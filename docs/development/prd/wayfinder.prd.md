@@ -39,13 +39,17 @@ specialist support for every workflow instance.
 - An admin or flow owner can configure a 5-step flow from scratch on the canvas
   in under 30 minutes — no code, no JSON editing.
 - Steps with a document template generate a download-ready DOCX automatically
-  when confidence ≥ 90 and the AI signals `readyToAdvance`.
+  when confidence ≥ 90 and the AI signals `readyToAdvance`. Templates are
+  `.docx` files uploaded by the flow admin; the AI fills in `{{placeholder}}`
+  markers from the session transcript (see ADR-009).
 - A shared session URL is viewable read-only by any authenticated user with the
   link.
 - Magic-link login works against the existing `AUTH_METHOD=magic-link` config
-  (no new auth code required for MVP).
-- AU Gov procurement flow (7 nodes, 5 compliance branches, 3 document templates,
-  3 context documents) is seeded into a fresh install and runs end-to-end.
+  (no new auth code required for MVP). Both admins and regular users authenticate
+  via `/admin/login`.
+- Fresh installs have no seed flow — admins create flows from scratch via the
+  canvas. The quickstart demo path is: create flow → add nodes → upload template
+  → start chat → complete step → download DOCX.
 
 ## 4. Non-goals
 
@@ -55,6 +59,7 @@ specialist support for every workflow instance.
 - No PDF output, no real-time collaborative session editing, no email
   notifications, no flow versioning, no analytics dashboard at MVP — all listed
   in Section 11.
+- No seed flows on fresh install — admins create flows from scratch.
 - No new authentication code paths. MVP reuses `AUTH_METHOD=magic-link` from
   v0.5.0. PKI/SAML/Entra mapping is Phase 6.
 - No mobile-optimised canvas — canvas is desktop-only and documented as such.
@@ -64,7 +69,7 @@ specialist support for every workflow instance.
 | Entity            | Lives in                                              | New / existing | Notes |
 | ----------------- | ----------------------------------------------------- | -------------- | ----- |
 | Flow              | `packages/domain/src/entities/flow.ts`                | new            | name, description, icon, owner, published |
-| FlowNode          | `packages/domain/src/entities/flow-node.ts`           | new            | type (`conversational` MVP), position, JSON config |
+| FlowNode          | `packages/domain/src/entities/flow-node.ts`           | new            | type (`conversational` MVP), position, JSON config. Config includes `output_type`, `document_template_path`, `document_template_filename` when `output_type='generate_document'`. |
 | FlowEdge          | `packages/domain/src/entities/flow-edge.ts`           | new            | directed, from/to node ids |
 | Session           | `packages/domain/src/entities/session.ts`             | new            | flow_id, user_id, status, current_node_id |
 | Message           | reuses `ai_messages` pattern                          | new table      | session_id, role, content, confidence, step, created_at |
@@ -72,7 +77,8 @@ specialist support for every workflow instance.
 | FlowPermission    | `packages/domain/src/entities/flow-permission.ts`     | new            | user_id, flow_id, permission (`owner`/`viewer`) |
 | INodeExecutor port| `packages/domain/src/ports/node-executor.ts`          | new            | `MockNodeExecutor` MVP; `N8nNodeExecutor` Phase 5 |
 | FlowSessionGraph  | `packages/adapters/src/agents/flow-session-graph.ts`  | new            | LangGraph instance per session, extends ADR-004 |
-| DocumentGeneration| `packages/adapters/src/documents/docx-generator.ts`   | new            | docx-js implementation behind `IDocumentGenerator` port |
+| IDocumentGenerator| `packages/domain/src/ports/document-generator.ts`     | new            | Port: `generate(templateBuffer, placeholders, filename)` + `extractPlaceholders(templateBuffer)` |
+| DocxTemplateGenerator| `packages/adapters/src/documents/docx-template-generator.ts` | new   | `docxtemplater` + `pizzip` implementation — substitutes `{{key}}` markers in uploaded `.docx` templates |
 
 All new tables use the `app_` prefix (Wayfinder is the application built on the
 template, not core or AI infrastructure). Columns are snake_case. Every table has
@@ -115,7 +121,9 @@ template, not core or AI infrastructure). Columns are snake_case. Every table ha
   "New Flow" modal.
 - `/admin/flows/[id]` — canvas (NEW). React Flow surface, node config modal,
   context document uploader, Save Draft / Publish.
-- `/admin/sessions` — admin view of all sessions across users (NEW).
+- `/admin/sessions` — admin view of all sessions across users (NEW). The
+  `/chats` page always shows only the current user's own sessions; there is
+  no toggle.
 
 ### Existing admin pages (untouched)
 
@@ -189,8 +197,8 @@ during `/build`. Each phase doc references the subset it satisfies.
 
 - [ ] `AUTH_METHOD=magic-link` (default in `.env.example`) signs in a user; the
       JWT claim includes `role: 'admin' | 'user'`.
-- [ ] An admin who navigates to `/admin/flows` sees the seeded AU Gov
-      procurement flow with status `published`.
+- [ ] An admin who navigates to `/admin/flows` sees the empty state with a
+      "Create your first flow" CTA (no seed data on fresh install).
 - [ ] An admin opens the canvas (`/admin/flows/[id]`), drags a node, configures
       its AI instruction and done-when, saves, and the changes survive a page
       refresh.
@@ -203,9 +211,11 @@ during `/build`. Each phase doc references the subset it satisfies.
 - [ ] When confidence ≥ 90 and `readyToAdvance` is true, the step badge in the
       progress rail flips to complete (green checkmark) and the next node's
       prompt streams in.
-- [ ] When a step with `output_type='generate_document'` completes, a document
-      card renders inline with a Download button that delivers a DOCX file
-      named `[FlowName]-[NodeName]-[SessionId]-[Date].docx`.
+- [ ] When a step with `output_type='generate_document'` completes, the server
+      fills the node's uploaded `.docx` template with AI-extracted placeholder
+      values; a document card renders inline with a Download button that
+      delivers the filled DOCX named
+      `[FlowName]-[NodeName]-[SessionId8]-[YYYY-MM-DD].docx`.
 - [ ] An admin viewing `/admin/sessions` sees every session in the
       organisation; user badges (name + initials) appear on each card.
 - [ ] Sharing a session URL copies `[base_url]/chats/[sessionId]?shared=true`;
@@ -264,10 +274,10 @@ Captured to prevent scope creep — these are deliberately deferred.
 - **`docx-js` table rendering** — Markdown tables require explicit conversion
   to `docx.Table`. Phase 3 templates avoid tables in v1 (use headed sections
   with bullet lists); table support is a Phase 4 polish item if needed.
-- **n8n payload contract stability** — including `userId` / `userRole` in
-  `NodeExecutionInput` from day one (ADR-010) prevents Phase 5 from being a
-  breaking change. Open question: do we also include `sessionTitle` and
-  `flowSlug` for n8n side-effect attribution? Default yes; revisit at Phase 5.
+- **n8n payload contract stability** — `NodeExecutionInput` includes `userId`,
+  `userRole`, `flowSlug`, and `sessionTitle` from day one (ADR-010) so Phase 5
+  is an adapter swap with no port-breaking change. Resolved: all four fields
+  ship in the Phase 0 port definition.
 - **Multi-tenancy** — MVP assumes a single organisation per deployment. If a
   hosted-multi-tenant deployment is later proposed, an `organisation_id` column
   will need to be back-filled across all `app_*` tables. Out of scope for now.

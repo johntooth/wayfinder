@@ -152,10 +152,8 @@ Two sessions:
 ## 9. Risks / open questions
 
 - The framework packages (`@rbrasier/*`) need a `^1.1.0` publish coordinated
-  with the apps. If the framework is published from a separate repo, the
-  publish PR is a prerequisite. Open question to the operator: are the
-  framework packages co-developed in this branch, or imported as a pinned
-  release?
+  with the apps. The packages are co-developed in this branch via
+  `workspace:*` links; a single publish PR covers both framework and apps.
 - Adding columns to `core_users` (e.g. surfacing `role` rather than just
   `is_admin`) is **not** part of Phase 0 — we reuse `is_admin` per ADR-005.
   If a future ADR needs a real `role` enum column, that is a separate MINOR

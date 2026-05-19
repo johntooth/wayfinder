@@ -54,6 +54,7 @@ All entities already exist from Phase 0. Phase 1 adds:
 | `FlowOwnerCanvas` page (user surface)                   | `apps/web/src/app/(user)/flows/[id]/config/page.tsx`           | yes |
 | `flow` tRPC router (real impl)                          | `apps/web/src/server/trpc/routers/flow.ts`                     | replaces stub |
 | `flow.context-doc` upload handler                       | `apps/web/src/app/api/flows/[id]/context-docs/route.ts`        | yes |
+| Node document template upload handler                   | `apps/web/src/app/api/flows/[id]/nodes/[nodeId]/template/route.ts` | yes |
 | Use cases in `packages/application/src/use-cases/flow/` | `create-flow.ts`, `list-flows.ts`, `update-node.ts`, etc.      | yes |
 
 ## 5. Pages / surfaces
@@ -102,10 +103,14 @@ shadcn `<Dialog>` with:
 - Instructions for the AI (textarea, required)
 - Done when… (textarea, required)
 - Output type toggle: `Conversation only` / `Generate document`
-- Document template (textarea, monospace, shown only when output type =
-  Generate document). Placeholder text shows the Markdown headings the
-  parser supports per ADR-009 (H1–H3, paragraphs, bullets, numbered, bold,
-  italic — no tables).
+- Document template section (shown only when output type = `Generate document`):
+  - File upload accepting `.docx` only, max 5 MB.
+  - On upload, the server extracts `{{placeholder_name}}` markers from the
+    template XML and returns them as read-only chips displayed under the
+    upload field, so the flow admin can confirm the AI will be asked to fill
+    in the correct fields (per ADR-009).
+  - Shows the uploaded filename + a "Replace" affordance if a template is
+    already saved.
 - "Remove step" button → confirmation → deletes node + connected edges.
 
 ### Context documents strip
@@ -142,6 +147,10 @@ None beyond Phase 0. All Phase 1 work uses the schema created in v1.1.0.
       the node and all 4 edges.
 - [ ] Uploading a PDF context doc shows a card in the bottom strip; the
       row is in `app_flow_context_docs`; removing the card deletes the row.
+- [ ] Switching a node to `Generate document` output type reveals the
+      template upload field; uploading a `.docx` saves the path in
+      `app_flow_nodes.config.document_template_path` and shows extracted
+      `{{placeholder}}` chips in the modal.
 - [ ] Publishing a flow flips `app_flows.status` to `published`. The flow
       now appears in `/chats` "New Chat" modal (which is fully implemented
       in Phase 2 — verify here only that the flow row's status is
