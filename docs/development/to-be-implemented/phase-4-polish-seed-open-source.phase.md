@@ -5,6 +5,7 @@
 - **PRD**: [`../prd/wayfinder.prd.md`](../prd/wayfinder.prd.md)
 - **ADRs**: 009 (IObjectStorage / MinIO); 011 (FSL licence); all earlier ADRs assumed
 - **Depends on**: Phase 3 (v1.4.0)
+- **Mockups**: [`../mockups/FlowAgent.html`](../mockups/FlowAgent.html), [`../mockups/FlowAgent Chat.html`](<../mockups/FlowAgent Chat.html>), [`../mockups/FlowAgent Configure.html`](<../mockups/FlowAgent Configure.html>) — all three; Phase 4 polishes every surface to match the mockups exactly
 
 ## 1. Problem
 
@@ -20,19 +21,29 @@ After Phase 3 the product is feature-complete for MVP but has two rough edges:
    something a developer can clone, run with one command, and demo end-to-end
    to an agency stakeholder in under 10 minutes.
 
+Fresh installs have **no seed flow** — admins create flows from scratch.
+The quickstart path is: install → log in → create a flow → add nodes →
+upload a document template → start a chat → complete a step → download the
+generated document.
+
 ## 2. Goals
 
 - **Persistent storage**: all uploaded files (context docs, node templates)
   and generated documents are stored in MinIO via an `IObjectStorage` port.
   Files survive container restarts without manual volume configuration.
-- All empty states (no sessions, no flows, no documents) are friendly.
+- All empty states (no sessions, no flows, no documents) are friendly and
+  guide the user to their next action.
 - All data-fetching surfaces have loading skeletons.
 - Error boundaries with user-friendly messages and retry actions on every
   page.
 - Toast notifications for save, delete, copy link, download trigger.
 - Canvas: zoom controls, minimap, fit-to-view on load.
+- Admin-only "Pick a branch manually?" override after three consecutive null
+  `branchChoice` returns on a branching node.
 - Chat: usable on mobile screen widths down to 360 px.
 - Dark mode: respect system preference.
+- First admin auto-provisioned via `ADMIN_SEED_EMAIL` if not present (ensures
+  a fresh `docker-compose up` is immediately accessible).
 - README + LICENSE + `.env.example` polished for an external audience.
 - Docker Compose runs the full stack (Next.js + Express API + Postgres +
   MinIO) with one command.
@@ -62,6 +73,7 @@ After Phase 3 the product is feature-complete for MVP but has two rough edges:
 | Empty-state components                       | `apps/web/src/components/empty-state/*`                                  | yes |
 | Skeleton components                          | `apps/web/src/components/skeleton/*`                                     | yes |
 | Toast wiring                                 | `apps/web/src/components/toast/*` (or shadcn `sonner`)                   | yes |
+| Branch-override modal                        | `apps/web/src/components/chat/branch-override-modal.tsx`                 | yes |
 | `LICENSE` (FSL 1.1)                          | repo root                                                                | yes |
 | `CONTRIBUTING.md`                            | repo root                                                                | yes |
 | Updated `README.md`                          | repo root                                                                | edit |
@@ -71,6 +83,11 @@ After Phase 3 the product is feature-complete for MVP but has two rough edges:
 | GitHub Actions: `ci.yml`                     | `.github/workflows/ci.yml`                                               | yes |
 
 ## 5. Pages / surfaces
+
+> **Mockup references** (polish target — all surfaces should match by end of Phase 4):
+> - [`../mockups/FlowAgent.html`](../mockups/FlowAgent.html) — My Chats (empty states, skeletons, session cards)
+> - [`../mockups/FlowAgent Chat.html`](<../mockups/FlowAgent Chat.html>) — Chat (mobile layout, document card, milestone pill polish)
+> - [`../mockups/FlowAgent Configure.html`](<../mockups/FlowAgent Configure.html>) — Configure (minimap, controls, empty canvas state)
 
 ### Persistent storage: IObjectStorage + MinIO
 
@@ -130,14 +147,22 @@ Object key scheme (preserves the Phase 3 path structure):
 - `context/<flowId>/<timestamp>-<filename>` — flow context documents
 - `generated/<sessionId>/<filename>` — AI-generated DOCX outputs
 
+### First-admin provisioning
+
+On startup (or as part of `pnpm db:seed`), if no user with `is_admin = true`
+exists in `core_users` and `ADMIN_SEED_EMAIL` is set, create that user with
+a magic-link login. This ensures `docker-compose up` produces an immediately
+usable app.
+
 ### UI polish
 
 - `EmptyState` component with icon + heading + body + CTA. Used on `/chats`,
-  `/admin/flows`, `/admin/sessions` when lists are empty.
-- `Skeleton` placeholders on all data-fetching surfaces (`/chats` list,
-  `/admin/flows` list, chat message feed).
-- `ErrorBoundary` at the route layout level with a "Try again" button and
-  an "Open errors" link to `/admin/errors` for admins.
+  `/admin/flows`, `/admin/sessions` when lists are empty, with contextual
+  guidance ("Create your first flow" on `/admin/flows`, "Start a new chat"
+  on `/chats`).
+- `Skeleton` placeholders on all data-fetching surfaces.
+- `ErrorBoundary` at the route layout level with a "Try again" button and an
+  "Open errors" link to `/admin/errors` for admins.
 - Toast on: flow create / update / publish, node delete, session start,
   share copy, document download, document regenerate.
 
@@ -145,6 +170,18 @@ Object key scheme (preserves the Phase 3 path structure):
 
 - React Flow `<MiniMap />` and `<Controls />` (zoom in/out, fit-to-view).
 - "Fit-to-view" run automatically on initial load if the flow has > 3 nodes.
+
+### Branch override modal
+
+When a branching node returns `branchChoice: null` three consecutive times:
+
+- A system message appears in the chat feed: "Wayfinder could not determine
+  the next step."
+- Admins see a "Pick a step manually" button below the system message.
+- Clicking it opens a modal listing the outgoing branches by node name.
+- Selecting a branch calls `session.overrideBranch({ sessionId, targetNodeId })`
+  and resumes the session from that node.
+- Non-admins see only the system message with no override affordance.
 
 ### Open source prep
 
@@ -190,13 +227,23 @@ they were written with.
 - [ ] Completing a document-generating step stores the output in MinIO
       (`generated/<sessionId>/...`). Downloading after a container restart
       succeeds (no 410 unless the object was explicitly deleted).
-- [ ] Empty states render when no data is present.
+- [ ] Fresh checkout: `docker-compose up`, magic-link login as
+      `ADMIN_SEED_EMAIL`, navigate to `/admin/flows` → empty state with
+      "Create your first flow" CTA.
+- [ ] Create a flow, add a single `generate_document` node with a `.docx`
+      template, start a chat, complete the step, download the DOCX — all from
+      a fresh clone in under 10 minutes.
+- [ ] Empty states render when no data is present on `/chats`,
+      `/admin/flows`, and `/admin/sessions`.
 - [ ] Loading skeletons appear during initial data fetch on `/chats`,
       `/admin/flows`, `/admin/sessions`.
 - [ ] Throwing an error from a test page renders the error boundary with
       "Try again" working.
 - [ ] Toast appears on flow create, save, publish, session share copy,
       and document download.
+- [ ] On a branching node that returns `branchChoice: null` three consecutive
+      times, an admin sees a "Pick a branch manually?" affordance; selecting
+      a branch advances the session to that node.
 - [ ] Canvas with multiple nodes auto-fits on first load; zoom controls and
       minimap work.
 - [ ] Chat interface is usable on a 360 px viewport (no horizontal scroll
@@ -228,7 +275,9 @@ Two sessions:
 
 **Session 4b** — UI polish + open source prep
 
+- First-admin seed via `ADMIN_SEED_EMAIL`.
 - Empty states, skeletons, error boundaries, toasts.
+- Branch-override modal (admin-only).
 - Canvas MiniMap, Controls, fit-to-view.
 - Mobile chat improvements.
 - README, LICENSE, CONTRIBUTING, docker-compose (finalise), .env.example,

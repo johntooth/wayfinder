@@ -5,6 +5,7 @@
 - **PRD**: [`../prd/wayfinder.prd.md`](../prd/wayfinder.prd.md)
 - **ADRs**: 005 (route groups), 006 (schema), 007 (session-scoped LangGraph), 010 (INodeExecutor)
 - **Depends on**: Phase 0 (v1.1.0), Phase 1 (v1.2.0)
+- **Mockups**: [`../mockups/FlowAgent.html`](../mockups/FlowAgent.html) (My Chats — session listing, New Chat modal), [`../mockups/FlowAgent Chat.html`](<../mockups/FlowAgent Chat.html>) (Chat — message feed, step rail, composer, confidence bar, share)
 
 ## 1. Problem
 
@@ -64,6 +65,10 @@ generation pending (Phase 3)" pill is shown. Phase 3 fills it in.
 
 ## 5. Pages / surfaces
 
+> **Mockup references**:
+> - [`../mockups/FlowAgent.html`](../mockups/FlowAgent.html) — session listing, session cards, New Chat modal
+> - [`../mockups/FlowAgent Chat.html`](<../mockups/FlowAgent Chat.html>) — chat header, step rail, message bubbles, confidence bar, milestone pill, composer, share mode
+
 ### `/chats`
 
 Tabs: Active / Completed / All. Search by title. Filter by flow type.
@@ -71,7 +76,9 @@ Tabs: Active / Completed / All. Search by title. Filter by flow type.
 Session card:
 
 - Flow icon (left)
-- Title (first user message, AI-summarised, max 80 chars)
+- Title (AI-generated summary of the first user message, max 80 chars,
+  produced asynchronously after the first message arrives; falls back to
+  the first 80 chars of the raw message until the async call completes)
 - Last message snippet (gray, max 100 chars)
 - Progress bar: completed steps / total steps
 - Status pill (`Active`/`Completed`/`Abandoned`)
@@ -83,11 +90,9 @@ Session card:
 - Each card: icon, name, description, "Start" CTA.
 - Click → `session.create({ flowId })` → redirect to `/chats/[sessionId]`.
 
-Admin view (`/admin/sessions` or toggle from `/chats`):
-
-- Amber banner: "Admin view — all sessions across all users."
-- "New Flow" button (links to `/admin/flows` New Flow modal — does not start
-  a session).
+The `/chats` page always shows only the current user's own sessions, even
+for admins. Admins view all sessions across all users on the separate
+`/admin/sessions` page (see below).
 
 ### `/chats/[sessionId]`
 
@@ -142,6 +147,10 @@ When `?shared=true` is in the URL and the requester is authenticated:
 - On stream completion, persists the agent message and the confidence row,
   updates `app_sessions.graph_checkpoint`, and advances the session if the
   predicate is true.
+- On the **first user message only**: fires a background `generateText` call
+  (cheap model, ≤ 80 chars, non-blocking) to summarise the message as the
+  session title. Updates `app_sessions.title`. Falls back to the first 80
+  chars of the raw user message if the call fails or times out.
 
 ## 6. Database changes
 
@@ -155,6 +164,9 @@ and writes `graph_checkpoint`.
 - [ ] "New Chat" → flow card click creates a session row with
       `status='active'`, `current_node_id` = first node, and redirects to
       `/chats/[sessionId]`.
+- [ ] After the first user message is sent, `app_sessions.title` is updated
+      to an AI-generated summary (≤ 80 chars); the session card on `/chats`
+      reflects the new title after a re-fetch.
 - [ ] On `/chats/[sessionId]` the first agent prompt streams in within 2
       seconds.
 - [ ] Sending a user message produces a streamed agent reply; the agent
@@ -173,8 +185,9 @@ and writes `graph_checkpoint`.
 - [ ] Stopping and restarting the dev server (`pnpm dev`) and sending the
       next user message produces a coherent reply that continues from the
       last checkpoint.
-- [ ] An admin on `/admin/sessions` sees a session created by another user;
-      a non-admin trying the same URL gets 403.
+- [ ] An admin on `/admin/sessions` sees sessions created by other users;
+      `/chats` shows only the admin's own sessions (no toggle).
+- [ ] A non-admin trying `/admin/sessions` gets 403.
 - [ ] Clicking Share copies `[base_url]/chats/[sessionId]?shared=true`. A
       different authenticated user opening the link sees the read-only view.
 - [ ] Langfuse traces show one `streamText` and one `streamObject` per
@@ -223,10 +236,10 @@ Three sessions:
   uses the full message history per turn (LLM-context-window-bounded).
   Trimming and summarisation is an Enhancement candidate.
 - **Branching with no consensus** — if the AI repeatedly returns
-  `branchChoice: null` on a branching node, the session stalls. The UI
-  shows a "Pick a branch manually?" affordance (admin-only) after three
-  null branches in a row. Open question: do we ship the manual override at
-  Phase 2 or defer to Phase 4 polish? Default: defer.
+  `branchChoice: null` on a branching node, the session stalls. Phase 2
+  shows a system message "Wayfinder could not determine the next step"
+  after three null branches. The admin-only "Pick a branch manually?"
+  override UI is deferred to Phase 4 polish.
 
 ## 10. Validation
 

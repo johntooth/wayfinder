@@ -39,6 +39,8 @@ export interface NodeExecutionInput {
   userId: string;        // who is running the session
   userRole: 'admin' | 'user';
   flowId: string;
+  flowSlug: string | null;    // for n8n side-effect attribution and routing
+  sessionTitle: string;       // for n8n side-effect attribution and audit logs
   fields: Record<string, unknown>;  // gathered from the conversation, schema set per node
 }
 
@@ -49,9 +51,10 @@ export interface NodeExecutionOutput {
 }
 ```
 
-`userId` and `userRole` are in the input **from day one** because n8n
-sub-workflows must attribute actions and enforce permissions inside agency
-systems.
+`userId`, `userRole`, `flowSlug`, and `sessionTitle` are in the input
+**from day one** so n8n sub-workflows can attribute actions, enforce
+permissions inside agency systems, and route/log by flow and session
+without an additional lookup.
 
 ### Implementations
 

@@ -4,6 +4,7 @@
 - **Target version**: `1.1.0`  (bump: MINOR — schema add + new dependencies + new port)
 - **PRD**: [`../prd/wayfinder.prd.md`](../prd/wayfinder.prd.md)
 - **ADRs**: 005 (route groups), 006 (schema), 010 (INodeExecutor)
+- **Mockups**: [`../mockups/FlowAgent.html`](../mockups/FlowAgent.html) (My Chats — target state for the `/chats` shell), [`../mockups/FlowAgent Chat.html`](<../mockups/FlowAgent Chat.html>) (Chat — target state for the `/chats/[sessionId]` shell), [`../mockups/FlowAgent Configure.html`](<../mockups/FlowAgent Configure.html>) (Configure — target state for the `/admin/flows/[id]` canvas shell)
 
 ## 1. Problem
 
@@ -151,10 +152,8 @@ Two sessions:
 ## 9. Risks / open questions
 
 - The framework packages (`@rbrasier/*`) need a `^1.1.0` publish coordinated
-  with the apps. If the framework is published from a separate repo, the
-  publish PR is a prerequisite. Open question to the operator: are the
-  framework packages co-developed in this branch, or imported as a pinned
-  release?
+  with the apps. The packages are co-developed in this branch via
+  `workspace:*` links; a single publish PR covers both framework and apps.
 - Adding columns to `core_users` (e.g. surfacing `role` rather than just
   `is_admin`) is **not** part of Phase 0 — we reuse `is_admin` per ADR-005.
   If a future ADR needs a real `role` enum column, that is a separate MINOR

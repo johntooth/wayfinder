@@ -5,6 +5,7 @@
 - **PRD**: [`../prd/wayfinder.prd.md`](../prd/wayfinder.prd.md)
 - **ADRs**: 005 (route groups), 006 (schema), 008 (React Flow), 010 (INodeExecutor)
 - **Depends on**: Phase 0 (v1.1.0)
+- **Mockups**: [`../mockups/FlowAgent Configure.html`](<../mockups/FlowAgent Configure.html>) — primary reference for all canvas and node config UI
 
 ## 1. Problem
 
@@ -58,6 +59,10 @@ All entities already exist from Phase 0. Phase 1 adds:
 
 ## 5. Pages / surfaces
 
+> **Mockup reference**: [`../mockups/FlowAgent Configure.html`](<../mockups/FlowAgent Configure.html>)
+> Open in a browser for the full interactive reference. All canvas, node card,
+> node config modal, and context document strip designs come from this file.
+
 ### `/admin/flows`
 
 - Table: name, description, status, owner (name + initials badge), updated date, edit link.
@@ -102,7 +107,7 @@ shadcn `<Dialog>` with:
 - Instructions for the AI (textarea, required)
 - Done when… (textarea, required)
 - Output type toggle: `Conversation only` / `Generate document`
-- Document template upload (shown only when output type = Generate document)
+- Document template upload (shown only when output type = `Generate document`)
   — **Phase 1 renders a disabled affordance** ("Upload a .docx template —
   available after Phase 3") so the modal layout is established. The real
   upload is wired in Phase 3 per ADR-009.
@@ -142,6 +147,9 @@ None beyond Phase 0. All Phase 1 work uses the schema created in v1.1.0.
       the node and all 4 edges.
 - [ ] Uploading a PDF context doc shows a card in the bottom strip; the
       row is in `app_flow_context_docs`; removing the card deletes the row.
+- [ ] Switching a node to `Generate document` output type reveals the
+      disabled template upload affordance ("Upload a .docx template —
+      available after Phase 3"); no upload is possible yet.
 - [ ] Publishing a flow flips `app_flows.status` to `published`. The flow
       now appears in `/chats` "New Chat" modal (which is fully implemented
       in Phase 2 — verify here only that the flow row's status is

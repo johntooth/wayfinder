@@ -5,12 +5,10 @@
 
 ## Context
 
-Wayfinder generates compliance documents (Request for Tender, Evaluation
-Report, Contract Management Plan, …) at the end of certain steps. The
+Wayfinder generates compliance documents at the end of certain steps. The
 constraints:
 
-- Output must be **editable** by procurement officers downstream → DOCX, not
-  PDF.
+- Output must be **editable** by users downstream → DOCX, not PDF.
 - Generation must happen **server-side** — the AI key never reaches the
   browser.
 - A document is a function of `(uploadedTemplate, sessionMessages,
@@ -43,22 +41,27 @@ formatting, styles, and structure.
   repeated sections such as evaluation criteria rows.
 - Template variables and their descriptions are documented by the flow owner
   in the node's AI instructions so the model knows what to populate.
+- Use `snake_case` names: `{{project_name}}`, `{{evaluation_criteria}}`.
+  Keep names short and descriptive — the AI receives them as JSON keys.
+- A template with zero `{{}}` markers is valid; the document is returned
+  unchanged (useful for cover-page templates that need no AI-filled content).
 
 ### Pipeline
 
 1. A node with `output_type = 'generate_document'` is configured. The admin
    uploads a `.docx` template file via the node config modal (Phase 3). The
-   template is stored via `IObjectStorage` (MinIO in Phase 4; local `/tmp` in
-   Phase 3 with a documented restart-loss limitation). The storage path and
-   original filename are written to the node's `config` jsonb as
-   `document_template_path` and `document_template_filename`.
+   template is stored via `IObjectStorage` (MinIO in Phase 4; local filesystem
+   under `DOCUMENT_STORAGE_PATH` in Phase 3 with a documented restart-loss
+   limitation). The storage path and original filename are written to the
+   node's `config` jsonb as `document_template_path` and
+   `document_template_filename`.
 2. Step completes (confidence ≥ 90, `readyToAdvance === true`).
 3. `DocumentGenerationService`
    (`packages/adapters/src/documents/docx-generator.ts`) loads the template
    bytes from `IObjectStorage`.
 4. Extracts the list of `{{variable_name}}` tags from the template using
    `docxtemplater`'s dry-run inspection.
-5. Calls `ILanguageModel.generateText` with:
+5. Calls `ILanguageModel.generateText` (not stream) with:
    - **system prompt** = `node.config.ai_instruction` (the document-generation
      instruction, which includes variable descriptions)
    - **user content** = compact session transcript + flow context docs +
@@ -72,15 +75,17 @@ formatting, styles, and structure.
    and an AI-generated 2-line `summary` for the chat card.
 10. The chat UI re-renders to include the document card.
 
+Document generation runs **after** the milestone pill is committed, so a
+generation failure does not block session advance.
+
 ### Filename pattern
 
 ```
-[FlowName]-[NodeName]-[SessionId]-[YYYY-MM-DD].docx
+[FlowName]-[NodeName]-[SessionId8]-[YYYY-MM-DD].docx
 ```
 
-`FlowName` and `NodeName` are kebab-cased; `SessionId` is the full UUID
-truncated to its first 8 chars for readability. Example:
-`au-gov-procurement-approach-to-market-a1b2c3d4-2026-05-19.docx`.
+`FlowName` and `NodeName` are kebab-cased. `SessionId8` is the first 8 chars
+of the UUID.
 
 ### Download endpoint
 
