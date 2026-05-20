@@ -36,16 +36,6 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
       minio:
         image: bitnami/minio:latest
         env:
@@ -56,7 +46,6 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wayfinder_e2e
-      REDIS_URL: redis://localhost:6379
       MINIO_ENDPOINT: localhost
       MINIO_PORT: "9000"
       MINIO_ACCESS_KEY: minioadmin
