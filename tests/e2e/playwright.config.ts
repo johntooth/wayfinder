@@ -37,6 +37,8 @@ export default defineConfig({
       outputFolder: 'playwright-report',
       open: 'never',
     }],
+    // Machine-readable results — parsed by CI to write the job summary
+    ['json', { outputFile: 'playwright-results.json' }],
     // Console summary during the run
     ['list'],
   ],

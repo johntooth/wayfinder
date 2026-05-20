@@ -84,6 +84,115 @@ jobs:
         run: npm test
         working-directory: tests/e2e
 
+      # ── Job summary ────────────────────────────────────────────────────────
+      # Parses playwright-results.json and writes a pass/fail table + failure
+      # list to the GitHub Actions job summary (visible in the Actions UI and
+      # the GitHub mobile app).
+      - name: Write job summary
+        if: always()
+        working-directory: tests/e2e
+        run: |
+          node -e "
+          const fs = require('fs');
+          if (!fs.existsSync('playwright-results.json')) {
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '## ⚠️ Playwright E2E\n\nNo results file found — tests may not have run.\n');
+            process.exit(0);
+          }
+
+          const r = JSON.parse(fs.readFileSync('playwright-results.json', 'utf8'));
+          const s = r.stats;
+          const ok = s.unexpected === 0;
+          const icon = ok ? '✅' : '❌';
+          const dur = (s.duration / 1000).toFixed(1);
+
+          let md = '## ' + icon + ' Playwright E2E — ' + (ok ? 'All passed' : s.unexpected + ' failed') + '\n\n';
+          md += '| ✅ Passed | ❌ Failed | ⏭️ Skipped | 🔁 Flaky | ⏱️ Duration |\n';
+          md += '|-----------|-----------|------------|----------|-------------|\n';
+          md += '| ' + s.expected + ' | ' + s.unexpected + ' | ' + s.skipped + ' | ' + s.flaky + ' | ' + dur + 's |\n\n';
+
+          const failures = [];
+          function walk(suite, parents) {
+            for (const spec of suite.specs || []) {
+              if (!spec.ok) {
+                const err = spec.tests?.[0]?.results?.[0]?.error?.message || '';
+                failures.push({ title: [...parents, spec.title].join(' › '), error: err.split('\n')[0] });
+              }
+            }
+            for (const child of suite.suites || []) walk(child, [...parents, child.title]);
+          }
+          for (const suite of r.suites || []) walk(suite, [suite.title]);
+
+          if (failures.length) {
+            md += '### Failed tests\n\n';
+            for (const f of failures) {
+              md += '- **' + f.title + '**' + (f.error ? ': \`' + f.error + '\`' : '') + '\n';
+            }
+            md += '\n';
+          }
+
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
+          "
+
+      # ── Netlify deploy ─────────────────────────────────────────────────────
+      # Deploys the HTML report to a unique Netlify preview URL.
+      # Requires two GitHub secrets:
+      #   NETLIFY_AUTH_TOKEN  — Personal access token from netlify.com/user/applications
+      #   NETLIFY_SITE_ID     — Site ID from Site Settings → General on netlify.com
+      #
+      # Both are optional: if either secret is absent the step is skipped gracefully.
+      - name: Deploy report to Netlify
+        id: netlify
+        if: always() && secrets.NETLIFY_AUTH_TOKEN != '' && secrets.NETLIFY_SITE_ID != ''
+        continue-on-error: true
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          npm install --global netlify-cli --silent
+          OUTPUT=$(netlify deploy \
+            --dir tests/e2e/playwright-report \
+            --message "E2E run #${{ github.run_number }} — ${{ github.event_name }}" \
+            --json)
+          URL=$(echo "$OUTPUT" | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).deploy_url || '')")
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "### 📊 [Playwright report]($URL)" >> $GITHUB_STEP_SUMMARY
+
+      # ── PR comment ─────────────────────────────────────────────────────────
+      # Posts (or updates) a comment on the PR with the Netlify report link.
+      # Finds any existing bot comment and replaces it so the thread stays tidy.
+      - name: Comment report link on PR
+        if: always() && github.event_name == 'pull_request' && steps.netlify.outputs.url != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = '${{ steps.netlify.outputs.url }}';
+            const marker = '<!-- playwright-report -->';
+            const body = `${marker}\n## 📊 Playwright E2E Report\n\n[View full report with screenshots and traces](${url})\n\nRun [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      # ── Artifacts ──────────────────────────────────────────────────────────
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4

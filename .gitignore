@@ -44,6 +44,7 @@ drizzle/meta
 
 # Playwright E2E artifacts
 tests/e2e/playwright-report/
+tests/e2e/playwright-results.json
 tests/e2e/test-results/
 tests/e2e/screenshots/
 tests/e2e/playwright/.auth/
