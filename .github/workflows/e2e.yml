@@ -71,7 +71,7 @@ jobs:
         run: pnpm db:migrate
 
       - name: Install Playwright browsers
-        run: npm ci && npx playwright install --with-deps chromium
+        run: npm install && npx playwright install --with-deps chromium
         working-directory: tests/e2e
 
       - name: Start app
