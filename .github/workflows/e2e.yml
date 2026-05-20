@@ -144,6 +144,7 @@ jobs:
         id: netlify
         if: always()
         continue-on-error: true
+        working-directory: tests/e2e
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
@@ -152,13 +153,13 @@ jobs:
             echo "Netlify secrets not configured — skipping deploy"
             exit 0
           fi
-          if [ ! -d "tests/e2e/playwright-report" ]; then
+          if [ ! -d "playwright-report" ]; then
             echo "No report directory — skipping deploy"
             exit 0
           fi
           npm install --global netlify-cli --silent
           netlify deploy \
-            --dir tests/e2e/playwright-report \
+            --dir playwright-report \
             --message "E2E run #${{ github.run_number }}" \
             --json > /tmp/netlify-output.json
           URL=$(node -e "try{process.stdout.write(JSON.parse(require('fs').readFileSync('/tmp/netlify-output.json','utf8')).deploy_url||'')}catch{}")
