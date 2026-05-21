@@ -51,11 +51,10 @@ export function MessageFeed({
   }, [dbMessages.length, streamingMessages.length]);
 
   const nodeById = Object.fromEntries(nodes.map((n) => [n.id, n]));
-
   const showStreaming = isStreaming || streamingMessages.length > dbMessages.length;
 
   return (
-    <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
+    <div className="flex flex-1 flex-col gap-5 overflow-y-auto bg-[#f7f6f3] px-5 py-6">
       {!showStreaming &&
         dbMessages.map((msg, index) => {
           const prevMsg = dbMessages[index - 1];
@@ -73,41 +72,56 @@ export function MessageFeed({
           const hasTemplate = Boolean(config?.["documentTemplatePath"]);
 
           type DocState = "generating" | "no_template" | "failed" | "done" | null;
-          const docState: DocState = isAdvancingMsg && isDocNode
-            ? msg.document
-              ? "done"
-              : hasTemplate
-              ? "generating"
-              : "no_template"
-            : null;
+          const docState: DocState =
+            isAdvancingMsg && isDocNode
+              ? msg.document
+                ? "done"
+                : hasTemplate
+                ? "generating"
+                : "no_template"
+              : null;
 
           return (
             <div key={msg.id}>
               {isNewStep && node && (
-                <div className="my-2 text-center text-xs text-muted-foreground">
+                <div className="my-1 text-center font-mono text-[10px] text-[#918d87]">
                   — {node.name} —
                 </div>
               )}
-              <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                {msg.role !== "user" && (
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#3a5fd9] text-[10px] font-bold text-white">
+                    FA
+                  </div>
+                )}
                 <div
-                  className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${
+                  className={`max-w-[68%] rounded-[14px] px-4 py-3 ${
                     msg.role === "user"
-                      ? "bg-indigo-600 text-white"
-                      : "border bg-white text-gray-900 shadow-sm"
+                      ? "rounded-br-[4px] bg-[#3a5fd9]"
+                      : "rounded-bl-[4px] border border-[#dedad2] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
                   }`}
                 >
-                  <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                   <p
-                    className={`mt-1 text-right text-[10px] ${
-                      msg.role === "user" ? "text-indigo-200" : "text-gray-400"
+                    className={`whitespace-pre-wrap text-[13px] leading-[1.55] ${
+                      msg.role === "user" ? "text-white/90" : "text-[#1a1814]"
+                    }`}
+                  >
+                    {msg.content}
+                  </p>
+                  <p
+                    className={`mt-1 text-right font-mono text-[10px] ${
+                      msg.role === "user" ? "text-white/50" : "text-[#918d87]"
                     }`}
                   >
                     {formatRelativeTime(msg.createdAt)}
                   </p>
-                  {msg.role === "assistant" && (
-                    <ConfidenceBar score={msg.confidence} />
-                  )}
+                  {msg.role === "assistant" && <ConfidenceBar score={msg.confidence} />}
                 </div>
+                {msg.role === "user" && (
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#e6e3dc] text-[10px] font-bold text-[#1a1814]">
+                    U
+                  </div>
+                )}
               </div>
               {isAdvancingMsg && node && (
                 <>
@@ -138,18 +152,28 @@ export function MessageFeed({
 
       {showStreaming &&
         streamingMessages.map((msg) => {
-          const confidenceAnnotation = msg.annotations?.map(toConfidenceAnnotation).find(Boolean) ?? null;
+          const confidenceAnnotation =
+            msg.annotations?.map(toConfidenceAnnotation).find(Boolean) ?? null;
 
           return (
-            <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+              {msg.role !== "user" && (
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#3a5fd9] text-[10px] font-bold text-white">
+                  FA
+                </div>
+              )}
               <div
-                className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${
+                className={`max-w-[68%] rounded-[14px] px-4 py-3 ${
                   msg.role === "user"
-                    ? "bg-indigo-600 text-white"
-                    : "border bg-white text-gray-900 shadow-sm"
+                    ? "rounded-br-[4px] bg-[#3a5fd9]"
+                    : "rounded-bl-[4px] border border-[#dedad2] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
                 }`}
               >
-                <p className="whitespace-pre-wrap leading-relaxed">
+                <p
+                  className={`whitespace-pre-wrap text-[13px] leading-[1.55] ${
+                    msg.role === "user" ? "text-white/90" : "text-[#1a1814]"
+                  }`}
+                >
                   {msg.content || (isStreaming && msg.role === "assistant" ? "…" : "")}
                 </p>
                 {msg.role === "assistant" && (
@@ -159,12 +183,17 @@ export function MessageFeed({
                   />
                 )}
               </div>
+              {msg.role === "user" && (
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#e6e3dc] text-[10px] font-bold text-[#1a1814]">
+                  U
+                </div>
+              )}
             </div>
           );
         })}
 
       {dbMessages.length === 0 && !isStreaming && (
-        <div className="flex flex-1 items-center justify-center text-center text-sm text-muted-foreground">
+        <div className="flex flex-1 items-center justify-center text-center text-[13px] text-[#918d87]">
           <p>The conversation will begin once you send your first message.</p>
         </div>
       )}

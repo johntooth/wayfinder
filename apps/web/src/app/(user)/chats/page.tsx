@@ -37,23 +37,22 @@ export default function ChatsPage() {
   ];
 
   return (
-    <div className="h-full overflow-auto">
-    <main className="container py-8 pb-24 md:pb-8">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">My Chats</h1>
+    <div className="flex h-full flex-col overflow-hidden">
+      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#dedad2] bg-white px-5">
+        <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1a1814]">My Chats</h1>
         <Button onClick={() => setNewChatOpen(true)}>New Chat</Button>
-      </div>
+      </header>
 
-      <div className="mb-6 flex gap-1 border-b">
+      <div className="flex shrink-0 gap-1 border-b border-[#dedad2] px-5">
         {tabs.map(({ key, label }) => (
           <button
             key={key}
             type="button"
             onClick={() => setTab(key)}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${
+            className={`px-3 py-[10px] text-[13px] font-medium transition-colors ${
               tab === key
-                ? "border-b-2 border-indigo-600 text-indigo-600"
-                : "text-muted-foreground hover:text-foreground"
+                ? "border-b-2 border-[#3a5fd9] text-[#3a5fd9]"
+                : "text-[#918d87] hover:text-[#5a5650]"
             }`}
           >
             {label}
@@ -61,34 +60,37 @@ export default function ChatsPage() {
         ))}
       </div>
 
-      {sessionsQuery.isLoading ? (
-        <CardSkeletonGrid count={3} />
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon="💬"
-          heading="No chats yet"
-          body="Start a new chat to begin a guided workflow session."
-          ctaLabel="New Chat"
-          onCta={() => setNewChatOpen(true)}
-        />
-      ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((session) => (
-            <SessionCard
-              key={session.id}
-              session={session}
-              flow={flowById[session.flowId]}
+      <div className="flex-1 overflow-auto">
+        <div className="container py-6">
+          {sessionsQuery.isLoading ? (
+            <CardSkeletonGrid count={3} />
+          ) : filtered.length === 0 ? (
+            <EmptyState
+              icon="💬"
+              heading="No chats yet"
+              body="Start a new chat to begin a guided workflow session."
+              ctaLabel="New Chat"
+              onCta={() => setNewChatOpen(true)}
             />
-          ))}
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {filtered.map((session) => (
+                <SessionCard
+                  key={session.id}
+                  session={session}
+                  flow={flowById[session.flowId]}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       <NewChatModal
         open={newChatOpen}
         onClose={() => setNewChatOpen(false)}
         publishedFlows={publishedFlowsQuery.data ?? []}
       />
-    </main>
     </div>
   );
 }

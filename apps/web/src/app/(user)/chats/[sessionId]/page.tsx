@@ -22,9 +22,9 @@ interface SessionPageProps {
 }
 
 const statusVariant = (status: string) => {
-  if (status === "active") return "default";
-  if (status === "complete") return "secondary";
-  return "outline";
+  if (status === "active") return "blue";
+  if (status === "complete") return "green";
+  return "grey";
 };
 
 function countStalls(
@@ -144,17 +144,17 @@ export default function SessionPage({ params }: SessionPageProps) {
 
   if (sessionQuery.isLoading) {
     return (
-      <main className="flex h-screen flex-col items-center justify-center gap-4 text-muted-foreground">
-        <p className="text-sm">Loading session…</p>
+      <main className="flex h-screen flex-col items-center justify-center gap-4">
+        <p className="text-[13px] text-[#918d87]">Loading session…</p>
       </main>
     );
   }
 
   if (!sessionData) {
     return (
-      <main className="flex h-screen flex-col items-center justify-center gap-4 text-muted-foreground">
-        <p className="text-lg font-medium">Session not found</p>
-        <Link href="/chats" className="text-sm text-indigo-600 underline">
+      <main className="flex h-screen flex-col items-center justify-center gap-4">
+        <p className="text-[14px] font-semibold text-[#1a1814]">Session not found</p>
+        <Link href="/chats" className="text-[13px] text-[#3a5fd9] underline">
           Back to My Chats
         </Link>
       </main>
@@ -165,15 +165,15 @@ export default function SessionPage({ params }: SessionPageProps) {
 
   return (
     <main className="flex h-full flex-col overflow-hidden">
-      <header className="flex min-w-0 items-center justify-between border-b bg-background px-4 py-3">
+      <header className="flex h-[52px] min-w-0 shrink-0 items-center justify-between border-b border-[#dedad2] bg-white px-5">
         <div className="flex min-w-0 items-center gap-3">
-          <Link href="/chats" className="shrink-0 text-sm text-muted-foreground hover:text-foreground">
+          <Link href="/chats" className="shrink-0 text-[13px] text-[#5a5650] hover:text-[#1a1814]">
             ← My Chats
           </Link>
-          <span className="text-muted-foreground">|</span>
-          <span className="text-xl">{flow.icon ?? "💬"}</span>
-          <h1 className="truncate text-sm font-semibold">{flow.name}</h1>
-          <Badge variant={statusVariant(session.status)} className="shrink-0 text-xs capitalize">
+          <span className="text-[13px] text-[#dedad2]">|</span>
+          <span className="text-[18px]">{flow.icon ?? "💬"}</span>
+          <h1 className="truncate text-[13px] font-semibold text-[#1a1814]">{flow.name}</h1>
+          <Badge variant={statusVariant(session.status)} className="shrink-0 capitalize">
             {session.status}
           </Badge>
         </div>
@@ -197,10 +197,10 @@ export default function SessionPage({ params }: SessionPageProps) {
       />
 
       {showBranchOverride && (
-        <div className="flex justify-center border-t bg-muted/50 px-4 py-3">
+        <div className="flex justify-center border-t border-[#dedad2] bg-[#fdf3e3] px-4 py-3">
           <div className="flex items-center gap-3">
-            <p className="text-sm text-muted-foreground">Wayfinder could not determine the next step.</p>
-            <Button size="sm" variant="outline" onClick={() => setOverrideOpen(true)}>
+            <p className="text-[13px] text-[#c17a1a]">Wayfinder could not determine the next step.</p>
+            <Button size="sm" variant="secondary" onClick={() => setOverrideOpen(true)}>
               Pick a step manually
             </Button>
           </div>

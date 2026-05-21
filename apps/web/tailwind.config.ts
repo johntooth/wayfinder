@@ -11,6 +11,10 @@ const config: Config = {
       screens: { "2xl": "1280px" },
     },
     extend: {
+      fontFamily: {
+        sans: ["var(--font-dm-sans)", "-apple-system", "BlinkMacSystemFont", "sans-serif"],
+        mono: ["var(--font-dm-mono)", "'Courier New'", "monospace"],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
