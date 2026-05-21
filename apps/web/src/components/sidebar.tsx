@@ -3,12 +3,19 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  AlertCircle,
+  BarChart2,
+  Flag,
   GitBranch,
   LayoutGrid,
+  Menu,
   MessageSquare,
   Settings,
   Users,
+  X,
 } from "lucide-react";
+import { useSidebar } from "@/components/sidebar-context";
+import { trpc } from "@/trpc/client";
 
 interface NavItem {
   href: string;
@@ -17,14 +24,17 @@ interface NavItem {
 }
 
 const userNav: NavItem[] = [
-  { href: "/chats", icon: MessageSquare, label: "Chats" },
+  { href: "/chats", icon: MessageSquare, label: "My Chats" },
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
 const adminNav: NavItem[] = [
+  { href: "/admin/sessions", icon: LayoutGrid, label: "All Sessions" },
   { href: "/admin/flows", icon: GitBranch, label: "Flows" },
-  { href: "/admin/sessions", icon: LayoutGrid, label: "Sessions" },
   { href: "/admin/users", icon: Users, label: "Users" },
+  { href: "/admin/usage", icon: BarChart2, label: "Usage" },
+  { href: "/admin/flags", icon: Flag, label: "Flags" },
+  { href: "/admin/errors", icon: AlertCircle, label: "Errors" },
   { href: "/admin/settings", icon: Settings, label: "Settings" },
 ];
 
@@ -34,60 +44,217 @@ interface AppSidebarProps {
 
 export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   const pathname = usePathname();
+  const { mobileOpen, openMobile, closeMobile } = useSidebar();
+
+  const userQuery = trpc.user.me.useQuery();
+  const publishedFlowsQuery = trpc.session.listPublishedFlows.useQuery(undefined, {
+    enabled: !isAdmin,
+  });
+  const adminFlowsQuery = trpc.flow.list.useQuery(undefined, {
+    enabled: isAdmin,
+  });
 
   if (pathname === "/admin/login") return null;
 
   const nav = isAdmin ? adminNav : userNav;
   const homeHref = isAdmin ? "/admin/flows" : "/chats";
+  const flows = isAdmin ? (adminFlowsQuery.data ?? []) : (publishedFlowsQuery.data ?? []);
+  const flowsLabel = isAdmin ? "All Flows" : "My Flows";
+  const flowHref = (flowId: string) =>
+    isAdmin ? `/admin/flows/${flowId}` : `/chats?flow=${flowId}`;
+
+  const user = userQuery.data;
+  const displayName = user?.name ?? user?.email ?? "";
+  const initials = displayName
+    .split(" ")
+    .map((n: string) => n[0] ?? "")
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || (user?.email?.slice(0, 2).toUpperCase() ?? "?");
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + "/");
 
-  return (
+  const navContent = (
     <>
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-14 shrink-0 flex-col border-r bg-white">
-        <div className="flex h-14 items-center justify-center border-b">
-          <Link href={homeHref} aria-label="Home">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-              W
-            </div>
-          </Link>
-        </div>
+      {/* Logo */}
+      <div className="flex items-center gap-[9px] border-b border-[#dedad2] px-[18px] pb-[14px] pt-[16px]">
+        <Link href={homeHref} onClick={closeMobile}>
+          <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[7px] bg-[#3a5fd9] text-[11px] font-bold text-white">
+            W
+          </div>
+        </Link>
+        <span className="text-[14px] font-bold tracking-[-0.3px] text-[#1a1814]">Wayfinder</span>
+      </div>
 
-        <nav className="flex flex-1 flex-col items-center gap-1 py-3">
-          {nav.map(({ href, icon: Icon, label }) => (
-            <Link
-              key={href}
-              href={href}
-              title={label}
-              className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
-                isActive(href)
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-            >
-              <Icon className="h-5 w-5" />
-            </Link>
-          ))}
-        </nav>
-      </aside>
-
-      {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t bg-white px-2">
+      {/* Nav items */}
+      <nav className="flex flex-1 flex-col gap-[2px] overflow-y-auto px-[10px] py-[12px]">
         {nav.map(({ href, icon: Icon, label }) => (
           <Link
             key={href}
             href={href}
-            className={`flex flex-col items-center gap-0.5 px-3 py-2 text-[10px] font-medium transition-colors ${
-              isActive(href) ? "text-primary" : "text-muted-foreground"
+            onClick={closeMobile}
+            className={`flex items-center gap-[9px] rounded-[8px] px-[10px] py-[8px] text-[13.5px] transition-colors ${
+              isActive(href)
+                ? "bg-[#eef1fc] font-medium text-[#3a5fd9]"
+                : "text-[#5a5650] hover:bg-[#efede8] hover:text-[#1a1814]"
             }`}
           >
-            <Icon className="h-5 w-5" />
-            <span>{label}</span>
+            <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+              <Icon className="h-[15px] w-[15px]" />
+            </span>
+            {label}
           </Link>
         ))}
+
+        {flows.length > 0 && (
+          <>
+            <hr className="my-[10px] border-[#dedad2]" />
+            <div className="px-[10px] pb-[6px] pt-[4px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#918d87]">
+              {flowsLabel}
+            </div>
+            {flows.slice(0, 8).map((flow) => (
+              <Link
+                key={flow.id}
+                href={flowHref(flow.id)}
+                onClick={closeMobile}
+                className="flex items-center gap-[9px] rounded-[8px] px-[10px] py-[7px] text-[13px] text-[#5a5650] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+              >
+                <span className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[5px] bg-[#eef1fc] text-[11px]">
+                  {flow.icon ?? "💬"}
+                </span>
+                <span className="overflow-hidden text-ellipsis whitespace-nowrap">{flow.name}</span>
+              </Link>
+            ))}
+          </>
+        )}
       </nav>
+
+      {/* Footer */}
+      <div className="border-t border-[#dedad2] px-[10px] py-[12px]">
+        {isAdmin && (
+          <div className="mb-[10px] flex items-center gap-[7px] rounded-[8px] border border-[#e8b87c] bg-[#fdf3e3] px-[10px] py-[8px] text-[12px] font-medium text-[#c17a1a]">
+            <span>⚠</span>
+            <span>Admin mode active</span>
+          </div>
+        )}
+        {user && (
+          <div className="flex items-center gap-[8px] rounded-[8px] px-[10px] py-[8px] hover:bg-[#efede8]">
+            <div className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full bg-[#3a5fd9] text-[11px] font-bold text-white">
+              {initials}
+            </div>
+            <div className="min-w-0">
+              <div className="truncate text-[13px] font-medium text-[#1a1814]">{displayName}</div>
+              {user.email && (
+                <div className="truncate text-[11px] text-[#918d87]">{user.email}</div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop: 220px text sidebar */}
+      <aside className="hidden h-screen w-[220px] shrink-0 flex-col border-r border-[#dedad2] bg-white md:flex">
+        {navContent}
+      </aside>
+
+      {/* Mobile: hamburger triggers the drawer managed by parent context */}
+      {mobileOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-40 bg-[rgba(20,18,15,0.35)]"
+            onClick={closeMobile}
+          />
+          {/* Drawer */}
+          <div className="fixed bottom-0 left-0 top-0 z-50 flex w-[220px] flex-col bg-white shadow-[4px_0_20px_rgba(0,0,0,.12)]">
+            {/* Drawer header with close button */}
+            <div className="flex items-center justify-between border-b border-[#dedad2] px-[14px] py-[14px] pb-[12px]">
+              <div className="flex items-center gap-[9px]">
+                <div className="flex h-[26px] w-[26px] items-center justify-center rounded-[7px] bg-[#3a5fd9] text-[11px] font-bold text-white">
+                  W
+                </div>
+                <span className="text-[14px] font-bold tracking-[-0.2px] text-[#1a1814]">Wayfinder</span>
+              </div>
+              <button
+                onClick={closeMobile}
+                className="flex h-[26px] w-[26px] items-center justify-center rounded-[6px] border border-[#dedad2] text-[#918d87] hover:bg-[#efede8]"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {/* Reuse nav + footer */}
+            <nav className="flex flex-1 flex-col gap-[2px] overflow-y-auto px-[10px] py-[12px]">
+              {nav.map(({ href, icon: Icon, label }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={closeMobile}
+                  className={`flex items-center gap-[9px] rounded-[8px] px-[10px] py-[8px] text-[13.5px] transition-colors ${
+                    isActive(href)
+                      ? "bg-[#eef1fc] font-medium text-[#3a5fd9]"
+                      : "text-[#5a5650] hover:bg-[#efede8] hover:text-[#1a1814]"
+                  }`}
+                >
+                  <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+                    <Icon className="h-[15px] w-[15px]" />
+                  </span>
+                  {label}
+                </Link>
+              ))}
+              {flows.length > 0 && (
+                <>
+                  <hr className="my-[10px] border-[#dedad2]" />
+                  <div className="px-[10px] pb-[6px] pt-[4px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#918d87]">
+                    {flowsLabel}
+                  </div>
+                  {flows.slice(0, 8).map((flow) => (
+                    <Link
+                      key={flow.id}
+                      href={flowHref(flow.id)}
+                      onClick={closeMobile}
+                      className="flex items-center gap-[9px] rounded-[8px] px-[10px] py-[7px] text-[13px] text-[#5a5650] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+                    >
+                      <span className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[5px] bg-[#eef1fc] text-[11px]">
+                        {flow.icon ?? "💬"}
+                      </span>
+                      <span className="overflow-hidden text-ellipsis whitespace-nowrap">{flow.name}</span>
+                    </Link>
+                  ))}
+                </>
+              )}
+            </nav>
+            <div className="border-t border-[#dedad2] px-[10px] py-[12px]">
+              {user && (
+                <div className="flex items-center gap-[8px] rounded-[8px] px-[10px] py-[8px]">
+                  <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-[#3a5fd9] text-[10px] font-bold text-white">
+                    {initials}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-[13px] font-medium text-[#1a1814]">{displayName}</div>
+                    {user.email && (
+                      <div className="truncate text-[11px] text-[#918d87]">{user.email}</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Mobile hamburger trigger — rendered inside the layout's content column via the mobile header */}
+      <button
+        className="fixed left-4 top-[14px] z-30 flex h-8 w-8 items-center justify-center rounded-[8px] border border-[#dedad2] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06)] md:hidden"
+        onClick={openMobile}
+        aria-label="Open navigation"
+      >
+        <Menu className="h-4 w-4 text-[#5a5650]" />
+      </button>
     </>
   );
 }

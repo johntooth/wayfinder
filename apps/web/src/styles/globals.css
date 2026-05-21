@@ -4,64 +4,72 @@
 
 @layer base {
   :root {
-    /* Warm off-white surface — matches mockup #f7f6f3 */
+    /* Tailwind HSL vars */
     --background: 40 20% 96%;
     --foreground: 35 12% 10%;
-
-    /* Cards stay pure white on the warm background */
     --card: 0 0% 100%;
     --card-foreground: 35 12% 10%;
-
-    /* Vivid indigo primary — matches mockup #3a5fd9 */
     --primary: 226 67% 54%;
     --primary-foreground: 0 0% 100%;
-
     --secondary: 40 15% 92%;
     --secondary-foreground: 35 12% 10%;
-
     --muted: 40 15% 92%;
     --muted-foreground: 35 8% 46%;
-
     --accent: 40 15% 88%;
     --accent-foreground: 35 12% 10%;
-
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-
-    /* Warm sand border — matches mockup #dedad2 */
     --border: 38 16% 83%;
     --input: 38 16% 83%;
-
     --ring: 226 67% 54%;
     --radius: 0.5rem;
+
+    /* ── Storybook design tokens ─────────────────────────────── */
+    --bg:            #f7f6f3;
+    --bg2:           #efede8;
+    --bg3:           #e6e3dc;
+    --surface:       #ffffff;
+    --wf-primary:    #3a5fd9;
+    --primary-light: #eef1fc;
+    --primary-dim:   #c5d0f7;
+    --wf-border:     #dedad2;
+    --border-strong: #c9c4ba;
+    --wf-text:       #1a1814;
+    --text2:         #5a5650;
+    --text3:         #918d87;
+    --success:       #2e9e6a;
+    --success-bg:    #eaf6f0;
+    --warning:       #c17a1a;
+    --warning-bg:    #fdf3e3;
+    --rose:          #c2385a;
+    --rose-bg:       #fdeef2;
+    --teal:          #0e8a7a;
+    --teal-bg:       #e6f7f5;
+    --purple:        #7c3aed;
+    --purple-light:  #f3eeff;
+    --sh:            0 1px 3px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.05);
+    --sh-md:         0 2px 8px rgba(0,0,0,.09), 0 12px 36px rgba(0,0,0,.07);
+    --sh-xl:         0 4px 24px rgba(0,0,0,.13), 0 20px 60px rgba(0,0,0,.10);
   }
 
   @media (prefers-color-scheme: dark) {
     :root {
       --background: 35 12% 8%;
       --foreground: 40 20% 94%;
-
       --card: 35 10% 11%;
       --card-foreground: 40 20% 94%;
-
       --primary: 226 67% 64%;
       --primary-foreground: 0 0% 100%;
-
       --secondary: 35 10% 16%;
       --secondary-foreground: 40 20% 94%;
-
       --muted: 35 10% 16%;
       --muted-foreground: 40 12% 58%;
-
       --accent: 35 10% 20%;
       --accent-foreground: 40 20% 94%;
-
       --destructive: 0 62% 40%;
       --destructive-foreground: 0 0% 100%;
-
       --border: 35 10% 20%;
       --input: 35 10% 20%;
-
       --ring: 226 67% 64%;
     }
   }
@@ -73,6 +81,11 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-dm-sans), -apple-system, BlinkMacSystemFont, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+  }
+  .font-mono {
+    font-family: var(--font-dm-mono), 'Courier New', monospace;
   }
 }

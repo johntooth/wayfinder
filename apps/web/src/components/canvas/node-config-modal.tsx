@@ -4,6 +4,8 @@ import { type ChangeEvent, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
+  DialogCloseButton,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -14,12 +16,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 const COLOURS = [
-  { hex: "#6366f1", label: "Indigo", class: "bg-indigo-500" },
-  { hex: "#10b981", label: "Emerald", class: "bg-emerald-500" },
-  { hex: "#f59e0b", label: "Amber", class: "bg-amber-500" },
-  { hex: "#ef4444", label: "Red", class: "bg-red-500" },
-  { hex: "#8b5cf6", label: "Violet", class: "bg-violet-500" },
-  { hex: "#06b6d4", label: "Cyan", class: "bg-cyan-500" },
+  { hex: "#3a5fd9", label: "Indigo" },
+  { hex: "#2e9e6a", label: "Green" },
+  { hex: "#c17a1a", label: "Amber" },
+  { hex: "#c2385a", label: "Rose" },
+  { hex: "#7c3aed", label: "Purple" },
+  { hex: "#0e8a7a", label: "Teal" },
 ];
 
 export interface NodeConfigValues {
@@ -44,7 +46,7 @@ interface NodeConfigModalProps {
 
 const DEFAULT_VALUES: NodeConfigValues = {
   name: "",
-  colour: "#6366f1",
+  colour: "#3a5fd9",
   aiInstruction: "",
   doneWhen: "",
   outputType: "conversation_only",
@@ -102,13 +104,6 @@ export function NodeConfigModal({
     }
   };
 
-  const handleRemoveTemplate = async () => {
-    if (!onUploadTemplate) return;
-    set("documentTemplatePath", null);
-    set("documentTemplateFilename", null);
-    setUploadError(null);
-  };
-
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md">
@@ -116,15 +111,18 @@ export function NodeConfigModal({
           <>
             <DialogHeader>
               <DialogTitle>Remove step?</DialogTitle>
+              <DialogCloseButton />
             </DialogHeader>
-            <p className="text-sm text-muted-foreground">
-              This will delete the step and all its connected edges. This cannot be undone.
-            </p>
+            <DialogBody>
+              <p className="text-[13px] leading-[1.55] text-[#5a5650]">
+                This will delete the step and all its connected edges. This cannot be undone.
+              </p>
+            </DialogBody>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setConfirmDelete(false)}>
+              <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
                 Cancel
               </Button>
-              <Button variant="destructive" onClick={onDelete}>
+              <Button variant="danger" onClick={onDelete}>
                 Remove step
               </Button>
             </DialogFooter>
@@ -133,10 +131,11 @@ export function NodeConfigModal({
           <>
             <DialogHeader>
               <DialogTitle>Configure step</DialogTitle>
+              <DialogCloseButton />
             </DialogHeader>
 
-            <div className="space-y-4">
-              <div className="space-y-2">
+            <DialogBody className="max-h-[70vh] overflow-y-auto">
+              <div className="space-y-1">
                 <Label htmlFor="node-name">Step name</Label>
                 <Input
                   id="node-name"
@@ -147,14 +146,19 @@ export function NodeConfigModal({
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <Label>Step colour</Label>
                 <div className="flex gap-2">
                   {COLOURS.map((colour) => (
                     <button
                       key={colour.hex}
                       type="button"
-                      className={`h-7 w-7 rounded-full ${colour.class} transition-transform ${values.colour === colour.hex ? "ring-2 ring-offset-2 ring-gray-900 scale-110" : "opacity-70 hover:opacity-100"}`}
+                      className={`h-6 w-6 rounded-full transition-transform ${
+                        values.colour === colour.hex
+                          ? "scale-110 ring-2 ring-[#1a1814] ring-offset-2"
+                          : "opacity-70 hover:opacity-100"
+                      }`}
+                      style={{ background: colour.hex }}
                       onClick={() => set("colour", colour.hex)}
                       title={colour.label}
                     />
@@ -162,7 +166,7 @@ export function NodeConfigModal({
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <Label htmlFor="ai-instruction">Instructions for the AI</Label>
                 <Textarea
                   id="ai-instruction"
@@ -174,7 +178,7 @@ export function NodeConfigModal({
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <Label htmlFor="done-when">Done when…</Label>
                 <Textarea
                   id="done-when"
@@ -186,13 +190,17 @@ export function NodeConfigModal({
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <Label>Output type</Label>
                 <div className="flex gap-3">
                   {(["conversation_only", "generate_document"] as const).map((type) => (
                     <label
                       key={type}
-                      className={`flex flex-1 cursor-pointer items-center justify-center rounded-md border px-3 py-2 text-sm transition-colors ${values.outputType === type ? "border-indigo-500 bg-indigo-50 text-indigo-700 font-medium" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+                      className={`flex flex-1 cursor-pointer items-center justify-center rounded-[9px] border px-3 py-2 text-[13px] transition-colors ${
+                        values.outputType === type
+                          ? "border-[#3a5fd9] bg-[#eef1fc] font-medium text-[#3a5fd9]"
+                          : "border-[#dedad2] text-[#5a5650] hover:bg-[#efede8]"
+                      }`}
                     >
                       <input
                         type="radio"
@@ -208,20 +216,20 @@ export function NodeConfigModal({
               </div>
 
               {values.outputType === "generate_document" && (
-                <div className="space-y-2">
+                <div className="space-y-1">
                   <Label>DOCX template</Label>
                   {!onUploadTemplate ? (
-                    <p className="text-xs text-muted-foreground rounded-md border border-dashed border-gray-300 bg-gray-50 p-3">
+                    <p className="rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3 text-[12px] text-[#918d87]">
                       Save this step first, then re-open to upload a template.
                     </p>
                   ) : values.documentTemplateFilename ? (
-                    <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2">
-                      <span className="text-xs text-emerald-800 flex-1 truncate">
+                    <div className="flex items-center gap-2 rounded-[9px] border border-[#c0e8d5] bg-[#eaf6f0] px-3 py-2">
+                      <span className="flex-1 truncate text-[12px] text-[#2e9e6a]">
                         {values.documentTemplateFilename}
                       </span>
                       <button
                         type="button"
-                        className="text-xs text-gray-500 hover:text-gray-700 shrink-0"
+                        className="shrink-0 text-[12px] text-[#918d87] hover:text-[#5a5650]"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isUploading}
                       >
@@ -229,8 +237,12 @@ export function NodeConfigModal({
                       </button>
                       <button
                         type="button"
-                        className="text-xs text-red-500 hover:text-red-700 shrink-0"
-                        onClick={handleRemoveTemplate}
+                        className="shrink-0 text-[12px] text-[#c2385a] hover:text-[#a02e4b]"
+                        onClick={() => {
+                          set("documentTemplatePath", null);
+                          set("documentTemplateFilename", null);
+                          setUploadError(null);
+                        }}
                         disabled={isUploading}
                       >
                         Remove
@@ -239,7 +251,7 @@ export function NodeConfigModal({
                   ) : (
                     <button
                       type="button"
-                      className="w-full rounded-md border border-dashed border-gray-300 bg-gray-50 p-4 text-center text-sm text-gray-500 hover:border-indigo-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors disabled:opacity-50"
+                      className="w-full rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-4 text-center text-[13px] text-[#918d87] transition-colors hover:border-[#c5d0f7] hover:bg-[#eef1fc] hover:text-[#3a5fd9] disabled:opacity-50"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={isUploading}
                     >
@@ -254,31 +266,31 @@ export function NodeConfigModal({
                     onChange={handleFileChange}
                   />
                   {uploadError && (
-                    <p className="text-xs text-red-600">{uploadError}</p>
+                    <p className="text-[12px] text-[#c2385a]">{uploadError}</p>
                   )}
                 </div>
               )}
-            </div>
+            </DialogBody>
 
             <DialogFooter className="flex-row items-center justify-between">
               {onDelete && (
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setConfirmDelete(true)}
-                >
+                <Button type="button" variant="danger" size="sm" onClick={() => setConfirmDelete(true)}>
                   Remove step
                 </Button>
               )}
-              <div className="flex gap-2 ml-auto">
-                <Button type="button" variant="outline" onClick={onClose}>
+              <div className="ml-auto flex gap-2">
+                <Button type="button" variant="ghost" onClick={onClose}>
                   Cancel
                 </Button>
                 <Button
                   type="button"
                   onClick={handleSave}
-                  disabled={isSaving || !values.name.trim() || !values.aiInstruction.trim() || !values.doneWhen.trim()}
+                  disabled={
+                    isSaving ||
+                    !values.name.trim() ||
+                    !values.aiInstruction.trim() ||
+                    !values.doneWhen.trim()
+                  }
                 >
                   {isSaving ? "Saving…" : "Save"}
                 </Button>

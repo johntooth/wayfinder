@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
+  DialogCloseButton,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -41,28 +43,31 @@ export function BranchOverrideModal({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Pick a step manually</DialogTitle>
+          <DialogCloseButton />
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">
-          Wayfinder could not determine the next step automatically. Select which step to advance to.
-        </p>
-        <div className="flex flex-col gap-2 py-2">
-          {branches.map((branch) => (
-            <button
-              key={branch.nodeId}
-              type="button"
-              onClick={() => setSelected(branch.nodeId)}
-              className={`rounded-md border px-4 py-3 text-left text-sm transition-colors ${
-                selected === branch.nodeId
-                  ? "border-indigo-500 bg-indigo-50 text-indigo-900"
-                  : "border-border hover:bg-muted"
-              }`}
-            >
-              {branch.nodeName}
-            </button>
-          ))}
-        </div>
+        <DialogBody>
+          <p className="text-[13px] leading-[1.55] text-[#5a5650]">
+            Wayfinder could not determine the next step automatically. Select which step to advance to.
+          </p>
+          <div className="flex flex-col gap-2">
+            {branches.map((branch) => (
+              <button
+                key={branch.nodeId}
+                type="button"
+                onClick={() => setSelected(branch.nodeId)}
+                className={`rounded-[10px] border-[1.5px] px-4 py-3 text-left text-[13px] transition-colors ${
+                  selected === branch.nodeId
+                    ? "border-[#3a5fd9] bg-[#eef1fc] text-[#1a1814]"
+                    : "border-[#dedad2] text-[#5a5650] hover:bg-[#efede8]"
+                }`}
+              >
+                {branch.nodeName}
+              </button>
+            ))}
+          </div>
+        </DialogBody>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isPending}>
+          <Button variant="ghost" onClick={onClose} disabled={isPending}>
             Cancel
           </Button>
           <Button onClick={handleConfirm} disabled={!selected || isPending}>
