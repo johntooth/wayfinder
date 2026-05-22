@@ -55,6 +55,16 @@ describe("MinioStorageAdapter", () => {
 
       expect(mockMakeBucket).not.toHaveBeenCalled();
     });
+
+    it("propagates the error when the MinIO server is unreachable", async () => {
+      const connectionError = Object.assign(new AggregateError([new Error("connect ECONNREFUSED")]), {
+        code: "ECONNREFUSED",
+      });
+      mockBucketExists.mockRejectedValue(connectionError);
+
+      const adapter = makeAdapter();
+      await expect(adapter.initialise()).rejects.toMatchObject({ code: "ECONNREFUSED" });
+    });
   });
 
   describe("put", () => {

@@ -106,7 +106,9 @@ const build = () => {
     bucket: env.MINIO_BUCKET,
     pathStyle: true,
   });
-  void objectStorage.initialise();
+  objectStorage.initialise().catch((error: unknown) => {
+    logger.warn("MinIO initialisation failed — object storage unavailable until the server restarts", { error });
+  });
 
   const pkiConfig = {
     trustedProxyIps: (env.PKI_TRUSTED_PROXY_IPS ?? "")

@@ -31,6 +31,18 @@ const config: NextConfig = {
         ? [existing as RegExp | string]
         : [];
     config.module.noParse = [...existing_rules, /node_modules[\\/]require-in-the-middle[\\/]/];
+
+    // pino-logger.ts uses createRequire(path.join(process.cwd(), "index.js")) to
+    // load pino-pretty as a synchronous stream.  Webpack's NodeStuffPlugin tries
+    // to statically evaluate the argument and emits a false-positive warning
+    // because process.cwd() is not a compile-time constant.  pino and pino-pretty
+    // are already in serverExternalPackages so this is purely a build-analysis
+    // artefact — suppress it without changing runtime behaviour.
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings ?? []),
+      { module: /pino-logger/, message: /createRequire/ },
+    ];
+
     return config;
   },
 };
