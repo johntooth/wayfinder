@@ -1,6 +1,7 @@
 "use client";
 
 import { type ChangeEvent, useRef, useState } from "react";
+import { Check, Copy, Eye, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { trpc } from "@/trpc/client";
 
 const COLOURS = [
   { hex: "#3a5fd9", label: "Indigo" },
@@ -36,6 +38,7 @@ export interface NodeConfigValues {
 
 interface NodeConfigModalProps {
   open: boolean;
+  flowId: string;
   initialValues?: Partial<NodeConfigValues>;
   onSave: (values: NodeConfigValues) => void;
   onDelete?: () => void;
@@ -54,8 +57,30 @@ const DEFAULT_VALUES: NodeConfigValues = {
   documentTemplateFilename: null,
 };
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[#918d87] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+    >
+      {copied ? <Check size={12} /> : <Copy size={12} />}
+      {copied ? "Copied!" : "Copy"}
+    </button>
+  );
+}
+
 export function NodeConfigModal({
   open,
+  flowId,
   initialValues,
   onSave,
   onDelete,
@@ -63,10 +88,15 @@ export function NodeConfigModal({
   isSaving = false,
   onUploadTemplate,
 }: NodeConfigModalProps) {
+  const utils = trpc.useUtils();
   const [values, setValues] = useState<NodeConfigValues>({ ...DEFAULT_VALUES, ...initialValues });
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [view, setView] = useState<"edit" | "preview">("edit");
+  const [previewPrompt, setPreviewPrompt] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const set = <K extends keyof NodeConfigValues>(key: K, value: NodeConfigValues[K]) =>
@@ -81,7 +111,33 @@ export function NodeConfigModal({
     if (!isOpen) {
       setConfirmDelete(false);
       setUploadError(null);
+      setView("edit");
+      setPreviewPrompt(null);
+      setPreviewError(null);
       onClose();
+    }
+  };
+
+  const handleToggleView = async () => {
+    if (view === "preview") {
+      setView("edit");
+      return;
+    }
+    setIsLoadingPreview(true);
+    setPreviewError(null);
+    try {
+      const result = await utils.flow.node.previewPrompt.fetch({
+        flowId,
+        aiInstruction: values.aiInstruction,
+        doneWhen: values.doneWhen,
+      });
+      setPreviewPrompt(result.systemPrompt);
+      setView("preview");
+    } catch (error) {
+      setPreviewError(error instanceof Error ? error.message : "Failed to load preview.");
+      setView("preview");
+    } finally {
+      setIsLoadingPreview(false);
     }
   };
 
@@ -131,9 +187,45 @@ export function NodeConfigModal({
           <>
             <DialogHeader>
               <DialogTitle>Configure step</DialogTitle>
+              <button
+                type="button"
+                aria-label={view === "edit" ? "Preview prompt" : "Back to edit"}
+                className="ml-auto mr-1 rounded-md p-1 text-[#918d87] transition-colors hover:bg-[#efede8] hover:text-[#1a1814] disabled:opacity-50"
+                onClick={handleToggleView}
+                disabled={isLoadingPreview}
+              >
+                {view === "edit" ? <Eye size={15} /> : <Pencil size={15} />}
+              </button>
               <DialogCloseButton />
             </DialogHeader>
 
+            {view === "preview" ? (
+              <>
+                <DialogBody className="flex max-h-[70vh] flex-col gap-3 overflow-hidden">
+                  {previewError ? (
+                    <p className="text-[13px] text-[#c2385a]">{previewError}</p>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <p className="text-[12px] text-[#918d87]">
+                          System prompt sent to the AI for this step (read-only)
+                        </p>
+                        <CopyButton text={previewPrompt ?? ""} />
+                      </div>
+                      <pre className="flex-1 overflow-y-auto whitespace-pre-wrap rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] p-3 font-mono text-[12px] leading-[1.6] text-[#1a1814]">
+                        {previewPrompt}
+                      </pre>
+                    </>
+                  )}
+                </DialogBody>
+                <DialogFooter>
+                  <Button type="button" variant="ghost" onClick={() => setView("edit")}>
+                    ← Back to edit
+                  </Button>
+                </DialogFooter>
+              </>
+            ) : (
+            <>
             <DialogBody className="max-h-[70vh] overflow-y-auto">
               <div className="space-y-1">
                 <Label htmlFor="node-name">Step name</Label>
@@ -296,6 +388,8 @@ export function NodeConfigModal({
                 </Button>
               </div>
             </DialogFooter>
+            </>
+            )}
           </>
         )}
       </DialogContent>
