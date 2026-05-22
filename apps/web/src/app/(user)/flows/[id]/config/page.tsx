@@ -343,6 +343,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
 
       <NodeConfigModal
         open={configOpen}
+        flowId={flowId}
         initialValues={initialConfigValues}
         onSave={handleConfigSave}
         onDelete={editingNodeId && !editingNodeId.startsWith("temp-") ? handleNodeDelete : undefined}

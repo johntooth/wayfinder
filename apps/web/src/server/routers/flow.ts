@@ -22,6 +22,46 @@ const canEditFlow = async (
 };
 
 const nodeRouter = router({
+  previewPrompt: authenticatedProcedure
+    .input(
+      z.object({
+        flowId: z.string().uuid(),
+        aiInstruction: z.string(),
+        doneWhen: z.string(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to view this flow." });
+      }
+
+      const canvasResult = await ctx.container.useCases.getFlowCanvas.execute(input.flowId);
+      if (canvasResult.error) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: canvasResult.error.message });
+      }
+      if (!canvasResult.data) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Flow not found." });
+      }
+
+      const contextDocs = canvasResult.data.flow.contextDocs;
+
+      const promptResult = ctx.container.services.sessionAgent.buildSystemPrompt({
+        nodeConfig: {
+          aiInstruction: input.aiInstruction,
+          doneWhen: input.doneWhen,
+          outputType: "conversation_only",
+        },
+        contextDocs,
+        gatheredContext: "",
+      });
+
+      if (promptResult.error) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: promptResult.error.message });
+      }
+
+      return { systemPrompt: promptResult.data };
+    }),
+
   create: authenticatedProcedure
     .input(
       z.object({
