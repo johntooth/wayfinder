@@ -64,6 +64,7 @@ const errorLogging = t.middleware(async ({ ctx, path, type, next }) => {
 });
 
 export const router = t.router;
+export const createCallerFactory = t.createCallerFactory;
 export const publicProcedure = t.procedure.use(errorLogging);
 
 export const authenticatedProcedure = publicProcedure.use(({ ctx, next }) => {
