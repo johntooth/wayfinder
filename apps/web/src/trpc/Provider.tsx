@@ -1,27 +1,14 @@
 "use client";
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { TRPCClientError } from "@trpc/client";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchStreamLink } from "@trpc/client";
 import { useState, type PropsWithChildren } from "react";
 import superjson from "superjson";
+import { createQueryClient } from "@/lib/query-client";
 import { trpc } from "./client";
 
-const retryFn = (failureCount: number, error: unknown): boolean => {
-  if (error instanceof TRPCClientError) {
-    const status = error.data?.httpStatus as number | undefined;
-    if (status !== undefined && status >= 400 && status < 500) return false;
-  }
-  return failureCount < 3;
-};
-
 export const TrpcProvider = ({ children }: PropsWithChildren) => {
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: { queries: { staleTime: 5_000, retry: retryFn } },
-      }),
-  );
+  const [queryClient] = useState(() => createQueryClient());
 
   const [trpcClient] = useState(() =>
     trpc.createClient({
