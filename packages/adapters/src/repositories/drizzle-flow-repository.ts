@@ -10,7 +10,7 @@ import {
   type NewFlow,
   type Result,
 } from "@rbrasier/domain";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { app_flows } from "../db/schema/wayfinder";
 
@@ -64,7 +64,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
 
   async list(): Promise<Result<Flow[]>> {
     try {
-      const rows = await this.db.select().from(app_flows).orderBy(app_flows.updated_at);
+      const rows = await this.db.select().from(app_flows).orderBy(desc(app_flows.updated_at));
       return ok(rows.map(toEntity));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list flows.", cause));
