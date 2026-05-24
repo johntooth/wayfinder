@@ -74,6 +74,12 @@ async function connectNodes(page: Page, srcIndex: number, tgtIndex: number): Pro
   await page.locator('.react-flow__pane').click({ position: { x: 10, y: 10 }, force: true });
   await page.waitForTimeout(200);
 
+  // Fit all nodes into the viewport. ReactFlow positions nodes via CSS transforms
+  // on a panning canvas; standard browser scroll has no effect, so nodes added
+  // beyond the visible area stay out of viewport until Fit View resets the pan.
+  await page.getByRole('button', { name: 'Fit View' }).click();
+  await page.waitForTimeout(400);
+
   const src = page.locator('.react-flow__node').nth(srcIndex).locator('.react-flow__handle-right');
   const tgt = page.locator('.react-flow__node').nth(tgtIndex).locator('.react-flow__handle-left');
   await src.dragTo(tgt, { force: true });
@@ -88,6 +94,13 @@ async function connectNodesDetour(
   tgtIndex: number,
   detourOffsetY: number,
 ): Promise<void> {
+  // Same viewport fix as connectNodes — must fit view before reading boundingBox
+  // coordinates, otherwise off-screen nodes return positions outside the viewport.
+  await page.locator('.react-flow__pane').click({ position: { x: 10, y: 10 }, force: true });
+  await page.waitForTimeout(200);
+  await page.getByRole('button', { name: 'Fit View' }).click();
+  await page.waitForTimeout(400);
+
   const src = page.locator('.react-flow__node').nth(srcIndex).locator('.react-flow__handle-right');
   const tgt = page.locator('.react-flow__node').nth(tgtIndex).locator('.react-flow__handle-left');
 
