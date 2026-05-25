@@ -45,7 +45,7 @@ const estimateCost = (model: string, usage: TokenUsage): number => {
   );
 };
 
-const record = (
+export const recordTokenUsage = (
   repo: IUsageRepository,
   input: { purpose: string; userId?: string | null; conversationId?: string | null; model?: string; provider: ProviderName },
   usage: TokenUsage,
@@ -81,7 +81,7 @@ export class UsageTrackingAdapter implements ILanguageModel {
   ): Promise<Result<{ object: T; usage: TokenUsage }>> {
     const result = await this.inner.generateObject<T>(input);
     if (!result.error) {
-      record(this.usageRepo, { ...input, provider: this.provider }, result.data.usage);
+      recordTokenUsage(this.usageRepo, { ...input, provider: this.provider }, result.data.usage);
     }
     return result;
   }
@@ -92,7 +92,7 @@ export class UsageTrackingAdapter implements ILanguageModel {
     const result = await this.inner.streamText(input);
     if (!result.error) {
       void result.data.usage.then((usage) => {
-        record(this.usageRepo, { ...input, provider: this.provider }, usage);
+        recordTokenUsage(this.usageRepo, { ...input, provider: this.provider }, usage);
       });
     }
     return result;
@@ -110,7 +110,7 @@ export class UsageTrackingAdapter implements ILanguageModel {
     const result = await this.inner.streamObject<T>(input);
     if (!result.error) {
       void result.data.usage.then((usage) => {
-        record(this.usageRepo, { ...input, provider: this.provider }, usage);
+        recordTokenUsage(this.usageRepo, { ...input, provider: this.provider }, usage);
       });
     }
     return result;

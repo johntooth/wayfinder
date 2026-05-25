@@ -52,6 +52,11 @@ const toRfNode = (node: {
     name: node.name,
     colour: node.colour,
     aiInstruction: (node.config.aiInstruction as string | null) ?? null,
+    doneWhen: (node.config.doneWhen as string | null) ?? null,
+    neverDone: Boolean(node.config.neverDone),
+    outputType: (node.config.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
+    documentTemplatePath: (node.config.documentTemplatePath as string | null) ?? null,
+    documentTemplateFilename: (node.config.documentTemplateFilename as string | null) ?? null,
   },
 });
 
@@ -191,8 +196,11 @@ function CanvasInner({ flowId }: { flowId: string }) {
 
     const config = {
       aiInstruction: values.aiInstruction,
-      doneWhen: values.doneWhen,
+      doneWhen: values.neverDone ? "" : values.doneWhen,
+      neverDone: values.neverDone,
       outputType: values.outputType,
+      documentTemplatePath: values.documentTemplatePath ?? null,
+      documentTemplateFilename: values.documentTemplateFilename ?? null,
     };
 
     const isTempNode = editingNodeId.startsWith("temp-");
@@ -239,7 +247,20 @@ function CanvasInner({ flowId }: { flowId: string }) {
         setRfNodes((nds) =>
           nds.map((n) =>
             n.id === editingNodeId
-              ? { ...n, data: { ...n.data, name: values.name, colour: values.colour, aiInstruction: values.aiInstruction } }
+              ? {
+                  ...n,
+                  data: {
+                    ...n.data,
+                    name: values.name,
+                    colour: values.colour,
+                    aiInstruction: values.aiInstruction,
+                    doneWhen: config.doneWhen,
+                    neverDone: config.neverDone,
+                    outputType: config.outputType,
+                    documentTemplatePath: config.documentTemplatePath,
+                    documentTemplateFilename: config.documentTemplateFilename,
+                  },
+                }
               : n,
           ),
         );
@@ -294,8 +315,11 @@ function CanvasInner({ flowId }: { flowId: string }) {
         name: editingData.name,
         colour: editingData.colour ?? "#6366f1",
         aiInstruction: editingData.aiInstruction ?? "",
-        doneWhen: (editingNode && (editingNode.data as Record<string, unknown>).doneWhen as string | undefined) ?? "",
-        outputType: ((editingNode?.data as Record<string, unknown>).outputType as "conversation_only" | "generate_document" | undefined) ?? "conversation_only",
+        doneWhen: ((editingNode?.data as Record<string, unknown>)?.doneWhen as string | undefined) ?? "",
+        neverDone: Boolean((editingNode?.data as Record<string, unknown>)?.neverDone),
+        outputType: ((editingNode?.data as Record<string, unknown>)?.outputType as "conversation_only" | "generate_document" | undefined) ?? "conversation_only",
+        documentTemplatePath: ((editingNode?.data as Record<string, unknown>)?.documentTemplatePath as string | null) ?? null,
+        documentTemplateFilename: ((editingNode?.data as Record<string, unknown>)?.documentTemplateFilename as string | null) ?? null,
       }
     : undefined;
 

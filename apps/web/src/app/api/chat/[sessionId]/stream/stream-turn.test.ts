@@ -61,8 +61,10 @@ describe("streamTurn", () => {
       writer,
     });
 
-    expect(turn.response).toBe("Hello world");
-    expect(turn.stepCompleteConfidence).toBe(50);
+    expect(turn.object.response).toBe("Hello world");
+    expect(turn.object.stepCompleteConfidence).toBe(50);
+    expect(turn.usage.promptTokens).toBe(1);
+    expect(turn.usage.completionTokens).toBe(5);
     expect(writer.written.join("")).toBe('0:"Hello"\n0:" world"\n');
   });
 

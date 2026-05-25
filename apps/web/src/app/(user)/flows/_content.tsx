@@ -6,32 +6,17 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogBody,
-  DialogCloseButton,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/empty-state";
 import { TableSkeletonRows } from "@/components/skeleton/card-skeleton";
+import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/flow-metadata-dialog";
+import { ShareFlowDialog } from "@/components/flow/share-flow-dialog";
 import { trpc } from "@/trpc/client";
 
-const ICONS = ["🗂️", "🏗️", "💬", "📋", "🔄", "⚙️"];
-
-interface NewFlowForm {
-  name: string;
-  expertRole: string;
-  description: string;
-  icon: string;
+interface EditState {
+  flowId: string;
+  initial: Partial<FlowMetadataValues>;
 }
-
-const emptyForm = (): NewFlowForm => ({ name: "", expertRole: "", description: "", icon: ICONS[0] ?? "🗂️" });
 
 export function UserFlowsContent() {
   const utils = trpc.useUtils();
@@ -45,18 +30,36 @@ export function UserFlowsContent() {
     },
   });
 
-  const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState<NewFlowForm>(emptyForm());
+  const updateMutation = trpc.flow.update.useMutation({
+    onSuccess: () => {
+      void utils.flow.listMine.invalidate();
+      setEditing(null);
+      toast.success("Flow updated");
+    },
+  });
 
-  const handleCreate = async () => {
-    if (!form.name.trim() || !form.expertRole.trim()) return;
-    await createMutation.mutateAsync({
-      name: form.name.trim(),
-      expertRole: form.expertRole.trim(),
-      description: form.description.trim() || null,
-      icon: form.icon || null,
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<EditState | null>(null);
+  const [sharing, setSharing] = useState<{ flowId: string; name: string } | null>(null);
+
+  const handleCreate = (values: FlowMetadataValues) => {
+    void createMutation.mutateAsync({
+      name: values.name,
+      expertRole: values.expertRole,
+      description: values.description || null,
+      icon: values.icon || null,
     });
-    setForm(emptyForm());
+  };
+
+  const handleEdit = (values: FlowMetadataValues) => {
+    if (!editing) return;
+    void updateMutation.mutateAsync({
+      flowId: editing.flowId,
+      name: values.name,
+      expertRole: values.expertRole,
+      description: values.description || null,
+      icon: values.icon || null,
+    });
   };
 
   return (
@@ -65,7 +68,7 @@ export function UserFlowsContent() {
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <CardTitle>Flows</CardTitle>
-            <Button onClick={() => { setForm(emptyForm()); setCreating(true); }}>New Flow</Button>
+            <Button onClick={() => setCreating(true)}>New Flow</Button>
           </CardHeader>
           <CardContent>
             {flowsQuery.isLoading ? (
@@ -76,7 +79,7 @@ export function UserFlowsContent() {
                 heading="No flows yet"
                 body="Create a flow to define a guided workflow."
                 ctaLabel="New Flow"
-                onCta={() => { setForm(emptyForm()); setCreating(true); }}
+                onCta={() => setCreating(true)}
               />
             ) : (
               <Table>
@@ -107,9 +110,35 @@ export function UserFlowsContent() {
                       <TableCell className="text-[13px] text-[#918d87]">
                         {new Date(flow.updatedAt).toLocaleDateString()}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="space-x-2 text-right">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setEditing({
+                              flowId: flow.id,
+                              initial: {
+                                name: flow.name,
+                                expertRole: flow.expertRole ?? "",
+                                description: flow.description ?? "",
+                                icon: flow.icon ?? "🗂️",
+                              },
+                            })
+                          }
+                        >
+                          Edit
+                        </Button>
+                        {flow.status === "published" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSharing({ flowId: flow.id, name: flow.name })}
+                          >
+                            Share
+                          </Button>
+                        )}
                         <Button size="sm" asChild>
-                          <Link href={`/flows/${flow.id}/config`}>Edit</Link>
+                          <Link href={`/flows/${flow.id}/config`}>Configure Flow</Link>
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -119,73 +148,31 @@ export function UserFlowsContent() {
             )}
           </CardContent>
 
-          <Dialog open={creating} onOpenChange={(o) => !o && setCreating(false)}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>New Flow</DialogTitle>
-                <DialogCloseButton />
-              </DialogHeader>
-              <DialogBody>
-                <div className="space-y-1">
-                  <Label htmlFor="flow-name">Name</Label>
-                  <Input
-                    id="flow-name"
-                    required
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    placeholder="e.g. Client onboarding"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="flow-expert-role">Expert role</Label>
-                  <Input
-                    id="flow-expert-role"
-                    required
-                    value={form.expertRole}
-                    onChange={(e) => setForm({ ...form, expertRole: e.target.value })}
-                    placeholder="e.g. Senior employment lawyer"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="flow-desc">Description</Label>
-                  <Input
-                    id="flow-desc"
-                    value={form.description}
-                    onChange={(e) => setForm({ ...form, description: e.target.value })}
-                    placeholder="Optional description"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>Icon</Label>
-                  <div className="flex gap-2">
-                    {ICONS.map((icon) => (
-                      <button
-                        key={icon}
-                        type="button"
-                        className={`flex h-10 w-10 items-center justify-center rounded-[9px] border text-xl transition-colors ${
-                          form.icon === icon
-                            ? "border-[#3a5fd9] bg-[#eef1fc]"
-                            : "border-[#dedad2] hover:bg-[#efede8]"
-                        }`}
-                        onClick={() => setForm({ ...form, icon })}
-                      >
-                        {icon}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </DialogBody>
-              <DialogFooter>
-                <Button variant="ghost" onClick={() => setCreating(false)}>Cancel</Button>
-                <Button
-                  onClick={handleCreate}
-                  disabled={createMutation.isPending || !form.name.trim() || !form.expertRole.trim()}
-                >
-                  {createMutation.isPending ? "Creating…" : "Create flow"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <FlowMetadataDialog
+            open={creating}
+            mode="create"
+            isSaving={createMutation.isPending}
+            onSubmit={handleCreate}
+            onClose={() => setCreating(false)}
+          />
+
+          <FlowMetadataDialog
+            open={editing !== null}
+            mode="edit"
+            initialValues={editing?.initial}
+            isSaving={updateMutation.isPending}
+            onSubmit={handleEdit}
+            onClose={() => setEditing(null)}
+          />
+
+          {sharing && (
+            <ShareFlowDialog
+              open={true}
+              flowId={sharing.flowId}
+              flowName={sharing.name}
+              onClose={() => setSharing(null)}
+            />
+          )}
         </Card>
       </div>
     </div>

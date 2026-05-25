@@ -18,9 +18,5 @@ export default async function HomePage() {
     redirect("/admin/login");
   }
 
-  if (session.isAdmin) {
-    redirect("/admin/flows");
-  }
-
   redirect("/chats");
 }
