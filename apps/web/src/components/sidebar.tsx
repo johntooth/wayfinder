@@ -51,21 +51,28 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   const { mobileOpen, openMobile, closeMobile } = useSidebar();
 
   const userQuery = trpc.user.me.useQuery();
-  const publishedFlowsQuery = trpc.session.listPublishedFlows.useQuery(undefined, {
+  const sessionsQuery = trpc.session.list.useQuery(undefined, {
     enabled: !isAdmin,
   });
-  const adminFlowsQuery = trpc.flow.list.useQuery(undefined, {
-    enabled: isAdmin,
+  const publishedFlowsQuery = trpc.session.listPublishedFlows.useQuery(undefined, {
+    enabled: !isAdmin,
   });
 
   if (pathname === "/admin/login") return null;
 
   const nav = isAdmin ? adminNav : userNav;
   const homeHref = isAdmin ? "/admin/flows" : "/chats";
-  const flows = isAdmin ? (adminFlowsQuery.data ?? []) : (publishedFlowsQuery.data ?? []);
-  const flowsLabel = isAdmin ? "All Flows" : "My Flows";
-  const flowHref = (flowId: string) =>
-    isAdmin ? `/admin/flows/${flowId}` : `/chats?flow=${flowId}`;
+
+  const recentChats = isAdmin
+    ? []
+    : (sessionsQuery.data ?? []).slice(0, 8).map((session) => {
+        const flow = publishedFlowsQuery.data?.find((f) => f.id === session.flowId);
+        return {
+          id: session.id,
+          label: session.title ?? flow?.name ?? "Untitled chat",
+          icon: flow?.icon ?? "💬",
+        };
+      });
 
   const user = userQuery.data;
   const displayName = user?.name ?? user?.email ?? "";
@@ -111,23 +118,23 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
           </Link>
         ))}
 
-        {flows.length > 0 && (
+        {recentChats.length > 0 && (
           <>
             <hr className="my-[10px] border-[#dedad2]" />
             <div className="px-[10px] pb-[6px] pt-[4px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#918d87]">
-              {flowsLabel}
+              Recent Chats
             </div>
-            {flows.slice(0, 8).map((flow) => (
+            {recentChats.map((chat) => (
               <Link
-                key={flow.id}
-                href={flowHref(flow.id)}
+                key={chat.id}
+                href={`/chats/${chat.id}`}
                 onClick={closeMobile}
                 className="flex items-center gap-[9px] rounded-[8px] px-[10px] py-[7px] text-[13px] text-[#5a5650] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
               >
                 <span className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[5px] bg-[#eef1fc] text-[11px]">
-                  {flow.icon ?? "💬"}
+                  {chat.icon}
                 </span>
-                <span className="overflow-hidden text-ellipsis whitespace-nowrap">{flow.name}</span>
+                <span className="overflow-hidden text-ellipsis whitespace-nowrap">{chat.label}</span>
               </Link>
             ))}
           </>
@@ -222,23 +229,23 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
                   {label}
                 </Link>
               ))}
-              {flows.length > 0 && (
+              {recentChats.length > 0 && (
                 <>
                   <hr className="my-[10px] border-[#dedad2]" />
                   <div className="px-[10px] pb-[6px] pt-[4px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#918d87]">
-                    {flowsLabel}
+                    Recent Chats
                   </div>
-                  {flows.slice(0, 8).map((flow) => (
+                  {recentChats.map((chat) => (
                     <Link
-                      key={flow.id}
-                      href={flowHref(flow.id)}
+                      key={chat.id}
+                      href={`/chats/${chat.id}`}
                       onClick={closeMobile}
                       className="flex items-center gap-[9px] rounded-[8px] px-[10px] py-[7px] text-[13px] text-[#5a5650] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
                     >
                       <span className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[5px] bg-[#eef1fc] text-[11px]">
-                        {flow.icon ?? "💬"}
+                        {chat.icon}
                       </span>
-                      <span className="overflow-hidden text-ellipsis whitespace-nowrap">{flow.name}</span>
+                      <span className="overflow-hidden text-ellipsis whitespace-nowrap">{chat.label}</span>
                     </Link>
                   ))}
                 </>

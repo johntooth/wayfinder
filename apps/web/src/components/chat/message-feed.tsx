@@ -27,7 +27,21 @@ interface MessageFeedProps {
   error?: Error | null;
   onRetry?: () => void;
   onRegenerateDocument?: (messageId: string) => void;
+  expertRole?: string | null;
+  userFirstInitial?: string;
 }
+
+const getRoleInitials = (role: string | null | undefined, fallback: string): string => {
+  if (!role) return fallback;
+  const tokens = role.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return fallback;
+  const initials = tokens
+    .map((t) => t[0] ?? "")
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  return initials || fallback;
+};
 
 const formatRelativeTime = (date: Date): string => {
   const diff = (Date.now() - date.getTime()) / 1000;
@@ -45,6 +59,8 @@ export function MessageFeed({
   error,
   onRetry,
   onRegenerateDocument,
+  expertRole,
+  userFirstInitial,
 }: MessageFeedProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -54,6 +70,8 @@ export function MessageFeed({
 
   const nodeById = Object.fromEntries(nodes.map((n) => [n.id, n]));
   const showStreaming = isStreaming || streamingMessages.length > dbMessages.length;
+  const botInitials = getRoleInitials(expertRole ?? null, "AI");
+  const userInitials = userFirstInitial ?? "U";
 
   return (
     <div className="flex flex-1 flex-col gap-5 overflow-y-auto bg-[#f7f6f3] px-5 py-6">
@@ -72,6 +90,7 @@ export function MessageFeed({
           const config = node?.config as Record<string, unknown> | undefined;
           const isDocNode = config?.["outputType"] === "generate_document";
           const hasTemplate = Boolean(config?.["documentTemplatePath"]);
+          const isNeverDone = Boolean(config?.["neverDone"]);
 
           type DocState = "generating" | "no_template" | "failed" | "done" | null;
           const docState: DocState =
@@ -93,7 +112,7 @@ export function MessageFeed({
               <div className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                 {msg.role !== "user" && (
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#3a5fd9] text-[10px] font-bold text-white">
-                    FA
+                    {botInitials}
                   </div>
                 )}
                 <div
@@ -117,15 +136,17 @@ export function MessageFeed({
                   >
                     {formatRelativeTime(msg.createdAt)}
                   </p>
-                  {msg.role === "assistant" && <ConfidenceBar score={msg.confidence} />}
+                  {msg.role === "assistant" && !isNeverDone && (
+                    <ConfidenceBar score={msg.confidence} />
+                  )}
                 </div>
                 {msg.role === "user" && (
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#e6e3dc] text-[10px] font-bold text-[#1a1814]">
-                    U
+                    {userInitials}
                   </div>
                 )}
               </div>
-              {isAdvancingMsg && node && (
+              {isAdvancingMsg && node && !isNeverDone && (
                 <>
                   <MilestonePill
                     nodeName={node.name}
@@ -156,12 +177,18 @@ export function MessageFeed({
         streamingMessages.map((msg) => {
           const confidenceAnnotation =
             msg.annotations?.map(toConfidenceAnnotation).find(Boolean) ?? null;
+          // Streaming messages don't yet have a stepNodeId; infer "never done" from the
+          // most recent persisted assistant message on the current step.
+          const latestPersistedNodeId = [...dbMessages].reverse().find((m) => m.role === "assistant")?.stepNodeId ?? null;
+          const streamingNode = latestPersistedNodeId ? nodeById[latestPersistedNodeId] : null;
+          const streamingConfig = streamingNode?.config as Record<string, unknown> | undefined;
+          const streamingIsNeverDone = Boolean(streamingConfig?.["neverDone"]);
 
           return (
             <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
               {msg.role !== "user" && (
                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#3a5fd9] text-[10px] font-bold text-white">
-                  FA
+                  {botInitials}
                 </div>
               )}
               <div
@@ -178,7 +205,7 @@ export function MessageFeed({
                 >
                   {msg.content || (isStreaming && msg.role === "assistant" ? "…" : "")}
                 </p>
-                {msg.role === "assistant" && (
+                {msg.role === "assistant" && !streamingIsNeverDone && (
                   <ConfidenceBar
                     score={confidenceAnnotation?.score ?? null}
                     evaluating={isStreaming && !confidenceAnnotation}
@@ -187,7 +214,7 @@ export function MessageFeed({
               </div>
               {msg.role === "user" && (
                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#e6e3dc] text-[10px] font-bold text-[#1a1814]">
-                  U
+                  {userInitials}
                 </div>
               )}
             </div>

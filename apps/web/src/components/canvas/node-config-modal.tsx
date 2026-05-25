@@ -1,6 +1,6 @@
 "use client";
 
-import { type ChangeEvent, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { Check, Copy, Eye, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +31,7 @@ export interface NodeConfigValues {
   colour: string;
   aiInstruction: string;
   doneWhen: string;
+  neverDone: boolean;
   outputType: "conversation_only" | "generate_document";
   documentTemplatePath?: string | null;
   documentTemplateFilename?: string | null;
@@ -52,6 +53,7 @@ const DEFAULT_VALUES: NodeConfigValues = {
   colour: "#3a5fd9",
   aiInstruction: "",
   doneWhen: "",
+  neverDone: false,
   outputType: "conversation_only",
   documentTemplatePath: null,
   documentTemplateFilename: null,
@@ -90,6 +92,12 @@ export function NodeConfigModal({
 }: NodeConfigModalProps) {
   const utils = trpc.useUtils();
   const [values, setValues] = useState<NodeConfigValues>({ ...DEFAULT_VALUES, ...initialValues });
+  // Reset form state when the modal opens for a different node.
+  useEffect(() => {
+    if (open) {
+      setValues({ ...DEFAULT_VALUES, ...initialValues });
+    }
+  }, [open, initialValues]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -103,7 +111,8 @@ export function NodeConfigModal({
     setValues((prev) => ({ ...prev, [key]: value }));
 
   const handleSave = () => {
-    if (!values.name.trim() || !values.aiInstruction.trim() || !values.doneWhen.trim()) return;
+    if (!values.name.trim() || !values.aiInstruction.trim()) return;
+    if (!values.neverDone && !values.doneWhen.trim()) return;
     onSave(values);
   };
 
@@ -271,15 +280,26 @@ export function NodeConfigModal({
               </div>
 
               <div className="space-y-1">
-                <Label htmlFor="done-when">Done when…</Label>
-                <Textarea
-                  id="done-when"
-                  required
-                  rows={2}
-                  value={values.doneWhen}
-                  onChange={(e) => set("doneWhen", e.target.value)}
-                  placeholder="Describe the condition that marks this step complete…"
-                />
+                <Label htmlFor="done-when-mode">Done when…</Label>
+                <select
+                  id="done-when-mode"
+                  className="flex h-10 w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#3a5fd9] focus:bg-white focus:outline-none"
+                  value={values.neverDone ? "never" : "condition"}
+                  onChange={(e) => set("neverDone", e.target.value === "never")}
+                >
+                  <option value="condition">Specific condition</option>
+                  <option value="never">Never done. User can continue to interact indefinitely</option>
+                </select>
+                {!values.neverDone && (
+                  <Textarea
+                    id="done-when"
+                    required
+                    rows={2}
+                    value={values.doneWhen}
+                    onChange={(e) => set("doneWhen", e.target.value)}
+                    placeholder="Describe the condition that marks this step complete…"
+                  />
+                )}
               </div>
 
               <div className="space-y-1">
@@ -381,7 +401,7 @@ export function NodeConfigModal({
                     isSaving ||
                     !values.name.trim() ||
                     !values.aiInstruction.trim() ||
-                    !values.doneWhen.trim()
+                    (!values.neverDone && !values.doneWhen.trim())
                   }
                 >
                   {isSaving ? "Saving…" : "Save"}

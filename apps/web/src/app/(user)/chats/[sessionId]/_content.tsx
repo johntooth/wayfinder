@@ -160,6 +160,11 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   }
 
   const { session, flow } = sessionData;
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const newChatUrl = `${origin}/chats?flow=${flow.id}&start=1`;
+  const collaborateUrl = `${origin}/chats/${sessionId}?shared=true`;
+  const me = meQuery.data;
+  const userFirstInitial = me?.name?.trim()?.[0]?.toUpperCase() ?? "U";
 
   return (
     <main className="flex h-full flex-col overflow-hidden">
@@ -176,7 +181,13 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
           </Badge>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {!isShared && <ShareButton sessionId={sessionId} />}
+          {!isShared && (
+            <ShareButton
+              label="Share"
+              url={newChatUrl}
+              toastMessage="Link copied — share with a colleague to start a new chat session using this flow"
+            />
+          )}
         </div>
       </header>
 
@@ -184,6 +195,15 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         nodes={nodes}
         currentNodeId={session.currentNodeId}
         completedNodeIds={completedNodeIds}
+        rightSlot={
+          !isShared ? (
+            <ShareButton
+              label="Collaborate"
+              url={collaborateUrl}
+              toastMessage="Link copied, share it with a colleague to collaborate in this chat session"
+            />
+          ) : null
+        }
       />
 
       <MessageFeed
@@ -194,6 +214,8 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         error={error ?? null}
         onRetry={!isShared ? () => void reload() : undefined}
         onRegenerateDocument={!isShared ? handleRegenerateDocument : undefined}
+        expertRole={flow.expertRole ?? null}
+        userFirstInitial={userFirstInitial}
       />
 
       {showBranchOverride && (

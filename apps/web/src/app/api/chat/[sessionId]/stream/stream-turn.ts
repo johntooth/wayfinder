@@ -13,9 +13,19 @@ export interface StreamTurnInput<Schema extends z.ZodTypeAny> {
   writer: StreamTurnWriter;
 }
 
+export interface StreamTurnUsage {
+  promptTokens: number;
+  completionTokens: number;
+}
+
+export interface StreamTurnResult<Schema extends z.ZodTypeAny> {
+  object: z.infer<Schema>;
+  usage: StreamTurnUsage;
+}
+
 export async function streamTurn<Schema extends z.ZodTypeAny>(
   input: StreamTurnInput<Schema>,
-): Promise<z.infer<Schema>> {
+): Promise<StreamTurnResult<Schema>> {
   let streamError: unknown = null;
 
   const turnStream = streamObject({
@@ -46,5 +56,13 @@ export async function streamTurn<Schema extends z.ZodTypeAny>(
 
   if (streamError) throw streamError;
 
-  return turnStream.object as Promise<z.infer<Schema>>;
+  const object = (await turnStream.object) as z.infer<Schema>;
+  const rawUsage = await turnStream.usage;
+  return {
+    object,
+    usage: {
+      promptTokens: rawUsage.promptTokens ?? 0,
+      completionTokens: rawUsage.completionTokens ?? 0,
+    },
+  };
 }

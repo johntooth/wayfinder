@@ -1,5 +1,5 @@
 import { createDataStreamResponse, generateObject, generateText } from "ai";
-import { resolveModel } from "@rbrasier/adapters";
+import { recordTokenUsage, resolveModel } from "@rbrasier/adapters";
 import type { AiTurnPayload, ConversationalNodeConfig, Flow, FlowNode, SessionMessage } from "@rbrasier/domain";
 import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
@@ -62,7 +62,8 @@ export async function POST(
   const currentNode = nodes.find((n) => n.id === session.currentNodeId);
   if (!currentNode) return new Response("Current node not found", { status: 500 });
 
-  const nodeConfig = currentNode.config as unknown as ConversationalNodeConfig;
+  const nodeConfig = currentNode.config as unknown as ConversationalNodeConfig & { neverDone?: boolean };
+  const isNeverDone = Boolean(nodeConfig.neverDone);
 
   const orgSettingResult = await container.repos.systemSettings.get("organisation_name");
   const organisationName = orgSettingResult.error ? null : (orgSettingResult.data?.value ?? null);
@@ -110,13 +111,32 @@ export async function POST(
         throw cause instanceof Error ? cause : new Error(userMsgResult.error.message);
       }
 
-      const turnResult = await streamTurn({
+      const streamResult = await streamTurn({
         model: haikuModel,
         schema: turnResponseSchema,
         system: systemPromptResult.data,
         messages: messagesWithNew,
         writer: dataStream,
       });
+      const turnResult = streamResult.object;
+
+      recordTokenUsage(
+        container.repos.usageRepo,
+        {
+          purpose: "chat-turn",
+          userId: authSession.userId,
+          conversationId: sessionId,
+          model: provider === "anthropic" ? "claude-haiku-4-5-20251001" : undefined,
+          provider,
+        },
+        {
+          promptTokens: streamResult.usage.promptTokens,
+          completionTokens: streamResult.usage.completionTokens,
+          systemTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+        },
+      );
 
       const aiPayload: AiTurnPayload = {
         response: turnResult.response,
@@ -131,7 +151,7 @@ export async function POST(
       });
 
       let branchChoice: string | null = null;
-      if (aiPayload.stepCompleteConfidence >= 90 && branchNodes.length > 1) {
+      if (!isNeverDone && aiPayload.stepCompleteConfidence >= 90 && branchNodes.length > 1) {
         const branchPromptResult = container.services.sessionAgent.buildBranchChoicePrompt({ branchNodes });
         if (!branchPromptResult.error) {
           const branchResult = await generateObject({
@@ -140,6 +160,25 @@ export async function POST(
             system: branchPromptResult.data,
             messages: messagesWithNew,
           }).catch(() => null);
+          if (branchResult) {
+            recordTokenUsage(
+              container.repos.usageRepo,
+              {
+                purpose: "chat-branch-choice",
+                userId: authSession.userId,
+                conversationId: sessionId,
+                model: provider === "anthropic" ? "claude-haiku-4-5-20251001" : undefined,
+                provider,
+              },
+              {
+                promptTokens: branchResult.usage.promptTokens ?? 0,
+                completionTokens: branchResult.usage.completionTokens ?? 0,
+                systemTokens: 0,
+                cacheReadTokens: 0,
+                cacheWriteTokens: 0,
+              },
+            );
+          }
           branchChoice = branchResult?.object.branchChoice ?? null;
         }
       }
@@ -150,7 +189,7 @@ export async function POST(
         assistantMessage: aiPayload.response,
         aiPayload,
         branchChoice,
-        advanceThreshold: nodeConfig.advanceConfidenceThreshold ?? 90,
+        advanceThreshold: isNeverDone ? Number.POSITIVE_INFINITY : (nodeConfig.advanceConfidenceThreshold ?? 90),
       });
 
       if (runResult.error) {
@@ -175,7 +214,7 @@ export async function POST(
       }
 
       if (dbMessages.filter((m) => m.role === "user").length === 0) {
-        void generateTitle(container, session.id, lastUserMessage, provider);
+        void generateTitle(container, session.id, lastUserMessage, provider, authSession.userId);
       }
     },
     onError: (error) => {
@@ -224,6 +263,7 @@ async function generateTitle(
   sessionId: string,
   firstUserMessage: string,
   provider: string,
+  userId: string,
 ): Promise<void> {
   try {
     const cheapModel = resolveModel(
@@ -236,6 +276,23 @@ async function generateTitle(
       prompt: firstUserMessage,
       maxTokens: 30,
     });
+    recordTokenUsage(
+      container.repos.usageRepo,
+      {
+        purpose: "chat-title",
+        userId,
+        conversationId: sessionId,
+        model: provider === "anthropic" ? "claude-haiku-4-5-20251001" : undefined,
+        provider: provider as Parameters<typeof recordTokenUsage>[1]["provider"],
+      },
+      {
+        promptTokens: result.usage.promptTokens ?? 0,
+        completionTokens: result.usage.completionTokens ?? 0,
+        systemTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      },
+    );
     const title = result.text.trim().slice(0, 80);
     if (title) {
       await container.repos.sessions.update(sessionId, { title });

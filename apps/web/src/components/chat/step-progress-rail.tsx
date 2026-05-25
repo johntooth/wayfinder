@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type { FlowNode } from "@rbrasier/domain";
 
 type StepState = "pending" | "current" | "complete";
@@ -8,6 +9,7 @@ interface StepProgressRailProps {
   nodes: FlowNode[];
   currentNodeId: string | null;
   completedNodeIds: string[];
+  rightSlot?: ReactNode;
 }
 
 const badgeClass: Record<StepState, string> = {
@@ -32,12 +34,12 @@ const getState = (
   return "pending";
 };
 
-export function StepProgressRail({ nodes, currentNodeId, completedNodeIds }: StepProgressRailProps) {
-  if (nodes.length === 0) return null;
+export function StepProgressRail({ nodes, currentNodeId, completedNodeIds, rightSlot }: StepProgressRailProps) {
+  if (nodes.length === 0 && !rightSlot) return null;
 
   return (
-    <div className="shrink-0 overflow-x-auto border-b border-[#dedad2] bg-white px-4 py-[10px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <div className="flex min-w-max items-center gap-0">
+    <div className="flex shrink-0 items-center gap-3 overflow-x-auto border-b border-[#dedad2] bg-white px-4 py-[10px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex min-w-max flex-1 items-center gap-0">
         {nodes.map((node, index) => {
           const state = getState(node.id, currentNodeId, completedNodeIds);
           return (
@@ -66,6 +68,7 @@ export function StepProgressRail({ nodes, currentNodeId, completedNodeIds }: Ste
           );
         })}
       </div>
+      {rightSlot && <div className="ml-auto shrink-0">{rightSlot}</div>}
     </div>
   );
 }

@@ -30,6 +30,7 @@ import { ConversationalNode } from "@/components/canvas/conversational-node";
 import { ContextDocsStrip } from "@/components/canvas/context-docs-strip";
 import type { NodeConfigValues } from "@/components/canvas/node-config-modal";
 import { NodeConfigModal } from "@/components/canvas/node-config-modal";
+import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/flow-metadata-dialog";
 import { trpc } from "@/trpc/client";
 import type { FlowContextDoc } from "@rbrasier/domain";
 
@@ -52,6 +53,7 @@ const toRfNode = (node: {
     colour: node.colour,
     aiInstruction: (node.config.aiInstruction as string | null) ?? null,
     doneWhen: (node.config.doneWhen as string | null) ?? null,
+    neverDone: Boolean(node.config.neverDone),
     outputType: (node.config.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
     documentTemplatePath: (node.config.documentTemplatePath as string | null) ?? null,
     documentTemplateFilename: (node.config.documentTemplateFilename as string | null) ?? null,
@@ -74,10 +76,11 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [rfEdges, setRfEdges] = useState<Edge[]>([]);
   const [contextDocs, setContextDocs] = useState<FlowContextDoc[]>([]);
   const [flowName, setFlowName] = useState("");
+  const [flowDescription, setFlowDescription] = useState<string>("");
+  const [flowIcon, setFlowIcon] = useState<string>("");
   const [flowStatus, setFlowStatus] = useState<"draft" | "published">("draft");
   const [expertRole, setExpertRole] = useState<string>("");
-  const [expertRoleFocused, setExpertRoleFocused] = useState(false);
-  const expertRoleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [editingMetadata, setEditingMetadata] = useState(false);
 
   const [configOpen, setConfigOpen] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -101,6 +104,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
     setRfEdges(data.edges.map(toRfEdge));
     setContextDocs(data.flow.contextDocs);
     setFlowName(data.flow.name);
+    setFlowDescription(data.flow.description ?? "");
+    setFlowIcon(data.flow.icon ?? "");
     setFlowStatus(data.flow.status);
     setExpertRole(data.flow.expertRole ?? "");
     if (data.nodes.length > 3) {
@@ -203,7 +208,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
     setIsSavingConfig(true);
     const config = {
       aiInstruction: values.aiInstruction,
-      doneWhen: values.doneWhen,
+      doneWhen: values.neverDone ? "" : values.doneWhen,
+      neverDone: values.neverDone,
       outputType: values.outputType,
       documentTemplatePath: values.documentTemplatePath ?? null,
       documentTemplateFilename: values.documentTemplateFilename ?? null,
@@ -236,7 +242,20 @@ function CanvasInner({ flowId }: { flowId: string }) {
         setRfNodes((nds) =>
           nds.map((n) =>
             n.id === editingNodeId
-              ? { ...n, data: { ...n.data, name: values.name, colour: values.colour, aiInstruction: values.aiInstruction } }
+              ? {
+                  ...n,
+                  data: {
+                    ...n.data,
+                    name: values.name,
+                    colour: values.colour,
+                    aiInstruction: values.aiInstruction,
+                    doneWhen: config.doneWhen,
+                    neverDone: config.neverDone,
+                    outputType: config.outputType,
+                    documentTemplatePath: config.documentTemplatePath,
+                    documentTemplateFilename: config.documentTemplateFilename,
+                  },
+                }
               : n,
           ),
         );
@@ -303,6 +322,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         colour: editingData.colour ?? "#6366f1",
         aiInstruction: editingData.aiInstruction ?? "",
         doneWhen: (editingData.doneWhen as string | null) ?? "",
+        neverDone: Boolean(editingData.neverDone),
         outputType: (editingData.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
         documentTemplatePath: (editingData.documentTemplatePath as string | null) ?? null,
         documentTemplateFilename: (editingData.documentTemplateFilename as string | null) ?? null,
@@ -318,25 +338,6 @@ function CanvasInner({ flowId }: { flowId: string }) {
         <Badge variant={flowStatus === "published" ? "default" : "secondary"}>
           {flowStatus === "published" ? "Published" : "Draft"}
         </Badge>
-        <div className="h-4 w-px bg-border" />
-        <span className="text-xs text-[#918d87]">Expert role</span>
-        <input
-          type="text"
-          value={expertRole}
-          placeholder="e.g. procurement specialist"
-          className={`h-7 rounded-md border px-2 text-xs text-[#1a1814] outline-none transition-colors ${expertRoleFocused ? "border-[#3a5fd9]" : "border-[#dedad2]"} bg-[#f7f6f3]`}
-          style={{ width: "180px" }}
-          onFocus={() => setExpertRoleFocused(true)}
-          onBlur={() => setExpertRoleFocused(false)}
-          onChange={(e) => {
-            const value = e.target.value;
-            setExpertRole(value);
-            if (expertRoleTimer.current) clearTimeout(expertRoleTimer.current);
-            expertRoleTimer.current = setTimeout(() => {
-              void updateFlowMutation.mutateAsync({ flowId, expertRole: value || null });
-            }, 800);
-          }}
-        />
         <div className="ml-auto flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={handleAddStep}>
             + Add step
@@ -354,7 +355,9 @@ function CanvasInner({ flowId }: { flowId: string }) {
           >
             {flowStatus === "published" ? "Unpublish" : "Publish"}
           </Button>
-          <Button size="sm" disabled title="Available in Phase 2">Open Chat</Button>
+          <Button size="sm" variant="outline" onClick={() => setEditingMetadata(true)}>
+            Edit
+          </Button>
         </div>
       </div>
 
@@ -389,6 +392,37 @@ function CanvasInner({ flowId }: { flowId: string }) {
         onClose={handleConfigClose}
         isSaving={isSavingConfig}
         onUploadTemplate={editingNodeId && !editingNodeId.startsWith("temp-") ? handleUploadTemplate : undefined}
+      />
+
+      <FlowMetadataDialog
+        open={editingMetadata}
+        mode="edit"
+        initialValues={{
+          name: flowName,
+          expertRole,
+          description: flowDescription,
+          icon: flowIcon || "🗂️",
+        }}
+        isSaving={updateFlowMutation.isPending}
+        onSubmit={(values: FlowMetadataValues) => {
+          setFlowName(values.name);
+          setExpertRole(values.expertRole);
+          setFlowDescription(values.description);
+          setFlowIcon(values.icon);
+          void updateFlowMutation
+            .mutateAsync({
+              flowId,
+              name: values.name,
+              expertRole: values.expertRole,
+              description: values.description || null,
+              icon: values.icon || null,
+            })
+            .then(() => {
+              setEditingMetadata(false);
+              toast.success("Flow updated");
+            });
+        }}
+        onClose={() => setEditingMetadata(false)}
       />
     </div>
   );

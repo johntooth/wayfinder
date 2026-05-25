@@ -4,19 +4,20 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
 interface ShareButtonProps {
-  sessionId: string;
+  label: string;
+  url: string;
+  toastMessage: string;
 }
 
-export function ShareButton({ sessionId }: ShareButtonProps) {
+export function ShareButton({ label, url, toastMessage }: ShareButtonProps) {
   const handleShare = async () => {
-    const url = `${window.location.origin}/chats/${sessionId}?shared=true`;
     await navigator.clipboard.writeText(url);
-    toast.success("Link copied");
+    toast.success(toastMessage);
   };
 
   return (
     <Button variant="outline" size="sm" onClick={handleShare}>
-      Share
+      {label}
     </Button>
   );
 }
