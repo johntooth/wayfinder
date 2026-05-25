@@ -101,6 +101,15 @@ export async function POST(
 
   return createDataStreamResponse({
     execute: async (dataStream) => {
+      const userMsgResult = await container.useCases.runTurn.persistUserMessage({
+        session,
+        userMessage: lastUserMessage,
+      });
+      if (userMsgResult.error) {
+        const cause = userMsgResult.error.cause;
+        throw cause instanceof Error ? cause : new Error(userMsgResult.error.message);
+      }
+
       const turnResult = await streamTurn({
         model: haikuModel,
         schema: turnResponseSchema,
@@ -135,10 +144,9 @@ export async function POST(
         }
       }
 
-      const runResult = await container.useCases.runTurn.execute({
+      const runResult = await container.useCases.runTurn.persistAssistantTurn({
         session,
         flowId: flow.id,
-        userMessage: lastUserMessage,
         assistantMessage: aiPayload.response,
         aiPayload,
         branchChoice,
@@ -147,9 +155,7 @@ export async function POST(
 
       if (runResult.error) {
         const cause = runResult.error.cause;
-        throw cause instanceof Error
-          ? cause
-          : new Error(runResult.error.message);
+        throw cause instanceof Error ? cause : new Error(runResult.error.message);
       }
 
       if (runResult.data.advanced) {
