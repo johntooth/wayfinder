@@ -1,8 +1,9 @@
-import { createDataStreamResponse, generateObject, generateText, streamObject } from "ai";
+import { createDataStreamResponse, generateObject, generateText } from "ai";
 import { resolveModel } from "@rbrasier/adapters";
 import type { AiTurnPayload, ConversationalNodeConfig, Flow, FlowNode, SessionMessage } from "@rbrasier/domain";
 import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
+import { streamTurn } from "./stream-turn";
 
 const getSessionToken = (req: Request): string | null => {
   const cookie = req.headers.get("cookie");
@@ -100,24 +101,14 @@ export async function POST(
 
   return createDataStreamResponse({
     execute: async (dataStream) => {
-      const turnStream = streamObject({
+      const turnResult = await streamTurn({
         model: haikuModel,
         schema: turnResponseSchema,
         system: systemPromptResult.data,
         messages: messagesWithNew,
+        writer: dataStream,
       });
 
-      let previousResponseLength = 0;
-      for await (const partial of turnStream.partialObjectStream) {
-        const currentResponse = partial.response ?? "";
-        if (currentResponse.length > previousResponseLength) {
-          const newChars = currentResponse.slice(previousResponseLength);
-          dataStream.write(`0:${JSON.stringify(newChars)}\n`);
-          previousResponseLength = currentResponse.length;
-        }
-      }
-
-      const turnResult = await turnStream.object;
       const aiPayload: AiTurnPayload = {
         response: turnResult.response,
         rationale: turnResult.rationale,
@@ -154,7 +145,14 @@ export async function POST(
         advanceThreshold: nodeConfig.advanceConfidenceThreshold ?? 90,
       });
 
-      if (!runResult.error && runResult.data.advanced) {
+      if (runResult.error) {
+        const cause = runResult.error.cause;
+        throw cause instanceof Error
+          ? cause
+          : new Error(runResult.error.message);
+      }
+
+      if (runResult.data.advanced) {
         const assistantMessages = await container.repos.sessionMessages.listBySession(session.id);
         if (!assistantMessages.error) {
           const milestone = [...assistantMessages.data].reverse().find(
