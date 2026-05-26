@@ -31,12 +31,26 @@ const buildTemplateBuffer = (xmlContent: string): Buffer => {
   return zip.generate({ type: "nodebuffer" }) as Buffer;
 };
 
+const NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+
 const simpleDocXml = (body: string) =>
   `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"
-  xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  ${NS}>
   <w:body><w:p><w:r><w:t>${body}</w:t></w:r></w:p></w:body>
 </w:document>`;
+
+// Builds a document where the tag text is spread across multiple <w:r> runs,
+// simulating Word's run-splitting behaviour.
+const splitRunDocXml = (...runTexts: string[]) => {
+  const runs = runTexts
+    .map((text) => `<w:r><w:t xml:space="preserve">${text}</w:t></w:r>`)
+    .join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document ${NS}>
+  <w:body><w:p>${runs}</w:p></w:body>
+</w:document>`;
+};
 
 describe("DocxGenerator", () => {
   const generator = new DocxGenerator();
@@ -44,7 +58,7 @@ describe("DocxGenerator", () => {
   describe("extractTags", () => {
     it("extracts template variables from a docx buffer", () => {
       const templateBytes = buildTemplateBuffer(
-        simpleDocXml("{project_title} and {background}"),
+        simpleDocXml("{{project_title}} and {{background}}"),
       );
 
       const result = generator.extractTags({ templateBytes });
@@ -53,6 +67,17 @@ describe("DocxGenerator", () => {
       expect(result.data?.tags).toEqual(
         expect.arrayContaining(["project_title", "background"]),
       );
+    });
+
+    it("treats single-curly {tag} syntax as plain text and returns no tags", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("{project_title} and {background}"),
+      );
+
+      const result = generator.extractTags({ templateBytes });
+
+      expect(result.error).toBeUndefined();
+      expect(result.data?.tags).toEqual([]);
     });
 
     it("returns empty tags array for a template with no placeholders", () => {
@@ -74,12 +99,83 @@ describe("DocxGenerator", () => {
       expect(result.error).toBeDefined();
       expect(result.data).toBeUndefined();
     });
+
+    it("extracts a tag when {{ and }} are split across adjacent Word runs", () => {
+      // Word frequently splits {{tag}} into separate <w:r> runs when typing or pasting.
+      const templateBytes = buildTemplateBuffer(
+        splitRunDocXml("{{", "full_name", "}}"),
+      );
+
+      const result = generator.extractTags({ templateBytes });
+
+      expect(result.error).toBeUndefined();
+      expect(result.data?.tags).toEqual(["full_name"]);
+    });
+
+    it("extracts a tag when only the opening {{ is split across runs", () => {
+      const templateBytes = buildTemplateBuffer(
+        splitRunDocXml("{", "{full_name}}"),
+      );
+
+      const result = generator.extractTags({ templateBytes });
+
+      expect(result.error).toBeUndefined();
+      expect(result.data?.tags).toEqual(["full_name"]);
+    });
+
+    it("normalises a descriptive tag with spaces to snake_case", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("{{ Full name }}"),
+      );
+
+      const result = generator.extractTags({ templateBytes });
+
+      expect(result.error).toBeUndefined();
+      expect(result.data?.tags).toEqual(["full_name"]);
+    });
+
+    it("normalises a descriptive tag containing an em dash", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("{{ Start Date \u2013 the date the person commences }}"),
+      );
+
+      const result = generator.extractTags({ templateBytes });
+
+      expect(result.error).toBeUndefined();
+      expect(result.data?.tags).toEqual([
+        "start_date_the_date_the_person_commences",
+      ]);
+    });
+
+    it("handles a paragraph with split runs and a descriptive tag", () => {
+      const templateBytes = buildTemplateBuffer(
+        splitRunDocXml("Full Name: {{", " Full name ", "}}"),
+      );
+
+      const result = generator.extractTags({ templateBytes });
+
+      expect(result.error).toBeUndefined();
+      expect(result.data?.tags).toEqual(["full_name"]);
+    });
+
+    it("leaves normal text containing lone braces unchanged", () => {
+      // A document may contain { or } in prose (e.g. code examples) without
+      // forming a tag — they must not cause errors or be treated as tags.
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("Use format { key: value } for JSON. Also {{actual_tag}}."),
+      );
+
+      const result = generator.extractTags({ templateBytes });
+
+      expect(result.error).toBeUndefined();
+      expect(result.data?.tags).toEqual(["actual_tag"]);
+    });
   });
 
   describe("generate", () => {
     it("fills template placeholders with provided data", () => {
       const templateBytes = buildTemplateBuffer(
-        simpleDocXml("{project_title} - {background}"),
+        simpleDocXml("{{project_title}} - {{background}}"),
       );
 
       const result = generator.generate({
@@ -101,6 +197,49 @@ describe("DocxGenerator", () => {
       expect(fullText).toContain("Context here");
     });
 
+    it("generates a document from a template with descriptive tags", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("Name: {{ Full name }} Department: {{ Department code }}"),
+      );
+
+      const result = generator.generate({
+        templateBytes,
+        data: { full_name: "Alice Smith", department_code: "HR-01" },
+      });
+
+      expect(result.error).toBeUndefined();
+      const outputZip = new PizZip(result.data!.docxBytes);
+      const outputDoc = new Docxtemplater(outputZip, {
+        paragraphLoop: true,
+        linebreaks: true,
+        delimiters: { start: "{{", end: "}}" },
+      });
+      const fullText = outputDoc.getFullText();
+      expect(fullText).toContain("Alice Smith");
+      expect(fullText).toContain("HR-01");
+    });
+
+    it("generates a document from a template with split runs", () => {
+      const templateBytes = buildTemplateBuffer(
+        splitRunDocXml("Employee: {{", "employee_name", "}}"),
+      );
+
+      const result = generator.generate({
+        templateBytes,
+        data: { employee_name: "Bob Jones" },
+      });
+
+      expect(result.error).toBeUndefined();
+      const outputZip = new PizZip(result.data!.docxBytes);
+      const outputDoc = new Docxtemplater(outputZip, {
+        paragraphLoop: true,
+        linebreaks: true,
+        delimiters: { start: "{{", end: "}}" },
+      });
+      const fullText = outputDoc.getFullText();
+      expect(fullText).toContain("Bob Jones");
+    });
+
     it("returns an error when given a malformed template buffer", () => {
       const result = generator.generate({
         templateBytes: Buffer.from("invalid"),
@@ -112,7 +251,7 @@ describe("DocxGenerator", () => {
 
     it("produces valid DOCX bytes that re-parse without error", () => {
       const templateBytes = buildTemplateBuffer(
-        simpleDocXml("Hello {name}"),
+        simpleDocXml("Hello {{name}}"),
       );
 
       const result = generator.generate({

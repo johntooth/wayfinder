@@ -5,17 +5,28 @@ import { domainError, err, ok } from "@rbrasier/domain";
 import type { IDocumentGenerator, ExtractTagsInput, ExtractTagsOutput, GenerateDocxInput, GenerateDocxOutput } from "@rbrasier/domain";
 import type { Result } from "@rbrasier/domain";
 
+interface RunInfo {
+  xml: string;
+  rPrXml: string;
+  text: string;
+  startIndex: number;
+  endIndex: number;
+  xmlStart: number;
+  xmlEnd: number;
+}
+
 export class DocxGenerator implements IDocumentGenerator {
   extractTags(input: ExtractTagsInput): Result<ExtractTagsOutput> {
     try {
-      const zip = new PizZip(input.templateBytes);
+      const processedBytes = this.preprocessTemplate(input.templateBytes);
+      const zip = new PizZip(processedBytes);
       const inspectModule = new InspectModule();
-      const doc = new Docxtemplater(zip, {
+      new Docxtemplater(zip, {
         paragraphLoop: true,
         linebreaks: true,
+        delimiters: { start: "{{", end: "}}" },
         modules: [inspectModule],
       });
-      doc.compile();
       const tagMap = inspectModule.getAllTags() as Record<string, unknown>;
       const tags = Object.keys(tagMap);
       return ok({ tags });
@@ -26,10 +37,12 @@ export class DocxGenerator implements IDocumentGenerator {
 
   generate(input: GenerateDocxInput): Result<GenerateDocxOutput> {
     try {
-      const zip = new PizZip(input.templateBytes);
+      const processedBytes = this.preprocessTemplate(input.templateBytes);
+      const zip = new PizZip(processedBytes);
       const doc = new Docxtemplater(zip, {
         paragraphLoop: true,
         linebreaks: true,
+        delimiters: { start: "{{", end: "}}" },
       });
       doc.render(input.data);
       const docxBytes = doc.getZip().generate({ type: "nodebuffer", compression: "DEFLATE" }) as Buffer;
@@ -37,5 +50,155 @@ export class DocxGenerator implements IDocumentGenerator {
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to generate DOCX from template.", cause));
     }
+  }
+
+  private preprocessTemplate(docxBytes: Buffer): Buffer {
+    const zip = new PizZip(docxBytes);
+
+    const filenames = Object.keys(zip.files).filter(
+      (name) => name === "word/document.xml" || /^word\/(header|footer)\d*\.xml$/.test(name),
+    );
+
+    for (const filename of filenames) {
+      const file = zip.file(filename);
+      if (!file) continue;
+      zip.file(filename, this.fixTemplateXml(file.asText()));
+    }
+
+    return zip.generate({ type: "nodebuffer" }) as Buffer;
+  }
+
+  private fixTemplateXml(xml: string): string {
+    return xml.replace(/<w:p[ >][\s\S]*?<\/w:p>/g, (paragraph) =>
+      this.fixParagraphTags(paragraph),
+    );
+  }
+
+  private fixParagraphTags(paragraph: string): string {
+    const runs = this.extractRuns(paragraph);
+    if (runs.length === 0) return paragraph;
+
+    const fullText = runs.map((run) => run.text).join("");
+    if (!fullText.includes("{{") || !fullText.includes("}}")) return paragraph;
+
+    const tagPattern = /\{\{([\s\S]*?)\}\}/g;
+    const tagMatches = [...fullText.matchAll(tagPattern)];
+    if (tagMatches.length === 0) return paragraph;
+
+    const replacements = tagMatches.map((match) => {
+      const matchStart = match.index ?? 0;
+      return {
+        start: matchStart,
+        end: matchStart + match[0].length,
+        normalizedTag: `{{${this.normalizeTagName(match[1] ?? "")}}}`,
+        rPrXml: this.rPrXmlForPosition(runs, matchStart),
+      };
+    });
+
+    const newRuns = this.buildNewRuns(runs, replacements, fullText);
+    return this.replaceParagraphRuns(paragraph, runs, newRuns);
+  }
+
+  private extractRuns(paragraph: string): RunInfo[] {
+    const runs: RunInfo[] = [];
+    let textOffset = 0;
+    const runPattern = /<w:r[ >][\s\S]*?<\/w:r>/g;
+    let match;
+
+    while ((match = runPattern.exec(paragraph)) !== null) {
+      const runXml = match[0];
+      const rPrMatch = runXml.match(/<w:rPr>[\s\S]*?<\/w:rPr>/);
+      const text = this.extractRunText(runXml);
+
+      runs.push({
+        xml: runXml,
+        rPrXml: rPrMatch ? rPrMatch[0] : "",
+        text,
+        startIndex: textOffset,
+        endIndex: textOffset + text.length,
+        xmlStart: match.index,
+        xmlEnd: match.index + runXml.length,
+      });
+      textOffset += text.length;
+    }
+
+    return runs;
+  }
+
+  private extractRunText(runXml: string): string {
+    const matches = [...runXml.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)];
+    return matches.map((match) => match[1]).join("");
+  }
+
+  private rPrXmlForPosition(runs: RunInfo[], position: number): string {
+    const run = runs.find((run) => run.startIndex <= position && run.endIndex > position);
+    return run?.rPrXml ?? "";
+  }
+
+  private buildNewRuns(
+    runs: RunInfo[],
+    replacements: Array<{ start: number; end: number; normalizedTag: string; rPrXml: string }>,
+    fullText: string,
+  ): string[] {
+    const newRuns: string[] = [];
+    let position = 0;
+
+    for (const replacement of replacements) {
+      if (position < replacement.start) {
+        const runsInRange = runs.filter(
+          (run) => run.endIndex > position && run.startIndex < replacement.start,
+        );
+        for (const run of runsInRange) {
+          const sliceStart = Math.max(run.startIndex, position);
+          const sliceEnd = Math.min(run.endIndex, replacement.start);
+          const text = run.text.slice(sliceStart - run.startIndex, sliceEnd - run.startIndex);
+          if (text) newRuns.push(this.buildRun(run.rPrXml, text));
+        }
+      }
+
+      newRuns.push(this.buildRun(replacement.rPrXml, replacement.normalizedTag));
+      position = replacement.end;
+    }
+
+    if (position < fullText.length) {
+      const runsInRange = runs.filter((run) => run.endIndex > position);
+      for (const run of runsInRange) {
+        const sliceStart = Math.max(run.startIndex, position);
+        const text = run.text.slice(sliceStart - run.startIndex);
+        if (text) newRuns.push(this.buildRun(run.rPrXml, text));
+      }
+    }
+
+    return newRuns;
+  }
+
+  private replaceParagraphRuns(
+    paragraph: string,
+    originalRuns: RunInfo[],
+    newRuns: string[],
+  ): string {
+    const firstRun = originalRuns.at(0);
+    const lastRun = originalRuns.at(-1);
+    if (!firstRun || !lastRun) return paragraph;
+    return (
+      paragraph.slice(0, firstRun.xmlStart) +
+      newRuns.join("") +
+      paragraph.slice(lastRun.xmlEnd)
+    );
+  }
+
+  private buildRun(rPrXml: string, text: string): string {
+    const escapedText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const spacePreserve = text.startsWith(" ") || text.endsWith(" ") ? ' xml:space="preserve"' : "";
+    return `<w:r>${rPrXml}<w:t${spacePreserve}>${escapedText}</w:t></w:r>`;
+  }
+
+  private normalizeTagName(description: string): string {
+    const normalized = description
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    return normalized || "field";
   }
 }
