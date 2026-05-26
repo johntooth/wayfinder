@@ -4,7 +4,7 @@ export function CardSkeleton() {
 
 export function CardSkeletonGrid({ count = 3 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="flex flex-col gap-3">
       {Array.from({ length: count }).map((_, i) => (
         <CardSkeleton key={i} />
       ))}

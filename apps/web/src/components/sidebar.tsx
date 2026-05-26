@@ -147,7 +147,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
                       : "bg-[#eef1fc] text-[#3a5fd9]"
                   }`}
                 >
-                  {chat.status === "complete" ? "Done" : "Live"}
+                  {chat.status === "complete" ? "Done" : "In Progress"}
                 </span>
               </Link>
             ))}

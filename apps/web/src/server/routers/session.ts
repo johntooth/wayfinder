@@ -34,7 +34,7 @@ export const sessionRouter = router({
     const enriched = await Promise.all(
       sessions.map(async (session) => {
         const graph = flowGraphs.get(session.flowId);
-        if (!graph || graph.nodeIds.length === 0) return { ...session, stepInfo: null };
+        if (!graph || graph.nodeIds.length === 0) return { ...session, lastMessage: null, stepInfo: null };
 
         const totalSteps = graph.nodeIds.length;
         const currentIndex = session.currentNodeId
@@ -43,6 +43,9 @@ export const sessionRouter = router({
 
         const messagesResult = await ctx.container.repos.sessionMessages.listBySession(session.id);
         const messages = messagesResult.error ? [] : messagesResult.data;
+
+        const lastAssistantMessage = [...messages].reverse().find((m) => m.role === "assistant");
+        const lastMessage = lastAssistantMessage?.content ?? null;
 
         const bestConfidenceByStep = new Map<string, number>();
         for (const message of messages) {
@@ -70,6 +73,7 @@ export const sessionRouter = router({
 
         return {
           ...session,
+          lastMessage,
           stepInfo: {
             currentIndex: currentIndex >= 0 ? currentIndex + 1 : 0,
             totalSteps,

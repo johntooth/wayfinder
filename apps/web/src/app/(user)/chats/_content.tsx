@@ -22,7 +22,7 @@ export function ChatsContent() {
     (publishedFlowsQuery.data ?? []).map((f: Flow) => [f.id, f]),
   );
 
-  const sessions = (sessionsQuery.data ?? []).filter((s) => s.status !== "abandoned");
+  const sessions = sessionsQuery.data ?? [];
 
   const filtered = sessions.filter((s) => {
     if (tab === "active") return s.status === "active";
@@ -73,13 +73,14 @@ export function ChatsContent() {
               onCta={() => setNewChatOpen(true)}
             />
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="flex flex-col gap-3">
               {filtered.map((session) => (
                 <SessionCard
                   key={session.id}
                   session={session}
                   flow={flowById[session.flowId]}
                   stepInfo={session.stepInfo ?? null}
+                  lastMessage={session.lastMessage ?? null}
                 />
               ))}
             </div>
