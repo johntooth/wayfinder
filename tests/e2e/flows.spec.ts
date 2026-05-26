@@ -95,7 +95,7 @@ test.describe('Admin: Flow Canvas', () => {
     await page.waitForLoadState('networkidle');
 
     // The flows table renders an "Edit" link (<Button asChild><Link href="/admin/flows/[id]">Edit</Link></Button>)
-    const editLink = page.getByRole('link', { name: 'Edit' }).first();
+    const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
     const count = await editLink.count();
 
     if (count === 0) {
