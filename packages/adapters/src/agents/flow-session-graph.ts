@@ -87,44 +87,19 @@ Return only: { "branchChoice": "<nodeId>" }`;
   }
 }
 
-const TOTAL_DOC_BUDGET = 65_536;
-
 const buildDocsBlock = (contextDocs: FlowContextDoc[]): string => {
-  const completeDocs = contextDocs.filter((d) => d.extractionStatus === "complete" && d.extractedText);
-  const otherDocs = contextDocs.filter((d) => d.extractionStatus !== "complete" || !d.extractedText);
-
-  const enrichedEntries = applyBudget(completeDocs);
-  const fallbackLines = otherDocs.map((d) => `    - ${d.filename}`);
-
-  const docElements = enrichedEntries
-    .map((d) => `  <document name="${d.filename}">\n${d.extractedText}\n  </document>`)
-    .join("\n");
-
-  const fallback = fallbackLines.length > 0 ? `\n${fallbackLines.join("\n")}` : "";
-
-  return `\n  <reference_documents>\n${docElements}${fallback}\n    Consult these when the user's question touches on policy or process.\n  </reference_documents>`;
-};
-
-const applyBudget = (docs: FlowContextDoc[]): FlowContextDoc[] => {
-  let remaining = TOTAL_DOC_BUDGET;
-  const sorted = [...docs].sort((a, b) => (b.extractedText?.length ?? 0) - (a.extractedText?.length ?? 0));
-  const result: FlowContextDoc[] = [];
-
-  for (const doc of sorted) {
-    const text = doc.extractedText ?? "";
-    if (text.length <= remaining) {
-      result.push(doc);
-      remaining -= text.length;
-    } else if (remaining > 0) {
-      const truncated = text.slice(0, remaining);
-      const lastSentence = Math.max(truncated.lastIndexOf(". "), truncated.lastIndexOf(".\n"));
-      const cappedText = lastSentence > remaining / 2 ? truncated.slice(0, lastSentence + 1) : truncated;
-      result.push({ ...doc, extractedText: cappedText });
-      remaining = 0;
+  // Upload-time validation guarantees every newly-uploaded doc has status="complete"
+  // and that the flow-wide total stays within budget. Legacy rows may still have
+  // failed/unsupported status from before the validation existed — fall back to
+  // listing the filename so the AI knows the document exists but cannot be read.
+  const entries = contextDocs.map((doc) => {
+    if (doc.extractionStatus === "complete" && doc.extractedText) {
+      return `  <document name="${doc.filename}">\n${doc.extractedText}\n  </document>`;
     }
-  }
+    return `  <document name="${doc.filename}" status="unreadable">\n    Document is attached to this flow but its contents could not be extracted. If the user asks about it, acknowledge that it exists and ask them to re-upload a readable version.\n  </document>`;
+  });
 
-  return result;
+  return `\n  <reference_documents>\n${entries.join("\n")}\n    Consult these when the user's question touches on policy or process.\n  </reference_documents>`;
 };
 
 const buildRoleBlock = (

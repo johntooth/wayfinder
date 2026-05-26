@@ -37,12 +37,12 @@ describe("DocumentExtractorService.extract — DOCX", () => {
     expect(result.data).toBeUndefined();
   });
 
-  it("caps DOCX text at 32 768 characters", async () => {
+  it("returns DOCX text unchanged regardless of length (caller enforces size limits)", async () => {
     const longText = "a ".repeat(20_000); // 40 000 chars
     const service = new DocumentExtractorService(makeDocGenerator(longText));
     const result = await service.extract({ buffer: Buffer.from("fake"), mimeType: DOCX_MIME });
     expect(result.error).toBeUndefined();
-    expect((result.data ?? "").length).toBeLessThanOrEqual(32_768);
+    expect((result.data ?? "").length).toBe(longText.length);
   });
 });
 
@@ -57,12 +57,12 @@ describe("DocumentExtractorService.extract — plain text", () => {
     expect(result.data).toBe(content);
   });
 
-  it("caps plain text at 32 768 characters", async () => {
+  it("returns plain text unchanged regardless of length (caller enforces size limits)", async () => {
     const service = new DocumentExtractorService(makeDocGenerator(""));
     const longText = "x".repeat(40_000);
     const result = await service.extract({ buffer: Buffer.from(longText, "utf-8"), mimeType: TEXT_MIME });
     expect(result.error).toBeUndefined();
-    expect((result.data ?? "").length).toBeLessThanOrEqual(32_768);
+    expect((result.data ?? "").length).toBe(40_000);
   });
 
   it("returns UTF-8 content for text/markdown", async () => {

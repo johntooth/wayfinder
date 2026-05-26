@@ -112,30 +112,28 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     expect(result.data).toContain("All purchases must be approved.");
   });
 
-  it("falls back to filename-only listing when extractionStatus is failed", () => {
+  it("marks legacy docs with non-complete status as unreadable so the AI knows they exist", () => {
     const result = agent.buildSystemPrompt({
       ...baseInput,
       contextDocs: [
         { id: "doc-1", filename: "policy.pdf", mimeType: "application/pdf", sizeBytes: 1024, storagePath: "/docs/policy.pdf", extractedText: null, extractionStatus: "failed" as const },
       ],
     });
-    expect(result.data).toContain("policy.pdf");
-    expect(result.data).not.toContain("<document name=");
+    expect(result.data).toContain('<document name="policy.pdf" status="unreadable">');
+    expect(result.data).toContain("could not be extracted");
   });
 
-  it("applies total budget across multiple complete docs", () => {
+  it("injects full extracted text without truncation — limits are enforced at upload", () => {
     const longText = "x".repeat(50_000);
     const result = agent.buildSystemPrompt({
       ...baseInput,
       contextDocs: [
         { id: "doc-1", filename: "a.pdf", mimeType: "application/pdf", sizeBytes: 1024, storagePath: "/a.pdf", extractedText: longText, extractionStatus: "complete" as const },
-        { id: "doc-2", filename: "b.pdf", mimeType: "application/pdf", sizeBytes: 1024, storagePath: "/b.pdf", extractedText: longText, extractionStatus: "complete" as const },
       ],
     });
     const prompt = result.data ?? "";
-    const docMatches = [...prompt.matchAll(/<document[^>]*>([\s\S]*?)<\/document>/g)];
-    const totalDocContentLength = docMatches.reduce((sum, m) => sum + (m[1] ?? "").trim().length, 0);
-    expect(totalDocContentLength).toBeLessThanOrEqual(65_536);
+    const match = prompt.match(/<document name="a\.pdf">\n([\s\S]*?)\n  <\/document>/);
+    expect(match?.[1]?.length).toBe(50_000);
   });
 
   it("omits <document_template> when outputType is conversation_only", () => {
