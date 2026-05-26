@@ -225,7 +225,7 @@ export async function POST(
               runResult.data.newNodeId,
               newNode,
               flow,
-              haikuModel,
+              branchingModel,
               organisationName,
               authSession.userId,
               provider,
