@@ -57,7 +57,7 @@ const toRfNode = (node: {
     outputType: (node.config.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
     documentTemplatePath: (node.config.documentTemplatePath as string | null) ?? null,
     documentTemplateFilename: (node.config.documentTemplateFilename as string | null) ?? null,
-    documentTemplateMarkdown: (node.config.documentTemplateMarkdown as string | null) ?? null,
+    documentTemplateContent: (node.config.documentTemplateContent as string | null) ?? null,
   },
 });
 
@@ -202,7 +202,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
       outputType: values.outputType,
       documentTemplatePath: values.documentTemplatePath ?? null,
       documentTemplateFilename: values.documentTemplateFilename ?? null,
-      documentTemplateMarkdown: values.documentTemplateMarkdown ?? null,
+      documentTemplateContent: values.documentTemplateContent ?? null,
     };
 
     const isTempNode = editingNodeId.startsWith("temp-");
@@ -261,7 +261,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
                     outputType: config.outputType,
                     documentTemplatePath: config.documentTemplatePath,
                     documentTemplateFilename: config.documentTemplateFilename,
-                    documentTemplateMarkdown: config.documentTemplateMarkdown,
+                    documentTemplateContent: config.documentTemplateContent,
                   },
                 }
               : n,
@@ -323,7 +323,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         outputType: ((editingNode?.data as Record<string, unknown>)?.outputType as "conversation_only" | "generate_document" | undefined) ?? "conversation_only",
         documentTemplatePath: ((editingNode?.data as Record<string, unknown>)?.documentTemplatePath as string | null) ?? null,
         documentTemplateFilename: ((editingNode?.data as Record<string, unknown>)?.documentTemplateFilename as string | null) ?? null,
-        documentTemplateMarkdown: ((editingNode?.data as Record<string, unknown>)?.documentTemplateMarkdown as string | null) ?? null,
+        documentTemplateContent: ((editingNode?.data as Record<string, unknown>)?.documentTemplateContent as string | null) ?? null,
       }
     : undefined;
 
