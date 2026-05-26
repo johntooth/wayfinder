@@ -335,20 +335,6 @@ function CanvasInner({ flowId }: { flowId: string }) {
     toast.success("Step deleted");
   }, [editingNodeId, deleteNodeMutation, flowId]);
 
-  if (canvasQuery.isLoading) {
-    return <div className="flex items-center justify-center h-96 text-muted-foreground">Loading canvas…</div>;
-  }
-
-  if (canvasQuery.error?.data?.httpStatus === 403) {
-    return (
-      <div className="flex flex-col items-center justify-center h-96 gap-4 text-center">
-        <p className="text-xl font-semibold text-gray-900">Access denied</p>
-        <p className="text-sm text-muted-foreground">You do not have permission to edit this flow.</p>
-        <Link href="/" className="text-sm text-indigo-600 hover:underline">Go home</Link>
-      </div>
-    );
-  }
-
   const stepOrder = useMemo(() => {
     const orderable = rfNodes.map((n) => ({ id: n.id, positionX: n.position.x }));
     const edgeData = rfEdges.map((e) => ({ fromNodeId: e.source, toNodeId: e.target }));
@@ -364,6 +350,20 @@ function CanvasInner({ flowId }: { flowId: string }) {
       })),
     [rfNodes, stepOrder],
   );
+
+  if (canvasQuery.isLoading) {
+    return <div className="flex items-center justify-center h-96 text-muted-foreground">Loading canvas…</div>;
+  }
+
+  if (canvasQuery.error?.data?.httpStatus === 403) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96 gap-4 text-center">
+        <p className="text-xl font-semibold text-gray-900">Access denied</p>
+        <p className="text-sm text-muted-foreground">You do not have permission to edit this flow.</p>
+        <Link href="/" className="text-sm text-indigo-600 hover:underline">Go home</Link>
+      </div>
+    );
+  }
 
   const editingNode = editingNodeId ? rfNodes.find((n) => n.id === editingNodeId) : null;
   const editingData = editingNode?.data as ConversationalNodeData | undefined;
