@@ -73,7 +73,9 @@ import {
 } from "@rbrasier/adapters";
 import { serverEnv } from "./env";
 
-let cached: ReturnType<typeof build> | null = null;
+const globalForContainer = globalThis as typeof globalThis & {
+  _wayfinder_container: ReturnType<typeof build> | undefined;
+};
 
 const build = () => {
   const env = serverEnv();
@@ -218,9 +220,11 @@ const build = () => {
 };
 
 export const getContainer = () => {
-  if (cached) return cached;
-  cached = build();
-  return cached;
+  if (globalForContainer._wayfinder_container) {
+    return globalForContainer._wayfinder_container;
+  }
+  globalForContainer._wayfinder_container = build();
+  return globalForContainer._wayfinder_container;
 };
 
 export type Container = ReturnType<typeof getContainer>;
