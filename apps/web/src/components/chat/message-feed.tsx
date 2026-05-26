@@ -6,6 +6,7 @@ import type { FlowNode, SessionMessage } from "@rbrasier/domain";
 import { ConfidenceBar } from "./confidence-bar";
 import { DocumentCard } from "./document-card";
 import { MilestonePill } from "./milestone-pill";
+import { TypingIndicator } from "./typing-indicator";
 
 interface ConfidenceAnnotation {
   type: "confidence";
@@ -198,13 +199,17 @@ export function MessageFeed({
                     : "rounded-bl-[4px] border border-[#dedad2] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
                 }`}
               >
-                <p
-                  className={`whitespace-pre-wrap text-[13px] leading-[1.55] ${
-                    msg.role === "user" ? "text-white/90" : "text-[#1a1814]"
-                  }`}
-                >
-                  {msg.content || (isStreaming && msg.role === "assistant" ? "…" : "")}
-                </p>
+                {msg.content ? (
+                  <p
+                    className={`whitespace-pre-wrap text-[13px] leading-[1.55] ${
+                      msg.role === "user" ? "text-white/90" : "text-[#1a1814]"
+                    }`}
+                  >
+                    {msg.content}
+                  </p>
+                ) : isStreaming && msg.role === "assistant" ? (
+                  <TypingIndicator />
+                ) : null}
                 {msg.role === "assistant" && !streamingIsNeverDone && (
                   <ConfidenceBar
                     score={confidenceAnnotation?.score ?? null}
