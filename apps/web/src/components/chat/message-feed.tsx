@@ -174,32 +174,32 @@ export function MessageFeed({
           );
         })}
 
-      {showStreaming &&
-        streamingMessages.map((msg) => {
-          const confidenceAnnotation =
-            msg.annotations?.map(toConfidenceAnnotation).find(Boolean) ?? null;
-          // Streaming messages don't yet have a stepNodeId; infer "never done" from the
-          // most recent persisted assistant message on the current step.
-          const latestPersistedNodeId = [...dbMessages].reverse().find((m) => m.role === "assistant")?.stepNodeId ?? null;
-          const streamingNode = latestPersistedNodeId ? nodeById[latestPersistedNodeId] : null;
-          const streamingConfig = streamingNode?.config as Record<string, unknown> | undefined;
-          const streamingIsNeverDone = Boolean(streamingConfig?.["neverDone"]);
+      {showStreaming && (
+        <>
+          {streamingMessages.map((msg) => {
+            const confidenceAnnotation =
+              msg.annotations?.map(toConfidenceAnnotation).find(Boolean) ?? null;
+            // Streaming messages don't yet have a stepNodeId; infer "never done" from the
+            // most recent persisted assistant message on the current step.
+            const latestPersistedNodeId = [...dbMessages].reverse().find((m) => m.role === "assistant")?.stepNodeId ?? null;
+            const streamingNode = latestPersistedNodeId ? nodeById[latestPersistedNodeId] : null;
+            const streamingConfig = streamingNode?.config as Record<string, unknown> | undefined;
+            const streamingIsNeverDone = Boolean(streamingConfig?.["neverDone"]);
 
-          return (
-            <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-              {msg.role !== "user" && (
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#3a5fd9] text-[10px] font-bold text-white">
-                  {botInitials}
-                </div>
-              )}
-              <div
-                className={`max-w-[68%] rounded-[14px] px-4 py-3 ${
-                  msg.role === "user"
-                    ? "rounded-br-[4px] bg-[#3a5fd9]"
-                    : "rounded-bl-[4px] border border-[#dedad2] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
-                }`}
-              >
-                {msg.content ? (
+            return (
+              <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                {msg.role !== "user" && (
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#3a5fd9] text-[10px] font-bold text-white">
+                    {botInitials}
+                  </div>
+                )}
+                <div
+                  className={`max-w-[68%] rounded-[14px] px-4 py-3 ${
+                    msg.role === "user"
+                      ? "rounded-br-[4px] bg-[#3a5fd9]"
+                      : "rounded-bl-[4px] border border-[#dedad2] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
+                  }`}
+                >
                   <p
                     className={`whitespace-pre-wrap text-[13px] leading-[1.55] ${
                       msg.role === "user" ? "text-white/90" : "text-[#1a1814]"
@@ -207,24 +207,33 @@ export function MessageFeed({
                   >
                     {msg.content}
                   </p>
-                ) : isStreaming && msg.role === "assistant" ? (
-                  <TypingIndicator />
-                ) : null}
-                {msg.role === "assistant" && !streamingIsNeverDone && (
-                  <ConfidenceBar
-                    score={confidenceAnnotation?.score ?? null}
-                    evaluating={isStreaming && !confidenceAnnotation}
-                  />
+                  {msg.role === "assistant" && !streamingIsNeverDone && (
+                    <ConfidenceBar
+                      score={confidenceAnnotation?.score ?? null}
+                      evaluating={isStreaming && !confidenceAnnotation}
+                    />
+                  )}
+                </div>
+                {msg.role === "user" && (
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#e6e3dc] text-[10px] font-bold text-[#1a1814]">
+                    {userInitials}
+                  </div>
                 )}
               </div>
-              {msg.role === "user" && (
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#e6e3dc] text-[10px] font-bold text-[#1a1814]">
-                  {userInitials}
-                </div>
-              )}
+            );
+          })}
+          {isStreaming && streamingMessages.at(-1)?.role !== "assistant" && (
+            <div className="flex gap-3 justify-start">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#3a5fd9] text-[10px] font-bold text-white">
+                {botInitials}
+              </div>
+              <div className="rounded-[14px] rounded-bl-[4px] border border-[#dedad2] bg-white px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]">
+                <TypingIndicator />
+              </div>
             </div>
-          );
-        })}
+          )}
+        </>
+      )}
 
       {error && !isStreaming && (
         <div className="flex justify-start">
