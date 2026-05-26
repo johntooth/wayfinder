@@ -26,6 +26,8 @@ const COLOURS = [
   { hex: "#0e8a7a", label: "Teal" },
 ];
 
+const EXAMPLE_TAG = "{{First name}}";
+
 export interface NodeConfigValues {
   name: string;
   colour: string;
@@ -330,6 +332,10 @@ export function NodeConfigModal({
               {values.outputType === "generate_document" && (
                 <div className="space-y-1">
                   <Label>DOCX template</Label>
+                  <p className="text-[12px] text-[#918d87]">
+                    Works best using variables marked with tags (e.g{" "}
+                    <code className="font-mono">{EXAMPLE_TAG}</code>)
+                  </p>
                   {!onUploadTemplate ? (
                     <p className="rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3 text-[12px] text-[#918d87]">
                       Save this step first, then re-open to upload a template.
