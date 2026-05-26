@@ -155,6 +155,11 @@ if [ -f packages/adapters/package.json ]; then
     echo "  migration failed — check DATABASE_URL in .env"
     exit 1
   }
+  echo "→ verifying schema is in sync (drizzle-kit push)"
+  pnpm --filter "$ADAPTERS_PKG" db:push || {
+    echo "  schema push failed — check DATABASE_URL in .env"
+    exit 1
+  }
 else
   FRAMEWORK_SCOPE=$(cat .framework-scope 2>/dev/null || echo "@rbrasier")
   ADAPTERS_PKG="${FRAMEWORK_SCOPE}/adapters"
