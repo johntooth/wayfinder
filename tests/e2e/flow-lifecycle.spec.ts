@@ -20,7 +20,7 @@ test.describe('Admin: Flow Canvas Editor', () => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
-    const editLink = page.getByRole('link', { name: 'Edit' }).first();
+    const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
     const hasEdit = await editLink.isVisible().catch(() => false);
 
     if (!hasEdit) {
@@ -45,7 +45,7 @@ test.describe('Admin: Flow Canvas Editor', () => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
-    const editLink = page.getByRole('link', { name: 'Edit' }).first();
+    const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
     if (!await editLink.isVisible().catch(() => false)) {
       test.skip(true, 'No flows available');
       return;
@@ -76,7 +76,7 @@ test.describe('Admin: Flow Canvas Editor', () => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
-    const editLink = page.getByRole('link', { name: 'Edit' }).first();
+    const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
     if (!await editLink.isVisible().catch(() => false)) {
       test.skip(true, 'No flows available');
       return;
@@ -163,7 +163,7 @@ test.describe('Admin: Create Flow', () => {
     await page.screenshot({ path: 'screenshots/flow-lifecycle-created.png', fullPage: true });
 
     // The new flow row should be in the list; open it
-    const editLink = page.getByRole('link', { name: 'Edit' }).first();
+    const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
     await expect(editLink).toBeVisible({ timeout: 5_000 });
     await editLink.click();
 
@@ -186,7 +186,7 @@ test.describe('Admin: Publish Flow', () => {
 
     // tRPC populates the list asynchronously — wait for the first Edit link or
     // an empty-state indicator before deciding whether to skip
-    const editLink = page.getByRole('link', { name: 'Edit' }).first();
+    const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
     await editLink.waitFor({ timeout: 5_000 }).catch(() => {});
 
     if (!await editLink.isVisible().catch(() => false)) {
