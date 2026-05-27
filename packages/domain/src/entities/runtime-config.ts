@@ -23,3 +23,4 @@ export interface StorageConfig {
 
 export const AI_CONFIG_SETTING_KEY = "ai_config";
 export const STORAGE_CONFIG_SETTING_KEY = "storage_config";
+export const REGISTRATION_ENABLED_SETTING_KEY = "registration_enabled";

@@ -138,25 +138,22 @@ const build = () => {
   };
 
   const authMethod: AuthMethod = (() => {
-    const sendMagicLink = async ({ email, url }: { email: string; url: string }) => {
-      logger.info(`[auth] magic link for ${email}: ${url}`);
-    };
     switch (env.AUTH_METHOD) {
       case "pki":
         return { type: "pki" as const, pkiConfig };
-      case "pki-and-magic-link":
-        return { type: "pki-and-magic-link" as const, pkiConfig, sendMagicLink };
+      case "pki-and-email-password":
+        return { type: "pki-and-email-password" as const, pkiConfig };
       case "google-oauth":
         return { type: "google-oauth" as const };
       case "other":
         return { type: "other" as const };
       default:
-        return { type: "magic-link" as const, sendMagicLink };
+        return { type: "email-password" as const };
     }
   })();
 
   const pkiCertAdapter =
-    env.AUTH_METHOD === "pki" || env.AUTH_METHOD === "pki-and-magic-link"
+    env.AUTH_METHOD === "pki" || env.AUTH_METHOD === "pki-and-email-password"
       ? new PkiCertAdapter(db, users, pkiConfig)
       : null;
 

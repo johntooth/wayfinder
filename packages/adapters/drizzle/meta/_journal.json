@@ -71,6 +71,13 @@
       "when": 1779914647078,
       "tag": "0009_bent_freak",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1779920605434,
+      "tag": "0010_certain_ikaris",
+      "breakpoints": true
     }
   ]
 }

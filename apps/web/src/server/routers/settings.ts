@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   AI_CONFIG_SETTING_KEY,
+  REGISTRATION_ENABLED_SETTING_KEY,
   STORAGE_CONFIG_SETTING_KEY,
   type AiConfig,
   type AiPurpose,
@@ -8,7 +9,7 @@ import {
   type StorageConfig,
 } from "@rbrasier/domain";
 import { DEFAULT_MODELS_FOR, RuntimeConfigStore } from "@rbrasier/adapters";
-import { adminProcedure, router } from "../trpc";
+import { adminProcedure, publicProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 const providerSchema = z.enum(["anthropic", "openai", "mistral"]);
@@ -119,6 +120,27 @@ export const settingsRouter = router({
       );
       if (result.error) throw toTrpcError(result.error);
       ctx.container.runtimeConfig.invalidateStorage();
+      return { ok: true };
+    }),
+
+  // Public so the /admin/register page can check whether to render the form
+  // without forcing the visitor to authenticate first.
+  registrationEnabled: publicProcedure.query(async ({ ctx }) => {
+    const result = await ctx.container.repos.systemSettings.get(
+      REGISTRATION_ENABLED_SETTING_KEY,
+    );
+    if (result.error) throw toTrpcError(result.error);
+    return { enabled: result.data?.value !== "false" };
+  }),
+
+  setRegistrationEnabled: adminProcedure
+    .input(z.object({ enabled: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.repos.systemSettings.set(
+        REGISTRATION_ENABLED_SETTING_KEY,
+        input.enabled ? "true" : "false",
+      );
+      if (result.error) throw toTrpcError(result.error);
       return { ok: true };
     }),
 });
