@@ -1,20 +1,13 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { magicLink } from "better-auth/plugins";
 import type { Database } from "../db/client";
+import { core_accounts, core_sessions, core_users, core_verification_tokens } from "../db/schema/core";
 import type { PkiConfig } from "./pki-cert-adapter";
 
 export type AuthMethod =
-  | {
-      readonly type: "magic-link";
-      readonly sendMagicLink: (params: { email: string; url: string }) => Promise<void>;
-    }
+  | { readonly type: "email-password" }
   | { readonly type: "pki"; readonly pkiConfig: PkiConfig }
-  | {
-      readonly type: "pki-and-magic-link";
-      readonly pkiConfig: PkiConfig;
-      readonly sendMagicLink: (params: { email: string; url: string }) => Promise<void>;
-    }
+  | { readonly type: "pki-and-email-password"; readonly pkiConfig: PkiConfig }
   | { readonly type: "google-oauth" }
   | { readonly type: "other" };
 
@@ -30,8 +23,6 @@ export interface AuthConfig {
  * actually uses. Declared explicitly so TypeScript does not have to spell out
  * Better Auth's full inferred type — which transitively references zod's
  * internal modules and breaks portable declaration emit across packages.
- *
- * Add fields here as the auth surface grows.
  */
 export interface Auth {
   readonly handler: (req: Request) => Promise<Response>;
@@ -51,26 +42,69 @@ export const createAuth = (db: Database, config: AuthConfig): Auth => {
     );
   }
 
-  const plugins = [];
-
-  if (
-    config.authMethod.type === "magic-link" ||
-    config.authMethod.type === "pki-and-magic-link"
-  ) {
-    const { sendMagicLink } = config.authMethod;
-    plugins.push(
-      magicLink({
-        sendMagicLink: async ({ email, url }) => {
-          await sendMagicLink({ email, url });
-        },
-      }),
-    );
-  }
+  const emailPasswordEnabled =
+    config.authMethod.type === "email-password" ||
+    config.authMethod.type === "pki-and-email-password";
 
   return betterAuth({
-    database: drizzleAdapter(db, { provider: "pg" }),
+    database: drizzleAdapter(db, {
+      provider: "pg",
+      schema: {
+        user: core_users,
+        session: core_sessions,
+        account: core_accounts,
+        verification: core_verification_tokens,
+      },
+    }),
     secret: config.secret,
     baseURL: config.baseURL,
-    plugins,
+    user: {
+      modelName: "user",
+      fields: {
+        emailVerified: "email_verified",
+        createdAt: "created_at",
+        updatedAt: "updated_at",
+      },
+    },
+    session: {
+      modelName: "session",
+      fields: {
+        userId: "user_id",
+        expiresAt: "expires_at",
+        ipAddress: "ip_address",
+        userAgent: "user_agent",
+        createdAt: "created_at",
+        updatedAt: "updated_at",
+      },
+    },
+    account: {
+      modelName: "account",
+      fields: {
+        userId: "user_id",
+        accountId: "account_id",
+        providerId: "provider_id",
+        accessToken: "access_token",
+        refreshToken: "refresh_token",
+        idToken: "id_token",
+        accessTokenExpiresAt: "access_token_expires_at",
+        refreshTokenExpiresAt: "refresh_token_expires_at",
+        createdAt: "created_at",
+        updatedAt: "updated_at",
+      },
+    },
+    verification: {
+      modelName: "verification",
+      fields: {
+        value: "token",
+        expiresAt: "expires_at",
+        createdAt: "created_at",
+        updatedAt: "updated_at",
+      },
+    },
+    emailAndPassword: {
+      enabled: emailPasswordEnabled,
+      autoSignIn: true,
+      requireEmailVerification: false,
+    },
   }) as unknown as Auth;
 };

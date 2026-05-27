@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +12,7 @@ const isDev = process.env.NODE_ENV === "development";
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -20,21 +21,37 @@ export default function AdminLoginPage() {
     setSubmitting(true);
     setError(null);
     try {
-      if (isDev) {
-        const res = await fetch("/api/dev-login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email }),
-        });
-        if (res.ok) {
-          window.location.href = "/admin";
-        } else {
-          const body = (await res.json()) as { error?: string };
-          setError(body.error ?? "Login failed");
-        }
+      const result = await authClient.signIn.email({
+        email,
+        password,
+        callbackURL: "/admin",
+      });
+      if (result.error) {
+        setError(result.error.message ?? "Invalid email or password");
+        return;
+      }
+      window.location.href = "/admin";
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const onDevLogin = async (): Promise<void> => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/dev-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (res.ok) {
+        window.location.href = "/admin";
       } else {
-        await authClient.signIn.magicLink({ email, callbackURL: "/admin" });
-        setSent(true);
+        const body = (await res.json()) as { error?: string };
+        setError(body.error ?? "Dev login failed");
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -47,32 +64,55 @@ export default function AdminLoginPage() {
     <div className="flex h-full items-center justify-center">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Admin sign-in</CardTitle>
+          <CardTitle>Sign in</CardTitle>
         </CardHeader>
         <CardContent>
-          {sent ? (
-            <p className="text-sm text-muted-foreground">
-              Check your email — we&apos;ve sent a magic link to <strong>{email}</strong>.
-            </p>
-          ) : (
-            <form onSubmit={onSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                />
-              </div>
-              {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="submit" className="w-full" disabled={submitting}>
-                {submitting ? "Signing in…" : isDev ? "Sign in" : "Send magic link"}
+          <form onSubmit={onSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button type="submit" className="w-full" disabled={submitting}>
+              {submitting ? "Signing in…" : "Sign in"}
+            </Button>
+            {isDev && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={onDevLogin}
+                disabled={submitting || !email}
+              >
+                Dev login (skip password)
               </Button>
-            </form>
-          )}
+            )}
+            <p className="text-center text-sm text-muted-foreground">
+              No account?{" "}
+              <Link href="/admin/register" className="underline">
+                Register
+              </Link>
+            </p>
+          </form>
         </CardContent>
       </Card>
     </div>

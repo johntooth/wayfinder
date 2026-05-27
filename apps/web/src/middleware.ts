@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const AUTH_METHOD = process.env.AUTH_METHOD ?? "magic-link";
-const PKI_MODES = new Set(["pki", "pki-and-magic-link"]);
+const AUTH_METHOD = process.env.AUTH_METHOD ?? "email-password";
+const PKI_MODES = new Set(["pki", "pki-and-email-password"]);
 
 const getSessionCookie = (req: NextRequest) =>
   req.cookies
@@ -22,7 +22,7 @@ const redirectToLogin = (req: NextRequest, pathname: string): NextResponse => {
 export const middleware = (req: NextRequest): NextResponse => {
   const { pathname } = req.nextUrl;
 
-  if (pathname.startsWith("/admin/login")) {
+  if (pathname.startsWith("/admin/login") || pathname.startsWith("/admin/register")) {
     return NextResponse.next();
   }
 
