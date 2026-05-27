@@ -260,6 +260,77 @@ describe("sequence: document generation before initial message", () => {
   });
 });
 
+describe("generateDocument return value", () => {
+  it("returns false when the use case returns Result.error", async () => {
+    const execute = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: "INFRA_FAILURE", message: "boom", cause: new Error("api error") },
+    });
+    const container = {
+      useCases: { generateDocument: { execute } },
+      repos: { sessionMessages: { updateDocumentStatus: vi.fn().mockResolvedValue({ data: {}, error: null }) } },
+      services: { errorLogger: { log: vi.fn().mockResolvedValue({ data: undefined, error: null }) } },
+    } as unknown as Parameters<typeof generateDocument>[0];
+
+    const result = await generateDocument(
+      container,
+      "msg-1",
+      "sess-1",
+      makeFlow(),
+      [],
+      [],
+      makeNode({ config: { outputType: "generate_document", documentTemplatePath: "x" } as unknown as FlowNode["config"] }),
+    );
+
+    expect(result).toBe(false);
+  });
+
+  it("returns false when the use case throws", async () => {
+    const execute = vi.fn().mockRejectedValue(new Error("network down"));
+    const container = {
+      useCases: { generateDocument: { execute } },
+      repos: { sessionMessages: { updateDocumentStatus: vi.fn().mockResolvedValue({ data: {}, error: null }) } },
+      services: { errorLogger: { log: vi.fn().mockResolvedValue({ data: undefined, error: null }) } },
+    } as unknown as Parameters<typeof generateDocument>[0];
+
+    const result = await generateDocument(
+      container,
+      "msg-2",
+      "sess-1",
+      makeFlow(),
+      [],
+      [],
+      makeNode({ config: { outputType: "generate_document", documentTemplatePath: "x" } as unknown as FlowNode["config"] }),
+    );
+
+    expect(result).toBe(false);
+  });
+
+  it("returns true when the use case succeeds", async () => {
+    const execute = vi.fn().mockResolvedValue({
+      data: { document: { filename: "f", storagePath: "p", summary: null, generatedAt: "now" } },
+      error: null,
+    });
+    const container = {
+      useCases: { generateDocument: { execute } },
+      repos: { sessionMessages: { updateDocumentStatus: vi.fn() } },
+      services: { errorLogger: { log: vi.fn() } },
+    } as unknown as Parameters<typeof generateDocument>[0];
+
+    const result = await generateDocument(
+      container,
+      "msg-3",
+      "sess-1",
+      makeFlow(),
+      [],
+      [],
+      makeNode({ config: { outputType: "generate_document", documentTemplatePath: "x" } as unknown as FlowNode["config"] }),
+    );
+
+    expect(result).toBe(true);
+  });
+});
+
 describe("AiTurnPayload typing guard", () => {
   it("preserves AiTurnPayload shape", () => {
     const payload: AiTurnPayload = {

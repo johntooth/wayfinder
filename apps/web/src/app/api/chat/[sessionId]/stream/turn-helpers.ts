@@ -28,7 +28,7 @@ export async function generateDocument(
   _nodes: FlowNode[],
   messages: SessionMessage[],
   node: FlowNode,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const result = await container.useCases.generateDocument.execute({
       messageId,
@@ -47,7 +47,7 @@ export async function generateDocument(
           page: `api/chat/${sessionId}/stream`,
           metadata: { sessionId, messageId, nodeId: node.id, originalError: result.error.message },
         });
-        return;
+        return false;
       }
       await container.services.errorLogger.log({
         level: "error",
@@ -56,7 +56,9 @@ export async function generateDocument(
         page: `api/chat/${sessionId}/stream`,
         metadata: { sessionId, messageId, nodeId: node.id, errorCode: result.error.code },
       });
+      return false;
     }
+    return true;
   } catch (cause) {
     await container.repos.sessionMessages
       .updateDocumentStatus(messageId, "failed")
@@ -68,6 +70,7 @@ export async function generateDocument(
       page: `api/chat/${sessionId}/stream`,
       metadata: { sessionId, messageId, nodeId: node.id },
     });
+    return false;
   }
 }
 
