@@ -19,7 +19,7 @@ const config: NextConfig = {
     "@opentelemetry/instrumentation-pg",
     "require-in-the-middle",
   ],
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     // require-in-the-middle uses dynamic require() calls that webpack cannot
     // statically analyse, producing "Critical dependency" build warnings.
     // The package is already excluded from bundling via serverExternalPackages;
@@ -42,6 +42,23 @@ const config: NextConfig = {
       ...(config.ignoreWarnings ?? []),
       { module: /pino-logger/, message: /createRequire/ },
     ];
+
+    if (isServer) {
+      // pdf-parse depends on pdfjs-dist/legacy/build/pdf.mjs, a pre-bundled webpack
+      // artifact containing __webpack_modules__ internals. When Next.js's webpack
+      // re-processes it through transpilePackages, Object.defineProperty is called on
+      // a non-existent exports object. serverExternalPackages does not cover deps of
+      // transpilePackages because it resolves the full pnpm store path first; adding
+      // explicit webpack externals here intercepts at the import-request level instead.
+      const existingExternals = config.externals;
+      const existingList = Array.isArray(existingExternals)
+        ? existingExternals
+        : existingExternals != null
+          ? [existingExternals]
+          : [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (config as any).externals = [...existingList, "pdf-parse", /pdfjs-dist/];
+    }
 
     return config;
   },
