@@ -13,7 +13,7 @@ import {
   type TokenUsage,
 } from "@rbrasier/domain";
 import { generateObject, streamObject, streamText } from "ai";
-import { resolveModel } from "./providers";
+import { resolveModel, type ProviderCredentials } from "./providers";
 import { RuntimeConfigStore } from "../config/runtime-config-store";
 
 interface AnthropicMeta {
@@ -44,12 +44,12 @@ const resolveForCall = (
   config: AiConfig,
   inputModel: string | undefined,
   rawPurpose: string,
-): { provider: ProviderName; model: string; apiKey: string | null } => {
+): { provider: ProviderName; model: string; credentials: ProviderCredentials } => {
   const provider = config.provider;
-  const apiKey = config.apiKeys[provider];
+  const credentials = config.apiKeys[provider];
   const purpose = resolvePurpose(rawPurpose);
   const model = inputModel ?? config.models[purpose];
-  return { provider, model, apiKey };
+  return { provider, model, credentials };
 };
 
 export class LanguageModelAdapter implements ILanguageModel {
@@ -63,9 +63,9 @@ export class LanguageModelAdapter implements ILanguageModel {
   ): Promise<Result<{ object: T; usage: TokenUsage }>> {
     try {
       const config = await this.runtimeConfig.getAiConfig();
-      const { provider, model, apiKey } = resolveForCall(config, input.model, input.purpose);
+      const { provider, model, credentials } = resolveForCall(config, input.model, input.purpose);
       const result = await generateObject({
-        model: resolveModel(provider, model, apiKey),
+        model: resolveModel(provider, model, credentials),
         schema: input.schema as never,
         system: input.system,
         prompt: input.prompt,
@@ -95,9 +95,9 @@ export class LanguageModelAdapter implements ILanguageModel {
   ): Promise<Result<{ textStream: AsyncIterable<string>; usage: Promise<TokenUsage> }>> {
     try {
       const config = await this.runtimeConfig.getAiConfig();
-      const { provider, model, apiKey } = resolveForCall(config, input.model, input.purpose);
+      const { provider, model, credentials } = resolveForCall(config, input.model, input.purpose);
       const result = streamText({
-        model: resolveModel(provider, model, apiKey),
+        model: resolveModel(provider, model, credentials),
         system: input.system,
         prompt: input.prompt,
         messages: input.messages as never,
@@ -128,9 +128,9 @@ export class LanguageModelAdapter implements ILanguageModel {
   > {
     try {
       const config = await this.runtimeConfig.getAiConfig();
-      const { provider, model, apiKey } = resolveForCall(config, input.model, input.purpose);
+      const { provider, model, credentials } = resolveForCall(config, input.model, input.purpose);
       const result = streamObject({
-        model: resolveModel(provider, model, apiKey),
+        model: resolveModel(provider, model, credentials),
         schema: input.schema as never,
         system: input.system,
         prompt: input.prompt,

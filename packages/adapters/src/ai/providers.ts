@@ -1,12 +1,36 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createMistral } from "@ai-sdk/mistral";
+import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import type { LanguageModel } from "ai";
-import type { ProviderName } from "@rbrasier/domain";
+import type { BedrockCredentials, ProviderName } from "@rbrasier/domain";
+
+export type ProviderCredentials = string | BedrockCredentials | null;
+
+const isBedrockCredentials = (value: unknown): value is BedrockCredentials =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as BedrockCredentials).region === "string" &&
+  typeof (value as BedrockCredentials).accessKeyId === "string" &&
+  typeof (value as BedrockCredentials).secretAccessKey === "string";
+
+const requireStringOrNull = (
+  value: ProviderCredentials,
+  provider: ProviderName,
+): string | null => {
+  if (value === null || typeof value === "string") return value;
+  throw new Error(`Provider ${provider} requires a string API key, not a credential object`);
+};
+
+const requireBedrockOrNull = (value: ProviderCredentials): BedrockCredentials | null => {
+  if (value === null) return null;
+  if (isBedrockCredentials(value)) return value;
+  throw new Error("Provider bedrock requires { region, accessKeyId, secretAccessKey }");
+};
 
 interface ProviderEntry {
   readonly defaultModel: string;
-  readonly resolve: (model: string, apiKey?: string | null) => LanguageModel;
+  readonly resolve: (model: string, credentials: ProviderCredentials) => LanguageModel;
 }
 
 /**
@@ -19,28 +43,41 @@ interface ProviderEntry {
 const PROVIDERS = {
   anthropic: {
     defaultModel: "claude-haiku-4-5-20251001",
-    resolve: (model: string, apiKey?: string | null) =>
-      createAnthropic(apiKey ? { apiKey } : {})(model),
+    resolve: (model: string, credentials: ProviderCredentials) => {
+      const apiKey = requireStringOrNull(credentials, "anthropic");
+      return createAnthropic(apiKey ? { apiKey } : {})(model);
+    },
   },
   openai: {
     defaultModel: "gpt-4o-mini",
-    resolve: (model: string, apiKey?: string | null) =>
-      createOpenAI(apiKey ? { apiKey } : {})(model),
+    resolve: (model: string, credentials: ProviderCredentials) => {
+      const apiKey = requireStringOrNull(credentials, "openai");
+      return createOpenAI(apiKey ? { apiKey } : {})(model);
+    },
   },
   mistral: {
     defaultModel: "mistral-small-latest",
-    resolve: (model: string, apiKey?: string | null) =>
-      createMistral(apiKey ? { apiKey } : {})(model),
+    resolve: (model: string, credentials: ProviderCredentials) => {
+      const apiKey = requireStringOrNull(credentials, "mistral");
+      return createMistral(apiKey ? { apiKey } : {})(model);
+    },
+  },
+  bedrock: {
+    defaultModel: "anthropic.claude-sonnet-4-5-20250929-v1:0",
+    resolve: (model: string, credentials: ProviderCredentials) => {
+      const creds = requireBedrockOrNull(credentials);
+      return createAmazonBedrock(creds ?? {})(model);
+    },
   },
 } as const satisfies Record<ProviderName, ProviderEntry>;
 
 export const resolveModel = (
   provider: ProviderName,
   model?: string,
-  apiKey?: string | null,
+  credentials?: ProviderCredentials,
 ): LanguageModel => {
   const entry = PROVIDERS[provider];
-  return entry.resolve(model ?? entry.defaultModel, apiKey ?? null);
+  return entry.resolve(model ?? entry.defaultModel, credentials ?? null);
 };
 
 export const defaultModelFor = (provider: ProviderName): string =>

@@ -18,7 +18,7 @@ import { resolveModel } from "./providers";
 
 const openaiConfig: AiConfig = {
   provider: "openai",
-  apiKeys: { anthropic: null, openai: "sk-openai-test", mistral: null },
+  apiKeys: { anthropic: null, openai: "sk-openai-test", mistral: null, bedrock: null },
   models: {
     chat: "gpt-4o-mini",
     documentGeneration: "gpt-4o",
@@ -221,7 +221,7 @@ describe("LanguageModelAdapter (openai) — provider/key resolution from runtime
   it("passes the openai api key from the runtime config to resolveModel", async () => {
     const customConfig: AiConfig = {
       ...openaiConfig,
-      apiKeys: { anthropic: null, openai: "sk-overridden-at-runtime", mistral: null },
+      apiKeys: { anthropic: null, openai: "sk-overridden-at-runtime", mistral: null, bedrock: null },
     };
     vi.mocked(generateObject).mockResolvedValue({
       object: {},
@@ -259,5 +259,72 @@ describe("LanguageModelAdapter (openai) — provider/key resolution from runtime
     await adapter.generateObject({ purpose: "summarise-document", schema });
 
     expect(resolveModel).toHaveBeenCalledWith("openai", "gpt-4o", "sk-openai-test");
+  });
+});
+
+describe("LanguageModelAdapter (bedrock) — credential plumbing", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const bedrockConfig: AiConfig = {
+    provider: "bedrock",
+    apiKeys: {
+      anthropic: null,
+      openai: null,
+      mistral: null,
+      bedrock: {
+        region: "us-east-1",
+        accessKeyId: "AKIA-bedrock-test",
+        secretAccessKey: "secret-bedrock-test",
+      },
+    },
+    models: {
+      chat: "anthropic.claude-haiku-4-5-20251001-v1:0",
+      documentGeneration: "anthropic.claude-sonnet-4-5-20250929-v1:0",
+      branching: "anthropic.claude-haiku-4-5-20251001-v1:0",
+    },
+  };
+
+  it("passes the bedrock credentials object from runtime config to resolveModel", async () => {
+    vi.mocked(generateObject).mockResolvedValue({
+      object: {},
+      usage: { promptTokens: 0, completionTokens: 0 },
+      experimental_providerMetadata: undefined,
+    } as never);
+    const adapter = new LanguageModelAdapter("bedrock", makeConfigStore(bedrockConfig));
+
+    await adapter.generateObject({ purpose: "chat", schema });
+
+    expect(resolveModel).toHaveBeenCalledWith(
+      "bedrock",
+      "anthropic.claude-haiku-4-5-20251001-v1:0",
+      {
+        region: "us-east-1",
+        accessKeyId: "AKIA-bedrock-test",
+        secretAccessKey: "secret-bedrock-test",
+      },
+    );
+  });
+
+  it("passes null when bedrock credentials are not configured", async () => {
+    const unconfigured: AiConfig = {
+      ...bedrockConfig,
+      apiKeys: { ...bedrockConfig.apiKeys, bedrock: null },
+    };
+    vi.mocked(generateObject).mockResolvedValue({
+      object: {},
+      usage: { promptTokens: 0, completionTokens: 0 },
+      experimental_providerMetadata: undefined,
+    } as never);
+    const adapter = new LanguageModelAdapter("bedrock", makeConfigStore(unconfigured));
+
+    await adapter.generateObject({ purpose: "chat", schema });
+
+    expect(resolveModel).toHaveBeenCalledWith(
+      "bedrock",
+      "anthropic.claude-haiku-4-5-20251001-v1:0",
+      null,
+    );
   });
 });

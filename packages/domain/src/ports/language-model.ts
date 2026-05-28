@@ -1,6 +1,6 @@
 import type { Result } from "../result";
 
-export type ProviderName = "anthropic" | "openai" | "mistral";
+export type ProviderName = "anthropic" | "openai" | "mistral" | "bedrock";
 
 export interface ChatMessage {
   readonly role: "system" | "user" | "assistant";

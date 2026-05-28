@@ -100,12 +100,22 @@ const build = () => {
   const sessionMessages = new DrizzleSessionMessageRepository(db);
   const systemSettings = new DrizzleSystemSettingsRepository(db);
 
+  const bedrockEnvCredentials =
+    env.AWS_BEDROCK_REGION && env.AWS_BEDROCK_ACCESS_KEY_ID && env.AWS_BEDROCK_SECRET_ACCESS_KEY
+      ? {
+          region: env.AWS_BEDROCK_REGION,
+          accessKeyId: env.AWS_BEDROCK_ACCESS_KEY_ID,
+          secretAccessKey: env.AWS_BEDROCK_SECRET_ACCESS_KEY,
+        }
+      : null;
+
   const runtimeConfig = new RuntimeConfigStore(systemSettings, {
     provider: env.AI_DEFAULT_PROVIDER,
     apiKeys: {
       anthropic: env.ANTHROPIC_API_KEY ?? null,
       openai: env.OPENAI_API_KEY ?? null,
       mistral: env.MISTRAL_API_KEY ?? null,
+      bedrock: bedrockEnvCredentials,
     },
     storage: {
       endpoint: env.MINIO_ENDPOINT,

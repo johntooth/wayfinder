@@ -17,12 +17,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";
 
-type Provider = "anthropic" | "openai" | "mistral";
+type Provider = "anthropic" | "openai" | "mistral" | "bedrock";
 
 const PROVIDER_LABEL: Record<Provider, string> = {
   anthropic: "Anthropic (Claude)",
   openai: "OpenAI",
   mistral: "Mistral",
+  bedrock: "Amazon Bedrock",
 };
 
 function OrganisationNameCard() {
@@ -135,6 +136,9 @@ function AiProviderCard() {
   const [anthropicKey, setAnthropicKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
   const [mistralKey, setMistralKey] = useState("");
+  const [bedrockRegion, setBedrockRegion] = useState("");
+  const [bedrockAccessKeyId, setBedrockAccessKeyId] = useState("");
+  const [bedrockSecretAccessKey, setBedrockSecretAccessKey] = useState("");
 
   const config = aiQuery.data;
 
@@ -147,6 +151,9 @@ function AiProviderCard() {
     setAnthropicKey("");
     setOpenaiKey("");
     setMistralKey("");
+    setBedrockRegion(config.apiKeys.bedrock.region ?? "");
+    setBedrockAccessKeyId("");
+    setBedrockSecretAccessKey("");
   }, [open, config]);
 
   const handleProviderChange = (next: Provider) => {
@@ -165,6 +172,11 @@ function AiProviderCard() {
         anthropic: anthropicKey || null,
         openai: openaiKey || null,
         mistral: mistralKey || null,
+        bedrock: {
+          region: bedrockRegion || null,
+          accessKeyId: bedrockAccessKeyId || null,
+          secretAccessKey: bedrockSecretAccessKey || null,
+        },
       },
       models: {
         chat: chatModel.trim(),
@@ -211,6 +223,14 @@ function AiProviderCard() {
                 {config.apiKeys.mistral === "set" ? "✓" : "—"}
               </span>
             </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Bedrock</span>
+              <span className="font-mono text-xs">
+                Region: {config.apiKeys.bedrock.region ?? "—"} · Access key:{" "}
+                {config.apiKeys.bedrock.accessKeyId === "set" ? "✓" : "—"} · Secret:{" "}
+                {config.apiKeys.bedrock.secretAccessKey === "set" ? "✓" : "—"}
+              </span>
+            </div>
           </>
         )}
       </CardContent>
@@ -233,6 +253,7 @@ function AiProviderCard() {
                 <option value="anthropic">Anthropic (Claude)</option>
                 <option value="openai">OpenAI</option>
                 <option value="mistral">Mistral</option>
+                <option value="bedrock">Amazon Bedrock</option>
               </select>
             </div>
 
@@ -284,6 +305,49 @@ function AiProviderCard() {
                 value={mistralKey}
                 onChange={(e) => setMistralKey(e.target.value)}
                 placeholder={config?.apiKeys.mistral === "set" ? "•••••• (stored)" : "Not set"}
+              />
+            </div>
+
+            <hr className="border-[#dedad2]" />
+
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-foreground">Amazon Bedrock credentials</p>
+              <p className="text-xs text-muted-foreground">
+                Leave any field blank to keep its stored value. All three fields together are required
+                for Bedrock calls to succeed.
+              </p>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="ai-bedrock-region">AWS region</Label>
+              <Input
+                id="ai-bedrock-region"
+                value={bedrockRegion}
+                onChange={(e) => setBedrockRegion(e.target.value)}
+                placeholder="e.g. us-east-1"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="ai-bedrock-access-key">AWS access key ID</Label>
+              <Input
+                id="ai-bedrock-access-key"
+                type="password"
+                value={bedrockAccessKeyId}
+                onChange={(e) => setBedrockAccessKeyId(e.target.value)}
+                placeholder={
+                  config?.apiKeys.bedrock.accessKeyId === "set" ? "•••••• (stored)" : "Not set"
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="ai-bedrock-secret">AWS secret access key</Label>
+              <Input
+                id="ai-bedrock-secret"
+                type="password"
+                value={bedrockSecretAccessKey}
+                onChange={(e) => setBedrockSecretAccessKey(e.target.value)}
+                placeholder={
+                  config?.apiKeys.bedrock.secretAccessKey === "set" ? "•••••• (stored)" : "Not set"
+                }
               />
             </div>
           </DialogBody>

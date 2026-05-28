@@ -1,5 +1,5 @@
 import { generateObject, generateText, type LanguageModel } from "ai";
-import { recordTokenUsage, resolveModel } from "@rbrasier/adapters";
+import { recordTokenUsage, resolveModel, type ProviderCredentials } from "@rbrasier/adapters";
 import type {
   AiTurnPayload,
   ConversationalNodeConfig,
@@ -80,11 +80,11 @@ export async function generateTitle(
   firstUserMessage: string,
   provider: Parameters<typeof resolveModel>[0],
   modelName: string,
-  apiKey: string | null,
+  credentials: ProviderCredentials,
   userId: string,
 ): Promise<void> {
   try {
-    const cheapModel = resolveModel(provider, modelName, apiKey);
+    const cheapModel = resolveModel(provider, modelName, credentials);
     const result = await generateText({
       model: cheapModel,
       system: "Generate a concise title (max 80 characters) for a workflow session based on the user's first message. Return only the title, no quotes or punctuation.",

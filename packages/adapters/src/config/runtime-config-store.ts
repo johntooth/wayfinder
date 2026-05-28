@@ -3,13 +3,14 @@ import {
   STORAGE_CONFIG_SETTING_KEY,
   type AiConfig,
   type AiPurpose,
+  type BedrockCredentials,
   type ISystemSettingsRepository,
   type ProviderName,
   type StorageConfig,
 } from "@rbrasier/domain";
 
 const ALL_PURPOSES: AiPurpose[] = ["chat", "documentGeneration", "branching"];
-const ALL_PROVIDERS: ProviderName[] = ["anthropic", "openai", "mistral"];
+const ALL_PROVIDERS: ProviderName[] = ["anthropic", "openai", "mistral", "bedrock"];
 
 export const DEFAULT_MODELS_FOR: Record<ProviderName, Record<AiPurpose, string>> = {
   anthropic: {
@@ -27,16 +28,48 @@ export const DEFAULT_MODELS_FOR: Record<ProviderName, Record<AiPurpose, string>>
     documentGeneration: "mistral-large-latest",
     branching: "mistral-small-latest",
   },
+  bedrock: {
+    chat: "anthropic.claude-haiku-4-5-20251001-v1:0",
+    documentGeneration: "anthropic.claude-sonnet-4-5-20250929-v1:0",
+    branching: "anthropic.claude-haiku-4-5-20251001-v1:0",
+  },
 };
 
 export interface EnvDefaults {
   provider: ProviderName;
-  apiKeys: { anthropic: string | null; openai: string | null; mistral: string | null };
+  apiKeys: {
+    anthropic: string | null;
+    openai: string | null;
+    mistral: string | null;
+    bedrock: BedrockCredentials | null;
+  };
   storage: StorageConfig;
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
+
+const parseBedrockCredentials = (
+  raw: unknown,
+  fallback: BedrockCredentials | null,
+): BedrockCredentials | null => {
+  if (raw === null) return null;
+  if (!isObject(raw)) return fallback;
+  const region = raw.region;
+  const accessKeyId = raw.accessKeyId;
+  const secretAccessKey = raw.secretAccessKey;
+  if (
+    typeof region !== "string" ||
+    region.length === 0 ||
+    typeof accessKeyId !== "string" ||
+    accessKeyId.length === 0 ||
+    typeof secretAccessKey !== "string" ||
+    secretAccessKey.length === 0
+  ) {
+    return fallback;
+  }
+  return { region, accessKeyId, secretAccessKey };
+};
 
 const parseAiConfig = (raw: string, fallback: AiConfig): AiConfig => {
   try {
@@ -46,10 +79,14 @@ const parseAiConfig = (raw: string, fallback: AiConfig): AiConfig => {
       ? (parsed.provider as ProviderName)
       : fallback.provider;
     const rawKeys = isObject(parsed.apiKeys) ? parsed.apiKeys : {};
+    const bedrockKeyPresent = "bedrock" in rawKeys;
     const apiKeys = {
       anthropic: typeof rawKeys.anthropic === "string" && rawKeys.anthropic.length > 0 ? rawKeys.anthropic : fallback.apiKeys.anthropic,
       openai: typeof rawKeys.openai === "string" && rawKeys.openai.length > 0 ? rawKeys.openai : fallback.apiKeys.openai,
       mistral: typeof rawKeys.mistral === "string" && rawKeys.mistral.length > 0 ? rawKeys.mistral : fallback.apiKeys.mistral,
+      bedrock: bedrockKeyPresent
+        ? parseBedrockCredentials(rawKeys.bedrock, fallback.apiKeys.bedrock)
+        : fallback.apiKeys.bedrock,
     };
     const rawModels = isObject(parsed.models) ? parsed.models : {};
     const defaultModelsForProvider = DEFAULT_MODELS_FOR[provider];
@@ -153,6 +190,13 @@ export class RuntimeConfigStore {
         anthropic: config.apiKeys.anthropic ? "••••••" : null,
         openai: config.apiKeys.openai ? "••••••" : null,
         mistral: config.apiKeys.mistral ? "••••••" : null,
+        bedrock: config.apiKeys.bedrock
+          ? {
+              region: config.apiKeys.bedrock.region,
+              accessKeyId: "••••••",
+              secretAccessKey: "••••••",
+            }
+          : null,
       },
     };
   }
