@@ -54,12 +54,22 @@ export const buildContainer = (env: Env) => {
   const jobRepo = new DrizzleJobRepository(db);
   const systemSettings = new DrizzleSystemSettingsRepository(db);
 
+  const bedrockEnvCredentials =
+    env.AWS_BEDROCK_REGION && env.AWS_BEDROCK_ACCESS_KEY_ID && env.AWS_BEDROCK_SECRET_ACCESS_KEY
+      ? {
+          region: env.AWS_BEDROCK_REGION,
+          accessKeyId: env.AWS_BEDROCK_ACCESS_KEY_ID,
+          secretAccessKey: env.AWS_BEDROCK_SECRET_ACCESS_KEY,
+        }
+      : null;
+
   const runtimeConfig = new RuntimeConfigStore(systemSettings, {
     provider: env.AI_DEFAULT_PROVIDER,
     apiKeys: {
       anthropic: env.ANTHROPIC_API_KEY ?? null,
       openai: env.OPENAI_API_KEY ?? null,
       mistral: env.MISTRAL_API_KEY ?? null,
+      bedrock: bedrockEnvCredentials,
     },
     storage: {
       endpoint: "localhost",
@@ -80,6 +90,9 @@ export const buildContainer = (env: Env) => {
     anthropicKey: env.ANTHROPIC_API_KEY,
     openaiKey: env.OPENAI_API_KEY,
     mistralKey: env.MISTRAL_API_KEY,
+    bedrockRegion: env.AWS_BEDROCK_REGION,
+    bedrockAccessKeyId: env.AWS_BEDROCK_ACCESS_KEY_ID,
+    bedrockSecretAccessKey: env.AWS_BEDROCK_SECRET_ACCESS_KEY,
   });
   const healthChecker = new CompositeHealthChecker(dbChecker, aiChecker, jobRepo);
 

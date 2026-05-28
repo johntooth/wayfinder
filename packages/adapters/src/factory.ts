@@ -31,7 +31,7 @@ import { PinoLogger } from "./logging/pino-logger";
 import type { Database } from "./db/client";
 
 export interface AdaptersConfig {
-  aiProvider: "anthropic" | "openai" | "mistral";
+  aiProvider: "anthropic" | "openai" | "mistral" | "bedrock";
   nodeEnv?: string;
   langfuse?: {
     publicKey?: string;
@@ -42,6 +42,11 @@ export interface AdaptersConfig {
     anthropic?: string;
     openai?: string;
     mistral?: string;
+    bedrock?: {
+      region: string;
+      accessKeyId: string;
+      secretAccessKey: string;
+    };
   };
   overrides?: {
     logger?: ILogger;
@@ -107,6 +112,7 @@ export function createAdapters(db: Database, config: AdaptersConfig): Adapters {
       anthropic: aiKeys.anthropic ?? null,
       openai: aiKeys.openai ?? null,
       mistral: aiKeys.mistral ?? null,
+      bedrock: aiKeys.bedrock ?? null,
     },
     storage: {
       endpoint: "localhost",

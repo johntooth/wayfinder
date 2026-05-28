@@ -2,12 +2,19 @@ import type { ProviderName } from "../ports/language-model";
 
 export type AiPurpose = "chat" | "documentGeneration" | "branching";
 
+export interface BedrockCredentials {
+  region: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+}
+
 export interface AiConfig {
   provider: ProviderName;
   apiKeys: {
     anthropic: string | null;
     openai: string | null;
     mistral: string | null;
+    bedrock: BedrockCredentials | null;
   };
   models: Record<AiPurpose, string>;
 }

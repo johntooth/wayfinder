@@ -5,6 +5,7 @@ import {
   STORAGE_CONFIG_SETTING_KEY,
   type AiConfig,
   type AiPurpose,
+  type BedrockCredentials,
   type ProviderName,
   type StorageConfig,
 } from "@rbrasier/domain";
@@ -12,7 +13,16 @@ import { DEFAULT_MODELS_FOR, RuntimeConfigStore } from "@rbrasier/adapters";
 import { adminProcedure, publicProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
-const providerSchema = z.enum(["anthropic", "openai", "mistral"]);
+const providerSchema = z.enum(["anthropic", "openai", "mistral", "bedrock"]);
+
+const bedrockInputSchema = z
+  .object({
+    region: z.string().optional().nullable(),
+    accessKeyId: z.string().optional().nullable(),
+    secretAccessKey: z.string().optional().nullable(),
+  })
+  .nullable()
+  .optional();
 
 const aiConfigInputSchema = z.object({
   provider: providerSchema,
@@ -20,6 +30,7 @@ const aiConfigInputSchema = z.object({
     anthropic: z.string().nullable().optional(),
     openai: z.string().nullable().optional(),
     mistral: z.string().nullable().optional(),
+    bedrock: bedrockInputSchema,
   }),
   models: z.object({
     chat: z.string().min(1),
@@ -39,22 +50,58 @@ const storageConfigInputSchema = z.object({
 
 const PURPOSES: AiPurpose[] = ["chat", "documentGeneration", "branching"];
 
+type BedrockInput = {
+  region?: string | null;
+  accessKeyId?: string | null;
+  secretAccessKey?: string | null;
+} | null | undefined;
+
+const mergeBedrockCredentials = (
+  incoming: BedrockInput,
+  stored: BedrockCredentials | null,
+): BedrockCredentials | null => {
+  if (incoming === null || incoming === undefined) return stored;
+  const region = incoming.region && incoming.region.length > 0 ? incoming.region : stored?.region;
+  const accessKeyId =
+    incoming.accessKeyId && incoming.accessKeyId.length > 0
+      ? incoming.accessKeyId
+      : stored?.accessKeyId;
+  const secretAccessKey =
+    incoming.secretAccessKey && incoming.secretAccessKey.length > 0
+      ? incoming.secretAccessKey
+      : stored?.secretAccessKey;
+  if (!region || !accessKeyId || !secretAccessKey) return stored;
+  return { region, accessKeyId, secretAccessKey };
+};
+
 /**
  * Merge incoming apiKeys with stored ones — if the client sends null/empty
  * for a key, keep the previously-stored value (so editing the modal doesn't
  * wipe an existing key the admin can't read back from a redacted display).
  */
-const mergeApiKeys = (
-  incoming: { anthropic?: string | null; openai?: string | null; mistral?: string | null },
+export const mergeApiKeys = (
+  incoming: {
+    anthropic?: string | null;
+    openai?: string | null;
+    mistral?: string | null;
+    bedrock?: BedrockInput;
+  },
   stored: AiConfig["apiKeys"],
 ): AiConfig["apiKeys"] => ({
   anthropic: incoming.anthropic && incoming.anthropic.length > 0 ? incoming.anthropic : stored.anthropic,
   openai: incoming.openai && incoming.openai.length > 0 ? incoming.openai : stored.openai,
   mistral: incoming.mistral && incoming.mistral.length > 0 ? incoming.mistral : stored.mistral,
+  bedrock: mergeBedrockCredentials(incoming.bedrock, stored.bedrock),
 });
 
 const apiKeyState = (value: string | null): "set" | "unset" =>
   value && value.length > 0 ? "set" : "unset";
+
+const bedrockState = (value: BedrockCredentials | null) => ({
+  region: value?.region ?? null,
+  accessKeyId: apiKeyState(value?.accessKeyId ?? null),
+  secretAccessKey: apiKeyState(value?.secretAccessKey ?? null),
+});
 
 export const settingsRouter = router({
   get: adminProcedure
@@ -82,6 +129,7 @@ export const settingsRouter = router({
         anthropic: apiKeyState(config.apiKeys.anthropic),
         openai: apiKeyState(config.apiKeys.openai),
         mistral: apiKeyState(config.apiKeys.mistral),
+        bedrock: bedrockState(config.apiKeys.bedrock),
       },
       defaultModelsForProvider: DEFAULT_MODELS_FOR,
       purposes: PURPOSES,
