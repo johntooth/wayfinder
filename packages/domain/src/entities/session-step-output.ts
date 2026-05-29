@@ -4,6 +4,7 @@ export interface StepOutputField {
   key: string;
   label: string;
   type: TemplateFieldType;
+  options?: string[];
   value: string;
 }
 

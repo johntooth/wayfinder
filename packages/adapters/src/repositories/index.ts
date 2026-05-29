@@ -11,4 +11,5 @@ export * from "./drizzle-flow-edge-repository";
 export * from "./drizzle-session-repository";
 export * from "./drizzle-session-message-repository";
 export * from "./drizzle-session-step-output-repository";
+export * from "./drizzle-analytics-repository";
 export * from "./drizzle-system-settings-repository";

@@ -13,6 +13,8 @@ import {
   GenerateDocument,
   GetFeatureFlag,
   GetFlowCanvas,
+  GetFlowDeepDive,
+  GetOverviewDashboard,
   GetSession,
   GetUsageSummary,
   GrantFlowOwner,
@@ -57,6 +59,7 @@ import {
   DrizzleJobRepository,
   DrizzleSessionMessageRepository,
   DrizzleSessionStepOutputRepository,
+  DrizzleAnalyticsRepository,
   DrizzleSessionRepository,
   DrizzleSystemSettingsRepository,
   DrizzleUsageRepository,
@@ -100,6 +103,7 @@ const build = () => {
   const sessions = new DrizzleSessionRepository(db);
   const sessionMessages = new DrizzleSessionMessageRepository(db);
   const sessionStepOutputs = new DrizzleSessionStepOutputRepository(db);
+  const analyticsRepo = new DrizzleAnalyticsRepository(db);
   const systemSettings = new DrizzleSystemSettingsRepository(db);
 
   const bedrockEnvCredentials =
@@ -230,6 +234,8 @@ const build = () => {
       getSession: new GetSession(sessions, sessionMessages, flows, flowNodes, flowEdges),
       runTurn: new RunTurn(sessions, sessionMessages, flowEdges),
       overrideBranch: new OverrideBranch(sessions, flowEdges),
+      getOverviewDashboard: new GetOverviewDashboard(analyticsRepo),
+      getFlowDeepDive: new GetFlowDeepDive(flows, flowNodes, analyticsRepo, sessionStepOutputs),
     },
   };
 };

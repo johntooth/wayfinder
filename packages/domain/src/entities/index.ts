@@ -14,5 +14,6 @@ export * from "./flow-edge";
 export * from "./session";
 export * from "./session-message";
 export * from "./session-step-output";
+export * from "./analytics";
 export * from "./system-setting";
 export * from "./runtime-config";

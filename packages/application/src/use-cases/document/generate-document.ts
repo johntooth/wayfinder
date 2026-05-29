@@ -171,6 +171,7 @@ export class GenerateDocument {
       key: field.key,
       label: field.label,
       type: field.type,
+      options: field.options,
       value: input.values[field.key] ?? "",
     }));
 
