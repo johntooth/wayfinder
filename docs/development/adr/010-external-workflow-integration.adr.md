@@ -2,6 +2,8 @@
 
 - **Status**: Accepted (Phase 5 implementation; port locked at Phase 0)
 - **Date**: 2026-05-19
+- **Amended by**: ADR-013 (adds `instruction`, tightens `fields` to
+  `Record<string, string>`, and resolves the Phase 5 open question below)
 
 ## Context
 
@@ -135,9 +137,15 @@ sub-workflows all land in Phase 5.
 - The 501 stub route may surprise a developer who curls it. Documented in
   the route handler.
 
-## Open question (Phase 5)
+## Open question (Phase 5) — RESOLVED by ADR-013
 
 Should `NodeExecutionInput.fields` carry its own Zod schema reference so n8n
-can validate inputs? Default: yes, the node config in `app_flow_nodes` (for
-`auto-node` type) includes an `input_schema` field; the adapter passes it
-along. Settled at Phase 5 design time.
+can validate inputs?
+
+**Resolved (ADR-013):** No separate Zod schema. The `auto` node config carries
+`requestFields` and `responseFields` as `TemplateField[]` — the same field
+descriptor used for `.docx` generation (ADR-009). Those *are* the schema; n8n
+inputs are gathered with the shared `extractStructuredFields` helper and n8n
+outputs are best-effort coerced against `responseFields`. `fields` is also
+tightened to `Record<string, string>` and an `instruction` free-text field is
+added to the port.
