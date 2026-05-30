@@ -122,12 +122,31 @@ Single Drizzle migration.
 | `updated_at` | `timestamp` not null default `now()` | |
 
 - Unique index on `(session_id, user_id)` — one heartbeat row per user per
-  session, upserted on each keystroke-throttled heartbeat.
+  session, upserted on each keystroke-throttled heartbeat. This bounds the
+  table to **one row per (session, user) pair**: repeated keystrokes overwrite
+  the same row rather than appending.
 - Index on `(session_id, expires_at)` for the "who is typing now" read.
-- A row is **upserted** while a user types and naturally goes stale via
-  `expires_at`; no explicit delete is required (a periodic cleanup of expired
-  rows is optional, not load-bearing). Typing state is intentionally
-  ephemeral — never part of session reload or the LangGraph checkpoint.
+- Index on `(user_id, expires_at)` to keep the cross-session cleanup delete
+  (below) cheap on its `user_id` branch.
+- **Cleanup is required, not optional.** The unique index stops per-keystroke
+  growth, but `expires_at` is only a read filter — stale rows are never removed
+  on their own, so the table would otherwise accumulate one dead row per
+  (session, user) pair forever. The `heartbeatTyping` use case therefore runs
+  an opportunistic scoped delete in the same write, immediately before the
+  upsert:
+
+  ```sql
+  DELETE FROM app_session_typing
+  WHERE (session_id = $1 OR user_id = $2) AND expires_at < now();
+  ```
+
+  The `session_id` branch clears anyone who has stopped typing in *this*
+  session; the `user_id` branch clears this user's stale rows in **other**
+  sessions — a user typing here is not typing elsewhere, so those records are
+  safe to reap. No cron, job, or new infrastructure is needed: the delete fires
+  only when someone is actively typing, so the table stays small during use and
+  stops growing entirely when idle. Typing state is intentionally ephemeral —
+  never part of session reload or the LangGraph checkpoint.
 
 ## 7. Access-control change (server)
 
