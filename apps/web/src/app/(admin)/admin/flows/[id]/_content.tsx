@@ -314,6 +314,64 @@ function CanvasInner({ flowId }: { flowId: string }) {
     setEditingNodeId(null);
   }, [editingNodeId]);
 
+  const handleUploadTemplate = useCallback(async (
+    file: File,
+    currentValues: NodeConfigValues,
+  ): Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string; code?: string }> => {
+    let nodeId = editingNodeId;
+
+    if (!nodeId || nodeId.startsWith("temp-")) {
+      const tempId = nodeId;
+      const newNode = await createNodeMutation.mutateAsync({
+        flowId,
+        name: currentValues.name || "New step",
+        colour: currentValues.colour || "#6366f1",
+        positionX: rfNodes.find((n) => n.id === tempId)?.position.x ?? 200,
+        positionY: rfNodes.find((n) => n.id === tempId)?.position.y ?? 200,
+        config: {
+          aiInstruction: currentValues.aiInstruction,
+          doneWhen: currentValues.neverDone ? "" : currentValues.doneWhen,
+          neverDone: currentValues.neverDone,
+          outputType: currentValues.outputType,
+          documentTemplatePath: null,
+          documentTemplateFilename: null,
+          documentTemplateContent: null,
+        },
+      });
+
+      setRfNodes((nds) =>
+        nds.map((n) => (n.id === tempId ? { ...toRfNode({ ...newNode, config: newNode.config as Record<string, unknown> }), id: newNode.id } : n)),
+      );
+      setEditingNodeId(newNode.id);
+      nodeId = newNode.id;
+
+      if (pendingEdge) {
+        const edge = await createEdgeMutation.mutateAsync({
+          flowId,
+          fromNodeId: pendingEdge.fromNodeId,
+          toNodeId: newNode.id,
+        });
+        setRfEdges((eds) => [
+          ...eds,
+          { id: edge.id, source: edge.fromNodeId, target: edge.toNodeId, type: "smoothstep", markerEnd: { type: MarkerType.ArrowClosed } },
+        ]);
+        setPendingEdge(null);
+      }
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`/api/flows/${flowId}/nodes/${nodeId}/template`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json() as { path?: string; filename?: string; documentTemplateContent?: string | null; error?: string; code?: string };
+    if (!res.ok || data.error) {
+      return { error: data.error ?? "Upload failed", code: data.code };
+    }
+    return { path: data.path!, filename: data.filename!, documentTemplateContent: data.documentTemplateContent ?? null };
+  }, [editingNodeId, flowId, rfNodes, pendingEdge, createNodeMutation, createEdgeMutation]);
+
   const handleNodeDelete = useCallback(async () => {
     if (!editingNodeId || editingNodeId.startsWith("temp-")) return;
     await deleteNodeMutation.mutateAsync({ nodeId: editingNodeId, flowId });
@@ -545,6 +603,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         onDelete={editingNodeId && !editingNodeId.startsWith("temp-") ? handleNodeDelete : undefined}
         onClose={handleConfigClose}
         isSaving={isSavingConfig}
+        onUploadTemplate={handleUploadTemplate}
       />
     </div>
   );

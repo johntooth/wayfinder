@@ -49,7 +49,7 @@ interface NodeConfigModalProps {
   onDelete?: () => void;
   onClose: () => void;
   isSaving?: boolean;
-  onUploadTemplate?: (file: File) => Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string; code?: string }>;
+  onUploadTemplate?: (file: File, currentValues: NodeConfigValues) => Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string; code?: string }>;
 }
 
 const DEFAULT_VALUES: NodeConfigValues = {
@@ -179,7 +179,7 @@ export function NodeConfigModal({
     setUploadError(null);
     setIsUploading(true);
     try {
-      const result = await onUploadTemplate(file);
+      const result = await onUploadTemplate(file, values);
       if ("error" in result) {
         setUploadError(result.error);
         if (result.code === "NO_TEMPLATE_TAGS") {

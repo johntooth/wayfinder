@@ -223,7 +223,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
     positionTimers.current.set(node.id, timer);
   }, [updatePositionMutation, flowId]);
 
-  const handleUploadTemplate = useCallback(async (file: File): Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string; code?: string }> => {
+  const handleUploadTemplate = useCallback(async (file: File, _currentValues: NodeConfigValues): Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string; code?: string }> => {
     if (!editingNodeId || editingNodeId.startsWith("temp-")) {
       return { error: "Save the step first before uploading a template." };
     }
