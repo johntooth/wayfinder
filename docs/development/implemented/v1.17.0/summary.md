@@ -15,7 +15,10 @@ SSE/WebSockets, no CRDTs, no presence roster, no collaborator roles.
 
 - **Write access = anyone with the link.** The stream route's owner-only `403`
   is removed; only a valid authenticated session is required. The session UUID
-  is the shared secret, identical to the read-only share model.
+  is the shared secret, identical to the read-only share model. The document
+  route (`/api/documents/[documentId]`) is relaxed the same way, so any
+  participant can download (GET) and regenerate (POST) a generated document —
+  not just the owner.
 - **Attribution.** Each human message is stamped with `sender_user_id` and
   rendered with the sender's name and avatar initials. Assistant/system
   messages and legacy pre-migration rows carry `null` and render unchanged.
@@ -102,6 +105,9 @@ Web:
   `typingUsers` query, and `participants: { id, name }[]` enrichment on `get`.
 - `apps/web/src/app/api/chat/[sessionId]/stream/route.ts` — removed the
   owner-only `403`; pass `senderUserId` into `persistUserMessage`.
+- `apps/web/src/app/api/documents/[documentId]/route.ts` — removed the
+  owner-only `403` on GET (download) and POST (regenerate) so any authenticated
+  participant can use documents generated in a collaborative session.
 - `apps/web/src/app/(user)/chats/[sessionId]/_content.tsx` — collaborative
   composer (no longer forced read-only by `isShared`), continuous active-session
   polling with tab-visibility gating, throttled typing heartbeat, typing-users
@@ -131,8 +137,10 @@ it is applied to a running database via the standard `db:migrate` step.)
 - No persistent participant roster / presence avatars; only the transient typing
   signal is shown.
 - No collaborator roles or per-user invitations; the link is the capability.
-- Retry / document-regeneration actions remain owner-gated (`!isShared`),
-  unchanged by this phase.
+- Document download and regeneration (`/api/documents/[documentId]` GET/POST)
+  are available to **any** authenticated participant — the message id is the
+  capability, consistent with the relaxed stream-route write access. There is no
+  per-user document restriction within a session.
 
 ## Version bump
 

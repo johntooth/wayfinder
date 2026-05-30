@@ -323,8 +323,8 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         isStreaming={isLoading}
         isComplete={session.status === "complete"}
         error={error ?? null}
-        onRetry={!isShared ? () => void reload() : undefined}
-        onRegenerateDocument={!isShared ? handleRegenerateDocument : undefined}
+        onRetry={() => void reload()}
+        onRegenerateDocument={handleRegenerateDocument}
         expertRole={flow.expertRole ?? null}
         userFirstInitial={userFirstInitial}
         senderNamesById={senderNamesById}
