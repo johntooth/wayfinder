@@ -130,6 +130,61 @@ describe("parseTemplateField", () => {
   it("rejects combining a scalar type with options", () => {
     expect(parseTemplateField("X (currency) (options: A, B)").error?.code).toBe("VALIDATION_FAILED");
   });
+
+  it("parses (multiple) combined with (options: …)", () => {
+    const result = parseTemplateField("Skills (options: Python, Go, Rust) (multiple)");
+    expect(result.error).toBeUndefined();
+    expect(result.data?.options).toEqual(["Python", "Go", "Rust"]);
+    expect(result.data?.multiple).toBe(true);
+  });
+
+  it("parses (multiple) before (options: …)", () => {
+    const result = parseTemplateField("Skills (multiple) (options: Python, Go, Rust)");
+    expect(result.error).toBeUndefined();
+    expect(result.data?.multiple).toBe(true);
+    expect(result.data?.options).toEqual(["Python", "Go", "Rust"]);
+  });
+
+  it("parses (multi-options: …) as shorthand for options + multiple", () => {
+    const result = parseTemplateField("Skills (multi-options: Python, Go, Rust)");
+    expect(result.error).toBeUndefined();
+    expect(result.data?.options).toEqual(["Python", "Go", "Rust"]);
+    expect(result.data?.multiple).toBe(true);
+  });
+
+  it("preserves option values with spaces in (multi-options: …)", () => {
+    const result = parseTemplateField("Stage (multi-options: Not Started, In Progress, Done)");
+    expect(result.data?.options).toEqual(["Not Started", "In Progress", "Done"]);
+    expect(result.data?.multiple).toBe(true);
+  });
+
+  it("accepts (max: N) on a multi-options field to cap selection count", () => {
+    const result = parseTemplateField("Skills (multi-options: Python, Go, Rust) (max: 2)");
+    expect(result.error).toBeUndefined();
+    expect(result.data?.max).toBe(2);
+    expect(result.data?.multiple).toBe(true);
+  });
+
+  it("rejects (multiple) without an options list", () => {
+    const result = parseTemplateField("Name (multiple)");
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toContain("multiple");
+  });
+
+  it("rejects (multi-options: …) combined with (options: …)", () => {
+    const result = parseTemplateField("X (options: A, B) (multi-options: C, D)");
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("rejects (multi-options: …) combined with a scalar type", () => {
+    const result = parseTemplateField("X (number) (multi-options: A, B)");
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("rejects an empty (multi-options: …) list", () => {
+    const result = parseTemplateField("X (multi-options:)");
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
 });
 
 describe("describeTemplateFieldFormat", () => {
@@ -142,9 +197,21 @@ describe("describeTemplateFieldFormat", () => {
     expect(describeTemplateFieldFormat(parseTemplateField("X").data!)).toContain("free text");
   });
 
-  it("describes an options enum", () => {
+  it("describes a single-select options enum", () => {
     const field = parseTemplateField("X (options: A, B, C)").data!;
     expect(describeTemplateFieldFormat(field)).toContain("exactly one of: A, B, C");
+  });
+
+  it("describes a multi-select options field", () => {
+    const field = parseTemplateField("X (multi-options: A, B, C)").data!;
+    expect(describeTemplateFieldFormat(field)).toContain("one or more of: A, B, C");
+  });
+
+  it("describes max selections on a multi-select field", () => {
+    const field = parseTemplateField("X (multi-options: A, B, C) (max: 2)").data!;
+    const description = describeTemplateFieldFormat(field);
+    expect(description).toContain("one or more of: A, B, C");
+    expect(description).toContain("select up to 2 values");
   });
 
   it("appends constraints and optionality", () => {

@@ -33,17 +33,21 @@ const TYPE_ROWS: AnnotationRow[] = [
 
 const OPTION_ROWS: AnnotationRow[] = [
   { annotation: "(options: A, B, C)", meaning: "AI must return exactly one of the listed values" },
+  { annotation: "(multi-options: A, B, C)", meaning: "Shorthand — AI may return one or more of the listed values (comma-separated)" },
+  { annotation: "(multiple)", meaning: "Combined with (options: …) — allows multiple values to be selected" },
 ];
 
 const CONSTRAINT_ROWS: AnnotationRow[] = [
   { annotation: "(maxlen: 100)", meaning: "Text constrained to N characters" },
   { annotation: "(optional)", meaning: "Field can be left blank if unknown — AI won't be penalised" },
-  { annotation: "(max: 100)", meaning: "Number or currency maximum" },
+  { annotation: "(max: 100)", meaning: "Number / currency maximum; on a multi-options field, caps the number of values that can be selected" },
   { annotation: "(min: 100)", meaning: "Number or currency minimum" },
 ];
 
 const COMBINED_EXAMPLES = [
   "{{ Approval Status (options: Approved, Rejected, Pending) (optional) }}",
+  "{{ Skills (multi-options: Python, Go, Rust) (max: 3) }}",
+  "{{ Tags (options: Urgent, Billing, Legal) (multiple) (optional) }}",
   "{{ Contract Value (currency) (optional) }}",
   "{{ Employee Email (email) }}",
   "{{ Notes (text) (maxlen: 200) (optional) }}",

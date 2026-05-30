@@ -9,6 +9,7 @@ export interface TemplateField {
   label: string;
   type: TemplateFieldType;
   options?: string[];
+  multiple?: boolean;
   optional: boolean;
   maxLength?: number;
   max?: number;
@@ -19,7 +20,7 @@ export interface TemplateField {
 const SCALAR_TYPES: TemplateFieldType[] = ["text", "date", "currency", "number", "email", "yesno"];
 
 const VALID_ANNOTATIONS_HINT =
-  "Valid annotations: (text), (date), (currency), (number), (email), (yesno), (options: A, B, C), (maxlen: N), (max: N), (min: N), (optional).";
+  "Valid annotations: (text), (date), (currency), (number), (email), (yesno), (options: A, B, C), (multi-options: A, B, C), (multiple), (maxlen: N), (max: N), (min: N), (optional).";
 
 const extractAnnotationGroups = (rawTag: string): string[] => {
   const matches = [...rawTag.matchAll(/\(([^()]*)\)/g)];
@@ -96,6 +97,44 @@ const applyAnnotation = (
       );
     }
     return ok({ ...field, options });
+  }
+
+  if (lower === "multiple") {
+    return ok({ ...field, multiple: true });
+  }
+
+  const multiOptionsMatch = lower.match(/^multi-options\s*:(.*)$/s);
+  if (multiOptionsMatch) {
+    if (field.type !== "text") {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `Tag "{{${rawTag}}}" combines a type with (multi-options: …). Use one or the other.`,
+        ),
+      );
+    }
+    if (field.options !== undefined) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `Tag "{{${rawTag}}}" has both (options: …) and (multi-options: …). Use only one.`,
+        ),
+      );
+    }
+    const remainder = annotation.slice(annotation.toLowerCase().indexOf(":") + 1);
+    const options = remainder
+      .split(",")
+      .map((option) => option.trim())
+      .filter((option) => option.length > 0);
+    if (options.length === 0) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `Tag "{{${rawTag}}}" has an empty (multi-options: …) list. List at least one value.`,
+        ),
+      );
+    }
+    return ok({ ...field, options, multiple: true });
   }
 
   const maxLenMatch = lower.match(/^maxlen\s*:\s*(.+)$/);
@@ -177,12 +216,22 @@ export const parseTemplateField = (rawTag: string): Result<TemplateField> => {
     field = applied.data;
   }
 
+  if (field.multiple && !field.options) {
+    return err(
+      domainError(
+        "VALIDATION_FAILED",
+        `Tag "{{${rawTag.trim()}}}" uses (multiple) without an options list. Add (options: A, B, C) or use (multi-options: A, B, C) instead.`,
+      ),
+    );
+  }
+
   return ok(field);
 };
 
 const describeType = (field: TemplateField): string => {
   if (field.options && field.options.length > 0) {
-    return `exactly one of: ${field.options.join(", ")}`;
+    const prefix = field.multiple ? "one or more of" : "exactly one of";
+    return `${prefix}: ${field.options.join(", ")}`;
   }
   switch (field.type) {
     case "date":
@@ -204,7 +253,9 @@ export const describeTemplateFieldFormat = (field: TemplateField): string => {
   const parts = [describeType(field)];
   if (field.maxLength !== undefined) parts.push(`max length ${field.maxLength} characters`);
   if (field.min !== undefined) parts.push(`minimum ${field.min}`);
-  if (field.max !== undefined) parts.push(`maximum ${field.max}`);
+  if (field.max !== undefined) {
+    parts.push(field.multiple ? `select up to ${field.max} values` : `maximum ${field.max}`);
+  }
   if (field.optional) parts.push("optional — may be left blank if genuinely unknown");
   return parts.join("; ");
 };
