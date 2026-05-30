@@ -11,7 +11,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { FlowPermission, FlowVisibility } from "@rbrasier/domain";
-import type { AiTurnPayload, SessionDocument, StepOutputField } from "@rbrasier/domain";
+import type { AiTurnPayload, PendingExecutions, SessionDocument, StepOutputField } from "@rbrasier/domain";
 import { core_users } from "./core";
 
 type StoredContextDoc = {
@@ -105,6 +105,10 @@ export const app_sessions = pgTable(
     title: text("title"),
     current_node_id: uuid("current_node_id"),
     graph_checkpoint: jsonb("graph_checkpoint").$type<Record<string, unknown>>(),
+    pending_executions: jsonb("pending_executions")
+      .$type<PendingExecutions>()
+      .notNull()
+      .default({}),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

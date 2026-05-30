@@ -12,11 +12,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import type { TemplateField } from "@rbrasier/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
 import { TemplateTagsHelpDialog } from "./template-tags-help-dialog";
+import { TemplateFieldEditor, parseFieldLines } from "./template-field-editor";
 
 const COLOURS = [
   { hex: "#3a5fd9", label: "Indigo" },
@@ -29,9 +31,12 @@ const COLOURS = [
 
 const EXAMPLE_TAG = "{{First name}}";
 
+export type NodeConfigType = "conversational" | "auto";
+
 export interface NodeConfigValues {
   name: string;
   colour: string;
+  type: NodeConfigType;
   aiInstruction: string;
   doneWhen: string;
   neverDone: boolean;
@@ -39,6 +44,11 @@ export interface NodeConfigValues {
   documentTemplatePath?: string | null;
   documentTemplateFilename?: string | null;
   documentTemplateContent?: string | null;
+  instruction: string;
+  executor: "n8n" | "mock";
+  webhookUrl: string;
+  requestFields: TemplateField[];
+  responseFields: TemplateField[];
 }
 
 interface NodeConfigModalProps {
@@ -49,12 +59,14 @@ interface NodeConfigModalProps {
   onDelete?: () => void;
   onClose: () => void;
   isSaving?: boolean;
+  autoNodeEnabled?: boolean;
   onUploadTemplate?: (file: File, currentValues: NodeConfigValues) => Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string; code?: string }>;
 }
 
 const DEFAULT_VALUES: NodeConfigValues = {
   name: "",
   colour: "#3a5fd9",
+  type: "conversational",
   aiInstruction: "",
   doneWhen: "",
   neverDone: false,
@@ -62,6 +74,11 @@ const DEFAULT_VALUES: NodeConfigValues = {
   documentTemplatePath: null,
   documentTemplateFilename: null,
   documentTemplateContent: null,
+  instruction: "",
+  executor: "n8n",
+  webhookUrl: "",
+  requestFields: [],
+  responseFields: [],
 };
 
 function CopyButton({ text }: { text: string }) {
@@ -93,14 +110,22 @@ export function NodeConfigModal({
   onDelete,
   onClose,
   isSaving = false,
+  autoNodeEnabled = false,
   onUploadTemplate,
 }: NodeConfigModalProps) {
   const utils = trpc.useUtils();
   const [values, setValues] = useState<NodeConfigValues>({ ...DEFAULT_VALUES, ...initialValues });
+  // Raw `Label (annotations)` lines edited in the field editors; the source of
+  // truth while editing so malformed lines stay visible with their errors.
+  const [requestLines, setRequestLines] = useState<string[]>([]);
+  const [responseLines, setResponseLines] = useState<string[]>([]);
   // Reset form state when the modal opens for a different node.
   useEffect(() => {
     if (open) {
-      setValues({ ...DEFAULT_VALUES, ...initialValues });
+      const next = { ...DEFAULT_VALUES, ...initialValues };
+      setValues(next);
+      setRequestLines((next.requestFields ?? []).map((field) => field.raw));
+      setResponseLines((next.responseFields ?? []).map((field) => field.raw));
     }
   }, [open, initialValues]);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -133,9 +158,30 @@ export function NodeConfigModal({
     }
   };
 
+  const isAuto = values.type === "auto";
+  const requestParsed = parseFieldLines(requestLines);
+  const responseParsed = parseFieldLines(responseLines);
+
+  const conversationalValid =
+    Boolean(values.name.trim()) &&
+    Boolean(values.aiInstruction.trim()) &&
+    (values.neverDone || isTemplateComplete || Boolean(values.doneWhen.trim()));
+
+  const autoValid =
+    Boolean(values.name.trim()) &&
+    Boolean(values.instruction.trim()) &&
+    (values.executor !== "n8n" || Boolean(values.webhookUrl.trim())) &&
+    requestParsed.valid &&
+    responseParsed.valid;
+
+  const canSave = isAuto ? autoValid : conversationalValid;
+
   const handleSave = () => {
-    if (!values.name.trim() || !values.aiInstruction.trim()) return;
-    if (!values.neverDone && !isTemplateComplete && !values.doneWhen.trim()) return;
+    if (!canSave) return;
+    if (isAuto) {
+      onSave({ ...values, requestFields: requestParsed.fields, responseFields: responseParsed.fields });
+      return;
+    }
     onSave(values);
   };
 
@@ -223,15 +269,17 @@ export function NodeConfigModal({
           <>
             <DialogHeader>
               <DialogTitle>Configure step</DialogTitle>
-              <button
-                type="button"
-                aria-label={view === "edit" ? "Preview prompt" : "Back to edit"}
-                className="ml-auto mr-1 rounded-md p-1 text-[#918d87] transition-colors hover:bg-[#efede8] hover:text-[#1a1814] disabled:opacity-50"
-                onClick={handleToggleView}
-                disabled={isLoadingPreview}
-              >
-                {view === "edit" ? <Eye size={15} /> : <Pencil size={15} />}
-              </button>
+              {!isAuto && (
+                <button
+                  type="button"
+                  aria-label={view === "edit" ? "Preview prompt" : "Back to edit"}
+                  className="ml-auto mr-1 rounded-md p-1 text-[#918d87] transition-colors hover:bg-[#efede8] hover:text-[#1a1814] disabled:opacity-50"
+                  onClick={handleToggleView}
+                  disabled={isLoadingPreview}
+                >
+                  {view === "edit" ? <Eye size={15} /> : <Pencil size={15} />}
+                </button>
+              )}
               <DialogCloseButton />
             </DialogHeader>
 
@@ -294,6 +342,40 @@ export function NodeConfigModal({
                 </div>
               </div>
 
+              {autoNodeEnabled && (
+                <div className="space-y-1">
+                  <Label>Step type</Label>
+                  <div className="flex gap-3">
+                    {(["conversational", "auto"] as const).map((type) => (
+                      <label
+                        key={type}
+                        className={`flex flex-1 cursor-pointer items-center justify-center rounded-[9px] border px-3 py-2 text-[13px] transition-colors ${
+                          values.type === type
+                            ? "border-[#7c3aed] bg-[#f3eefc] font-medium text-[#7c3aed]"
+                            : "border-[#dedad2] text-[#5a5650] hover:bg-[#efede8]"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          className="sr-only"
+                          value={type}
+                          checked={values.type === type}
+                          onChange={() => set("type", type)}
+                        />
+                        {type === "conversational" ? "Conversational" : "Automated (n8n)"}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-[12px] text-[#918d87]">
+                    {isAuto
+                      ? "Runs automatically via an n8n sub-workflow — no conversation. Completes when n8n calls back."
+                      : "A human takes a turn with the AI to complete this step."}
+                  </p>
+                </div>
+              )}
+
+              {!isAuto && (
+              <>
               <div className="space-y-1">
                 <Label htmlFor="ai-instruction">Instructions for the AI</Label>
                 <Textarea
@@ -432,6 +514,76 @@ export function NodeConfigModal({
                   </p>
                 )}
               </div>
+              </>
+              )}
+
+              {isAuto && (
+              <>
+              <div className="space-y-1">
+                <Label htmlFor="auto-instruction">Instruction for n8n</Label>
+                <Textarea
+                  id="auto-instruction"
+                  required
+                  rows={4}
+                  value={values.instruction}
+                  onChange={(e) => set("instruction", e.target.value)}
+                  placeholder="Describe the task the n8n sub-workflow should perform…"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label>Executor</Label>
+                <div className="flex gap-3">
+                  {(["n8n", "mock"] as const).map((executor) => (
+                    <label
+                      key={executor}
+                      className={`flex flex-1 cursor-pointer items-center justify-center rounded-[9px] border px-3 py-2 text-[13px] transition-colors ${
+                        values.executor === executor
+                          ? "border-[#7c3aed] bg-[#f3eefc] font-medium text-[#7c3aed]"
+                          : "border-[#dedad2] text-[#5a5650] hover:bg-[#efede8]"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        className="sr-only"
+                        value={executor}
+                        checked={values.executor === executor}
+                        onChange={() => set("executor", executor)}
+                      />
+                      {executor === "n8n" ? "n8n webhook" : "Mock (testing)"}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {values.executor === "n8n" && (
+                <div className="space-y-1">
+                  <Label htmlFor="auto-webhook">n8n webhook URL</Label>
+                  <Input
+                    id="auto-webhook"
+                    required
+                    value={values.webhookUrl}
+                    onChange={(e) => set("webhookUrl", e.target.value)}
+                    placeholder="https://n8n.example.com/webhook/…"
+                  />
+                </div>
+              )}
+
+              <TemplateFieldEditor
+                label="Request fields (sent to n8n)"
+                helpText="Gathered from the conversation so far and sent with the request. Use the same Label (type) syntax as document templates."
+                lines={requestLines}
+                onChange={setRequestLines}
+              />
+
+              <TemplateFieldEditor
+                label="Response fields (expected back)"
+                helpText="The structured values n8n is expected to return. Matched values are stored; anything else is left blank."
+                lines={responseLines}
+                onChange={setResponseLines}
+              />
+              </>
+              )}
             </DialogBody>
 
             <DialogFooter className="flex-row items-center justify-between">
@@ -447,12 +599,7 @@ export function NodeConfigModal({
                 <Button
                   type="button"
                   onClick={handleSave}
-                  disabled={
-                    isSaving ||
-                    !values.name.trim() ||
-                    !values.aiInstruction.trim() ||
-                    (!values.neverDone && !isTemplateComplete && !values.doneWhen.trim())
-                  }
+                  disabled={isSaving || !canSave}
                 >
                   {isSaving ? "Saving…" : "Save"}
                 </Button>

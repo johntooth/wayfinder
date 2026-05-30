@@ -1,9 +1,10 @@
-import type { FlowNode, NewFlowNode } from "../entities/flow-node";
+import type { FlowNode, FlowNodeType, NewFlowNode } from "../entities/flow-node";
 import type { Result } from "../result";
 
 export interface FlowNodeUpdate {
   name?: string;
   colour?: string | null;
+  type?: FlowNodeType;
   config?: Record<string, unknown>;
 }
 

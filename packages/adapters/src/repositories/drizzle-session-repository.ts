@@ -20,6 +20,7 @@ const toEntity = (row: typeof app_sessions.$inferSelect): Session => ({
   title: row.title,
   currentNodeId: row.current_node_id,
   graphCheckpoint: row.graph_checkpoint ?? null,
+  pendingExecutions: row.pending_executions ?? {},
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -88,6 +89,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
           ...(patch.title !== undefined ? { title: patch.title } : {}),
           ...(patch.currentNodeId !== undefined ? { current_node_id: patch.currentNodeId } : {}),
           ...(patch.graphCheckpoint !== undefined ? { graph_checkpoint: patch.graphCheckpoint ?? undefined } : {}),
+          ...(patch.pendingExecutions !== undefined ? { pending_executions: patch.pendingExecutions } : {}),
           updated_at: new Date(),
         })
         .where(eq(app_sessions.id, id))

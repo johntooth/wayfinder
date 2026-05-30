@@ -1,4 +1,5 @@
 import {
+  ApplyAutoNodeResult,
   CreateUser,
   DeleteUser,
   FailJob,
@@ -27,7 +28,11 @@ import {
   DrizzleErrorLogRepository,
   DrizzleErrorLogger,
   DrizzleFeatureFlagRepository,
+  DrizzleFlowEdgeRepository,
+  DrizzleFlowNodeRepository,
   DrizzleJobRepository,
+  DrizzleSessionRepository,
+  DrizzleSessionStepOutputRepository,
   DrizzleSystemSettingsRepository,
   DrizzleUsageRepository,
   DrizzleUserRepository,
@@ -53,6 +58,10 @@ export const buildContainer = (env: Env) => {
   const usageRepo = new DrizzleUsageRepository(db);
   const jobRepo = new DrizzleJobRepository(db);
   const systemSettings = new DrizzleSystemSettingsRepository(db);
+  const sessions = new DrizzleSessionRepository(db);
+  const flowNodes = new DrizzleFlowNodeRepository(db);
+  const flowEdges = new DrizzleFlowEdgeRepository(db);
+  const sessionStepOutputs = new DrizzleSessionStepOutputRepository(db);
 
   const bedrockEnvCredentials =
     env.AWS_BEDROCK_REGION && env.AWS_BEDROCK_ACCESS_KEY_ID && env.AWS_BEDROCK_SECRET_ACCESS_KEY
@@ -101,9 +110,10 @@ export const buildContainer = (env: Env) => {
     db,
     logger,
     runtimeConfig,
-    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, systemSettings },
+    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, systemSettings, sessions, flowNodes, flowEdges, sessionStepOutputs },
     services: { llm, errorLogger, auditLogger },
     useCases: {
+      applyAutoNodeResult: new ApplyAutoNodeResult(sessions, flowNodes, flowEdges, sessionStepOutputs),
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
       deleteUser: new DeleteUser(users),

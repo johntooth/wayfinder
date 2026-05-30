@@ -5,6 +5,7 @@ import type {
   ConversationalNodeConfig,
   Flow,
   FlowNode,
+  Session,
   SessionMessage,
 } from "@rbrasier/domain";
 import { turnResponseSchema } from "@rbrasier/shared";
@@ -115,6 +116,69 @@ export async function generateTitle(
   } catch {
     const fallback = firstUserMessage.slice(0, 80);
     await container.repos.sessions.update(sessionId, { title: fallback }).catch(() => undefined);
+  }
+}
+
+// True only when the auto_node feature flag exists and is enabled. Admins toggle
+// it on to use and test auto nodes before the feature is fully released.
+export async function isAutoNodeEnabled(container: Container): Promise<boolean> {
+  const flag = await container.useCases.getFeatureFlag.execute("auto_node");
+  return !flag.error && flag.data?.enabled === true;
+}
+
+export interface DispatchAutoNodeInput {
+  container: Container;
+  session: Session;
+  flow: Flow;
+  node: FlowNode;
+  messages: SessionMessage[];
+  userId: string;
+  userRole: "admin" | "user";
+}
+
+// Runs an auto node: gathers its request fields, records a pending execution and
+// hands off to the node executor (n8n). The result returns later via the inbound
+// webhook, which advances the session. Surfaces a non-interactive status message.
+export async function dispatchAutoNode(input: DispatchAutoNodeInput): Promise<void> {
+  const { container, session, flow, node, messages, userId, userRole } = input;
+  try {
+    const result = await container.useCases.runAutoNode.execute({
+      session,
+      flow,
+      node,
+      messages,
+      userId,
+      userRole,
+    });
+
+    const content = result.error
+      ? `This automated step (${node.name}) could not be started: ${result.error.message}`
+      : `Running automated step: ${node.name}. This step completes on its own — no input is needed.`;
+
+    await container.repos.sessionMessages.create({
+      sessionId: session.id,
+      role: "system",
+      content,
+      stepNodeId: node.id,
+    });
+
+    if (result.error) {
+      await container.services.errorLogger.log({
+        level: "error",
+        message: `Auto node dispatch failed: ${result.error.message}`,
+        stack: result.error.cause instanceof Error ? result.error.cause.stack ?? null : null,
+        page: `api/chat/${session.id}/stream`,
+        metadata: { sessionId: session.id, nodeId: node.id, errorCode: result.error.code },
+      });
+    }
+  } catch (cause) {
+    await container.services.errorLogger.log({
+      level: "error",
+      message: "Auto node dispatch threw",
+      stack: cause instanceof Error ? cause.stack ?? null : null,
+      page: `api/chat/${session.id}/stream`,
+      metadata: { sessionId: session.id, nodeId: node.id },
+    });
   }
 }
 

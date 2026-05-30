@@ -1,4 +1,4 @@
-import type { Session, NewSession, SessionStatus } from "../entities/session";
+import type { Session, NewSession, PendingExecutions, SessionStatus } from "../entities/session";
 import type { Result } from "../result";
 
 export interface SessionUpdate {
@@ -6,6 +6,7 @@ export interface SessionUpdate {
   title?: string | null;
   currentNodeId?: string | null;
   graphCheckpoint?: Record<string, unknown> | null;
+  pendingExecutions?: PendingExecutions;
 }
 
 export interface ISessionRepository {

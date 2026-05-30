@@ -32,6 +32,7 @@ import {
   PingJob,
   RegisterJob,
   RemoveContextDoc,
+  RunAutoNode,
   RunTurn,
   SendMessage,
   StartSession,
@@ -73,6 +74,7 @@ import {
   RuntimeConfigStore,
   createAuth,
   createDatabase,
+  createNodeExecutor,
   resolveSession,
   withOptionalLangfuse,
   withUsageTracking,
@@ -139,6 +141,7 @@ const build = () => {
   const sessionAgent = new FlowSessionGraph();
   const docxGenerator = new DocxGenerator();
   const documentExtractor = new DocumentExtractorService(docxGenerator);
+  const nodeExecutor = createNodeExecutor(env.N8N_WEBHOOK_SECRET);
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
   const contextDocContent = new DrizzleContextDocContentRepository(db);
   objectStorage.initialise().catch((error: unknown) => {
@@ -233,6 +236,7 @@ const build = () => {
       listAllSessions: new ListAllSessions(sessions),
       getSession: new GetSession(sessions, sessionMessages, flows, flowNodes, flowEdges),
       runTurn: new RunTurn(sessions, sessionMessages, flowEdges),
+      runAutoNode: new RunAutoNode(sessions, llm, nodeExecutor),
       overrideBranch: new OverrideBranch(sessions, flowEdges),
       getOverviewDashboard: new GetOverviewDashboard(analyticsRepo),
       getFlowDeepDive: new GetFlowDeepDive(flows, flowNodes, analyticsRepo, sessionStepOutputs),
