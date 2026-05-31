@@ -6,9 +6,11 @@ import { getContainer } from "@/lib/container";
 import { streamTurn } from "./stream-turn";
 import {
   buildGatheredContext,
+  dispatchAutoNode,
   generateDocument,
   generateInitialMessage,
   generateTitle,
+  isAutoNodeEnabled,
 } from "./turn-helpers";
 
 const getSessionToken = (req: Request): string | null => {
@@ -231,18 +233,31 @@ export async function POST(
             const nextStepContext = refreshed.error
               ? gatheredContext
               : buildGatheredContext(refreshed.data);
-            await generateInitialMessage({
-              container,
-              sessionId: session.id,
-              newNodeId: runResult.data.newNodeId,
-              newNode,
-              flow,
-              model: branchingModel,
-              organisationName,
-              userId: authSession.userId,
-              provider,
-              gatheredContext: nextStepContext,
-            });
+
+            if (newNode.type === "auto" && (await isAutoNodeEnabled(container))) {
+              await dispatchAutoNode({
+                container,
+                session: runResult.data.session,
+                flow,
+                node: newNode,
+                messages: refreshed.error ? dbMessages : refreshed.data,
+                userId: authSession.userId,
+                userRole: authSession.isAdmin ? "admin" : "user",
+              });
+            } else {
+              await generateInitialMessage({
+                container,
+                sessionId: session.id,
+                newNodeId: runResult.data.newNodeId,
+                newNode,
+                flow,
+                model: branchingModel,
+                organisationName,
+                userId: authSession.userId,
+                provider,
+                gatheredContext: nextStepContext,
+              });
+            }
           }
         }
       }

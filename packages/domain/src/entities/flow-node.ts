@@ -14,6 +14,16 @@ export interface ConversationalNodeConfig {
   advanceConfidenceThreshold?: number;
 }
 
+export type NodeExecutorKind = "n8n" | "mock";
+
+export interface AutoNodeConfig {
+  instruction: string;
+  executor: NodeExecutorKind;
+  webhookUrl: string;
+  requestFields?: TemplateField[];
+  responseFields?: TemplateField[];
+}
+
 export interface FlowNode {
   id: string;
   flowId: string;

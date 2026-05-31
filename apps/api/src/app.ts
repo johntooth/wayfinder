@@ -23,7 +23,7 @@ export const buildApp = (container: Container): Express => {
   app.use("/health", buildHealthRouter(container));
   app.use("/v1/users", buildUsersRouter(container));
   app.use("/v1/errors", buildErrorsRouter(container));
-  app.use("/v1/webhooks", buildWebhooksRouter(container.env));
+  app.use("/v1/webhooks", buildWebhooksRouter(container));
 
   app.use(errorHandler(container));
   return app;

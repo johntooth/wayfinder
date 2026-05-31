@@ -77,6 +77,7 @@ export class DrizzleFlowNodeRepository implements IFlowNodeRepository {
         .set({
           ...(patch.name !== undefined ? { name: patch.name } : {}),
           ...(patch.colour !== undefined ? { colour: patch.colour } : {}),
+          ...(patch.type !== undefined ? { type: patch.type } : {}),
           ...(patch.config !== undefined ? { config: patch.config } : {}),
           updated_at: new Date(),
         })

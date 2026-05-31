@@ -75,6 +75,7 @@ const nodeRouter = router({
         flowId: z.string().uuid(),
         name: z.string().min(1),
         colour: z.string().nullable().optional(),
+        type: z.enum(["conversational", "auto"]).optional(),
         positionX: z.number(),
         positionY: z.number(),
         config: z.record(z.unknown()).default({}),
@@ -86,7 +87,7 @@ const nodeRouter = router({
       }
       const result = await ctx.container.useCases.createFlowNode.execute({
         flowId: input.flowId,
-        type: "conversational",
+        type: input.type ?? "conversational",
         name: input.name,
         colour: input.colour ?? null,
         positionX: input.positionX,
@@ -104,6 +105,7 @@ const nodeRouter = router({
         flowId: z.string().uuid(),
         name: z.string().min(1).optional(),
         colour: z.string().nullable().optional(),
+        type: z.enum(["conversational", "auto"]).optional(),
         config: z.record(z.unknown()).optional(),
       }),
     )
@@ -114,6 +116,7 @@ const nodeRouter = router({
       const result = await ctx.container.useCases.updateFlowNode.execute(input.nodeId, {
         name: input.name,
         colour: input.colour,
+        type: input.type,
         config: input.config,
       });
       if (result.error) throw toTrpcError(result.error);

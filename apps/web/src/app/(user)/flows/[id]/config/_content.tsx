@@ -38,32 +38,47 @@ import {
 } from "@/components/ui/dialog";
 import type { ConversationalNodeData } from "@/components/canvas/conversational-node";
 import { ConversationalNode } from "@/components/canvas/conversational-node";
+import type { AutoNodeData } from "@/components/canvas/auto-node";
+import { AutoNode } from "@/components/canvas/auto-node";
 import { ContextDocsStrip } from "@/components/canvas/context-docs-strip";
 import type { NodeConfigValues } from "@/components/canvas/node-config-modal";
 import { NodeConfigModal } from "@/components/canvas/node-config-modal";
 import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/flow-metadata-dialog";
 import { trpc } from "@/trpc/client";
-import type { FlowContextDoc } from "@rbrasier/domain";
+import type { FlowContextDoc, TemplateField } from "@rbrasier/domain";
 import { orderStepIds } from "@/lib/step-order";
 
-const NODE_TYPES = { conversationalNode: ConversationalNode };
+const NODE_TYPES = { conversationalNode: ConversationalNode, autoNode: AutoNode };
 const DEBOUNCE_MS = 600;
 
-const toRfNode = (
-  node: {
-    id: string;
-    name: string;
-    colour: string | null;
-    positionX: number;
-    positionY: number;
-    config: Record<string, unknown>;
-  },
-  stepNumber: number | null,
-): Node<ConversationalNodeData> => ({
-  id: node.id,
-  type: "conversationalNode",
-  position: { x: node.positionX, y: node.positionY },
-  data: {
+interface RawNode {
+  id: string;
+  name: string;
+  colour: string | null;
+  type?: "conversational" | "auto";
+  positionX: number;
+  positionY: number;
+  config: Record<string, unknown>;
+}
+
+const readFields = (value: unknown): TemplateField[] =>
+  Array.isArray(value) ? (value as TemplateField[]) : [];
+
+const toRfNode = (node: RawNode, stepNumber: number | null): Node => {
+  if (node.type === "auto") {
+    const data: AutoNodeData = {
+      name: node.name,
+      colour: node.colour,
+      instruction: (node.config.instruction as string | null) ?? null,
+      requestFieldCount: readFields(node.config.requestFields).length,
+      responseFieldCount: readFields(node.config.responseFields).length,
+      stepNumber,
+      config: node.config,
+    };
+    return { id: node.id, type: "autoNode", position: { x: node.positionX, y: node.positionY }, data };
+  }
+
+  const data: ConversationalNodeData = {
     name: node.name,
     colour: node.colour,
     aiInstruction: (node.config.aiInstruction as string | null) ?? null,
@@ -74,8 +89,10 @@ const toRfNode = (
     documentTemplatePath: (node.config.documentTemplatePath as string | null) ?? null,
     documentTemplateFilename: (node.config.documentTemplateFilename as string | null) ?? null,
     documentTemplateContent: (node.config.documentTemplateContent as string | null) ?? null,
-  },
-});
+    config: node.config,
+  };
+  return { id: node.id, type: "conversationalNode", position: { x: node.positionX, y: node.positionY }, data };
+};
 
 const toRfEdge = (edge: { id: string; fromNodeId: string; toNodeId: string }): Edge => ({
   id: edge.id,
@@ -101,6 +118,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [expertRole, setExpertRole] = useState<string>("");
   const meQuery = trpc.user.me.useQuery();
   const isAdmin = meQuery.data?.isAdmin ?? false;
+  const autoNodeEnabled = trpc.featureFlag.isEnabled.useQuery({ key: "auto_node" }).data ?? false;
   const [editingMetadata, setEditingMetadata] = useState(false);
 
   const [configOpen, setConfigOpen] = useState(false);
@@ -243,30 +261,40 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const handleConfigSave = useCallback(async (values: NodeConfigValues) => {
     if (!editingNodeId) return;
     setIsSavingConfig(true);
-    const config = {
-      aiInstruction: values.aiInstruction,
-      doneWhen: values.neverDone ? "" : values.doneWhen,
-      neverDone: values.neverDone,
-      outputType: values.outputType,
-      documentTemplatePath: values.documentTemplatePath ?? null,
-      documentTemplateFilename: values.documentTemplateFilename ?? null,
-      documentTemplateContent: values.documentTemplateContent ?? null,
-    };
+    const config: Record<string, unknown> =
+      values.type === "auto"
+        ? {
+            instruction: values.instruction,
+            executor: values.executor,
+            webhookUrl: values.webhookUrl,
+            requestFields: values.requestFields,
+            responseFields: values.responseFields,
+          }
+        : {
+            aiInstruction: values.aiInstruction,
+            doneWhen: values.neverDone ? "" : values.doneWhen,
+            neverDone: values.neverDone,
+            outputType: values.outputType,
+            documentTemplatePath: values.documentTemplatePath ?? null,
+            documentTemplateFilename: values.documentTemplateFilename ?? null,
+            documentTemplateContent: values.documentTemplateContent ?? null,
+          };
     const isTempNode = editingNodeId.startsWith("temp-");
 
     try {
       if (isTempNode) {
+        const position = rfNodes.find((n) => n.id === editingNodeId)?.position ?? { x: 200, y: 200 };
         const newNode = await createNodeMutation.mutateAsync({
           flowId,
           name: values.name,
           colour: values.colour,
-          positionX: rfNodes.find((n) => n.id === editingNodeId)?.position.x ?? 200,
-          positionY: rfNodes.find((n) => n.id === editingNodeId)?.position.y ?? 200,
+          type: values.type,
+          positionX: position.x,
+          positionY: position.y,
           config,
         });
-        setRfNodes((nds) =>
-          nds.map((n) => (n.id === editingNodeId ? { ...toRfNode({ ...newNode, config }, null), id: newNode.id } : n)),
-        );
+        const rebuilt = toRfNode({ id: newNode.id, name: values.name, colour: values.colour, type: values.type, positionX: position.x, positionY: position.y, config }, null);
+        setRfNodes((nds) => nds.map((n) => (n.id === editingNodeId ? rebuilt : n)));
         if (pendingEdge) {
           const edge = await createEdgeMutation.mutateAsync({ flowId, fromNodeId: pendingEdge.fromNodeId, toNodeId: newNode.id });
           setRfEdges((eds) => [
@@ -276,27 +304,12 @@ function CanvasInner({ flowId }: { flowId: string }) {
           setPendingEdge(null);
         }
       } else {
-        await updateNodeMutation.mutateAsync({ nodeId: editingNodeId, flowId, name: values.name, colour: values.colour, config });
+        await updateNodeMutation.mutateAsync({ nodeId: editingNodeId, flowId, name: values.name, colour: values.colour, type: values.type, config });
         setRfNodes((nds) =>
-          nds.map((n) =>
-            n.id === editingNodeId
-              ? {
-                  ...n,
-                  data: {
-                    ...n.data,
-                    name: values.name,
-                    colour: values.colour,
-                    aiInstruction: values.aiInstruction,
-                    doneWhen: config.doneWhen,
-                    neverDone: config.neverDone,
-                    outputType: config.outputType,
-                    documentTemplatePath: config.documentTemplatePath,
-                    documentTemplateFilename: config.documentTemplateFilename,
-                    documentTemplateContent: config.documentTemplateContent,
-                  },
-                }
-              : n,
-          ),
+          nds.map((n) => {
+            if (n.id !== editingNodeId) return n;
+            return toRfNode({ id: n.id, name: values.name, colour: values.colour, type: values.type, positionX: n.position.x, positionY: n.position.y, config }, null);
+          }),
         );
       }
       setConfigOpen(false);
@@ -370,18 +383,27 @@ function CanvasInner({ flowId }: { flowId: string }) {
   }
 
   const editingNode = editingNodeId ? rfNodes.find((n) => n.id === editingNodeId) : null;
-  const editingData = editingNode?.data as ConversationalNodeData | undefined;
-  const initialConfigValues = editingData
+  const editingData = editingNode?.data as
+    | (ConversationalNodeData & { config?: Record<string, unknown> })
+    | undefined;
+  const editingConfig = (editingData?.config ?? {}) as Record<string, unknown>;
+  const initialConfigValues: Partial<NodeConfigValues> | undefined = editingData
     ? {
         name: editingData.name,
         colour: editingData.colour ?? "#6366f1",
-        aiInstruction: editingData.aiInstruction ?? "",
-        doneWhen: (editingData.doneWhen as string | null) ?? "",
-        neverDone: Boolean(editingData.neverDone),
-        outputType: (editingData.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
-        documentTemplatePath: (editingData.documentTemplatePath as string | null) ?? null,
-        documentTemplateFilename: (editingData.documentTemplateFilename as string | null) ?? null,
-        documentTemplateContent: (editingData.documentTemplateContent as string | null) ?? null,
+        type: editingNode?.type === "autoNode" ? "auto" : "conversational",
+        aiInstruction: (editingConfig.aiInstruction as string | null) ?? editingData.aiInstruction ?? "",
+        doneWhen: (editingConfig.doneWhen as string | null) ?? "",
+        neverDone: Boolean(editingConfig.neverDone),
+        outputType: (editingConfig.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
+        documentTemplatePath: (editingConfig.documentTemplatePath as string | null) ?? null,
+        documentTemplateFilename: (editingConfig.documentTemplateFilename as string | null) ?? null,
+        documentTemplateContent: (editingConfig.documentTemplateContent as string | null) ?? null,
+        instruction: (editingConfig.instruction as string | null) ?? "",
+        executor: (editingConfig.executor as "n8n" | "mock" | undefined) ?? "n8n",
+        webhookUrl: (editingConfig.webhookUrl as string | null) ?? "",
+        requestFields: readFields(editingConfig.requestFields),
+        responseFields: readFields(editingConfig.responseFields),
       }
     : undefined;
 
@@ -553,6 +575,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         onDelete={editingNodeId && !editingNodeId.startsWith("temp-") ? handleNodeDelete : undefined}
         onClose={handleConfigClose}
         isSaving={isSavingConfig}
+        autoNodeEnabled={autoNodeEnabled}
         onUploadTemplate={editingNodeId && !editingNodeId.startsWith("temp-") ? handleUploadTemplate : undefined}
       />
 

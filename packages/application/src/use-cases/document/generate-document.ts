@@ -1,5 +1,4 @@
 import {
-  buildFieldConstraintsText,
   domainError,
   err,
   ok,
@@ -21,20 +20,10 @@ import {
   type TemplateField,
 } from "@rbrasier/domain";
 import {
-  documentDataSchema,
   documentGenerationConfidenceSchema,
   documentSummarySchema,
 } from "@rbrasier/shared";
-
-const buildContextDocsSection = (docs: FlowContextDoc[]): string => {
-  if (docs.length === 0) return "";
-  const lines = docs.map((d) =>
-    d.extractionStatus === "complete" && d.extractedText
-      ? `\n[${d.filename}]\n${d.extractedText}`
-      : `- ${d.filename}`,
-  );
-  return `\nFlow context documents:\n${lines.join("\n")}`;
-};
+import { buildContextDocsSection, extractStructuredFields } from "./structured-fields";
 
 export interface GenerateDocumentInput {
   messageId: string;
@@ -71,29 +60,22 @@ export class GenerateDocument {
     if (fieldsResult.error) return fieldsResult;
 
     const fields = fieldsResult.data;
-    const keys = fields.map((field) => field.key);
     const transcript = this.buildTranscript(input.messages);
-    const contextDocsSection = buildContextDocsSection(input.flow.contextDocs);
 
-    const dataResult = await this.languageModel.generateObject<Record<string, string>>({
+    const dataResult = await extractStructuredFields(this.languageModel, {
+      fields,
+      transcript,
+      contextDocs: input.flow.contextDocs,
+      instruction: config.aiInstruction,
       purpose: "documentGeneration",
-      system: config.aiInstruction,
-      prompt: [
-        `Return a JSON object with exactly these keys: ${JSON.stringify(keys)}.`,
-        `Fill each value using the session context below.`,
-        `\nEach field has a required format. Reformat the information the user provided into the required format whenever you reasonably can — for example, parse a written date into DD-MM-YYYY, or format an amount as currency. Only leave a value blank when its field is marked optional and the information is genuinely missing.`,
-        `\n<field_constraints>\n${buildFieldConstraintsText(fields)}\n</field_constraints>`,
-        contextDocsSection,
-        `\nSession transcript:\n${transcript}`,
-      ].filter(Boolean).join("\n"),
-      schema: documentDataSchema,
-      temperature: 0.3,
     });
     if (dataResult.error) return dataResult;
 
+    const fieldValues = dataResult.data;
+
     const generateResult = this.documentGenerator.generate({
       templateBytes: templateResult.data,
-      data: dataResult.data.object,
+      data: fieldValues,
     });
     if (generateResult.error) return generateResult;
 
@@ -109,7 +91,7 @@ export class GenerateDocument {
 
     const summaryResult = await this.languageModel.generateObject<{ summary: string }>({
       purpose: "chat",
-      prompt: `Write a 2-sentence summary of a document with these values: ${JSON.stringify(dataResult.data.object).slice(0, 2000)}`,
+      prompt: `Write a 2-sentence summary of a document with these values: ${JSON.stringify(fieldValues).slice(0, 2000)}`,
       schema: documentSummarySchema,
       temperature: 0.2,
     });
@@ -132,12 +114,12 @@ export class GenerateDocument {
       nodeId: input.node.id,
       messageId: input.messageId,
       fields,
-      values: dataResult.data.object,
+      values: fieldValues,
     });
 
     await this.persistDocumentGrading({
       messageId: input.messageId,
-      documentData: dataResult.data.object,
+      documentData: fieldValues,
       contextDocs: input.flow.contextDocs,
       stepCriteria: config.doneWhen,
     });

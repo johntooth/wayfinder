@@ -1,8 +1,16 @@
 import { z } from "zod";
-import { adminProcedure, router } from "../trpc";
+import { adminProcedure, authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 export const featureFlagRouter = router({
+  isEnabled: authenticatedProcedure
+    .input(z.object({ key: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.getFeatureFlag.execute(input.key);
+      if (result.error) throw toTrpcError(result.error);
+      return result.data?.enabled === true;
+    }),
+
   list: adminProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listFeatureFlags.execute();
     if (result.error) throw toTrpcError(result.error);
