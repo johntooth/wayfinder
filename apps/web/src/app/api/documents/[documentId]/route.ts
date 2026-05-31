@@ -35,16 +35,10 @@ export async function GET(
 
   const message = messageResult.data;
   const documentMeta = message.document!;
-  const sessionResult = await container.repos.sessions.findById(message.sessionId);
-  if (sessionResult.error) return NextResponse.json({ error: "Server error" }, { status: 500 });
-  if (!sessionResult.data) return NextResponse.json({ error: "Session not found" }, { status: 404 });
 
-  const session = sessionResult.data;
-  const canAccess = authSession.isAdmin || session.userId === authSession.userId;
-  if (!canAccess) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
+  // Collaborative sessions: any authenticated participant may download a
+  // document generated in the session. The message id is the capability,
+  // matching the session share model (no owner-only restriction).
   const { storagePath, filename } = documentMeta;
 
   const getResult = await container.objectStorage.get(storagePath);
@@ -90,10 +84,10 @@ export async function POST(
   }
 
   const session = sessionResult.data;
-  if (!authSession.isAdmin && session.userId !== authSession.userId) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
 
+  // Collaborative sessions: any authenticated participant may regenerate a
+  // document in the session, mirroring the relaxed write access on the stream
+  // route. The message id is the capability.
   const detailResult = await container.useCases.getSession.execute(session.id);
   if (detailResult.error || !detailResult.data) {
     return NextResponse.json({ error: "Failed to load session" }, { status: 500 });

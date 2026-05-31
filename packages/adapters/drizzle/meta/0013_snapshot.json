@@ -1,6 +1,6 @@
 {
-  "id": "111df717-362c-4f78-b12e-398465fdb417",
-  "prevId": "71509c7d-63a2-4ee8-b8c6-fdd8d13aeecf",
+  "id": "1df5e1a7-8172-4185-b566-d6232ed40fb2",
+  "prevId": "111df717-362c-4f78-b12e-398465fdb417",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1815,6 +1815,13 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
+        },
+        "pending_executions": {
+          "name": "pending_executions",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
         },
         "created_at": {
           "name": "created_at",

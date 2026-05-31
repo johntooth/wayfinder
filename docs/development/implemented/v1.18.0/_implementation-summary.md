@@ -71,7 +71,7 @@ Migration `0012_clammy_spacker_dave.sql` seeds `core_feature_flag` with
 
 ## Migrations run
 
-`0012_clammy_spacker_dave.sql`:
+`0013_mighty_groot.sql`:
 1. `ALTER TABLE app_sessions ADD COLUMN pending_executions jsonb NOT NULL DEFAULT '{}'`.
 2. `INSERT` the `auto_node` feature flag (disabled) with `ON CONFLICT DO NOTHING`.
 
