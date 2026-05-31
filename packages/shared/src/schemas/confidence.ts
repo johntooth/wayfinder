@@ -13,6 +13,7 @@ export const turnResponseSchema = z.object({
 });
 
 export const branchChoiceSchema = z.object({
+  rationale: z.string().describe("Why this branch fits the conversation better than the others"),
   branchChoice: z.string().describe("Node ID of the chosen next step"),
 });
 

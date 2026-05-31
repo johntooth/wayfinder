@@ -83,15 +83,20 @@ export class FlowSessionGraph implements ISessionAgent {
 
   buildBranchChoicePrompt(input: BuildBranchChoicePromptInput): Result<string> {
     const branchList = input.branchNodes
-      .map((n) => `- ${n.id} (${n.name})`)
+      .map((node) => {
+        const purpose = node.purpose?.trim();
+        return purpose ? `- ${node.id} (${node.name}): ${purpose}` : `- ${node.id} (${node.name})`;
+      })
       .join("\n");
 
     const prompt = `Based on the conversation below, select the most appropriate next step.
 
+Each branch lists its node id, name, and (where available) the purpose describing when it applies. Compare the conversation against each branch's purpose and choose the one that fits best.
+
 Available branches:
 ${branchList}
 
-Return only: { "branchChoice": "<nodeId>" }`;
+First explain your reasoning, then give the chosen node id. Return only: { "rationale": "<why this branch fits>", "branchChoice": "<nodeId>" }`;
 
     return ok(prompt);
   }
