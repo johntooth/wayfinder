@@ -25,7 +25,7 @@ the auto step type.
 
 ## Feature flag (per the build request)
 
-Migration `0012_clammy_spacker_dave.sql` seeds `core_feature_flag` with
+Migration `0013_mighty_groot.sql` seeds `core_feature_flag` with
 `auto_node` (`enabled = false`, `ON CONFLICT (key) DO NOTHING`). Gating:
 
 - **Dispatch** — the session stream route only runs the auto path when
@@ -41,7 +41,7 @@ Migration `0012_clammy_spacker_dave.sql` seeds `core_feature_flag` with
 - `packages/application/src/use-cases/session/run-auto-node.ts` (+ test) — `RunAutoNode`.
 - `packages/application/src/use-cases/session/apply-auto-node-result.ts` (+ test) — `ApplyAutoNodeResult`.
 - `packages/adapters/src/node-executors/n8n-node-executor.ts` (+ test) — `N8nNodeExecutor` (signed POST).
-- `packages/adapters/drizzle/0012_clammy_spacker_dave.sql` — column + feature-flag seed.
+- `packages/adapters/drizzle/0013_mighty_groot.sql` — adds the `pending_executions` column and seeds the `auto_node` feature flag (disabled).
 - `apps/api/src/routes/webhooks.test.ts` — webhook handler tests.
 - `apps/web/src/components/canvas/auto-node.tsx` — auto node canvas rendering.
 - `apps/web/src/components/canvas/template-field-editor.tsx` (+ test) — field editor reusing `parseTemplateField`.
