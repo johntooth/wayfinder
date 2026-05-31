@@ -14,7 +14,7 @@ export interface BuildSystemPromptInput {
 }
 
 export interface BuildBranchChoicePromptInput {
-  branchNodes: { id: string; name: string }[];
+  branchNodes: { id: string; name: string; purpose?: string }[];
 }
 
 export interface ISessionAgent {

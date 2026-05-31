@@ -81,8 +81,16 @@ export async function POST(
   const outgoingEdges = edges.filter((e) => e.fromNodeId === session.currentNodeId);
   const branchNodeIds = outgoingEdges.map((e) => e.toNodeId);
   const branchNodes = nodes
-    .filter((n) => branchNodeIds.includes(n.id))
-    .map((n) => ({ id: n.id, name: n.name }));
+    .filter((node) => branchNodeIds.includes(node.id))
+    .map((node) => {
+      const config = node.config as { doneWhen?: string; aiInstruction?: string; instruction?: string };
+      // doneWhen may hold a sentinel meaning "template complete" — that string is not
+      // meaningful guidance for choosing a branch, so fall back to the instruction.
+      const doneWhenPurpose =
+        config.doneWhen && config.doneWhen !== "__TEMPLATE_COMPLETE__" ? config.doneWhen : undefined;
+      const purpose = doneWhenPurpose ?? config.aiInstruction ?? config.instruction;
+      return { id: node.id, name: node.name, purpose };
+    });
 
   const coreMessages = dbMessages.map((m) => ({
     role: m.role as "user" | "assistant" | "system",
