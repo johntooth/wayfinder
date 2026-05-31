@@ -239,4 +239,30 @@ describe("FlowSessionGraph.buildBranchChoicePrompt", () => {
     });
     expect(result.data).toContain("branchChoice");
   });
+
+  it("includes each branch's purpose when provided", () => {
+    const result = agent.buildBranchChoicePrompt({
+      branchNodes: [
+        { id: "node-a", name: "Standard Route", purpose: "The request is within the approval limit" },
+        { id: "node-b", name: "Escalation Route", purpose: "The request exceeds the approval limit" },
+      ],
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toContain("The request is within the approval limit");
+    expect(result.data).toContain("The request exceeds the approval limit");
+  });
+
+  it("remains well-formed when a branch has no purpose", () => {
+    const result = agent.buildBranchChoicePrompt({
+      branchNodes: [
+        { id: "node-a", name: "Standard Route" },
+        { id: "node-b", name: "Escalation Route", purpose: "The request exceeds the approval limit" },
+      ],
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toContain("node-a");
+    expect(result.data).toContain("Standard Route");
+    expect(result.data).toContain("The request exceeds the approval limit");
+    expect(result.data).not.toContain("undefined");
+  });
 });
