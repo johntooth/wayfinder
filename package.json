@@ -26,6 +26,11 @@
   "pnpm": {
     "overrides": {
       "langsmith": ">=0.6.0"
+    },
+    "auditConfig": {
+      "ignoreGhsas": [
+        "GHSA-5xrq-8626-4rwp"
+      ]
     }
   },
   "devDependencies": {
