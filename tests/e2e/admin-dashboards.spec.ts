@@ -37,34 +37,36 @@ test.describe('Admin: Analytics Dashboards', () => {
       `JS errors on flow insights dashboard:\n${errors.map(e => e.text).join('\n')}`,
     ).toHaveLength(0);
 
+    // With no flows the whole dashboard is replaced by an empty-state message;
+    // the heading only renders once at least one flow exists.
+    if (await page.getByText(/no flows yet/i).isVisible().catch(() => false)) {
+      test.skip(true, 'No flows yet — insights dashboard shows its empty state');
+      return;
+    }
+
     await expect(page.getByRole('heading', { name: /flow insights/i })).toBeVisible();
+    await expect(page.getByText(/select a flow to see its node-level breakdown/i)).toBeVisible();
   });
 
   test('selecting a flow reveals node-level breakdown charts', async ({ page }) => {
     await page.goto('/admin/dashboards/flows');
     await page.waitForLoadState('networkidle');
 
-    // A flow selector (select or list of flow buttons/links) drives the deep dive.
-    const flowSelect = page.locator('select').first();
-    if (await flowSelect.isVisible().catch(() => false)) {
-      const optionCount = await flowSelect.locator('option').count();
-      if (optionCount <= 1) {
-        test.skip(true, 'No flows available to drill into on the insights dashboard');
-        return;
-      }
-      await flowSelect.selectOption({ index: 1 });
-    } else {
-      const flowLink = page.getByRole('link').filter({ hasText: /.+/ }).first();
-      if (!(await flowLink.isVisible().catch(() => false))) {
-        test.skip(true, 'No flow selector found on the insights dashboard');
-        return;
-      }
-      await flowLink.click();
+    if (await page.getByText(/no flows yet/i).isVisible().catch(() => false)) {
+      test.skip(true, 'No flows yet — nothing to drill into on the insights dashboard');
+      return;
     }
 
-    await page.waitForLoadState('networkidle');
+    // Each flow is a button showing its name + "N session(s)".
+    const flowButton = page.getByRole('button').filter({ hasText: /\bsessions?\b/i }).first();
+    if (await flowButton.isVisible().catch(() => false)) {
+      await flowButton.click();
+    }
+
     await page.screenshot({ path: 'screenshots/admin-dashboard-flow-deepdive.png', fullPage: true });
 
+    // Chart cards + the node breakdown table render whenever a flow is selected,
+    // regardless of whether that flow has any recorded session activity.
     await expect(
       page.getByText(/avg confidence at completion|node breakdown|drop-off volume/i).first(),
     ).toBeVisible();
