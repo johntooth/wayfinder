@@ -108,7 +108,7 @@ export default function AdminLoginPage() {
             )}
             <p className="text-center text-sm text-muted-foreground">
               No account?{" "}
-              <Link href="/admin/register" className="underline">
+              <Link href="/register" className="underline">
                 Register
               </Link>
             </p>

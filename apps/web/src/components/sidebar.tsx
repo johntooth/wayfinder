@@ -64,11 +64,9 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     enabled: !isAdmin,
   });
 
-  if (pathname === "/admin/login" || pathname === "/admin/register") return null;
-
   const handleSignOut = async (): Promise<void> => {
     await authClient.signOut();
-    window.location.href = "/admin/login";
+    window.location.href = "/login";
   };
 
   const nav = isAdmin ? adminNav : userNav;

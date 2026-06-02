@@ -69,7 +69,7 @@ export default function AdminRegisterPage() {
             <p className="text-sm text-muted-foreground">
               New account registration is currently disabled. Please contact your administrator.
             </p>
-            <Link href="/admin/login" className="text-sm underline">
+            <Link href="/login" className="text-sm underline">
               Back to sign in
             </Link>
           </CardContent>
@@ -139,7 +139,7 @@ export default function AdminRegisterPage() {
             </Button>
             <p className="text-center text-sm text-muted-foreground">
               Already have an account?{" "}
-              <Link href="/admin/login" className="underline">
+              <Link href="/login" className="underline">
                 Sign in
               </Link>
             </p>

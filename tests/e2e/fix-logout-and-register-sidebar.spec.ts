@@ -5,10 +5,10 @@
  * fix-logout-and-register-sidebar.md:
  *
  *   1. A signed-in user can sign out from the sidebar footer and lands on
- *      /admin/login.
- *   2. A fresh visitor to /admin/register sees a bare registration screen with
+ *      /login.
+ *   2. A fresh visitor to /register sees a bare registration screen with
  *      no admin navigation sidebar.
- *   3. A signed-in admin who navigates to /admin/register is redirected to
+ *   3. A signed-in admin who navigates to /register is redirected to
  *      /admin (never sees the registration form inside admin chrome).
  *
  * The main suite runs with a stored admin session. Tests that need an
@@ -26,7 +26,7 @@ test.describe('Logout', () => {
     await expect(signOut).toBeVisible();
 
     await signOut.click();
-    await expect(page).toHaveURL(/\/admin\/login/, { timeout: 10_000 });
+    await expect(page).toHaveURL(/\/login/, { timeout: 10_000 });
     await page.screenshot({ path: 'screenshots/fix-logout-after-signout.png', fullPage: true });
   });
 });
@@ -36,7 +36,7 @@ test.describe('Register page chrome', () => {
     const context = await browser.newContext({ storageState: undefined });
     const page = await context.newPage();
 
-    await page.goto('/admin/register');
+    await page.goto('/register');
     await page.waitForLoadState('networkidle');
     await page.screenshot({ path: 'screenshots/fix-register-no-sidebar.png', fullPage: true });
 
@@ -48,11 +48,11 @@ test.describe('Register page chrome', () => {
     await context.close();
   });
 
-  test('signed-in admin visiting /admin/register is redirected to /admin', async ({ page }) => {
-    await page.goto('/admin/register');
+  test('signed-in admin visiting /register is redirected to /admin', async ({ page }) => {
+    await page.goto('/register');
     await page.waitForLoadState('networkidle');
 
-    await expect(page).not.toHaveURL(/\/admin\/register/);
+    await expect(page).not.toHaveURL(/\/register/);
     await expect(page).toHaveURL(/\/admin(\/|$)/);
     await page.screenshot({ path: 'screenshots/fix-register-redirect.png', fullPage: true });
   });

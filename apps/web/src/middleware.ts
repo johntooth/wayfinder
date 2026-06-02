@@ -14,7 +14,7 @@ const redirectToLogin = (req: NextRequest, pathname: string): NextResponse => {
     url.pathname = "/api/auth/cert";
     url.searchParams.set("redirect", pathname);
   } else {
-    url.pathname = "/admin/login";
+    url.pathname = "/login";
   }
   return NextResponse.redirect(url);
 };
@@ -22,7 +22,7 @@ const redirectToLogin = (req: NextRequest, pathname: string): NextResponse => {
 export const middleware = (req: NextRequest): NextResponse => {
   const { pathname } = req.nextUrl;
 
-  if (pathname.startsWith("/admin/register")) {
+  if (pathname.startsWith("/register")) {
     if (getSessionCookie(req)?.value) {
       const url = req.nextUrl.clone();
       url.pathname = "/admin";
@@ -31,7 +31,7 @@ export const middleware = (req: NextRequest): NextResponse => {
     return NextResponse.next();
   }
 
-  if (pathname.startsWith("/admin/login")) {
+  if (pathname.startsWith("/login")) {
     return NextResponse.next();
   }
 
@@ -46,5 +46,5 @@ export const middleware = (req: NextRequest): NextResponse => {
 };
 
 export const config = {
-  matcher: ["/admin/:path*", "/chats/:path*", "/chats", "/flows/:path*"],
+  matcher: ["/login", "/register", "/admin/:path*", "/chats/:path*", "/chats", "/flows/:path*"],
 };

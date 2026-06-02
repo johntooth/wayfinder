@@ -218,7 +218,7 @@ export const settingsRouter = router({
       return { ok: true };
     }),
 
-  // Public so the /admin/register page can check whether to render the form
+  // Public so the /register page can check whether to render the form
   // without forcing the visitor to authenticate first.
   registrationEnabled: publicProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.repos.systemSettings.get(
