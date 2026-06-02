@@ -61,7 +61,20 @@ const config: NextConfig = {
           ? [existingExternals]
           : [];
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (config as any).externals = [...existingList, "pdf-parse", /pdfjs-dist/];
+      (config as any).externals = [
+        ...existingList,
+        "pdf-parse",
+        /pdfjs-dist/,
+        // @huggingface/transformers and onnxruntime-node contain native Node.js
+        // binaries that webpack cannot parse. serverExternalPackages alone does
+        // not prevent webpack from following dynamic imports of these packages
+        // when the import originates inside a transpilePackages module. Regex
+        // externals intercept at the resolver level before any file is read,
+        // matching the package root and any sub-path imports (e.g.
+        // onnxruntime-node/dist/binding).
+        /^@huggingface\/transformers/,
+        /^onnxruntime/,
+      ];
     }
 
     return config;
