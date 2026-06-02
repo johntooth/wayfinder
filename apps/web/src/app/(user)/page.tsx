@@ -9,13 +9,13 @@ export default async function HomePage() {
     .find((c) => c.name.endsWith(".session_token") || c.name === "better-auth.session_token");
 
   if (!sessionCookie?.value) {
-    redirect("/admin/login");
+    redirect("/login");
   }
 
   const session = await getContainer().resolveSession(sessionCookie.value);
 
   if (!session) {
-    redirect("/admin/login");
+    redirect("/login");
   }
 
   redirect("/chats");

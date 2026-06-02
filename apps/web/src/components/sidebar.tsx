@@ -9,6 +9,7 @@ import {
   Flag,
   GitBranch,
   LayoutGrid,
+  LogOut,
   Menu,
   MessageSquare,
   PieChart,
@@ -19,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { useSidebar } from "@/components/sidebar-context";
+import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/trpc/client";
 
 interface NavItem {
@@ -62,7 +64,10 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     enabled: !isAdmin,
   });
 
-  if (pathname === "/admin/login") return null;
+  const handleSignOut = async (): Promise<void> => {
+    await authClient.signOut();
+    window.location.href = "/login";
+  };
 
   const nav = isAdmin ? adminNav : userNav;
   const homeHref = isAdmin ? "/admin/flows" : "/chats";
@@ -192,6 +197,17 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
             </div>
           </div>
         )}
+        {user && (
+          <button
+            onClick={handleSignOut}
+            className="mt-[6px] flex w-full items-center gap-[9px] rounded-[8px] px-[10px] py-[8px] text-[13px] text-[#5a5650] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+          >
+            <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+              <LogOut className="h-[15px] w-[15px]" />
+            </span>
+            Sign out
+          </button>
+        )}
       </div>
     </>
   );
@@ -300,6 +316,17 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
                     )}
                   </div>
                 </div>
+              )}
+              {user && (
+                <button
+                  onClick={() => { closeMobile(); void handleSignOut(); }}
+                  className="mt-[6px] flex w-full items-center gap-[9px] rounded-[8px] px-[10px] py-[8px] text-[13px] text-[#5a5650] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+                >
+                  <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+                    <LogOut className="h-[15px] w-[15px]" />
+                  </span>
+                  Sign out
+                </button>
               )}
             </div>
           </div>

@@ -95,7 +95,7 @@ function RegistrationToggleCard() {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          When enabled, anyone can create an account at <code>/admin/register</code>. New users
+          When enabled, anyone can create an account at <code>/register</code>. New users
           have no admin privileges. Turn this off in production once your team is set up.
         </p>
         <div className="flex items-center justify-between">

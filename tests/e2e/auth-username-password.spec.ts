@@ -9,10 +9,10 @@
  *
  * Visual spec (docs/development/implemented/v1.14.0/username-password-auth.md
  * + selectors in app):
- *   /admin/login    → "Sign in" card, #email, #password, "Sign in" submit,
- *                     "No account? Register" link
- *   /admin/register → "Create account" card, #name, #email, #password,
- *                     #confirm-password, "Create account" submit, "Sign in" link
+ *   /login    → "Sign in" card, #email, #password, "Sign in" submit,
+ *               "No account? Register" link
+ *   /register → "Create account" card, #name, #email, #password,
+ *               #confirm-password, "Create account" submit, "Sign in" link
  */
 
 import { test, expect } from './helpers/base';
@@ -22,7 +22,7 @@ test.describe('Auth: Username / Password login', () => {
     const context = await browser.newContext({ storageState: undefined });
     const page = await context.newPage();
 
-    await page.goto('/admin/login');
+    await page.goto('/login');
     await page.waitForLoadState('networkidle');
     await page.screenshot({ path: 'screenshots/auth-login-form.png', fullPage: true });
 
@@ -37,7 +37,7 @@ test.describe('Auth: Username / Password login', () => {
     const context = await browser.newContext({ storageState: undefined });
     const page = await context.newPage();
 
-    await page.goto('/admin/login');
+    await page.goto('/login');
     await page.waitForLoadState('networkidle');
 
     const registerLink = page.getByRole('link', { name: /register/i });
@@ -49,7 +49,7 @@ test.describe('Auth: Username / Password login', () => {
 
     await registerLink.click();
     await page.waitForLoadState('networkidle');
-    await expect(page).toHaveURL(/\/admin\/register/);
+    await expect(page).toHaveURL(/\/register/);
     await page.screenshot({ path: 'screenshots/auth-register-from-login.png', fullPage: true });
   });
 });
@@ -59,7 +59,7 @@ test.describe('Auth: Register', () => {
     const context = await browser.newContext({ storageState: undefined });
     const page = await context.newPage();
 
-    await page.goto('/admin/register');
+    await page.goto('/register');
     await page.waitForLoadState('networkidle');
     await page.screenshot({ path: 'screenshots/auth-register-form.png', fullPage: true });
 
