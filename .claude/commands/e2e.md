@@ -65,18 +65,7 @@ Actionable next steps only. Do not list "by design" skips as action items.
 
 ## Fixing failures
 
-If failures are found, fix them immediately unless the fix requires a schema change or
-new feature (in which case note it and stop):
-
-1. Read the failing test file and any source files it exercises.
-2. Apply the minimal fix — do not refactor surrounding code.
-3. Re-run the affected spec in isolation to confirm the fix:
-   ```bash
-   cd tests/e2e && npx playwright test --config=playwright.config.ts <spec-file> 2>&1
-   ```
-4. Re-run the full suite to confirm no regressions.
-5. Commit all fixes in a single commit with message format:
-   `fix: repair e2e <short description>`
+If failures are found, don't fix them immediately. Note them in the recommendations with enough context to understand what failed and why, and the recommended approach to fix. 
 
 ---
 
