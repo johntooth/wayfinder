@@ -153,14 +153,15 @@ hierarchy comes from Entra/HR and every route is operator-confirmed (ADR-018).
 
 - Multi-stage chains, quorum, delegation.
 - Auto-detecting HR column mappings (manual mapping for v1).
-- Magic-link approvals for approvers who are not Wayfinder users (see §12).
+- Auto-inviting / provisioning a free-typed approver who has no account (see §12).
 - Scheduled HR re-import / live HR sync.
 
 ## 12. Risks / open questions
 
-- **Approver who is not a known user.** A free-typed email may match no account.
-  Decision needed: restrict to authenticable users vs send a secure magic-link
-  approval. Flagged in ADR-018 for `/doc-review`.
+- **Free-typed approver with no account.** Every approver gets the same in-app
+  link; an unauthenticated recipient is redirected to login (no magic-link, no
+  approve-by-email). So a typed email with no account cannot act until one
+  exists — auto-invite vs admin-add is deferred (ADR-018).
 - **Graph scopes.** `Directory.Read.All` is privileged and needs tenant admin
   consent; until granted, resolution falls back to the HR upload / manual pick.
 - HR mapping UX: require explicit mapping before a dataset is usable for

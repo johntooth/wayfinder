@@ -118,6 +118,17 @@ by the operator; zero or several → "Someone else" search. The AI reads the rol
 out of policy prose; the person↔approval binding stays deterministic and
 human-ratified.
 
+### Every approver gets the same link, gated by auth
+
+The notification to the approver carries a link to the in-app approval —
+identical whether or not the address matches a `core_users` row. Clicking it
+routes to the approval screen; if the recipient is not authenticated they are
+redirected to login first and returned to the approval afterward. There is no
+separate magic-link or approve-by-email path: decisions always happen in-app
+behind normal authentication. A free-typed `approver_email` therefore needs an
+account that can sign in to act; provisioning/invite of brand-new accounts is
+out of scope for this phase.
+
 ### Decisions and effects
 
 Decisions are `approved` | `rejected` | `changes_requested` with an optional
@@ -155,14 +166,15 @@ confirm rule means no single stored edge is treated as ground truth.
   parts than a single column.
 - Graph scopes (`Directory.Read.All`) are privileged and need tenant admin
   consent.
-- Free-email approvers may not be Wayfinder users (see open question).
+- A free-typed approver who has no account cannot act until one exists (the link
+  redirects to login); account provisioning is deferred.
 
 ## Open questions
 
-- **Approver who is not a known user.** A typed email may match no
-  account. Options: restrict to authenticable users, or send a secure
-  magic-link approval to external/not-yet-onboarded approvers. Leaning toward
-  magic-link, but it expands auth scope — flagged for `/doc-review`.
+- **Onboarding a free-typed approver.** The link-behind-login decision means an
+  approver without an account is blocked until one is created. Whether to
+  auto-invite/provision on first use, or require an admin to add them, is left
+  for a later phase.
 - HR-upload mapping UX: auto-detect likely columns vs require explicit mapping
   before the dataset is usable for *resolution* (search works regardless).
 - Whether `dynamic` ever needs more than band/role/unit to disambiguate (e.g.

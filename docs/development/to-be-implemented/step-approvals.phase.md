@@ -117,8 +117,10 @@ No `core_users` change (the earlier `supervisor_user_id` is dropped from scope).
 
 New triggers on `INotificationSender`: `approval_requested` (→ approver),
 `approval_decided` (→ requester). Outbox + non-blocking, per the Email
-Notifications ADR. A confirmed `approver_email` with no `core_users` match is the
-open question (magic-link) — see §8.
+Notifications ADR. The approver link is the same for everyone and routes to the
+in-app approval; an unauthenticated recipient is redirected to login and returned
+afterward. No magic-link / approve-by-email path. A confirmed `approver_email`
+with no account cannot act until one exists (provisioning deferred — see §9).
 
 ## 6. Identity integration
 
@@ -157,7 +159,8 @@ Open question carried in the ADR: magic-link approvals for non-user approvers.
 
 ## 9. Risks / open questions
 
-Carried from PRD §12: non-user (free-email) approver handling, Graph
+Carried from PRD §12: provisioning a free-typed approver who has no account (the
+link redirects to login; auto-invite vs admin-add deferred), Graph
 `Directory.Read.All` admin consent, HR mapping-before-resolution UX, and
 flow-edit-under-an-open-approval (mitigated by `record_snapshot`).
 
