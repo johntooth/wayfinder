@@ -15,7 +15,31 @@ setupTelemetry({
 const container = buildContainer(env);
 const app = buildApp(container);
 
-app.listen(env.API_PORT, () => {
+const server = app.listen(env.API_PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`[api] listening on http://localhost:${env.API_PORT}`);
 });
+
+if (env.SCHEDULER_ENABLED) {
+  void container.schedulerWorker.start().then(
+    () => {
+      // eslint-disable-next-line no-console
+      console.log("[api] scheduler worker started");
+    },
+    (error: unknown) => {
+      container.logger.error("Scheduler worker failed to start.", {
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    },
+  );
+}
+
+const shutdown = (signal: string) => {
+  // eslint-disable-next-line no-console
+  console.log(`[api] received ${signal}, shutting down`);
+  container.schedulerWorker.stop();
+  server.close(() => process.exit(0));
+};
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

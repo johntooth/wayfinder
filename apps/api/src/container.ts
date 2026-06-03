@@ -3,6 +3,7 @@ import {
   CreateUser,
   DeleteUser,
   FailJob,
+  FireDueSchedules,
   GetFeatureFlag,
   GetSystemHealth,
   GetUsageSummary,
@@ -12,6 +13,7 @@ import {
   ListUsers,
   LogAuditEvent,
   LogError,
+  NotifyScheduleFireHandler,
   PingJob,
   RegisterJob,
   TrackUsage,
@@ -31,6 +33,9 @@ import {
   DrizzleFlowEdgeRepository,
   DrizzleFlowNodeRepository,
   DrizzleJobRepository,
+  DrizzleScheduleRepository,
+  DrizzleScheduleRunRepository,
+  DrizzleSessionMessageRepository,
   DrizzleSessionRepository,
   DrizzleSessionStepOutputRepository,
   DrizzleSystemSettingsRepository,
@@ -39,6 +44,8 @@ import {
   LanguageModelAdapter,
   PinoLogger,
   RuntimeConfigStore,
+  SchedulerWorker,
+  SystemClock,
   createDatabase,
   withOptionalLangfuse,
   withUsageTracking,
@@ -60,9 +67,13 @@ export const buildContainer = (env: Env) => {
   const jobRepo = new DrizzleJobRepository(db);
   const systemSettings = new DrizzleSystemSettingsRepository(db);
   const sessions = new DrizzleSessionRepository(db);
+  const sessionMessages = new DrizzleSessionMessageRepository(db);
   const flowNodes = new DrizzleFlowNodeRepository(db);
   const flowEdges = new DrizzleFlowEdgeRepository(db);
   const sessionStepOutputs = new DrizzleSessionStepOutputRepository(db);
+  const schedules = new DrizzleScheduleRepository(db);
+  const scheduleRuns = new DrizzleScheduleRunRepository(db);
+  const clock = new SystemClock();
 
   const bedrockEnvCredentials =
     env.AWS_BEDROCK_REGION && env.AWS_BEDROCK_ACCESS_KEY_ID && env.AWS_BEDROCK_SECRET_ACCESS_KEY
@@ -107,12 +118,21 @@ export const buildContainer = (env: Env) => {
   });
   const healthChecker = new CompositeHealthChecker(dbChecker, aiChecker, jobRepo);
 
+  // The in-process scheduler: a tick loop (cron) that claims due schedules,
+  // fires them, recurs/completes, and records each fire to the run log.
+  const scheduleFireHandler = new NotifyScheduleFireHandler(sessionMessages, flowNodes);
+  const fireDueSchedules = new FireDueSchedules(schedules, scheduleRuns, scheduleFireHandler, clock);
+  const schedulerWorker = new SchedulerWorker(fireDueSchedules, jobRepo, logger, {
+    tickIntervalMs: env.SCHEDULER_TICK_MS,
+  });
+
   return {
     env,
     db,
     logger,
     runtimeConfig,
-    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, systemSettings, sessions, flowNodes, flowEdges, sessionStepOutputs },
+    schedulerWorker,
+    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, systemSettings, sessions, sessionMessages, flowNodes, flowEdges, sessionStepOutputs, schedules, scheduleRuns },
     services: { llm, errorLogger, auditLogger },
     useCases: {
       applyAutoNodeResult: new ApplyAutoNodeResult(sessions, flowNodes, flowEdges, sessionStepOutputs),

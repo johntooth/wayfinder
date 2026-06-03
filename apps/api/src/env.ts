@@ -17,6 +17,13 @@ const envSchema = z.object({
   LANGFUSE_HOST: z.string().url().optional(),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
   OTEL_SERVICE_NAME: z.string().default("template-api"),
+  // The in-process scheduler tick loop runs in this long-lived API server.
+  // Disabled only by an explicit "false" so it is on by default.
+  SCHEDULER_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value !== "false"),
+  SCHEDULER_TICK_MS: z.coerce.number().int().positive().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
