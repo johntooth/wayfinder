@@ -8,6 +8,10 @@
 - **Depends on**: `job_registry` (existing), ADR-009 (`IDocumentGenerator`),
   Step Approvals (`app_session_approvals` snapshots) for the regeneration
   procedure.
+- **Build order**: Step-Approvals (1.24.0) → Record-Keeping (1.25.0) → this
+  phase (1.26.0); repo is at 1.23.3. The scheduled-node engine is independent
+  and may land first, but the **record-regeneration procedure is feature-gated
+  until `app_session_approvals` exists**.
 
 ## 1. Goal
 
@@ -20,9 +24,15 @@ reported to `job_registry`.
 
 Postgres-backed poller (no new infra):
 
-1. `scheduled` joins the `FlowNode` union with a `ScheduledNodeConfig`.
+1. `scheduled` joins the `FlowNode` union with a `ScheduledNodeConfig`
+   (`kind`, `spec`, `recurring`, `maxOccurrences`, plus an `anchor`:
+   `node_reached` | `step_metadata` with a `metadataKey`).
 2. Reaching the node creates an `active` `app_session_schedules` row with a
-   computed `next_fire_at` and pauses the session.
+   computed `next_fire_at` and pauses the session. The anchor is resolved first
+   (`node_reached` → now; `step_metadata` → the ISO timestamp at `metadataKey`
+   in session metadata), then `kind`/`spec` is applied
+   (`relative` = anchor + spec, `at` = anchor or literal spec, `cron` = next
+   valid time forward). A missing/unparseable `metadataKey` → `failed` row.
 3. A single worker ticks, claims due rows with `FOR UPDATE SKIP LOCKED`, fires
    them, then recurs (`next_fire_at`) or completes.
 4. The record-regeneration procedure is registered on a cadence; each run
@@ -39,7 +49,7 @@ See ADR-019.
 | domain | `packages/domain/src/entities/flow-node.ts` | Add `scheduled` to union + `ScheduledNodeConfig`. |
 | domain | `packages/domain/src/ports/schedule-repository.ts` | New `IScheduleRepository` (`create`, `claimDue`, `markFired`, `complete`, `cancel`). |
 | domain | `packages/domain/src/ports/clock.ts` | New `IClock`. |
-| application | `packages/application/src/use-cases/scheduling/schedule-node-event.ts` | Compute `next_fire_at` from config + session metadata. |
+| application | `packages/application/src/use-cases/scheduling/schedule-node-event.ts` | Resolve the `anchor` (node-reached or step-metadata ISO timestamp) then compute `next_fire_at` from `kind`/`spec`; `failed` on missing/unparseable `metadataKey`. |
 | application | `packages/application/src/use-cases/scheduling/fire-due-schedules.ts` | Claim + fire + recur/complete. |
 | application | `packages/application/src/use-cases/scheduling/run-record-regeneration.ts` | Regenerate documents for approved snapshots. |
 | adapters | `packages/adapters/src/repositories/drizzle-schedule-repository.ts` | Persistence + `SKIP LOCKED` claim. |
@@ -87,8 +97,9 @@ change) updated each run.
 
 1. `app_session_schedules` schema + migration; repository test (incl. `claimDue`
    safety) → repository.
-2. `IClock` + `schedule-node-event` test (compute `next_fire_at` from metadata) →
-   use-case.
+2. `IClock` + `schedule-node-event` test (anchor = node-reached vs step-metadata;
+   `relative`/`at`/`cron` from the anchor; missing/unparseable `metadataKey` →
+   `failed`) → use-case.
 3. `fire-due-schedules` test (recur within `max_occurrences`, complete,
    no double-fire, catch-up policy) → use-case.
 4. `run-record-regeneration` test (idempotent regeneration of approved snapshots)
@@ -115,6 +126,11 @@ Mirror PRD §10. At minimum:
 
 - [ ] `scheduled` node configurable; reaching it creates an `active` row with a
       computed `next_fire_at` and pauses the session.
+- [ ] Time anchored to a step's completion metadata fires at the expected time
+      (`relative` after the anchor step, `at` from the named `metadataKey`); a
+      missing/unparseable key marks the schedule `failed`.
+- [ ] One-time node (`recurring = false`) fires once then `completed`; recurring
+      node recurs up to `max_occurrences` then `completed`.
 - [ ] Worker claims due rows safely (no double-fire), recurs/completes correctly,
       and survives a restart.
 - [ ] Record-regeneration regenerates the master document for approved snapshots
