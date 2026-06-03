@@ -35,6 +35,19 @@ Two distinct needs share one engine:
 - A new **`scheduled` node type**: pauses the session and fires once or
   recurring, with the time derived from flow/session metadata (relative,
   absolute, or cron).
+  - **Time anchoring.** The fire time may be anchored to a **specific step's
+    completion metadata**, not only to the moment the node is reached. The node
+    config names a base via `anchor`: `node_reached` (default — anchor is when
+    this node is reached) or `step_metadata` with a `metadataKey` naming a field
+    on an earlier step's output (an ISO timestamp). The use-case resolves the
+    anchor from session metadata and then applies `kind`/`spec`: for `relative`,
+    `next_fire_at = anchor + spec` (e.g. `30d` after step X completed); for `at`,
+    `next_fire_at = anchor` when the anchor itself is the ISO timestamp, else the
+    literal `spec` timestamp; for `cron`, the next valid time forward from the
+    anchor. A `step_metadata` anchor whose key is absent or unparseable yields a
+    `failed` schedule (surfaced to the operator), never a silent skip.
+  - **Once vs recurring** is set by `recurring` (default false) bounded by
+    `max_occurrences`; a one-time run is `recurring = false`.
 - An **in-app scheduler** that durably persists due times, claims due work
   safely, fires it, and reschedules or completes it.
 - A **record-regeneration procedure** that periodically scans approved-but-not-
@@ -95,6 +108,11 @@ Two distinct needs share one engine:
 (`active`|`completed`|`cancelled`|`failed`), `payload` (jsonb), `created_at`,
 `updated_at`. Index on `(status, next_fire_at)` for the due-claim query.
 
+The **time anchor** (`anchor`: `node_reached` | `step_metadata`, plus
+`metadataKey`) lives on the node's `ScheduledNodeConfig` in `app_flow_nodes.config`
+(jsonb) — **no new column**; the resolved anchor timestamp is recorded in
+`payload` for audit. Anchoring therefore stays within the MINOR bump.
+
 ## 9. Architectural decisions
 
 - **ADR-019 — In-app job scheduler** (new): a Postgres-backed poller using
@@ -110,6 +128,13 @@ Two distinct needs share one engine:
 - [ ] A `scheduled` node can be added, configured, and saved.
 - [ ] Reaching it creates an `active` `app_session_schedules` row with a computed
       `next_fire_at`; the session pauses.
+- [ ] A node anchored to a step's completion metadata fires at the expected time:
+      `relative` (`30d` after the anchor step completed) and `at` (the ISO
+      timestamp carried in the named `metadataKey`) both resolve `next_fire_at`
+      from that metadata; a missing/unparseable `metadataKey` marks the schedule
+      `failed` and surfaces to the operator.
+- [ ] A one-time node (`recurring = false`) fires exactly once then `completed`;
+      a recurring node recurs up to `max_occurrences` then `completed`.
 - [ ] The worker claims due rows safely (no double-fire), advances/recurs the
       session, and updates `next_fire_at` / completes.
 - [ ] Firing survives a process restart (state is in Postgres, not memory).
@@ -131,3 +156,8 @@ Two distinct needs share one engine:
   for relative/at schedules; cron computes the next valid time forward.
 - Coupling to Approvals: the regeneration procedure reads approval state; the
   contract (approved snapshot shape + "regenerated" marker) must be stable.
+- **Build order.** This phase (1.26.0) depends on `app_session_approvals` from
+  Step-Approvals (1.24.0), with Record-Keeping (1.25.0) in between; the repo is
+  at 1.23.3. Build in that order. The scheduled-node engine is independent and
+  can land first, but the **record-regeneration procedure must be feature-gated
+  until `app_session_approvals` exists** so the scheduler ships without it.
