@@ -1,86 +1,100 @@
-# ADR-020 — Record Export via n8n
+# ADR-020 — Record Export via the Existing Auto-Node
 
-- **Status**: Proposed
+- **Status**: Proposed (supersedes the earlier outbox/`app_session_records` sketch
+  of this ADR)
 - **Date**: 2026-06-03
 - **Relates to**: ADR-010 (external workflow integration), ADR-013 (auto-node
-  structured data), Email Notifications ADR (outbox model), Record-Keeping PRD
+  structured data), ADR-018 (approval step), Record-Keeping PRD
 
 ## Context
 
 A finished Wayfinder record must be pushed into an agency's external system of
-record, which returns a system-assigned record id. We already have a signed,
-asynchronous integration with n8n (auto-node → `POST
-/v1/webhooks/n8n/:sessionId`). The question is whether record export warrants a
-new transport or should reuse that path, and how to capture the returned id
-durably without coupling export to the session's progress.
+record (EDRMS / SharePoint / line-of-business system), which returns a
+system-assigned record id we want to keep against the session for traceability.
+
+The first draft of this ADR proposed a new subsystem to do that: an
+`IRecordExporter` port, a `DrizzleRecordExportRepository`, an `app_session_records`
+outbox table, two new use-cases, and an `externalRecordId` field added to the n8n
+callback contract.
+
+Reviewing that against the code showed it largely **reinvents infrastructure that
+already ships**. The auto-node already is an outbound write to n8n whose response
+is captured as end-of-step metadata:
+
+- `AutoNodeConfig.requestFields` declares the fields sent **to** n8n
+  (`packages/domain/src/entities/flow-node.ts`).
+- `AutoNodeConfig.responseFields` declares the fields n8n is configured to
+  **return**.
+- On the inbound callback, `ApplyAutoNodeResult.persistStepOutput` coerces the
+  returned `data` into those `responseFields` and writes them to
+  `session_step_outputs` — the **same** `ISessionStepOutputRepository.create`
+  call `GenerateDocument` uses to persist a generated document's structured
+  fields. One shared "structured data at the end of a step" path.
+- The callback's `data` is already an open `z.record(z.unknown())`
+  (`apps/api/src/routes/webhooks.ts`), so an `externalRecordId` returning from
+  n8n needs **no schema change** — it is just another `responseField`.
 
 ## Decision
 
-### Reuse the n8n transport; do not invent a new one
+### Record export is a usage pattern of the existing auto-node, not a new subsystem
 
-Record export is an outbound write to an agency system — exactly what the n8n
-auto-node pattern exists for (ADR-010 lists "SharePoint write, AusTender
-publish" as the motivating cases). We reuse `INodeExecutor` / `N8nNodeExecutor`
-(HMAC-signed request, `correlationId`, async result via the existing webhook).
+To export a record:
 
-A thin domain port expresses intent at the application layer:
+1. Place an **auto-node** at the export point of the flow.
+2. Configure its `requestFields` with the record payload to send to n8n (the n8n
+   sub-workflow performs the agency-side write — unchanged, out of scope here).
+3. Configure its `responseFields` to include the field n8n returns for the
+   external record id (e.g. `externalRecordId`).
+4. The existing callback path persists those response fields to
+   `session_step_outputs` against the session, node, and flow. The external
+   record id is now captured as end-of-step metadata, exactly like a generated
+   document's fields.
 
-```ts
-export interface IRecordExporter {
-  export(input: {
-    sessionId: string;
-    flowId: string;
-    correlationId: string;
-    payload: Record<string, unknown>;
-  }): Promise<Result<{ accepted: true }>>;
-}
-```
+No `IRecordExporter`, no `app_session_records` table, no new repository, no new
+use-cases, and no change to the callback Zod schema.
 
-The adapter delegates to the n8n executor. No new secret, route, or signature
-scheme — `N8N_WEBHOOK_SECRET` and the existing endpoint are reused.
+### Triggering uses the graph, not a new finalization hook
 
-### Outbox model with callback-supplied record id
+The earlier draft proposed firing export on `approval_granted` / `session_complete`
+signals. The flow graph already provides both:
 
-Mirroring the Email Notifications outbox: finalizing a record commits a
-`pending` `app_session_records` row (idempotent on `(session_id, trigger,
-node_id)`), then export runs out of band. The n8n callback is extended to carry
-the external record id:
+- An export auto-node placed **terminally** runs when reached and, having no
+  outgoing edges, completes the session (`ApplyAutoNodeResult.advance`).
+- An export auto-node placed **immediately downstream of an `approval` node**
+  (ADR-018) runs once the approval advances the session.
 
-```
-POST /v1/webhooks/n8n/:sessionId
-Body: { correlationId?, nodeId, status, data, message?, externalRecordId? }
-```
+So positioning the node is the trigger. No finalization-signal plumbing is added.
 
-On a successful callback the row flips to `exported` and stores
-`external_record_id`; failure marks `failed` with the error. Export is
-**non-blocking** — failure never breaks the session, matching the rest of the
-n8n integration's best-effort posture.
+### The only potentially-new code is a read-only audit view, and it is deferrable
 
-### Triggers
-
-Export is fired on record finalization. The v1 trigger set is
-`approval_granted` (from the Approvals feature) and `session_complete`. A
-dedicated `record` node is deliberately deferred — finalization signals cover the
-need without a new node type.
+Records officers/auditors may want a single "what was exported, when, and the
+external id it became" view across sessions. That is a **read-only query over
+`session_step_outputs` filtered to export nodes** (a tRPC `record.listExports`),
+not a new table. It is optional and can be deferred until an auditor actually
+needs it; the data is already captured without it.
 
 ## Consequences
 
 **Positive**
 
-- Zero new transport surface or secrets; one integration to operate and audit.
-- The external record id is captured against the session for traceability.
-- Outbox + idempotency key prevent double-export on re-finalization.
+- Zero new transport, persistence, ports, or callback-contract surface. One
+  integration and one metadata store to operate and audit.
+- The external record id is captured against the session via the mechanism that
+  already captures generated-document fields — consistent and already tested.
+- Record-keeping stops being a "phase" of net-new code and becomes a
+  flow-configuration pattern (plus an optional read view).
 
 **Negative**
 
-- Adds an optional `externalRecordId` to the shared webhook contract (additive,
-  backward compatible).
-- Couples record-keeping to n8n availability; mitigated by the durable outbox
-  and bounded retry.
+- `session_step_outputs` is a general metadata store, not a purpose-built export
+  ledger. If a future requirement demands a hard legal-retention or
+  immutability/locking guarantee that step outputs cannot give, a dedicated table
+  can be introduced **then**, with that requirement as its justification. We do
+  not pre-build it (YAGNI).
 
-## Open questions
+## Superseded
 
-- Large generated documents: inline (base64) vs a storage link in the payload —
-  lean toward link to keep payloads small.
-- Idempotency when a record is legitimately re-approved and must re-export —
-  whether that is a new row or an update.
+This replaces the first draft's outbox design: `IRecordExporter`,
+`IRecordExportRepository`, `app_session_records`, `RecordExport`,
+`export-record` / `apply-record-export-result` use-cases, and the
+`externalRecordId` callback-schema addition. None are needed.
