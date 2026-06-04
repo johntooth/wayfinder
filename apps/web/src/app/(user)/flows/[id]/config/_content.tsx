@@ -51,7 +51,7 @@ import type {
 import { NodeConfigModal } from "@/components/canvas/node-config-modal";
 import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/flow-metadata-dialog";
 import { trpc } from "@/trpc/client";
-import type { FlowContextDoc, TemplateField } from "@rbrasier/domain";
+import type { FieldValueSource, FlowContextDoc, PriorStepField, TemplateField } from "@rbrasier/domain";
 import { orderStepIds } from "@/lib/step-order";
 
 const NODE_TYPES = {
@@ -291,15 +291,25 @@ function CanvasInner({ flowId }: { flowId: string }) {
         return {
           instruction: values.instruction,
           executor: values.executor,
+          workflowId: values.workflowId,
           webhookUrl: values.webhookUrl,
           requestFields: values.requestFields,
+          requestFieldValues: values.requestFieldValues,
           responseFields: values.responseFields,
         };
       }
       if (values.type === "scheduled") {
+        const specSource = values.scheduleSpecSource;
+        const spec =
+          values.scheduleKind === "at"
+            ? specSource.kind === "literal"
+              ? specSource.value
+              : ""
+            : values.scheduleSpec;
         return {
           kind: values.scheduleKind,
-          spec: values.scheduleSpec,
+          spec,
+          specSource: values.scheduleKind === "at" ? values.scheduleSpecSource : undefined,
           recurring: values.scheduleRecurring,
           maxOccurrences: values.scheduleMaxOccurrences ? Number(values.scheduleMaxOccurrences) : null,
           anchor: values.scheduleAnchor,
@@ -420,6 +430,42 @@ function CanvasInner({ flowId }: { flowId: string }) {
     [rfNodes, stepOrder],
   );
 
+  // Fields declared by steps before the one being edited — auto-node response
+  // fields and conversational document-template fields — offered as value
+  // sources for the current node's request fields / scheduled timestamp.
+  const priorStepFields = useMemo<PriorStepField[]>(() => {
+    if (!editingNodeId) return [];
+    const currentStep = stepOrder.get(editingNodeId);
+    if (currentStep == null) return [];
+    const result: PriorStepField[] = [];
+    for (const node of rfNodes) {
+      const step = stepOrder.get(node.id);
+      if (step == null || step >= currentStep) continue;
+      const config = ((node.data as { config?: Record<string, unknown> }).config ?? {}) as Record<
+        string,
+        unknown
+      >;
+      const fields =
+        node.type === "autoNode"
+          ? readFields(config.responseFields)
+          : node.type === "scheduledNode"
+            ? []
+            : config.outputType === "generate_document"
+              ? readFields(config.documentTemplateFields)
+              : [];
+      if (fields.length === 0) continue;
+      const stepLabel = `${step}. ${(node.data as { name?: string }).name ?? "Step"}`;
+      for (const field of fields) {
+        result.push({
+          nodeId: node.id,
+          stepLabel,
+          field: { key: field.key, label: field.label, type: field.type },
+        });
+      }
+    }
+    return result;
+  }, [editingNodeId, rfNodes, stepOrder]);
+
   if (canvasQuery.isLoading) {
     return <div className="flex items-center justify-center h-96 text-muted-foreground">Loading canvas…</div>;
   }
@@ -458,11 +504,21 @@ function CanvasInner({ flowId }: { flowId: string }) {
         documentTemplateContent: (editingConfig.documentTemplateContent as string | null) ?? null,
         instruction: (editingConfig.instruction as string | null) ?? "",
         executor: (editingConfig.executor as "n8n" | "mock" | undefined) ?? "n8n",
+        workflowId: (editingConfig.workflowId as string | null) ?? null,
         webhookUrl: (editingConfig.webhookUrl as string | null) ?? "",
         requestFields: readFields(editingConfig.requestFields),
+        requestFieldValues:
+          (editingConfig.requestFieldValues as Record<string, FieldValueSource> | undefined) ?? {},
         responseFields: readFields(editingConfig.responseFields),
         scheduleKind: (editingConfig.kind as ScheduleKind | undefined) ?? "relative",
         scheduleSpec: (editingConfig.spec as string | null) ?? "",
+        // Legacy `at` nodes stored a literal ISO in `spec` without a specSource —
+        // surface those as a literal source so the value remains editable.
+        scheduleSpecSource:
+          (editingConfig.specSource as FieldValueSource | undefined) ??
+          (editingConfig.kind === "at" && editingConfig.spec
+            ? { kind: "literal", value: String(editingConfig.spec) }
+            : { kind: "ai" }),
         scheduleRecurring: Boolean(editingConfig.recurring),
         scheduleMaxOccurrences:
           editingConfig.maxOccurrences != null ? String(editingConfig.maxOccurrences) : "",
@@ -653,6 +709,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         isSaving={isSavingConfig}
         autoNodeEnabled={autoNodeEnabled}
         scheduledNodeEnabled={scheduledNodeEnabled}
+        priorStepFields={priorStepFields}
         onUploadTemplate={editingNodeId && !editingNodeId.startsWith("temp-") ? handleUploadTemplate : undefined}
       />
 

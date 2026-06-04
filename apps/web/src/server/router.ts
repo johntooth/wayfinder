@@ -3,6 +3,7 @@ import { errorRouter } from "./routers/error";
 import { featureFlagRouter } from "./routers/feature-flag";
 import { flowRouter } from "./routers/flow";
 import { messageRouter } from "./routers/message";
+import { n8nRouter } from "./routers/n8n";
 import { scheduleRouter } from "./routers/schedule";
 import { sessionRouter } from "./routers/session";
 import { settingsRouter } from "./routers/settings";
@@ -20,6 +21,7 @@ export const appRouter = router({
   session: sessionRouter,
   schedule: scheduleRouter,
   settings: settingsRouter,
+  n8n: n8nRouter,
   analytics: analyticsRouter,
 });
 

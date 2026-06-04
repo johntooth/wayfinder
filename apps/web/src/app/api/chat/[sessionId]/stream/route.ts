@@ -262,6 +262,7 @@ export async function POST(
               await dispatchScheduledNode({
                 container,
                 session: runResult.data.session,
+                flow,
                 node: newNode,
                 messages: refreshed.error ? dbMessages : refreshed.data,
               });

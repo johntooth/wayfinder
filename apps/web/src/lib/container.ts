@@ -38,6 +38,7 @@ import {
   RemoveContextDoc,
   RemoveSessionUpload,
   RetrieveDocumentChunks,
+  ApplyAutoNodeResult,
   RunAutoNode,
   RunTurn,
   ScheduleNodeEvent,
@@ -83,6 +84,7 @@ import {
   LanguageModelAdapter,
   createEmbeddingsProvider,
   MinioStorageAdapter,
+  N8nHttpWorkflowDirectory,
   NodemailerEmailSender,
   PinoLogger,
   PkiCertAdapter,
@@ -90,7 +92,7 @@ import {
   SystemClock,
   createAuth,
   createDatabase,
-  createNodeExecutor,
+  createNodeExecutors,
   resolveSession,
   withOptionalLangfuse,
   withUsageTracking,
@@ -162,7 +164,8 @@ const build = () => {
   const sessionAgent = new FlowSessionGraph();
   const docxGenerator = new DocxGenerator();
   const documentExtractor = new DocumentExtractorService(docxGenerator);
-  const nodeExecutor = createNodeExecutor(env.N8N_WEBHOOK_SECRET);
+  const nodeExecutors = createNodeExecutors(llm, env.N8N_WEBHOOK_SECRET);
+  const n8nWorkflowDirectory = new N8nHttpWorkflowDirectory(() => runtimeConfig.getN8nConfig());
   const emailSender = new NodemailerEmailSender(systemSettings);
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
   const contextDocContent = new DrizzleContextDocContentRepository(db);
@@ -225,7 +228,7 @@ const build = () => {
     objectStorage,
     runtimeConfig,
     resolveSession: (token: string) => resolveSession(db, token),
-    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender },
+    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory },
     repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, systemSettings, contextDocContent, documentChunks, reindexSource },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
@@ -273,8 +276,9 @@ const build = () => {
       listAllSessions: new ListAllSessions(sessions),
       getSession: new GetSession(sessions, sessionMessages, flows, flowNodes, flowEdges),
       runTurn: new RunTurn(sessions, sessionMessages, flowEdges),
-      runAutoNode: new RunAutoNode(sessions, llm, nodeExecutor),
-      scheduleNodeEvent: new ScheduleNodeEvent(schedules, clock),
+      runAutoNode: new RunAutoNode(sessions, llm, nodeExecutors, sessionStepOutputs),
+      applyAutoNodeResult: new ApplyAutoNodeResult(sessions, flowNodes, flowEdges, sessionStepOutputs),
+      scheduleNodeEvent: new ScheduleNodeEvent(schedules, clock, llm),
       overrideBranch: new OverrideBranch(sessions, flowEdges),
       heartbeatTyping: new HeartbeatTyping(sessionTyping),
       listTypingUsers: new ListTypingUsers(sessionTyping, users),

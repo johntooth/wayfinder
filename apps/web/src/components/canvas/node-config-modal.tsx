@@ -12,13 +12,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { TemplateField } from "@rbrasier/domain";
+import type { FieldValueSource, PriorStepField, TemplateField } from "@rbrasier/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
 import { TemplateTagsHelpDialog } from "./template-tags-help-dialog";
 import { TemplateFieldEditor, parseFieldLines } from "./template-field-editor";
+import { FieldValueList, FieldValueSelector, ReadOnlyFieldList } from "./field-value-selector";
 
 const COLOURS = [
   { hex: "#3a5fd9", label: "Indigo" },
@@ -49,11 +50,14 @@ export interface NodeConfigValues {
   documentTemplateContent?: string | null;
   instruction: string;
   executor: "n8n" | "mock";
+  workflowId: string | null;
   webhookUrl: string;
   requestFields: TemplateField[];
+  requestFieldValues: Record<string, FieldValueSource>;
   responseFields: TemplateField[];
   scheduleKind: ScheduleKind;
   scheduleSpec: string;
+  scheduleSpecSource: FieldValueSource;
   scheduleRecurring: boolean;
   scheduleMaxOccurrences: string;
   scheduleAnchor: ScheduleAnchor;
@@ -70,6 +74,8 @@ interface NodeConfigModalProps {
   isSaving?: boolean;
   autoNodeEnabled?: boolean;
   scheduledNodeEnabled?: boolean;
+  // Fields declared by steps earlier in the flow, offered as value sources.
+  priorStepFields?: PriorStepField[];
   onUploadTemplate?: (file: File, currentValues: NodeConfigValues) => Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string; code?: string }>;
 }
 
@@ -86,11 +92,14 @@ const DEFAULT_VALUES: NodeConfigValues = {
   documentTemplateContent: null,
   instruction: "",
   executor: "n8n",
+  workflowId: null,
   webhookUrl: "",
   requestFields: [],
+  requestFieldValues: {},
   responseFields: [],
   scheduleKind: "relative",
   scheduleSpec: "",
+  scheduleSpecSource: { kind: "ai" },
   scheduleRecurring: false,
   scheduleMaxOccurrences: "",
   scheduleAnchor: "node_reached",
@@ -128,6 +137,7 @@ export function NodeConfigModal({
   isSaving = false,
   autoNodeEnabled = false,
   scheduledNodeEnabled = false,
+  priorStepFields = [],
   onUploadTemplate,
 }: NodeConfigModalProps) {
   const utils = trpc.useUtils();
@@ -181,6 +191,32 @@ export function NodeConfigModal({
   const requestParsed = parseFieldLines(requestLines);
   const responseParsed = parseFieldLines(responseLines);
 
+  const usesN8n = isAuto && values.executor === "n8n";
+  const workflowsQuery = trpc.n8n.listWorkflows.useQuery(undefined, { enabled: open && usesN8n });
+  const workflows = workflowsQuery.data ?? [];
+  const selectedWorkflow = workflows.find((workflow) => workflow.id === values.workflowId) ?? null;
+
+  // Workflow inputs are read-only and combine with author-added extras to form
+  // the full request-field set. Mock executor uses only the author-added fields.
+  const derivedInputs = usesN8n && selectedWorkflow ? selectedWorkflow.inputs : [];
+  const derivedOutputs = usesN8n && selectedWorkflow ? selectedWorkflow.outputs : [];
+  const requestFields = [...derivedInputs, ...requestParsed.fields];
+
+  const setFieldValue = (key: string, next: FieldValueSource) =>
+    setValues((prev) => ({
+      ...prev,
+      requestFieldValues: { ...prev.requestFieldValues, [key]: next },
+    }));
+
+  const selectWorkflow = (workflowId: string) => {
+    const workflow = workflows.find((candidate) => candidate.id === workflowId);
+    setValues((prev) => ({
+      ...prev,
+      workflowId: workflowId || null,
+      webhookUrl: workflow?.webhookUrl ?? "",
+    }));
+  };
+
   const conversationalValid =
     Boolean(values.name.trim()) &&
     Boolean(values.aiInstruction.trim()) &&
@@ -189,13 +225,21 @@ export function NodeConfigModal({
   const autoValid =
     Boolean(values.name.trim()) &&
     Boolean(values.instruction.trim()) &&
-    (values.executor !== "n8n" || Boolean(values.webhookUrl.trim())) &&
+    (values.executor !== "n8n" || (Boolean(values.workflowId) && Boolean(values.webhookUrl.trim()))) &&
     requestParsed.valid &&
-    responseParsed.valid;
+    (usesN8n || responseParsed.valid);
+
+  // For an `at` schedule the time lives in the value source; a literal one still
+  // needs a value. Relative/cron always require their spec string.
+  const scheduleSpecSatisfied =
+    values.scheduleKind === "at"
+      ? values.scheduleSpecSource.kind !== "literal" ||
+        Boolean(values.scheduleSpecSource.value.trim())
+      : Boolean(values.scheduleSpec.trim());
 
   const scheduledValid =
     Boolean(values.name.trim()) &&
-    Boolean(values.scheduleSpec.trim()) &&
+    scheduleSpecSatisfied &&
     (values.scheduleAnchor !== "step_metadata" || Boolean(values.scheduleMetadataKey.trim()));
 
   const canSave = isAuto ? autoValid : isScheduled ? scheduledValid : conversationalValid;
@@ -203,7 +247,21 @@ export function NodeConfigModal({
   const handleSave = () => {
     if (!canSave) return;
     if (isAuto) {
-      onSave({ ...values, requestFields: requestParsed.fields, responseFields: responseParsed.fields });
+      const finalRequestFields = usesN8n
+        ? [...derivedInputs, ...requestParsed.fields]
+        : requestParsed.fields;
+      const finalResponseFields = usesN8n ? derivedOutputs : responseParsed.fields;
+      // Drop value bindings for fields that no longer exist.
+      const keys = new Set(finalRequestFields.map((field) => field.key));
+      const prunedValues = Object.fromEntries(
+        Object.entries(values.requestFieldValues).filter(([key]) => keys.has(key)),
+      );
+      onSave({
+        ...values,
+        requestFields: finalRequestFields,
+        requestFieldValues: prunedValues,
+        responseFields: finalResponseFields,
+      });
       return;
     }
     onSave(values);
@@ -594,30 +652,81 @@ export function NodeConfigModal({
 
               {values.executor === "n8n" && (
                 <div className="space-y-1">
-                  <Label htmlFor="auto-webhook">n8n webhook URL</Label>
-                  <Input
-                    id="auto-webhook"
-                    required
-                    value={values.webhookUrl}
-                    onChange={(e) => set("webhookUrl", e.target.value)}
-                    placeholder="https://n8n.example.com/webhook/…"
-                  />
+                  <Label htmlFor="auto-workflow">n8n workflow</Label>
+                  {workflowsQuery.isLoading ? (
+                    <p className="text-[12px] text-[#918d87]">Loading workflows…</p>
+                  ) : workflowsQuery.error ? (
+                    <p className="text-[12px] text-[#c2385a]">
+                      Could not load workflows. Configure an n8n instance in Admin → Settings.
+                    </p>
+                  ) : (
+                    <select
+                      id="auto-workflow"
+                      className="flex h-10 w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#3a5fd9] focus:bg-white focus:outline-none"
+                      value={values.workflowId ?? ""}
+                      onChange={(e) => selectWorkflow(e.target.value)}
+                    >
+                      <option value="">Select a workflow…</option>
+                      {workflows.map((workflow) => (
+                        <option key={workflow.id} value={workflow.id}>
+                          {workflow.name}
+                          {workflow.webhookUrl ? "" : " (no webhook trigger)"}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {selectedWorkflow && !selectedWorkflow.webhookUrl && (
+                    <p className="text-[12px] text-[#c2385a]">
+                      This workflow has no webhook trigger and cannot be called automatically.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {usesN8n && selectedWorkflow && (
+                <div className="space-y-1">
+                  <Label>Expected outputs (from n8n)</Label>
+                  <p className="text-[12px] text-[#918d87]">
+                    Returned by the workflow and stored as this step&apos;s output.
+                  </p>
+                  <ReadOnlyFieldList fields={derivedOutputs} emptyText="This workflow declares no outputs." />
                 </div>
               )}
 
               <TemplateFieldEditor
-                label="Request fields (sent to n8n)"
-                helpText="Gathered from the conversation so far and sent with the request. Use the same Label (type) syntax as document templates."
+                label={usesN8n ? "Add request fields" : "Request fields"}
+                helpText={
+                  usesN8n
+                    ? "Extra fields to send alongside the workflow's inputs. Use the same Label (type) syntax as document templates."
+                    : "Fields sent with the request. Use the same Label (type) syntax as document templates."
+                }
                 lines={requestLines}
                 onChange={setRequestLines}
               />
 
-              <TemplateFieldEditor
-                label="Response fields (expected back)"
-                helpText="The structured values n8n is expected to return. Matched values are stored; anything else is left blank."
-                lines={responseLines}
-                onChange={setResponseLines}
-              />
+              {(!usesN8n || selectedWorkflow) && requestFields.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Field values</Label>
+                  <p className="text-[12px] text-[#918d87]">
+                    Choose where each value comes from: the AI, an earlier step&apos;s field, or a specific value.
+                  </p>
+                  <FieldValueList
+                    fields={requestFields}
+                    values={values.requestFieldValues}
+                    onChange={setFieldValue}
+                    priorStepFields={priorStepFields}
+                  />
+                </div>
+              )}
+
+              {!usesN8n && (
+                <TemplateFieldEditor
+                  label="Response fields (expected back)"
+                  helpText="The structured values the step is expected to return. Matched values are stored; anything else is left blank."
+                  lines={responseLines}
+                  onChange={setResponseLines}
+                />
+              )}
               </>
               )}
 
@@ -637,27 +746,34 @@ export function NodeConfigModal({
                 </select>
               </div>
 
-              <div className="space-y-1">
-                <Label htmlFor="schedule-spec">
-                  {values.scheduleKind === "relative"
-                    ? "Duration (e.g. 30d, 2h, 15m)"
-                    : values.scheduleKind === "cron"
-                      ? "Cron expression (e.g. 0 9 * * 1)"
-                      : "ISO timestamp (leave blank to use the anchor)"}
-                </Label>
-                <Input
-                  id="schedule-spec"
-                  value={values.scheduleSpec}
-                  onChange={(e) => set("scheduleSpec", e.target.value)}
-                  placeholder={
-                    values.scheduleKind === "relative"
-                      ? "30d"
-                      : values.scheduleKind === "cron"
-                        ? "0 9 * * 1"
-                        : "2026-12-25T09:00:00.000Z"
-                  }
-                />
-              </div>
+              {values.scheduleKind === "at" ? (
+                <div className="space-y-1">
+                  <Label>Fire date/time</Label>
+                  <p className="text-[12px] text-[#918d87]">
+                    Choose where the timestamp comes from: the AI, an earlier step&apos;s field, or a specific ISO
+                    timestamp (e.g. 2026-12-25T09:00:00.000Z).
+                  </p>
+                  <FieldValueSelector
+                    value={values.scheduleSpecSource}
+                    onChange={(next) => set("scheduleSpecSource", next)}
+                    priorStepFields={priorStepFields}
+                  />
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <Label htmlFor="schedule-spec">
+                    {values.scheduleKind === "relative"
+                      ? "Duration (e.g. 30d, 2h, 15m)"
+                      : "Cron expression (e.g. 0 9 * * 1)"}
+                  </Label>
+                  <Input
+                    id="schedule-spec"
+                    value={values.scheduleSpec}
+                    onChange={(e) => set("scheduleSpec", e.target.value)}
+                    placeholder={values.scheduleKind === "relative" ? "30d" : "0 9 * * 1"}
+                  />
+                </div>
+              )}
 
               <div className="space-y-1">
                 <Label htmlFor="schedule-anchor">Anchor</Label>

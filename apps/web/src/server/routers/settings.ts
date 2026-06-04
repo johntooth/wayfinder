@@ -3,6 +3,7 @@ import {
   AI_CONFIG_SETTING_KEY,
   EMAIL_CONFIG_SETTING_KEY,
   EMBEDDINGS_CONFIG_SETTING_KEY,
+  N8N_CONFIG_SETTING_KEY,
   REGISTRATION_ENABLED_SETTING_KEY,
   SESSION_UPLOAD_CONFIG_SETTING_KEY,
   STORAGE_CONFIG_SETTING_KEY,
@@ -10,6 +11,7 @@ import {
   type AiPurpose,
   type BedrockCredentials,
   type EmailConfig,
+  type N8nConfig,
   type ProviderName,
   type StorageConfig,
 } from "@rbrasier/domain";
@@ -56,6 +58,12 @@ const storageConfigInputSchema = z.object({
   accessKey: z.string().min(1),
   secretKey: z.string().min(1),
   bucket: z.string().min(1),
+});
+
+const n8nConfigInputSchema = z.object({
+  baseUrl: z.string().url(),
+  // Empty/omitted apiKey keeps the stored one — admins can't read it back.
+  apiKey: z.string().nullable().optional(),
 });
 
 const sessionUploadConfigInputSchema = z.object({
@@ -199,6 +207,28 @@ export const settingsRouter = router({
       );
       if (result.error) throw toTrpcError(result.error);
       ctx.container.runtimeConfig.invalidateAi();
+      return { ok: true };
+    }),
+
+  getN8nConfig: adminProcedure.query(async ({ ctx }) => {
+    const config: N8nConfig = await ctx.container.runtimeConfig.getN8nConfig();
+    return RuntimeConfigStore.redactN8n(config);
+  }),
+
+  setN8nConfig: adminProcedure
+    .input(n8nConfigInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const current: N8nConfig = await ctx.container.runtimeConfig.getN8nConfig();
+      const merged: N8nConfig = {
+        baseUrl: input.baseUrl.trim().replace(/\/+$/, ""),
+        apiKey: input.apiKey && input.apiKey.length > 0 ? input.apiKey : current.apiKey,
+      };
+      const result = await ctx.container.repos.systemSettings.set(
+        N8N_CONFIG_SETTING_KEY,
+        JSON.stringify(merged),
+      );
+      if (result.error) throw toTrpcError(result.error);
+      ctx.container.runtimeConfig.invalidateN8n();
       return { ok: true };
     }),
 

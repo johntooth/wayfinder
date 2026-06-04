@@ -9,6 +9,8 @@ export * from "./system-health";
 export * from "./flow";
 export * from "./flow-visibility";
 export * from "./flow-node";
+export * from "./field-value-source";
+export * from "./n8n-workflow";
 export * from "./session-schedule";
 export * from "./template-field";
 export * from "./flow-edge";
