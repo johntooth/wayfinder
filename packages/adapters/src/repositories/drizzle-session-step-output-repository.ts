@@ -57,4 +57,17 @@ export class DrizzleSessionStepOutputRepository implements ISessionStepOutputRep
       return err(domainError("INFRA_FAILURE", "Failed to list session step outputs.", cause));
     }
   }
+
+  async listBySession(sessionId: string): Promise<Result<SessionStepOutput[]>> {
+    try {
+      const rows = await this.db
+        .select()
+        .from(app_session_step_outputs)
+        .where(eq(app_session_step_outputs.session_id, sessionId))
+        .orderBy(desc(app_session_step_outputs.created_at));
+      return ok(rows.map(toEntity));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to list session step outputs.", cause));
+    }
+  }
 }

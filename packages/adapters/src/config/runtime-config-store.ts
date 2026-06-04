@@ -1,6 +1,7 @@
 import {
   AI_CONFIG_SETTING_KEY,
   EMBEDDINGS_CONFIG_SETTING_KEY,
+  N8N_CONFIG_SETTING_KEY,
   SESSION_UPLOAD_CONFIG_SETTING_KEY,
   STORAGE_CONFIG_SETTING_KEY,
   type AiConfig,
@@ -8,6 +9,7 @@ import {
   type BedrockCredentials,
   type EmbeddingsConfig,
   type ISystemSettingsRepository,
+  type N8nConfig,
   type ProviderName,
   type SessionUploadConfig,
   type StorageConfig,
@@ -56,7 +58,10 @@ export interface EnvDefaults {
   };
   storage: StorageConfig;
   embeddingsProvider: EmbeddingsProvider;
+  n8n?: N8nConfig;
 }
+
+const DEFAULT_N8N_CONFIG: N8nConfig = { baseUrl: "", apiKey: "" };
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
@@ -169,6 +174,24 @@ const buildEnvEmbeddingsConfig = (env: EnvDefaults): EmbeddingsConfig => ({
   model: EMBEDDINGS_DEFAULT_MODELS[env.embeddingsProvider],
 });
 
+// Trailing slashes on the base URL would double up when we append `/api/v1/...`
+// or `/webhook/...`, so they are stripped here at the parse boundary.
+const parseN8nConfig = (raw: string, fallback: N8nConfig): N8nConfig => {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!isObject(parsed)) return fallback;
+    const baseUrl =
+      typeof parsed.baseUrl === "string" && parsed.baseUrl.trim().length > 0
+        ? parsed.baseUrl.trim().replace(/\/+$/, "")
+        : fallback.baseUrl;
+    const apiKey =
+      typeof parsed.apiKey === "string" && parsed.apiKey.length > 0 ? parsed.apiKey : fallback.apiKey;
+    return { baseUrl, apiKey };
+  } catch {
+    return fallback;
+  }
+};
+
 const parseEmbeddingsConfig = (raw: string, fallback: EmbeddingsConfig): EmbeddingsConfig => {
   try {
     const parsed = JSON.parse(raw);
@@ -196,6 +219,8 @@ export class RuntimeConfigStore {
   private sessionUploadPending: Promise<SessionUploadConfig> | null = null;
   private embeddingsCache: EmbeddingsConfig | null = null;
   private embeddingsPending: Promise<EmbeddingsConfig> | null = null;
+  private n8nCache: N8nConfig | null = null;
+  private n8nPending: Promise<N8nConfig> | null = null;
 
   constructor(
     private readonly settingsRepo: ISystemSettingsRepository,
@@ -263,6 +288,21 @@ export class RuntimeConfigStore {
     return this.embeddingsPending;
   }
 
+  async getN8nConfig(): Promise<N8nConfig> {
+    if (this.n8nCache) return this.n8nCache;
+    if (this.n8nPending) return this.n8nPending;
+    this.n8nPending = (async () => {
+      const fallback = this.envDefaults.n8n ?? DEFAULT_N8N_CONFIG;
+      const result = await this.settingsRepo.get(N8N_CONFIG_SETTING_KEY);
+      const config =
+        !result.error && result.data?.value ? parseN8nConfig(result.data.value, fallback) : fallback;
+      this.n8nCache = config;
+      this.n8nPending = null;
+      return config;
+    })();
+    return this.n8nPending;
+  }
+
   getStorageVersion(): number {
     return this.storageVersion;
   }
@@ -286,6 +326,11 @@ export class RuntimeConfigStore {
   invalidateEmbeddings(): void {
     this.embeddingsCache = null;
     this.embeddingsPending = null;
+  }
+
+  invalidateN8n(): void {
+    this.n8nCache = null;
+    this.n8nPending = null;
   }
 
   /**
@@ -312,5 +357,9 @@ export class RuntimeConfigStore {
 
   static redactStorage(config: StorageConfig): StorageConfig {
     return { ...config, secretKey: config.secretKey ? "••••••" : "" };
+  }
+
+  static redactN8n(config: N8nConfig): { baseUrl: string; apiKey: "set" | "unset" } {
+    return { baseUrl: config.baseUrl, apiKey: config.apiKey ? "set" : "unset" };
   }
 }

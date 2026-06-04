@@ -3,6 +3,7 @@ import {
   type FlowContextDoc,
   type ILanguageModel,
   type Result,
+  type SessionStepOutput,
   type StepOutputField,
   type TemplateField,
 } from "@rbrasier/domain";
@@ -24,7 +25,30 @@ export interface ExtractStructuredFieldsInput {
   contextDocs: FlowContextDoc[];
   instruction: string;
   purpose: string;
+  // Higher-priority context than the transcript: structured values captured by
+  // earlier steps, then insights accumulated across the conversation. Optional
+  // so document generation keeps its existing prompt byte-for-byte.
+  priorStepOutputs?: SessionStepOutput[];
+  insights?: { key: string; value: string }[];
 }
+
+const buildStepOutputsSection = (outputs: SessionStepOutput[]): string => {
+  const lines = outputs.flatMap((output) =>
+    output.fields
+      .filter((stepField) => stepField.value.trim().length > 0)
+      .map((stepField) => `- ${stepField.label}: ${stepField.value}`),
+  );
+  if (lines.length === 0) return "";
+  return `\nData captured by earlier steps (most reliable):\n${lines.join("\n")}`;
+};
+
+const buildInsightsSection = (insights: { key: string; value: string }[]): string => {
+  const lines = insights
+    .filter((insight) => insight.value.trim().length > 0)
+    .map((insight) => `- ${insight.key}: ${insight.value}`);
+  if (lines.length === 0) return "";
+  return `\nInsights gathered so far:\n${lines.join("\n")}`;
+};
 
 // Narrative and section fields invert the default "extract what the user said"
 // behaviour: narrative asks the model to compose prose, section asks it to make
@@ -54,6 +78,8 @@ export const extractStructuredFields = async (
   const keys = input.fields.map((field) => field.key);
   const contextDocsSection = buildContextDocsSection(input.contextDocs);
   const generationGuidance = buildGenerationGuidance(input.fields);
+  const stepOutputsSection = buildStepOutputsSection(input.priorStepOutputs ?? []);
+  const insightsSection = buildInsightsSection(input.insights ?? []);
 
   const result = await languageModel.generateObject<Record<string, string>>({
     purpose: input.purpose,
@@ -64,6 +90,8 @@ export const extractStructuredFields = async (
       `\nEach field has a required format. Reformat the information the user provided into the required format whenever you reasonably can — for example, parse a written date into DD-MM-YYYY, or format an amount as currency. Only leave a value blank when its field is marked optional and the information is genuinely missing.`,
       `\n<field_constraints>\n${buildFieldConstraintsText(input.fields)}\n</field_constraints>`,
       generationGuidance,
+      stepOutputsSection,
+      insightsSection,
       contextDocsSection,
       `\nSession transcript:\n${input.transcript}`,
     ]

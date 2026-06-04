@@ -6,9 +6,11 @@ import type {
   ILanguageModel,
   INodeExecutor,
   ISessionRepository,
+  ISessionStepOutputRepository,
   NodeExecutionInput,
   Session,
   SessionMessage,
+  SessionStepOutput,
 } from "@rbrasier/domain";
 import { RunAutoNode } from "./run-auto-node";
 
@@ -83,6 +85,15 @@ const makeLanguageModel = (): ILanguageModel => ({
   streamObject: vi.fn(),
 });
 
+const makeStepOutputs = (
+  outputs: SessionStepOutput[] = [],
+): ISessionStepOutputRepository =>
+  ({
+    create: vi.fn(),
+    listByFlow: vi.fn().mockResolvedValue(ok([])),
+    listBySession: vi.fn().mockResolvedValue(ok(outputs)),
+  }) as unknown as ISessionStepOutputRepository;
+
 const makeExecutor = (): INodeExecutor & { lastInput: NodeExecutionInput | null } => {
   const ref = { lastInput: null as NodeExecutionInput | null };
   return {
@@ -114,7 +125,7 @@ describe("RunAutoNode", () => {
     const sessions = makeSessions(session);
     const executor = makeExecutor();
 
-    const useCase = new RunAutoNode(sessions, makeLanguageModel(), executor, {
+    const useCase = new RunAutoNode(sessions, makeLanguageModel(), { n8n: executor, mock: executor }, makeStepOutputs(), {
       generateCorrelationId: () => "corr-123",
       now: () => new Date("2026-05-30T10:00:00.000Z"),
     });
@@ -143,7 +154,7 @@ describe("RunAutoNode", () => {
     const session = makeSession();
     const executor = makeExecutor();
 
-    const useCase = new RunAutoNode(makeSessions(session), makeLanguageModel(), executor, {
+    const useCase = new RunAutoNode(makeSessions(session), makeLanguageModel(), { n8n: executor, mock: executor }, makeStepOutputs(), {
       generateCorrelationId: () => "corr-123",
       now: () => new Date("2026-05-30T10:00:00.000Z"),
     });
@@ -178,7 +189,7 @@ describe("RunAutoNode", () => {
     });
 
     const sessions = makeSessions(session);
-    const useCase = new RunAutoNode(sessions, makeLanguageModel(), makeExecutor(), {
+    const useCase = new RunAutoNode(sessions, makeLanguageModel(), { n8n: makeExecutor(), mock: makeExecutor() }, makeStepOutputs(), {
       generateCorrelationId: () => "corr-123",
       now: () => new Date("2026-05-30T10:00:00.000Z"),
     });
@@ -205,7 +216,7 @@ describe("RunAutoNode", () => {
     const executor = makeExecutor();
     const languageModel = makeLanguageModel();
 
-    const useCase = new RunAutoNode(makeSessions(session), languageModel, executor, {
+    const useCase = new RunAutoNode(makeSessions(session), languageModel, { n8n: executor, mock: executor }, makeStepOutputs(), {
       generateCorrelationId: () => "corr-123",
       now: () => new Date(),
     });
@@ -226,7 +237,7 @@ describe("RunAutoNode", () => {
   it("returns a validation error when an n8n node has no webhook URL", async () => {
     const session = makeSession();
 
-    const useCase = new RunAutoNode(makeSessions(session), makeLanguageModel(), makeExecutor(), {
+    const useCase = new RunAutoNode(makeSessions(session), makeLanguageModel(), { n8n: makeExecutor(), mock: makeExecutor() }, makeStepOutputs(), {
       generateCorrelationId: () => "corr-123",
       now: () => new Date(),
     });
@@ -251,7 +262,7 @@ describe("RunAutoNode", () => {
       err(domainError("INFRA_FAILURE", "model down")),
     );
 
-    const useCase = new RunAutoNode(sessions, languageModel, makeExecutor(), {
+    const useCase = new RunAutoNode(sessions, languageModel, { n8n: makeExecutor(), mock: makeExecutor() }, makeStepOutputs(), {
       generateCorrelationId: () => "corr-123",
       now: () => new Date(),
     });
@@ -267,5 +278,81 @@ describe("RunAutoNode", () => {
 
     expect(result.error).toBeDefined();
     expect(sessions.update).not.toHaveBeenCalled();
+  });
+
+  it("resolves a request field bound to a prior step output without calling the model", async () => {
+    const session = makeSession();
+    const executor = makeExecutor();
+    const languageModel = makeLanguageModel();
+    const priorOutput: SessionStepOutput = {
+      id: "out-1",
+      sessionId: "sess-1",
+      flowId: "flow-1",
+      nodeId: "node-0",
+      messageId: null,
+      fields: [{ key: "vendor", label: "Vendor", type: "text", value: "Acme Corp" }],
+      createdAt: new Date("2026-05-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-05-01T00:00:00.000Z"),
+    };
+
+    const useCase = new RunAutoNode(
+      makeSessions(session),
+      languageModel,
+      { n8n: executor, mock: executor },
+      makeStepOutputs([priorOutput]),
+      { generateCorrelationId: () => "corr-123", now: () => new Date() },
+    );
+
+    await useCase.execute({
+      session,
+      flow: makeFlow(),
+      node: makeNode({
+        ...baseConfig,
+        requestFields: [
+          { key: "category", label: "Category", type: "text", optional: false, raw: "Category" },
+        ],
+        requestFieldValues: {
+          category: { kind: "step_field", nodeId: "node-0", fieldKey: "vendor" },
+        },
+      }),
+      messages: makeMessages(),
+      userId: "user-1",
+      userRole: "user",
+    });
+
+    expect(languageModel.generateObject).not.toHaveBeenCalled();
+    expect(executor.lastInput?.fields).toEqual({ category: "Acme Corp" });
+  });
+
+  it("routes to the mock executor and returns its synchronous completed data", async () => {
+    const session = makeSession();
+    const n8nExecutor = makeExecutor();
+    const mockExecutor: INodeExecutor = {
+      execute: vi
+        .fn()
+        .mockResolvedValue(ok({ status: "completed", data: { vendor: "Mocked Co" } })),
+    };
+
+    const useCase = new RunAutoNode(
+      makeSessions(session),
+      makeLanguageModel(),
+      { n8n: n8nExecutor, mock: mockExecutor },
+      makeStepOutputs(),
+      { generateCorrelationId: () => "corr-123", now: () => new Date() },
+    );
+
+    const result = await useCase.execute({
+      session,
+      flow: makeFlow(),
+      node: makeNode({ ...baseConfig, executor: "mock", webhookUrl: "" }),
+      messages: makeMessages(),
+      userId: "user-1",
+      userRole: "user",
+    });
+
+    expect(mockExecutor.execute).toHaveBeenCalled();
+    expect(n8nExecutor.execute).not.toHaveBeenCalled();
+    expect(result.data?.status).toBe("completed");
+    expect(result.data?.data).toEqual({ vendor: "Mocked Co" });
   });
 });

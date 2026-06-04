@@ -150,9 +150,23 @@ export async function dispatchAutoNode(input: DispatchAutoNodeInput): Promise<vo
       userRole,
     });
 
+    // A synchronous completion (the mock executor) carries its result inline —
+    // apply it so the session advances without waiting for a callback.
+    if (!result.error && result.data.status === "completed") {
+      await container.useCases.applyAutoNodeResult.execute({
+        sessionId: session.id,
+        correlationId: result.data.correlationId,
+        nodeId: node.id,
+        status: "completed",
+        data: result.data.data,
+      });
+    }
+
     const content = result.error
       ? `This automated step (${node.name}) could not be started: ${result.error.message}`
-      : `Running automated step: ${node.name}. This step completes on its own — no input is needed.`;
+      : result.data.status === "completed"
+        ? `Completed automated step: ${node.name}.`
+        : `Running automated step: ${node.name}. This step completes on its own — no input is needed.`;
 
     await container.repos.sessionMessages.create({
       sessionId: session.id,
@@ -199,9 +213,17 @@ const buildSessionMetadata = (messages: SessionMessage[]): Record<string, string
   return metadata;
 };
 
+const buildScheduleTranscript = (messages: SessionMessage[]): string =>
+  messages
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${message.content}`)
+    .join("\n\n")
+    .slice(0, 8000);
+
 export interface DispatchScheduledNodeInput {
   container: Container;
   session: Session;
+  flow: Flow;
   node: FlowNode;
   messages: SessionMessage[];
 }
@@ -209,12 +231,18 @@ export interface DispatchScheduledNodeInput {
 // Reaching a scheduled node creates an active schedule row and pauses the
 // session (no initial message is generated). The worker resumes it when due.
 export async function dispatchScheduledNode(input: DispatchScheduledNodeInput): Promise<void> {
-  const { container, session, node, messages } = input;
+  const { container, session, flow, node, messages } = input;
   try {
+    const metadata = buildSessionMetadata(messages);
+    const priorOutputs = await container.repos.sessionStepOutputs.listBySession(session.id);
     const result = await container.useCases.scheduleNodeEvent.execute({
       session,
       node,
-      metadata: buildSessionMetadata(messages),
+      metadata,
+      priorStepOutputs: priorOutputs.error ? [] : priorOutputs.data,
+      insights: Object.entries(metadata).map(([key, value]) => ({ key, value })),
+      transcript: buildScheduleTranscript(messages),
+      contextDocs: flow.contextDocs,
     });
 
     let content: string;

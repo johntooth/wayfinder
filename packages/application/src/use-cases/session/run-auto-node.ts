@@ -8,12 +8,14 @@ import {
   type ILanguageModel,
   type INodeExecutor,
   type ISessionRepository,
+  type ISessionStepOutputRepository,
   type NodeExecutionOutput,
   type Result,
   type Session,
   type SessionMessage,
 } from "@rbrasier/domain";
-import { extractStructuredFields } from "../document/structured-fields";
+import { accumulateInsights } from "../../services/accumulate-insights";
+import { resolveFieldValues } from "../../services/resolve-field-values";
 
 export interface RunAutoNodeInput {
   session: Session;
@@ -28,11 +30,22 @@ export interface RunAutoNodeOutput {
   correlationId: string;
   status: NodeExecutionOutput["status"];
   message?: string;
+  // The executor's synchronous result data. Only populated when an executor
+  // (e.g. the mock) completes inline; n8n returns `pending` with empty data and
+  // delivers the real result via the inbound callback.
+  data: Record<string, unknown>;
 }
 
 export interface RunAutoNodeClock {
   generateCorrelationId: () => string;
   now: () => Date;
+}
+
+// The node's `config.executor` selects which executor runs: `n8n` dispatches the
+// real (async) workflow, `mock` completes synchronously for testing.
+export interface NodeExecutors {
+  n8n: INodeExecutor;
+  mock: INodeExecutor;
 }
 
 const defaultClock: RunAutoNodeClock = {
@@ -58,30 +71,31 @@ export class RunAutoNode {
   constructor(
     private readonly sessions: ISessionRepository,
     private readonly languageModel: ILanguageModel,
-    private readonly executor: INodeExecutor,
+    private readonly executors: NodeExecutors,
+    private readonly sessionStepOutputs: ISessionStepOutputRepository,
     private readonly clock: RunAutoNodeClock = defaultClock,
   ) {}
 
   async execute(input: RunAutoNodeInput): Promise<Result<RunAutoNodeOutput>> {
     const config = input.node.config as unknown as AutoNodeConfig;
 
-    if (!config.webhookUrl) {
-      return err(domainError("VALIDATION_FAILED", "Auto node has no webhook URL configured."));
+    if (config.executor !== "mock" && !config.webhookUrl) {
+      return err(domainError("VALIDATION_FAILED", "Auto node has no n8n workflow configured."));
     }
 
     const requestFields = config.requestFields ?? [];
-    let fields: Record<string, string> = {};
-    if (requestFields.length > 0) {
-      const extracted = await extractStructuredFields(this.languageModel, {
-        fields: requestFields,
-        transcript: buildTranscript(input.messages),
-        contextDocs: input.flow.contextDocs,
-        instruction: config.instruction,
-        purpose: "autoNodeFields",
-      });
-      if (extracted.error) return extracted;
-      fields = extracted.data;
-    }
+    const priorOutputs = await this.sessionStepOutputs.listBySession(input.session.id);
+    const fieldsResult = await resolveFieldValues(this.languageModel, {
+      fields: requestFields,
+      valueSources: config.requestFieldValues ?? {},
+      priorStepOutputs: priorOutputs.error ? [] : priorOutputs.data,
+      insights: accumulateInsights(input.messages),
+      transcript: buildTranscript(input.messages),
+      contextDocs: input.flow.contextDocs,
+      instruction: config.instruction,
+      purpose: "autoNodeFields",
+    });
+    if (fieldsResult.error) return fieldsResult;
 
     const correlationId = this.clock.generateCorrelationId();
     const sentAt = this.clock.now().toISOString();
@@ -94,7 +108,8 @@ export class RunAutoNode {
     });
     if (recorded.error) return recorded;
 
-    const executed = await this.executor.execute({
+    const executor = config.executor === "mock" ? this.executors.mock : this.executors.n8n;
+    const executed = await executor.execute({
       nodeId: input.node.id,
       sessionId: input.session.id,
       userId: input.userId,
@@ -105,7 +120,8 @@ export class RunAutoNode {
       instruction: config.instruction,
       correlationId,
       webhookUrl: config.webhookUrl,
-      fields,
+      fields: fieldsResult.data,
+      responseFields: config.responseFields ?? [],
     });
     if (executed.error) return executed;
 
@@ -113,6 +129,7 @@ export class RunAutoNode {
       correlationId,
       status: executed.data.status,
       message: executed.data.message,
+      data: executed.data.data,
     });
   }
 }

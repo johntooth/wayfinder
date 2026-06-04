@@ -76,7 +76,7 @@ export class ScheduledSessionFireHandler implements IScheduleFireHandler {
     const gatheredContext = buildGatheredContext(messages);
 
     if (newNode.type === "scheduled" && (await isScheduledNodeEnabled(this.container))) {
-      await dispatchScheduledNode({ container: this.container, session: advancedSession, node: newNode, messages });
+      await dispatchScheduledNode({ container: this.container, session: advancedSession, flow, node: newNode, messages });
       return ok(undefined);
     }
 

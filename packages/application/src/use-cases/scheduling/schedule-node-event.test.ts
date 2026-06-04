@@ -1,14 +1,31 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ok, err, domainError } from "@rbrasier/domain";
 import type {
   FlowNode,
   IClock,
+  ILanguageModel,
   IScheduleRepository,
   NewSessionSchedule,
   Session,
   SessionSchedule,
+  SessionStepOutput,
 } from "@rbrasier/domain";
 import { ScheduleNodeEvent } from "./schedule-node-event";
+
+const usage = {
+  promptTokens: 1,
+  completionTokens: 1,
+  systemTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+};
+
+const makeLanguageModel = (fireAt: string): ILanguageModel => ({
+  provider: "anthropic",
+  generateObject: vi.fn().mockResolvedValue(ok({ object: { fire_at: fireAt }, usage })),
+  streamText: vi.fn(),
+  streamObject: vi.fn(),
+});
 
 const NOW = new Date("2026-06-03T10:00:00.000Z");
 
@@ -174,5 +191,81 @@ describe("ScheduleNodeEvent", () => {
     expect(repo.created?.recurring).toBe(true);
     expect(repo.created?.maxOccurrences).toBe(4);
     expect(repo.created?.kind).toBe("cron");
+  });
+
+  it("uses a literal specSource as the fire timestamp for an `at` node", async () => {
+    const repo = makeRepo();
+    const useCase = new ScheduleNodeEvent(repo, fixedClock);
+
+    const result = await useCase.execute({
+      session: makeSession(),
+      node: makeNode({
+        kind: "at",
+        spec: "",
+        specSource: { kind: "literal", value: "2026-12-25T09:00:00.000Z" },
+      }),
+    });
+
+    expect(result.data?.status).toBe("active");
+    expect(result.data?.nextFireAt.toISOString()).toBe("2026-12-25T09:00:00.000Z");
+    expect(repo.created?.spec).toBe("2026-12-25T09:00:00.000Z");
+  });
+
+  it("draws an `at` specSource from a prior step output", async () => {
+    const repo = makeRepo();
+    const useCase = new ScheduleNodeEvent(repo, fixedClock);
+    const priorOutput: SessionStepOutput = {
+      id: "out-1",
+      sessionId: "sess-1",
+      flowId: "flow-1",
+      nodeId: "node-0",
+      messageId: null,
+      fields: [
+        { key: "renewal_date", label: "Renewal", type: "date", value: "2027-01-15T00:00:00.000Z" },
+      ],
+      createdAt: NOW,
+      updatedAt: NOW,
+    };
+
+    const result = await useCase.execute({
+      session: makeSession(),
+      node: makeNode({
+        kind: "at",
+        spec: "",
+        specSource: { kind: "step_field", nodeId: "node-0", fieldKey: "renewal_date" },
+      }),
+      priorStepOutputs: [priorOutput],
+    });
+
+    expect(result.data?.nextFireAt.toISOString()).toBe("2027-01-15T00:00:00.000Z");
+  });
+
+  it("resolves an `at` ai specSource via the language model", async () => {
+    const repo = makeRepo();
+    const useCase = new ScheduleNodeEvent(
+      repo,
+      fixedClock,
+      makeLanguageModel("2026-10-10T12:00:00.000Z"),
+    );
+
+    const result = await useCase.execute({
+      session: makeSession(),
+      node: makeNode({ kind: "at", spec: "", specSource: { kind: "ai" } }),
+      transcript: "User: schedule it for October the tenth at noon",
+    });
+
+    expect(result.data?.nextFireAt.toISOString()).toBe("2026-10-10T12:00:00.000Z");
+  });
+
+  it("fails when an `at` ai specSource has no language model configured", async () => {
+    const repo = makeRepo();
+    const useCase = new ScheduleNodeEvent(repo, fixedClock);
+
+    const result = await useCase.execute({
+      session: makeSession(),
+      node: makeNode({ kind: "at", spec: "", specSource: { kind: "ai" } }),
+    });
+
+    expect(result.data?.status).toBe("failed");
   });
 });
