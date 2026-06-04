@@ -3,7 +3,6 @@ import {
   CreateUser,
   DeleteUser,
   FailJob,
-  FireDueSchedules,
   GetFeatureFlag,
   GetSystemHealth,
   GetUsageSummary,
@@ -13,7 +12,6 @@ import {
   ListUsers,
   LogAuditEvent,
   LogError,
-  NotifyScheduleFireHandler,
   PingJob,
   RegisterJob,
   TrackUsage,
@@ -33,9 +31,6 @@ import {
   DrizzleFlowEdgeRepository,
   DrizzleFlowNodeRepository,
   DrizzleJobRepository,
-  DrizzleScheduleRepository,
-  DrizzleScheduleRunRepository,
-  DrizzleSessionMessageRepository,
   DrizzleSessionRepository,
   DrizzleSessionStepOutputRepository,
   DrizzleSystemSettingsRepository,
@@ -45,11 +40,11 @@ import {
   PinoLogger,
   RuntimeConfigStore,
   SchedulerWorker,
-  SystemClock,
   createDatabase,
   withOptionalLangfuse,
   withUsageTracking,
 } from "@rbrasier/adapters";
+import { HttpTickFirer } from "./scheduler/http-tick-firer.js";
 import { EMBEDDINGS_DEFAULT_PROVIDER } from "@rbrasier/shared";
 import type { Env } from "./env.js";
 
@@ -67,13 +62,9 @@ export const buildContainer = (env: Env) => {
   const jobRepo = new DrizzleJobRepository(db);
   const systemSettings = new DrizzleSystemSettingsRepository(db);
   const sessions = new DrizzleSessionRepository(db);
-  const sessionMessages = new DrizzleSessionMessageRepository(db);
   const flowNodes = new DrizzleFlowNodeRepository(db);
   const flowEdges = new DrizzleFlowEdgeRepository(db);
   const sessionStepOutputs = new DrizzleSessionStepOutputRepository(db);
-  const schedules = new DrizzleScheduleRepository(db);
-  const scheduleRuns = new DrizzleScheduleRunRepository(db);
-  const clock = new SystemClock();
 
   const bedrockEnvCredentials =
     env.AWS_BEDROCK_REGION && env.AWS_BEDROCK_ACCESS_KEY_ID && env.AWS_BEDROCK_SECRET_ACCESS_KEY
@@ -118,13 +109,19 @@ export const buildContainer = (env: Env) => {
   });
   const healthChecker = new CompositeHealthChecker(dbChecker, aiChecker, jobRepo);
 
-  // The in-process scheduler: a tick loop (cron) that claims due schedules,
-  // fires them, recurs/completes, and records each fire to the run log.
-  const scheduleFireHandler = new NotifyScheduleFireHandler(sessionMessages, flowNodes);
-  const fireDueSchedules = new FireDueSchedules(schedules, scheduleRuns, scheduleFireHandler, clock);
-  const schedulerWorker = new SchedulerWorker(fireDueSchedules, jobRepo, logger, {
-    tickIntervalMs: env.SCHEDULER_TICK_MS,
-  });
+  // The scheduler heartbeat: a tick loop (cron) that POSTs the web tick endpoint
+  // each interval and reports health to job_registry. The firing logic itself
+  // lives behind that endpoint (where the AI turn machinery is). Only started
+  // when both the URL and shared secret are configured.
+  const schedulerWorker =
+    env.SCHEDULER_TICK_URL && env.SCHEDULER_TICK_SECRET
+      ? new SchedulerWorker(
+          new HttpTickFirer(env.SCHEDULER_TICK_URL, env.SCHEDULER_TICK_SECRET),
+          jobRepo,
+          logger,
+          { tickIntervalMs: env.SCHEDULER_TICK_MS },
+        )
+      : null;
 
   return {
     env,
@@ -132,7 +129,7 @@ export const buildContainer = (env: Env) => {
     logger,
     runtimeConfig,
     schedulerWorker,
-    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, systemSettings, sessions, sessionMessages, flowNodes, flowEdges, sessionStepOutputs, schedules, scheduleRuns },
+    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, systemSettings, sessions, flowNodes, flowEdges, sessionStepOutputs },
     services: { llm, errorLogger, auditLogger },
     useCases: {
       applyAutoNodeResult: new ApplyAutoNodeResult(sessions, flowNodes, flowEdges, sessionStepOutputs),

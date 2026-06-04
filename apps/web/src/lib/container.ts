@@ -1,5 +1,6 @@
 import {
   AddContextDoc,
+  AdvanceScheduledNode,
   AddSessionUpload,
   DeleteAllErrors,
   CreateFlow,
@@ -274,6 +275,7 @@ const build = () => {
       runTurn: new RunTurn(sessions, sessionMessages, flowEdges),
       runAutoNode: new RunAutoNode(sessions, llm, nodeExecutor),
       scheduleNodeEvent: new ScheduleNodeEvent(schedules, clock),
+      advanceScheduledNode: new AdvanceScheduledNode(sessions, flowEdges),
       listScheduleRuns: new ListScheduleRuns(scheduleRuns),
       overrideBranch: new OverrideBranch(sessions, flowEdges),
       heartbeatTyping: new HeartbeatTyping(sessionTyping),
