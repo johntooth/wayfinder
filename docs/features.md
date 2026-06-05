@@ -23,11 +23,6 @@ Before publishing, a flow owner can preview the exact AI prompt that will be gen
 
 _Why it matters:_ AI prompts are sensitive to wording. Seeing the final rendered prompt removes uncertainty and dramatically reduces the feedback loop during flow authoring.
 
-### Flow Selector Search
-When an organisation has many flows, the analytics dashboard's flow selector caps visible cards and reveals an auto-suggest search input. Flows are filtered by name as the user types, making it fast to navigate to the right flow regardless of how many exist.
-
-_Why it matters:_ Without search, large flow lists become unmanageable in the analytics UI. Search keeps the dashboard usable as usage grows.
-
 ---
 
 ## Conversational AI Sessions
@@ -46,11 +41,6 @@ _Why it matters:_ Without a structured confidence signal the system would need h
 Multiple authenticated users can participate in the same session simultaneously via a shared link. All participants can send messages; new messages and AI replies propagate to every open window within a few seconds. A typing indicator shows when another participant is composing a message.
 
 _Why it matters:_ Many document-heavy processes involve more than one stakeholder. Collaboration lets a subject-matter expert and a document author work through a session together without one person relaying questions to the other.
-
-### Session Sharing (Read-only)
-The session owner can copy a share link that renders the session in read-only mode for any authenticated user. Shared viewers see the full message history, step rail, and confidence bars but cannot send messages.
-
-_Why it matters:_ Clients, reviewers, and managers often need visibility into a process without participating. Read-only sharing provides that without granting edit access.
 
 ### Branch-Aware Context
 When a flow has multiple outgoing edges from a step (a branching node), a separate AI call selects which branch to take. The branch-choice prompt includes each candidate step's purpose (its completion criteria and instructions) and requests a written rationale before committing to a branch. This gives the model the context it needs to make correct branching decisions.
@@ -85,11 +75,6 @@ _Why it matters:_ Real documents often contain sections that summarise context i
 PDF, DOCX, and XLSX files uploaded as flow-level context documents are parsed and their content is injected into the AI's background knowledge for every session on that flow. This allows flows to be grounded in reference material such as policies, contracts, or product specifications.
 
 _Why it matters:_ AI models have a training cutoff and no access to internal documents. Injecting extracted content bridges that gap, allowing the AI to answer domain-specific questions accurately without fine-tuning.
-
-### Template Validation
-Templates are validated at upload time: files must not exceed the configured content size limit, and every `{{ tag }}` must be syntactically valid. Uploads that contain untagged content where tags are expected, or tags with invalid annotations, are rejected with a specific error message explaining what to fix.
-
-_Why it matters:_ A malformed template produces a broken document or a silent generation failure. Catching errors at upload time, before any sessions run, saves flow authors from diagnosing mysterious generation failures.
 
 ---
 
@@ -129,11 +114,6 @@ Flows can be configured to start sessions automatically on a cron schedule or fi
 
 _Why it matters:_ Many compliance and reporting processes must run at specific times — end of day, end of month, on a trigger date. Scheduling lets these flows run reliably without requiring a human to manually initiate them.
 
-### Scheduler Auto-Resume
-If a scheduled session is interrupted — due to a worker restart, deployment, or transient error — it automatically resumes from its last LangGraph checkpoint when the worker comes back online. No session is silently lost or left in a half-complete state.
-
-_Why it matters:_ Reliability is a prerequisite for unattended automation. Without auto-resume a failed worker process would leave scheduled sessions permanently stalled, requiring manual diagnosis and restarting.
-
 ### Plain-Language Schedule UX
 Schedule recurrence is configured using a plain-language input (e.g. "every weekday at 9 AM", "first Monday of the month") rather than raw cron syntax. The UI shows a human-readable confirmation of the next scheduled run time.
 
@@ -160,17 +140,7 @@ _Why it matters:_ LLM costs and latency are opaque without instrumentation. Lang
 
 ---
 
-## Authentication & AI Providers
-
-### Magic Link Authentication
-Users log in via a passwordless email magic link. The admin seed email is automatically promoted to admin on first login. No password management is required.
-
-_Why it matters:_ Magic links eliminate password reuse, credential theft, and password-reset flows. For internal tools where email is already the identity source of truth, they provide secure login with minimal friction.
-
-### Username/Password Authentication
-Traditional username and password login is available alongside magic links for deployments that require it — for example, environments where users do not have reliable email access or where a local identity store is preferred.
-
-_Why it matters:_ Some enterprise environments have restrictions on email-based authentication, or existing tooling that expects credential-based login. Offering both methods ensures Wayfinder can be deployed in a wider range of organisational contexts.
+## AI Providers
 
 ### Multi-Provider AI
 The AI provider, model ID, and API key are all configurable via environment variables. Supported providers are Anthropic, OpenAI, Mistral, and AWS Bedrock. Different steps in a flow can use different models; the embedding provider is configured independently of the chat provider.
