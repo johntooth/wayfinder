@@ -70,14 +70,27 @@ export default defineConfig({
       testMatch: /auth\.setup\.ts/,
     },
 
-    // 2. Main test suite — Chromium with saved auth
+    // 2. Seed deterministic fixtures, then tear them down once everything that
+    //    depends on the seed has finished.
+    {
+      name: 'seed',
+      testMatch: /seed\.setup\.ts/,
+      dependencies: ['setup'],
+      teardown: 'cleanup',
+    },
+    {
+      name: 'cleanup',
+      testMatch: /cleanup\.teardown\.ts/,
+    },
+
+    // 3. Main test suite — Chromium with saved auth
     {
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/admin.json',
       },
-      dependencies: ['setup'],
+      dependencies: ['setup', 'seed'],
       testIgnore: /auth\.setup\.ts/,
     },
   ],
