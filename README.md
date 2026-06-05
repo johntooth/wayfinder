@@ -18,14 +18,12 @@ See [`docs/features.md`](docs/features.md) for full detail on every feature.
 ### Workflow Design
 - **Visual Canvas Builder** — drag-and-drop node editor for designing multi-step workflows; admins configure each step's AI instructions, completion criteria, and output type without writing code.
 - **Flow Visibility Control** — flows can be set to private or global, giving admins control over which workflows users can access before they are ready.
-- **Step Prompt Preview** — flow owners can preview the exact AI prompt that will be generated for each step before publishing, catching configuration mistakes early.
 
 ### Conversational AI Sessions
 - **Chat Interface** — users follow published flows via a streaming multi-turn chat powered by LangGraph; the AI gathers information per step and advances automatically when confidence is high enough.
 - **Structured AI Turns** — each AI reply includes a scored confidence assessment generated in parallel with the text stream, making step advancement deterministic and auditable.
 - **Real-time Collaborative Sessions** — multiple authenticated users can participate in the same session simultaneously via a share link, with typing indicators and near-real-time message propagation.
 - **AI Transparency Modals** — users can inspect the AI's reasoning, information sources, and confidence score for any message, presented in plain language.
-- **Session Sharing** — owners can share a read-only session link so reviewers and managers can follow a conversation without participating.
 
 ### Document Generation
 - **DOCX Document Generation** — flow steps automatically fill Word document templates with information gathered during chat, producing finished reports, contracts, and assessments.
@@ -43,7 +41,6 @@ See [`docs/features.md`](docs/features.md) for full detail on every feature.
 - **n8n Automation Integration** — flow steps can trigger n8n workflows as auto-nodes, posting session context as structured JSON and resuming automatically when n8n responds.
 - **n8n Workflow Context Mapping** — outputs returned by n8n are mapped back into the session context so downstream AI steps can reference and build on them.
 - **Scheduled Sessions** — flows can start sessions automatically on a cron schedule or interval, running unattended through all auto-nodes.
-- **Scheduler Auto-Resume** — interrupted scheduled sessions resume automatically from their last checkpoint when the worker restarts, with no manual intervention required.
 - **Plain-Language Schedule UX** — schedules are configured with plain-language recurrence patterns rather than raw cron syntax.
 
 ### Analytics & Observability
@@ -51,9 +48,7 @@ See [`docs/features.md`](docs/features.md) for full detail on every feature.
 - **Flow Insights Dashboard** — per-flow step-level drop-off rates, average confidence, node breakdown, and template field value reporting.
 - **Langfuse Integration** — optional AI observability tracing for LLM call latency, token counts, and prompt/response inspection.
 
-### Authentication & AI Providers
-- **Magic Link Authentication** — passwordless email login; the admin seed email is promoted to admin automatically on first login.
-- **Username/Password Authentication** — traditional credential login available alongside magic links for environments that require it.
+### AI Providers
 - **Multi-Provider AI** — Anthropic, OpenAI, Mistral, and AWS Bedrock supported; provider and model are configurable per deployment via environment variables.
 
 ---
