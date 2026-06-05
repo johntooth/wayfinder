@@ -14,6 +14,7 @@
  */
 
 import { test, expect } from './helpers/base';
+import { loadSeedFixtures } from './helpers/seed';
 
 const AI_MODE = process.env.USE_REAL_AI === 'true' ? 'REAL AI' : 'MOCKED AI';
 
@@ -40,7 +41,9 @@ test.describe('Chat: List', () => {
     await page.goto('/chats');
     await page.waitForLoadState('networkidle');
 
-    await expect(page.getByRole('button', { name: /new chat/i })).toBeVisible();
+    await expect(
+      page.getByRole('banner').getByRole('button', { name: /new chat/i }),
+    ).toBeVisible();
   });
 });
 
@@ -50,6 +53,9 @@ test.describe('Chat: Session', () => {
    * If no sessions exist this returns null and the test skips.
    */
   async function resolveExistingSessionId(page: import('@playwright/test').Page): Promise<string | null> {
+    const seeded = loadSeedFixtures()?.sessionId;
+    if (seeded) return seeded;
+
     await page.goto('/chats');
     await page.waitForLoadState('networkidle');
 

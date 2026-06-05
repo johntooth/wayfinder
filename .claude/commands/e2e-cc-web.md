@@ -1,12 +1,29 @@
-# Running the Playwright E2E suite inside Claude Code (web sandbox)
+# /e2e-cc-web — Bootstrap & Run Playwright E2E in the Claude Code Web Sandbox
 
-The CI workflow (`.github/workflows/e2e.yml`) only runs against `main`, and the
-Claude Code web container starts with **no database, no app server, and no
-browser**. Outbound network is restricted: the **npm registry and Ubuntu apt
-mirrors are reachable, but the Playwright/Chrome download CDNs return 403**, so
-`npx playwright install` fails. The recipe below is what actually works here.
+Use this skill to run the Playwright e2e suite from **inside a Claude Code web
+container**, where there is **no database, no app server, and no browser**, and
+where the Playwright/Chrome download CDNs are blocked (403). This is the
+"stand everything up from nothing" recipe.
 
-## 1. Postgres (with pgvector) — Docker Hub is rate-limited, run it locally
+> Difference from `/e2e`: `/e2e` assumes the dev server and a Playwright browser
+> are already available and drives tests via the MCP connector. `/e2e-cc-web`
+> provisions Postgres, the app server, and a Chromium binary first, then runs
+> the suite via the CLI. Reach for this one in a fresh web session.
+
+---
+
+## Environment constraints (why this recipe exists)
+
+- The CI workflow (`.github/workflows/e2e.yml`) only runs against `main`.
+- The web container starts with no DB, no app server, no browser.
+- Outbound network is restricted: the **npm registry and Ubuntu apt mirrors are
+  reachable**, but the **Playwright/Chrome download CDNs return 403**, so
+  `npx playwright install` fails. We sidestep this with `@sparticuz/chromium`,
+  which ships a headless Chromium inside its npm tarball.
+
+---
+
+## 1. Postgres (with pgvector), run locally as the `ubuntu` user
 
 ```bash
 # pgvector isn't preinstalled; the apt mirror has it
@@ -23,6 +40,8 @@ su ubuntu -c "$PGBIN/pg_ctl -D /tmp/pgdata -o '-p 5432 -k /tmp/pgsock' -l /tmp/p
 PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE wayfinder_e2e;"
 PGPASSWORD=postgres psql -h localhost -U postgres -d wayfinder_e2e -c "CREATE EXTENSION IF NOT EXISTS vector;"
 ```
+
+---
 
 ## 2. Install deps, migrate, start the app
 
@@ -45,6 +64,8 @@ pnpm db:migrate
 nohup pnpm --filter @wayfinder/web dev >/tmp/web.log 2>&1 &
 # wait until http://localhost:3000 answers (307 redirect to /login is fine)
 ```
+
+---
 
 ## 3. A Chromium that doesn't need the blocked CDN
 
@@ -78,6 +99,8 @@ config.projects = (base as any).projects.map((p: any) => ({
 export default config;
 ```
 
+---
+
 ## 4. Run
 
 ```bash
@@ -86,6 +109,28 @@ npx playwright test --config playwright.local.config.ts --project=setup   # auth
 npx playwright test --config playwright.local.config.ts --project=chromium \
   phase-scheduling.spec.ts admin-flow-editing.spec.ts --reporter=list
 ```
+
+To run the **full** suite, drop the per-file arguments and run all chromium specs:
+
+```bash
+npx playwright test --config playwright.local.config.ts --project=chromium --reporter=list
+```
+
+---
+
+## 5. Report
+
+After the run, produce a structured report:
+
+- **Summary table**: Passed / Failed / Skipped counts.
+- **Failures**: for each — test name + file, verbatim error (first 3 lines),
+  diagnosed root cause (read the source, don't assume), proposed fix.
+- **Skips**: categorise as *by design* (needs specific DB state) vs *needs
+  investigation*.
+- **Recommendations**: actionable next steps only, distinguishing test bugs from
+  application bugs.
+
+---
 
 ## Gotchas
 
