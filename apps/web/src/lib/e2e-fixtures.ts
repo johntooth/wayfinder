@@ -8,10 +8,6 @@ import type { Container } from "./container";
 // whole E2E database (seed + anything the specs themselves created).
 
 const SEED_FLOW_NAME = "E2E SEED Onboarding Flow";
-const EXTRA_FLOW_PREFIX = "E2E SEED Extra";
-// The flow-selector search affordance only appears once more than five
-// flows-with-sessions exist, so seed enough extras to cross that threshold.
-const EXTRA_FLOW_COUNT = 5;
 
 const unwrap = <T>(result: Result<T>, context: string): T => {
   if ("error" in result) {
@@ -34,58 +30,9 @@ const resolveAdminUserId = async (container: Container): Promise<string> => {
   return created.id;
 };
 
-const createPublishedFlowWithSession = async (
-  container: Container,
-  ownerUserId: string,
-  name: string,
-): Promise<{ flowId: string; sessionId: string; nodeId: string }> => {
-  const flow = unwrap(
-    await container.useCases.createFlow.execute({
-      name,
-      description: "Seeded E2E fixture flow",
-      expertRole: "E2E Seed Expert",
-      ownerUserId,
-    }),
-    "create flow",
-  );
-
-  const node = unwrap(
-    await container.useCases.createFlowNode.execute({
-      flowId: flow.id,
-      type: "conversational",
-      name: "Gather details",
-      positionX: 120,
-      positionY: 120,
-      config: {
-        aiInstruction: "Collect the requester's name and organisation.",
-        doneWhen: "Name and organisation are known.",
-        outputType: "conversation_only",
-      },
-    }),
-    "create flow node",
-  );
-
-  unwrap(
-    await container.useCases.updateFlow.execute(
-      flow.id,
-      { status: "published", visibility: { kind: "global" } },
-      { isAdmin: true },
-    ),
-    "publish flow",
-  );
-
-  const session = unwrap(
-    await container.useCases.startSession.execute({ flowId: flow.id, userId: ownerUserId }),
-    "start session",
-  );
-
-  return { flowId: flow.id, sessionId: session.id, nodeId: node.id };
-};
-
 export interface SeedResult {
   flowId: string;
   sessionId: string;
-  extraFlowIds: string[];
 }
 
 export const seedE2EFixtures = async (container: Container): Promise<SeedResult> => {
@@ -255,18 +202,7 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     "create step output",
   );
 
-  // ── Extra published flows-with-sessions to exercise the >5 selector path ──
-  const extraFlowIds: string[] = [];
-  for (let index = 1; index <= EXTRA_FLOW_COUNT; index++) {
-    const extra = await createPublishedFlowWithSession(
-      container,
-      ownerUserId,
-      `${EXTRA_FLOW_PREFIX} ${index}`,
-    );
-    extraFlowIds.push(extra.flowId);
-  }
-
-  return { flowId: flow.id, sessionId: session.id, extraFlowIds };
+  return { flowId: flow.id, sessionId: session.id };
 };
 
 // Clears every flow/session row in the (dedicated) E2E database — the seed

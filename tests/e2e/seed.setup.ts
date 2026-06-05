@@ -16,5 +16,5 @@ setup('seed e2e fixtures', async ({ request }) => {
   ).toBeTruthy();
 
   const result = await response.json();
-  console.log(`✅ Seed: flow=${result.flowId} session=${result.sessionId} extras=${result.extraFlowIds?.length ?? 0}`);
+  console.log(`✅ Seed: flow=${result.flowId} session=${result.sessionId}`);
 });
