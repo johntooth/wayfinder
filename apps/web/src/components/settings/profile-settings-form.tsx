@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";
+import { ChangePasswordModal } from "./change-password-modal";
 
 export function ProfileSettingsForm() {
   const utils = trpc.useUtils();
@@ -15,6 +16,7 @@ export function ProfileSettingsForm() {
   const [name, setName] = useState("");
   const [role, setRole] = useState("");
   const [team, setTeam] = useState("");
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   useEffect(() => {
     if (!meQuery.data) return;
@@ -40,6 +42,7 @@ export function ProfileSettingsForm() {
   };
 
   return (
+    <>
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Profile</CardTitle>
@@ -90,12 +93,27 @@ export function ProfileSettingsForm() {
           </div>
         )}
 
-        <div className="flex justify-end">
+        <div className="flex items-center justify-between">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowChangePassword(true)}
+            disabled={meQuery.isLoading}
+          >
+            Change password
+          </Button>
           <Button onClick={handleSave} disabled={updateMutation.isPending || meQuery.isLoading}>
             {updateMutation.isPending ? "Saving…" : "Save changes"}
           </Button>
         </div>
       </CardContent>
     </Card>
+
+    <ChangePasswordModal
+      open={showChangePassword}
+      onClose={() => setShowChangePassword(false)}
+    />
+    </>
   );
 }
