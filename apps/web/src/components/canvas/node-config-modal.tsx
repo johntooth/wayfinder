@@ -270,20 +270,23 @@ export function NodeConfigModal({
   const removeCustomField = (id: string) =>
     setCustomFields((prev) => prev.filter((field) => field.id !== id));
 
-  // When the executionMode field is present, default it to "production" so the
-  // workflow always runs in production mode unless the author explicitly changes it.
+  // Apply defaults for advanced fields the first time they appear:
+  // - executionMode → "production" literal (n8n requires an explicit mode)
+  // - headers / params / query / webhookUrl → no value (omit unless overridden)
   useEffect(() => {
-    const hasExecutionMode = advancedDerivedInputs.some((field) => field.key === "executionmode");
-    if (!hasExecutionMode) return;
+    if (advancedDerivedInputs.length === 0) return;
     setValues((prev) => {
-      if (prev.requestFieldValues["executionmode"]) return prev;
-      return {
-        ...prev,
-        requestFieldValues: {
-          ...prev.requestFieldValues,
-          executionmode: { kind: "literal", value: "production" },
-        },
-      };
+      const updates: Record<string, FieldValueSource> = {};
+      for (const field of advancedDerivedInputs) {
+        if (prev.requestFieldValues[field.key]) continue;
+        if (field.key === "executionmode") {
+          updates[field.key] = { kind: "literal", value: "production" };
+        } else {
+          updates[field.key] = { kind: "none" };
+        }
+      }
+      if (Object.keys(updates).length === 0) return prev;
+      return { ...prev, requestFieldValues: { ...prev.requestFieldValues, ...updates } };
     });
   }, [advancedDerivedInputs]);
 
