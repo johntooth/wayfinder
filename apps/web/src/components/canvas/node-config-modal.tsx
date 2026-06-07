@@ -45,6 +45,11 @@ const COLOURS = [
 
 const EXAMPLE_TAG = "{{First name}}";
 
+// Field keys that are low-level HTTP concerns and should be hidden from the
+// primary "Add request fields" list behind a collapsed "Advanced fields" section.
+// Keys are normalised (lowercase, alphanumeric only) to match TemplateField.key.
+const ADVANCED_REQUEST_FIELD_KEYS = new Set(["headers", "params", "query", "webhookurl", "executionmode"]);
+
 export type NodeConfigType = "conversational" | "auto" | "scheduled";
 
 // An author-added request field while it is being edited. The key is derived
@@ -241,6 +246,8 @@ export function NodeConfigModal({
   const schema = schemaQuery.data ?? null;
 
   const derivedInputs = usesN8n && schema ? schema.inputs : [];
+  const regularDerivedInputs = derivedInputs.filter((field) => !ADVANCED_REQUEST_FIELD_KEYS.has(field.key));
+  const advancedDerivedInputs = derivedInputs.filter((field) => ADVANCED_REQUEST_FIELD_KEYS.has(field.key));
   const derivedOutputs = usesN8n && schema ? schema.outputs : [];
   // Mock executor builds its request fields from the line editor.
   const mockRequestFields = requestParsed.fields;
@@ -262,6 +269,23 @@ export function NodeConfigModal({
     setCustomFields((prev) => prev.map((field) => (field.id === id ? { ...field, value } : field)));
   const removeCustomField = (id: string) =>
     setCustomFields((prev) => prev.filter((field) => field.id !== id));
+
+  // When the executionMode field is present, default it to "production" so the
+  // workflow always runs in production mode unless the author explicitly changes it.
+  useEffect(() => {
+    const hasExecutionMode = advancedDerivedInputs.some((field) => field.key === "executionmode");
+    if (!hasExecutionMode) return;
+    setValues((prev) => {
+      if (prev.requestFieldValues["executionmode"]) return prev;
+      return {
+        ...prev,
+        requestFieldValues: {
+          ...prev.requestFieldValues,
+          executionmode: { kind: "literal", value: "production" },
+        },
+      };
+    });
+  }, [advancedDerivedInputs]);
 
   const selectWorkflow = (workflowId: string) => {
     const workflow = workflows.find((candidate) => candidate.id === workflowId);
@@ -786,7 +810,7 @@ export function NodeConfigModal({
                     ) : (
                       <>
                         <FieldValueList
-                          fields={derivedInputs}
+                          fields={regularDerivedInputs}
                           values={values.requestFieldValues}
                           onChange={setFieldValue}
                           priorStepFields={priorStepFields}
@@ -837,6 +861,22 @@ export function NodeConfigModal({
                         >
                           + Add field
                         </button>
+                        {advancedDerivedInputs.length > 0 && (
+                          <details className="group mt-1">
+                            <summary className="cursor-pointer list-none text-[13px] font-medium text-[#918d87] hover:text-[#605c57] [&::-webkit-details-marker]:hidden">
+                              <span className="group-open:hidden">▶ Advanced fields</span>
+                              <span className="hidden group-open:inline">▼ Advanced fields</span>
+                            </summary>
+                            <div className="mt-2 space-y-2 rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] p-3">
+                              <FieldValueList
+                                fields={advancedDerivedInputs}
+                                values={values.requestFieldValues}
+                                onChange={setFieldValue}
+                                priorStepFields={priorStepFields}
+                              />
+                            </div>
+                          </details>
+                        )}
                       </>
                     )}
                   </div>
