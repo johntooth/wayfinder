@@ -261,6 +261,11 @@ function CanvasInner({ flowId }: { flowId: string }) {
     if (!editingNodeId) return;
     setIsSavingConfig(true);
 
+    // Read the existing node's raw config so we can forward fields that the
+    // modal does not manage (documentTemplateFields, documentTemplateStructuredContent).
+    // These are written by the template upload endpoint; omitting them here would
+    // wipe them from the DB on every conversational-node save.
+    const existingNodeConfig = ((rfNodes.find((n) => n.id === editingNodeId)?.data as { config?: Record<string, unknown> })?.config ?? {});
     const buildConfig = (): Record<string, unknown> => {
       if (values.type === "auto") {
         return {
@@ -277,6 +282,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
       if (values.type === "scheduled") {
         return scheduledConfigFromValues(values);
       }
+      const hasTemplate = values.outputType === "generate_document" && !!values.documentTemplatePath;
       return {
         aiInstruction: values.aiInstruction,
         doneWhen: values.neverDone ? "" : values.doneWhen,
@@ -285,6 +291,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         documentTemplatePath: values.documentTemplatePath ?? null,
         documentTemplateFilename: values.documentTemplateFilename ?? null,
         documentTemplateContent: values.documentTemplateContent ?? null,
+        documentTemplateFields: hasTemplate ? (existingNodeConfig.documentTemplateFields ?? null) : null,
+        documentTemplateStructuredContent: hasTemplate ? (existingNodeConfig.documentTemplateStructuredContent ?? null) : null,
       };
     };
     const config: Record<string, unknown> = buildConfig();
@@ -430,9 +438,21 @@ function CanvasInner({ flowId }: { flowId: string }) {
       method: "POST",
       body: formData,
     });
-    const data = await res.json() as { path?: string; filename?: string; documentTemplateContent?: string | null; error?: string; code?: string };
+    const data = await res.json() as { path?: string; filename?: string; documentTemplateContent?: string | null; documentTemplateFields?: TemplateField[]; error?: string; code?: string };
     if (!res.ok || data.error) {
       return { error: data.error ?? "Upload failed", code: data.code };
+    }
+    // Immediately reflect the extracted template fields in rfNodes so that
+    // priorStepFields picks them up for any subsequently opened step config.
+    if (data.documentTemplateFields) {
+      const uploadedFields = data.documentTemplateFields;
+      setRfNodes((nds) =>
+        nds.map((n) => {
+          if (n.id !== nodeId) return n;
+          const nodeConfig = ((n.data as { config?: Record<string, unknown> }).config ?? {});
+          return { ...n, data: { ...n.data, config: { ...nodeConfig, documentTemplateFields: uploadedFields } } };
+        }),
+      );
     }
     return { path: data.path!, filename: data.filename!, documentTemplateContent: data.documentTemplateContent ?? null };
   }, [editingNodeId, flowId, rfNodes, pendingEdge, createNodeMutation, createEdgeMutation]);

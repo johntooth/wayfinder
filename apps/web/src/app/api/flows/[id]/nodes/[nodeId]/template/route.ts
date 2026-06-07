@@ -191,6 +191,7 @@ export async function POST(
       tagCount: validationResult.data.tags.length,
       templateContentLength: documentTemplateStructuredContent.length,
       documentTemplateContent,
+      documentTemplateFields: fieldsResult.data.fields,
       indexed: !indexResult.error,
       chunkCount: indexResult.error ? 0 : indexResult.data.chunkCount,
     },
