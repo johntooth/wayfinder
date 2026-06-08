@@ -390,6 +390,119 @@ describe("N8nHttpWorkflowDirectory.getWorkflowSchema", () => {
     expect(result.data?.hasExecutions).toBe(false);
   });
 
+  it("extracts nested pinData fields as dotted paths instead of a single top-level field", async () => {
+    const workflow = {
+      id: "wf-1",
+      nodes: [
+        { name: "Webhook", type: "n8n-nodes-base.webhook", parameters: { path: "p" } },
+        {
+          name: "Outputs",
+          type: "n8n-nodes-base.set",
+          parameters: { assignments: { assignments: [{ name: "vendor", type: "string" }] } },
+        },
+      ],
+      pinData: { Webhook: [{ json: { body: { document: "abc", title: "def" } } }] },
+    };
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(workflow));
+    const directory = new N8nHttpWorkflowDirectory(
+      async () => config,
+      fetchFn as unknown as typeof fetch,
+      fakeExecutionClient(),
+    );
+
+    const result = await directory.getWorkflowSchema("wf-1");
+    expect(result.data?.inputsMethod).toBe("pin");
+    expect(result.data?.inputs).toEqual([
+      { key: "body.document", label: "body.document", type: "text", optional: false, raw: "body.document" },
+      { key: "body.title", label: "body.title", type: "text", optional: false, raw: "body.title" },
+    ]);
+  });
+
+  it("caps nested pinData at a 3-segment path when nesting exceeds 3 levels", async () => {
+    const workflow = {
+      id: "wf-1",
+      nodes: [
+        { name: "Webhook", type: "n8n-nodes-base.webhook", parameters: { path: "p" } },
+        {
+          name: "Outputs",
+          type: "n8n-nodes-base.set",
+          parameters: { assignments: { assignments: [{ name: "vendor", type: "string" }] } },
+        },
+      ],
+      pinData: { Webhook: [{ json: { a: { b: { c: { d: "val" } } } } }] },
+    };
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(workflow));
+    const directory = new N8nHttpWorkflowDirectory(
+      async () => config,
+      fetchFn as unknown as typeof fetch,
+      fakeExecutionClient(),
+    );
+
+    const result = await directory.getWorkflowSchema("wf-1");
+    expect(result.data?.inputsMethod).toBe("pin");
+    expect(result.data?.inputs).toEqual([
+      { key: "a.b.c", label: "a.b.c", type: "text", optional: false, raw: "a.b.c" },
+    ]);
+  });
+
+  it("extracts nested responseBody fields as dotted paths", async () => {
+    const workflow = {
+      id: "wf-1",
+      nodes: [
+        { name: "Webhook", type: "n8n-nodes-base.webhook", parameters: { path: "p" } },
+        {
+          name: "Respond",
+          type: "n8n-nodes-base.respondToWebhook",
+          parameters: { responseBody: '{"result":{"id":1,"status":"ok"}}' },
+        },
+      ],
+    };
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(workflow));
+    const directory = new N8nHttpWorkflowDirectory(
+      async () => config,
+      fetchFn as unknown as typeof fetch,
+      fakeExecutionClient(),
+    );
+
+    const result = await directory.getWorkflowSchema("wf-1");
+    expect(result.data?.outputsMethod).toBe("respond");
+    expect(result.data?.outputs).toEqual([
+      { key: "result.id", label: "result.id", type: "number", optional: false, raw: "result.id" },
+      { key: "result.status", label: "result.status", type: "text", optional: false, raw: "result.status" },
+    ]);
+  });
+
+  it("captures a dotted $json expression path as a single field key", async () => {
+    const workflow = {
+      id: "wf-1",
+      nodes: [
+        { name: "Webhook", type: "n8n-nodes-base.webhook", parameters: { path: "p" } },
+        {
+          name: "Code",
+          type: "n8n-nodes-base.code",
+          parameters: { expr: "={{ $json.body.document }}" },
+        },
+        {
+          name: "Outputs",
+          type: "n8n-nodes-base.set",
+          parameters: { assignments: { assignments: [{ name: "vendor", type: "string" }] } },
+        },
+      ],
+    };
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(workflow));
+    const directory = new N8nHttpWorkflowDirectory(
+      async () => config,
+      fetchFn as unknown as typeof fetch,
+      fakeExecutionClient(),
+    );
+
+    const result = await directory.getWorkflowSchema("wf-1");
+    expect(result.data?.inputsMethod).toBe("expression");
+    expect(result.data?.inputs).toEqual([
+      { key: "body.document", label: "body.document", type: "text", optional: false, raw: "body.document" },
+    ]);
+  });
+
   it("returns a validation error when n8n is not configured", async () => {
     const directory = new N8nHttpWorkflowDirectory(async () => ({ baseUrl: "", apiKey: "" }));
     const result = await directory.getWorkflowSchema("wf-1");

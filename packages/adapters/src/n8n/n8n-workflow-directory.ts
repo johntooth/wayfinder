@@ -60,17 +60,50 @@ const mapFieldType = (n8nType: unknown): TemplateFieldType => {
   }
 };
 
+const normalizeSegment = (segment: string): string =>
+  segment.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+
 const buildField = (name: unknown, n8nType: unknown): TemplateField | null => {
   if (typeof name !== "string") return null;
   const label = name.trim();
   if (!label) return null;
-  const key = label
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
+  const key = normalizeSegment(label);
   if (!key) return null;
   return { key, label, type: mapFieldType(n8nType), optional: false, raw: label };
 };
+
+const buildNestedField = (segments: string[], n8nType: unknown): TemplateField | null => {
+  const normalized = segments.map(normalizeSegment).filter(Boolean);
+  if (normalized.length === 0) return null;
+  const key = normalized.join(".");
+  const label = segments.join(".");
+  return { key, label, type: mapFieldType(n8nType), optional: false, raw: label };
+};
+
+const MAX_OBJECT_DEPTH = 3;
+
+const fieldsFromObjectRecursive = (value: unknown, prefix: string[], depth: number): TemplateField[] => {
+  if (!isObject(value) || depth >= MAX_OBJECT_DEPTH) return [];
+  const fields: TemplateField[] = [];
+  for (const [key, val] of Object.entries(value)) {
+    const path = [...prefix, key];
+    if (isObject(val)) {
+      const nested = fieldsFromObjectRecursive(val, path, depth + 1);
+      if (nested.length > 0) {
+        fields.push(...nested);
+      } else {
+        const field = buildNestedField(path, "object");
+        if (field) fields.push(field);
+      }
+    } else {
+      const field = buildNestedField(path, typeof val);
+      if (field) fields.push(field);
+    }
+  }
+  return fields;
+};
+
+const fieldsFromObject = (value: unknown): TemplateField[] => fieldsFromObjectRecursive(value, [], 0);
 
 // n8n's "Edit Fields (Set)" node: v3.4+ stores `parameters.assignments.assignments`
 // as `[{ name, type, value }]`; older versions store `parameters.values` keyed by
@@ -109,9 +142,7 @@ const fieldsFromRespondNode = (node: N8nNode): TemplateField[] => {
   try {
     const parsed = JSON.parse(body);
     if (!isObject(parsed)) return [];
-    return Object.keys(parsed)
-      .map((key) => buildField(key, typeof parsed[key]))
-      .filter((field): field is TemplateField => field !== null);
+    return fieldsFromObject(parsed);
   } catch {
     return [];
   }
@@ -124,13 +155,6 @@ const firstSetNode = (nodes: N8nNode[]): N8nNode | undefined =>
   nodes.find((node) => node.type === SET_TYPE);
 
 const TRIGGER_TYPE_HINT = /trigger|webhook/i;
-
-const fieldsFromObject = (value: unknown): TemplateField[] => {
-  if (!isObject(value)) return [];
-  return Object.keys(value)
-    .map((key) => buildField(key, typeof value[key]))
-    .filter((field): field is TemplateField => field !== null);
-};
 
 // n8n pinData stores a node's pinned items as `[{ json: {...} }]`; older pins may
 // hold the raw object. Read the first item's shape best-effort.
@@ -157,7 +181,7 @@ const fieldsFromExpressions = (nodes: N8nNode[]): TemplateField[] => {
 
   const keys = new Set<string>();
   for (const text of strings) {
-    for (const match of text.matchAll(/\$json\.([a-zA-Z_][a-zA-Z0-9_]*)/g)) {
+    for (const match of text.matchAll(/\$json\.((?:[a-zA-Z_][a-zA-Z0-9_]*)(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)/g)) {
       if (match[1]) keys.add(match[1]);
     }
     for (const match of text.matchAll(/\$json\[['"]([^'"\]]+)['"]\]/g)) {
@@ -165,7 +189,7 @@ const fieldsFromExpressions = (nodes: N8nNode[]): TemplateField[] => {
     }
   }
   return [...keys]
-    .map((key) => buildField(key, "string"))
+    .map((path) => buildNestedField(path.split("."), "string"))
     .filter((field): field is TemplateField => field !== null);
 };
 
