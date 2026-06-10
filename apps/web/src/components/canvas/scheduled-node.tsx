@@ -28,7 +28,8 @@ export function ScheduledNode({ data, selected }: NodeProps) {
   const nodeData = data as ScheduledNodeData;
   const subtitle = scheduleSubtitle(nodeData.kind, nodeData.spec, nodeData.recurring);
 
-  const displayName = nodeData.stepNumber ? `${nodeData.stepNumber}. ${nodeData.name}` : nodeData.name;
+  const name = nodeData.name.trim() || "Untitled step";
+  const displayName = nodeData.stepNumber ? `${nodeData.stepNumber}. ${name}` : name;
 
   return (
     <div

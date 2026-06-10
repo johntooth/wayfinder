@@ -2,7 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   CONTEXT_DOCS_ALLOWED_MIME_TYPES,
   CONTEXT_DOCS_MAX_FILE_SIZE_BYTES,
-  CONTEXT_DOCS_TOTAL_BUDGET_CHARS,
 } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
 
@@ -17,9 +16,6 @@ const getSessionToken = (req: NextRequest): string | null => {
     .find((c) => c.startsWith("better-auth.session_token="));
   return pair ? pair.slice("better-auth.session_token=".length) : null;
 };
-
-const sumExtractedChars = (docs: { extractedText: string | null }[]): number =>
-  docs.reduce((total, doc) => total + (doc.extractedText?.length ?? 0), 0);
 
 export async function POST(
   req: NextRequest,
@@ -90,11 +86,6 @@ export async function POST(
     );
   }
 
-  // Retrieval (RAG) controls what reaches the prompt now, so the full extracted
-  // text is always stored — no per-flow character budget guard.
-  const currentTotalChars = sumExtractedChars(flow.contextDocs);
-  const newTotalChars = currentTotalChars + extractedText.length;
-
   const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const storageKey = `context/${flowId}/${timestamp}-${safeFilename}`;
@@ -156,8 +147,6 @@ export async function POST(
     {
       ...doc,
       extractedChars: extractedText.length,
-      flowTotalChars: newTotalChars,
-      flowBudgetChars: CONTEXT_DOCS_TOTAL_BUDGET_CHARS,
       indexed: !indexResult.error,
       chunkCount: indexResult.error ? 0 : indexResult.data.chunkCount,
     },

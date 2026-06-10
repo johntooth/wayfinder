@@ -20,9 +20,8 @@ export function ConversationalNode({ data, selected }: NodeProps) {
     ? nodeData.aiInstruction.slice(0, 60) + (nodeData.aiInstruction.length > 60 ? "…" : "")
     : "No instructions yet";
 
-  const displayName = nodeData.stepNumber
-    ? `${nodeData.stepNumber}. ${nodeData.name}`
-    : nodeData.name;
+  const name = nodeData.name.trim() || "Untitled step";
+  const displayName = nodeData.stepNumber ? `${nodeData.stepNumber}. ${name}` : name;
 
   return (
     <div
@@ -43,7 +42,7 @@ export function ConversationalNode({ data, selected }: NodeProps) {
           className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-white text-xs font-bold"
           style={{ backgroundColor: nodeData.colour ?? DEFAULT_COLOUR }}
         >
-          {nodeData.stepNumber ?? nodeData.name.charAt(0).toUpperCase()}
+          {nodeData.stepNumber ?? name.charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-gray-900">{displayName}</p>

@@ -81,17 +81,17 @@ test.describe('Node configuration improvements', () => {
     await page.getByRole('button', { name: '+ Add step' }).click();
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
 
-    const autoOption = page.locator('label', { hasText: /Automated \(n8n\)/ });
+    const autoOption = page.getByRole('button', { name: /Automated \(n8n\)/ });
     test.skip(
       !(await autoOption.isVisible().catch(() => false)),
       'Auto step type not offered — flag not picked up in this environment',
     );
+    await autoOption.click();
 
     // The modal uses the wider layout.
     await expect(page.locator('.max-w-3xl')).toBeVisible();
 
     await page.locator('#node-name').fill('Look up vendor');
-    await autoOption.click();
     await page.locator('#auto-instruction').fill('Look up the preferred vendor.');
 
     // Mock executor needs no live n8n instance and renders the request-field
@@ -135,14 +135,15 @@ test.describe('Node configuration improvements', () => {
     await page.getByRole('button', { name: '+ Add step' }).click();
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
 
-    const scheduledOption = page.locator('label', { hasText: /^Scheduled$/ });
+    const scheduledOption = page.getByRole('button', { name: 'Scheduled' });
     test.skip(
       !(await scheduledOption.isVisible().catch(() => false)),
       'Scheduled step type not offered — flag not picked up in this environment',
     );
-
-    await page.locator('#node-name').fill('Follow up');
     await scheduledOption.click();
+
+    await expect(page.locator('#node-name')).toBeVisible({ timeout: 5_000 });
+    await page.locator('#node-name').fill('Follow up');
 
     // The three "when" options are offered; recurrence is gone.
     const whenSelect = page.locator('#schedule-when');

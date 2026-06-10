@@ -33,8 +33,11 @@ import { AutoNode } from "@/components/canvas/auto-node";
 import type { ScheduledNodeData } from "@/components/canvas/scheduled-node";
 import { ScheduledNode } from "@/components/canvas/scheduled-node";
 import { ContextDocsStrip } from "@/components/canvas/context-docs-strip";
-import type { NodeConfigValues } from "@/components/canvas/node-config-modal";
+import type { NodeConfigType, NodeConfigValues } from "@/components/canvas/node-config-modal";
 import { NodeConfigModal } from "@/components/canvas/node-config-modal";
+import { NodeTypePickerModal } from "@/components/canvas/node-type-picker-modal";
+import { STEP_TYPE_ACCENT } from "@/components/canvas/node-styles";
+import { defaultConfigForType } from "@/components/canvas/node-defaults";
 import {
   scheduledConfigFromValues,
   scheduledValuesFromConfig,
@@ -135,8 +138,12 @@ function CanvasInner({ flowId }: { flowId: string }) {
     trpc.featureFlag.isEnabledForMe.useQuery({ key: "scheduled_node" }).data ?? false;
 
   const [configOpen, setConfigOpen] = useState(false);
+  const [typePickerOpen, setTypePickerOpen] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
-  const [pendingEdge, setPendingEdge] = useState<{ fromNodeId: string; toNodeId: string } | null>(null);
+  // The node just created by the picker / a drag-out. Deleted if the author
+  // cancels the config modal, so picking a type and backing out leaves no
+  // orphan — while still being a real, persisted node during editing.
+  const [createdNodeId, setCreatedNodeId] = useState<string | null>(null);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   const positionTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -211,6 +218,41 @@ function CanvasInner({ flowId }: { flowId: string }) {
     });
   }, [createEdgeMutation, flowId]);
 
+  // Persists a new node immediately (auto-save), optionally wiring an edge from
+  // a source node, then opens its config modal. The node exists in the DB before
+  // any field is entered, so uploads and other in-modal actions work right away.
+  const createAndEditNode = useCallback(
+    async (type: NodeConfigType, position: { x: number; y: number }, fromNodeId?: string) => {
+      const config = defaultConfigForType(type);
+      const colour = STEP_TYPE_ACCENT[type];
+      const created = await createNodeMutation.mutateAsync({
+        flowId,
+        name: "",
+        colour,
+        type,
+        positionX: position.x,
+        positionY: position.y,
+        config,
+      });
+      const rebuilt = toRfNode(
+        { id: created.id, name: "", colour, type, positionX: position.x, positionY: position.y, config },
+        null,
+      );
+      setRfNodes((nds) => [...nds, rebuilt]);
+      if (fromNodeId) {
+        const edge = await createEdgeMutation.mutateAsync({ flowId, fromNodeId, toNodeId: created.id });
+        setRfEdges((eds) => [
+          ...eds,
+          { id: edge.id, source: edge.fromNodeId, target: edge.toNodeId, type: "smoothstep", markerEnd: { type: MarkerType.ArrowClosed } },
+        ]);
+      }
+      setCreatedNodeId(created.id);
+      setEditingNodeId(created.id);
+      setConfigOpen(true);
+    },
+    [createNodeMutation, createEdgeMutation, flowId],
+  );
+
   const onConnectEnd: OnConnectEnd = useCallback((event, connectionState) => {
     if (connectionState.isValid) return;
     if (!connectionState.fromNode) return;
@@ -223,19 +265,12 @@ function CanvasInner({ flowId }: { flowId: string }) {
     if (!paneEl) return;
     const paneRect = paneEl.getBoundingClientRect();
 
-    const tempId = `temp-${Date.now()}`;
-    const tempNode: Node<ConversationalNodeData> = {
-      id: tempId,
-      type: "conversationalNode",
-      position: { x: target.clientX - paneRect.left - 112, y: target.clientY - paneRect.top - 40 },
-      data: { name: "New step", colour: "#6366f1", aiInstruction: null },
-    };
-
-    setRfNodes((nds) => [...nds, tempNode]);
-    setPendingEdge({ fromNodeId, toNodeId: tempId });
-    setEditingNodeId(tempId);
-    setConfigOpen(true);
-  }, []);
+    void createAndEditNode(
+      "conversational",
+      { x: target.clientX - paneRect.left - 112, y: target.clientY - paneRect.top - 40 },
+      fromNodeId,
+    );
+  }, [createAndEditNode]);
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setEditingNodeId(node.id);
@@ -277,10 +312,11 @@ function CanvasInner({ flowId }: { flowId: string }) {
           requestFieldValues: values.requestFieldValues,
           responseFields: values.responseFields,
           customRequestFieldKeys: values.customRequestFieldKeys,
+          notifyOnComplete: values.notifyOnComplete,
         };
       }
       if (values.type === "scheduled") {
-        return scheduledConfigFromValues(values);
+        return { ...scheduledConfigFromValues(values), notifyOnComplete: values.notifyOnComplete };
       }
       const hasTemplate = values.outputType === "generate_document" && !!values.documentTemplatePath;
       return {
@@ -293,144 +329,68 @@ function CanvasInner({ flowId }: { flowId: string }) {
         documentTemplateContent: values.documentTemplateContent ?? null,
         documentTemplateFields: hasTemplate ? (existingNodeConfig.documentTemplateFields ?? null) : null,
         documentTemplateStructuredContent: hasTemplate ? (existingNodeConfig.documentTemplateStructuredContent ?? null) : null,
+        notifyOnComplete: values.notifyOnComplete,
       };
     };
     const config: Record<string, unknown> = buildConfig();
 
-    const isTempNode = editingNodeId.startsWith("temp-");
-    const position = rfNodes.find((n) => n.id === editingNodeId)?.position ?? { x: 200, y: 200 };
-
     try {
-      if (isTempNode) {
-        const newNode = await createNodeMutation.mutateAsync({
-          flowId,
-          name: values.name,
-          colour: values.colour,
-          type: values.type,
-          positionX: position.x,
-          positionY: position.y,
-          config,
-        });
-
-        const rebuilt = toRfNode({ id: newNode.id, name: values.name, colour: values.colour, type: values.type, positionX: position.x, positionY: position.y, config }, null);
-        setRfNodes((nds) => nds.map((n) => (n.id === editingNodeId ? rebuilt : n)));
-
-        if (pendingEdge) {
-          const edge = await createEdgeMutation.mutateAsync({
-            flowId,
-            fromNodeId: pendingEdge.fromNodeId,
-            toNodeId: newNode.id,
-          });
-          setRfEdges((eds) => [
-            ...eds,
-            { id: edge.id, source: edge.fromNodeId, target: edge.toNodeId, type: "smoothstep", markerEnd: { type: MarkerType.ArrowClosed } },
-          ]);
-          setPendingEdge(null);
-        }
-      } else {
-        await updateNodeMutation.mutateAsync({
-          nodeId: editingNodeId,
-          flowId,
-          name: values.name,
-          colour: values.colour,
-          type: values.type,
-          config,
-        });
-        setRfNodes((nds) =>
-          nds.map((n) => {
-            if (n.id !== editingNodeId) return n;
-            return toRfNode({ id: n.id, name: values.name, colour: values.colour, type: values.type, positionX: n.position.x, positionY: n.position.y, config }, null);
-          }),
-        );
-      }
+      await updateNodeMutation.mutateAsync({
+        nodeId: editingNodeId,
+        flowId,
+        name: values.name,
+        colour: values.colour,
+        type: values.type,
+        config,
+      });
+      setRfNodes((nds) =>
+        nds.map((n) => {
+          if (n.id !== editingNodeId) return n;
+          return toRfNode({ id: n.id, name: values.name, colour: values.colour, type: values.type, positionX: n.position.x, positionY: n.position.y, config }, null);
+        }),
+      );
+      // The node has been saved with the author's content, so it is no longer a
+      // throwaway: cancelling later must not delete it.
+      setCreatedNodeId(null);
       setConfigOpen(false);
       setEditingNodeId(null);
     } finally {
       setIsSavingConfig(false);
     }
-  }, [editingNodeId, flowId, rfNodes, pendingEdge, createNodeMutation, updateNodeMutation, createEdgeMutation]);
+  }, [editingNodeId, flowId, rfNodes, updateNodeMutation]);
 
   const handleAddStep = useCallback(() => {
-    const tempId = `temp-${Date.now()}`;
-    const xOffset = rfNodes.length > 0 ? (rfNodes[rfNodes.length - 1]?.position.x ?? 0) + 280 : 200;
-    const tempNode: Node<ConversationalNodeData> = {
-      id: tempId,
-      type: "conversationalNode",
-      position: { x: xOffset, y: 200 },
-      data: { name: "New step", colour: "#6366f1", aiInstruction: null },
-    };
-    setRfNodes((nds) => [...nds, tempNode]);
-    setEditingNodeId(tempId);
-    setConfigOpen(true);
-  }, [rfNodes]);
+    setTypePickerOpen(true);
+  }, []);
 
-  const handleAddAutoNode = useCallback(() => {
-    const tempId = `temp-${Date.now()}`;
+  const handleSelectNodeType = useCallback((type: NodeConfigType) => {
+    setTypePickerOpen(false);
     const xOffset = rfNodes.length > 0 ? (rfNodes[rfNodes.length - 1]?.position.x ?? 0) + 280 : 200;
-    const tempNode: Node<AutoNodeData> = {
-      id: tempId,
-      type: "autoNode",
-      position: { x: xOffset, y: 200 },
-      data: { name: "New step", colour: "#7c3aed", instruction: null },
-    };
-    setRfNodes((nds) => [...nds, tempNode]);
-    setEditingNodeId(tempId);
-    setConfigOpen(true);
-  }, [rfNodes]);
+    void createAndEditNode(type, { x: xOffset, y: 200 });
+  }, [rfNodes, createAndEditNode]);
 
   const handleConfigClose = useCallback(() => {
-    if (editingNodeId?.startsWith("temp-")) {
-      setRfNodes((nds) => nds.filter((n) => n.id !== editingNodeId));
-      setPendingEdge(null);
+    // The author backed out of a step they just created; remove it so the
+    // canvas is not littered with empty placeholder nodes.
+    if (createdNodeId) {
+      const orphanId = createdNodeId;
+      void deleteNodeMutation.mutateAsync({ nodeId: orphanId, flowId }).catch(() => undefined);
+      setRfNodes((nds) => nds.filter((n) => n.id !== orphanId));
+      setRfEdges((eds) => eds.filter((e) => e.source !== orphanId && e.target !== orphanId));
+      setCreatedNodeId(null);
     }
     setConfigOpen(false);
     setEditingNodeId(null);
-  }, [editingNodeId]);
+  }, [createdNodeId, deleteNodeMutation, flowId]);
 
   const handleUploadTemplate = useCallback(async (
     file: File,
-    currentValues: NodeConfigValues,
+    _currentValues: NodeConfigValues,
   ): Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string; code?: string }> => {
-    let nodeId = editingNodeId;
-
-    if (!nodeId || nodeId.startsWith("temp-")) {
-      const tempId = nodeId;
-      const newNode = await createNodeMutation.mutateAsync({
-        flowId,
-        name: currentValues.name || "New step",
-        colour: currentValues.colour || "#6366f1",
-        positionX: rfNodes.find((n) => n.id === tempId)?.position.x ?? 200,
-        positionY: rfNodes.find((n) => n.id === tempId)?.position.y ?? 200,
-        config: {
-          aiInstruction: currentValues.aiInstruction,
-          doneWhen: currentValues.neverDone ? "" : currentValues.doneWhen,
-          neverDone: currentValues.neverDone,
-          outputType: currentValues.outputType,
-          documentTemplatePath: null,
-          documentTemplateFilename: null,
-          documentTemplateContent: null,
-        },
-      });
-
-      setRfNodes((nds) =>
-        nds.map((n) => (n.id === tempId ? { ...toRfNode({ ...newNode, config: newNode.config as Record<string, unknown> }, null), id: newNode.id } : n)),
-      );
-      setEditingNodeId(newNode.id);
-      nodeId = newNode.id;
-
-      if (pendingEdge) {
-        const edge = await createEdgeMutation.mutateAsync({
-          flowId,
-          fromNodeId: pendingEdge.fromNodeId,
-          toNodeId: newNode.id,
-        });
-        setRfEdges((eds) => [
-          ...eds,
-          { id: edge.id, source: edge.fromNodeId, target: edge.toNodeId, type: "smoothstep", markerEnd: { type: MarkerType.ArrowClosed } },
-        ]);
-        setPendingEdge(null);
-      }
+    if (!editingNodeId) {
+      return { error: "Save the step first before uploading a template." };
     }
+    const nodeId = editingNodeId;
 
     const formData = new FormData();
     formData.append("file", file);
@@ -455,15 +415,16 @@ function CanvasInner({ flowId }: { flowId: string }) {
       );
     }
     return { path: data.path!, filename: data.filename!, documentTemplateContent: data.documentTemplateContent ?? null };
-  }, [editingNodeId, flowId, rfNodes, pendingEdge, createNodeMutation, createEdgeMutation]);
+  }, [editingNodeId, flowId]);
 
   const handleNodeDelete = useCallback(async () => {
-    if (!editingNodeId || editingNodeId.startsWith("temp-")) return;
+    if (!editingNodeId) return;
     await deleteNodeMutation.mutateAsync({ nodeId: editingNodeId, flowId });
     setRfNodes((nds) => nds.filter((n) => n.id !== editingNodeId));
     setRfEdges((eds) =>
       eds.filter((e) => e.source !== editingNodeId && e.target !== editingNodeId),
     );
+    setCreatedNodeId(null);
     setConfigOpen(false);
     setEditingNodeId(null);
     toast.success("Step deleted");
@@ -580,6 +541,9 @@ function CanvasInner({ flowId }: { flowId: string }) {
         responseFields: readFields(editingConfig.responseFields),
         customRequestFieldKeys:
           (editingConfig.customRequestFieldKeys as string[] | undefined) ?? [],
+        notifyOnComplete:
+          (editingConfig.notifyOnComplete as boolean | undefined) ??
+          (editingNode?.type === "scheduledNode"),
         ...scheduledValuesFromConfig(editingConfig),
       }
     : undefined;
@@ -762,18 +726,6 @@ function CanvasInner({ flowId }: { flowId: string }) {
                     >
                       Open Chat
                     </Link>
-                    {autoNodeEnabled && (
-                      <button
-                        type="button"
-                        className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
-                        onClick={() => {
-                          setActionsMenuOpen(false);
-                          handleAddAutoNode();
-                        }}
-                      >
-                        Add Auto Node
-                      </button>
-                    )}
                   </>
                 )}
               </div>
@@ -813,18 +765,24 @@ function CanvasInner({ flowId }: { flowId: string }) {
         onDocsChange={setContextDocs}
       />
 
+      <NodeTypePickerModal
+        open={typePickerOpen}
+        autoNodeEnabled={autoNodeEnabled}
+        scheduledNodeEnabled={scheduledNodeEnabled}
+        onSelect={handleSelectNodeType}
+        onClose={() => setTypePickerOpen(false)}
+      />
+
       <NodeConfigModal
         open={configOpen}
         flowId={flowId}
         initialValues={initialConfigValues}
         onSave={handleConfigSave}
-        onDelete={editingNodeId && !editingNodeId.startsWith("temp-") ? handleNodeDelete : undefined}
+        onDelete={editingNodeId ? handleNodeDelete : undefined}
         onClose={handleConfigClose}
         isSaving={isSavingConfig}
-        autoNodeEnabled={autoNodeEnabled}
-        scheduledNodeEnabled={scheduledNodeEnabled}
         priorStepFields={priorStepFields}
-        onUploadTemplate={handleUploadTemplate}
+        onUploadTemplate={editingNodeId ? handleUploadTemplate : undefined}
       />
     </div>
   );

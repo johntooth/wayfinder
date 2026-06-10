@@ -32,7 +32,6 @@ import type {
   ScheduleUnit,
   ScheduleWhen,
 } from "./scheduled-node-config";
-import { STEP_TYPE_ACCENT } from "./node-styles";
 
 const COLOURS = [
   { hex: "#3a5fd9", label: "Indigo" },
@@ -93,6 +92,7 @@ export interface NodeConfigValues {
   scheduleModifier: ScheduleModifier;
   scheduleAnchorChoice: string;
   scheduleDescribeText: string;
+  notifyOnComplete: boolean;
 }
 
 interface NodeConfigModalProps {
@@ -103,8 +103,6 @@ interface NodeConfigModalProps {
   onDelete?: () => void;
   onClose: () => void;
   isSaving?: boolean;
-  autoNodeEnabled?: boolean;
-  scheduledNodeEnabled?: boolean;
   // Fields declared by steps earlier in the flow, offered as value sources.
   priorStepFields?: PriorStepField[];
   onUploadTemplate?: (file: File, currentValues: NodeConfigValues) => Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string; code?: string }>;
@@ -135,6 +133,7 @@ const DEFAULT_VALUES: NodeConfigValues = {
   scheduleModifier: "after",
   scheduleAnchorChoice: "node_reached",
   scheduleDescribeText: "",
+  notifyOnComplete: false,
 };
 
 const SCHEDULE_SELECT_CLASS =
@@ -180,8 +179,6 @@ export function NodeConfigModal({
   onDelete,
   onClose,
   isSaving = false,
-  autoNodeEnabled = false,
-  scheduledNodeEnabled = false,
   priorStepFields = [],
   onUploadTemplate,
 }: NodeConfigModalProps) {
@@ -539,59 +536,6 @@ export function NodeConfigModal({
                   ))}
                 </div>
               </div>
-
-              {(autoNodeEnabled || scheduledNodeEnabled) && (
-                <div className="space-y-1">
-                  <Label>Step type</Label>
-                  <div className="flex gap-3">
-                    {(
-                      [
-                        "conversational",
-                        ...(autoNodeEnabled ? (["auto"] as const) : []),
-                        ...(scheduledNodeEnabled ? (["scheduled"] as const) : []),
-                      ] as NodeConfigType[]
-                    ).map((type) => {
-                      const accent = STEP_TYPE_ACCENT[type];
-                      const isSelected = values.type === type;
-                      return (
-                      <label
-                        key={type}
-                        className={`flex flex-1 cursor-pointer items-center justify-center rounded-[9px] border px-3 py-2 text-[13px] font-medium transition-colors ${
-                          isSelected
-                            ? ""
-                            : "border-[#dedad2] font-normal text-[#5a5650] hover:bg-[#efede8]"
-                        }`}
-                        style={
-                          isSelected
-                            ? { borderColor: accent, backgroundColor: `${accent}14`, color: accent }
-                            : undefined
-                        }
-                      >
-                        <input
-                          type="radio"
-                          className="sr-only"
-                          value={type}
-                          checked={isSelected}
-                          onChange={() => set("type", type)}
-                        />
-                        {type === "conversational"
-                          ? "Conversational"
-                          : type === "auto"
-                            ? "Automated (n8n)"
-                            : "Scheduled"}
-                      </label>
-                      );
-                    })}
-                  </div>
-                  <p className="text-[12px] text-[#918d87]">
-                    {isAuto
-                      ? "Runs automatically via an n8n sub-workflow — no conversation. Completes when n8n calls back."
-                      : isScheduled
-                        ? "Pauses the session and resumes at a computed time."
-                        : "A human takes a turn with the AI to complete this step."}
-                  </p>
-                </div>
-              )}
 
               {isConversational && (
               <>
@@ -1003,6 +947,31 @@ export function NodeConfigModal({
               )}
               </>
               )}
+
+              <div className="flex items-start justify-between gap-3 border-t border-[#ece9e3] pt-3">
+                <div className="space-y-0.5">
+                  <Label htmlFor="notify-on-complete">Notify chat participants when step complete</Label>
+                  <p className="text-[12px] text-[#918d87]">
+                    Emails everyone in the chat once this step finishes.
+                  </p>
+                </div>
+                <button
+                  id="notify-on-complete"
+                  type="button"
+                  role="switch"
+                  aria-checked={values.notifyOnComplete}
+                  onClick={() => set("notifyOnComplete", !values.notifyOnComplete)}
+                  className={`relative mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                    values.notifyOnComplete ? "bg-[#1f8a4c]" : "bg-[#d7d3cc]"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      values.notifyOnComplete ? "translate-x-4" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
             </DialogBody>
 
             <DialogFooter className="flex-row items-center justify-between">

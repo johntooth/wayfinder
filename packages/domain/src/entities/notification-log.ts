@@ -3,7 +3,7 @@
 // flipped to `sent`/`failed` by the best-effort send that follows. A unique
 // index on (trigger, resource_id, recipient_email) makes sends idempotent.
 
-export type NotificationTrigger = "session_complete" | "flow_shared";
+export type NotificationTrigger = "session_complete" | "step_complete" | "flow_shared";
 export type NotificationResourceType = "session" | "flow";
 export type NotificationStatus = "pending" | "sent" | "failed";
 

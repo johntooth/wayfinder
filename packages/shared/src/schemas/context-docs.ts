@@ -1,6 +1,3 @@
-export const CONTEXT_DOCS_TOTAL_BUDGET_CHARS = 65_536;
-export const CONTEXT_DOCS_WARNING_THRESHOLD_CHARS = 32_768;
-
 export const CONTEXT_DOCS_ALLOWED_MIME_TYPES = [
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
