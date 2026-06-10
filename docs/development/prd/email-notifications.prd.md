@@ -5,10 +5,10 @@
 > **flow shared / permission granted**. Route to the Documentation Review skill
 > before any code is written.
 
-- **Status**: Draft
+- **Status**: Implemented (v1.35.0)
 - **Date**: 2026-05-31
 - **Author**: Solo / Claude Code
-- **Target version**: TBD (bump: **MINOR** — new table, new domain port, new
+- **Target version**: 1.35.0 (bump: **MINOR** — new table, new domain port, new
   adapter; no breaking change. See `docs/guides/versioning.md`.)
 
 ## 1. Problem
@@ -41,7 +41,7 @@ no template.
   flow.
 - Email is sent through a single configurable SMTP transport that supports both
   **generic SMTP AUTH** (self-hosted relays, dev) and **OAuth2 / XOAUTH2** for
-  Microsoft 365 / Exchange Online (see ADR-014).
+  Microsoft 365 / Exchange Online (see ADR-023).
 - Every send attempt is recorded in `app_notification_log` with its delivery
   status, so an admin can see what was sent and why a send failed.
 - A failed or slow email **never** blocks or rolls back the triggering action
@@ -69,7 +69,7 @@ no template.
 | `EmailMessage` (value object) | `packages/domain/src/entities/email-message.ts` | new | `to`, `subject`, `textBody`, `htmlBody`. No provider concepts. |
 | `NotificationLog` (entity) | `packages/domain/src/entities/notification-log.ts` | new | Backs `app_notification_log`; doubles as the outbox row. |
 | `INotificationLogRepository` (port) | `packages/domain/src/ports/notification-log-repository.ts` | new | `enqueue`, `markSent`, `markFailed`, `listPending`, `existsFor(trigger, resourceId, recipient)`. |
-| `SmtpNotificationSender` (adapter) | `packages/adapters/src/notifications/smtp-notification-sender.ts` | new | Nodemailer; SMTP AUTH + XOAUTH2 (ADR-014). |
+| `SmtpNotificationSender` (adapter) | `packages/adapters/src/notifications/smtp-notification-sender.ts` | new | Nodemailer; SMTP AUTH + XOAUTH2 (ADR-023). |
 | `DrizzleNotificationLogRepository` | `packages/adapters/src/repositories/drizzle-notification-log-repository.ts` | new | Implements the log/outbox port. |
 | `NotifyOnSessionComplete` (use-case) | `packages/application/src/use-cases/notifications/notify-on-session-complete.ts` | new | Composes the `EmailMessage`, dedupes, enqueues. |
 | `NotifyOnFlowShared` (use-case) | `packages/application/src/use-cases/notifications/notify-on-flow-shared.ts` | new | Diffs old vs new `permissions`, emails only newly added users. |
@@ -103,7 +103,7 @@ transport.
   admin `notification.listLog` read procedure — see §11.)
 - **Wiring** — `apps/web/lib/container.ts` constructs `SmtpNotificationSender`
   from config and injects the notification use-cases.
-- **Config** — new environment variables (see ADR-014): transport host/port,
+- **Config** — new environment variables (see ADR-023): transport host/port,
   auth mode, and the M365 OAuth2 client credentials.
 
 ## 8. Database changes
@@ -129,7 +129,7 @@ present per convention.
 
 ### New ADR introduced by this PRD
 
-- **ADR-014 Email Notification Transport** — selects Nodemailer with a single
+- **ADR-023 Email Notification Transport** — selects Nodemailer with a single
   SMTP transport supporting SMTP AUTH and OAuth2/XOAUTH2 for Microsoft 365 /
   Exchange Online; defines the outbox-on-`app_notification_log` delivery model
   and the environment-variable contract.
@@ -171,7 +171,7 @@ present per convention.
 
 - **M365 Basic Auth deprecation** — Microsoft is retiring SMTP AUTH (basic) for
   Exchange Online; OAuth2/XOAUTH2 via an Azure AD app registration is the
-  durable path. ADR-014 makes XOAUTH2 a first-class transport mode so this is
+  durable path. ADR-023 makes XOAUTH2 a first-class transport mode so this is
   not a later breaking change. **Open:** client-credentials vs. a dedicated
   service-mailbox grant — confirm with the target tenant at build time.
 - **Delivery decoupling** — v1 uses `app_notification_log` as an outbox: the

@@ -39,6 +39,8 @@ import {
   ListUsersForRole,
   LogAuditEvent,
   LogError,
+  NotifyOnFlowShared,
+  NotifyOnSessionComplete,
   OverrideBranch,
   PingJob,
   RegisterJob,
@@ -80,6 +82,7 @@ import {
   DrizzleFlowNodeRepository,
   DrizzleFlowRepository,
   DrizzleJobRepository,
+  DrizzleNotificationLogRepository,
   DrizzleReindexSourceRepository,
   DrizzleRoleRepository,
   DrizzleSessionMessageRepository,
@@ -187,7 +190,38 @@ const build = () => {
   const documentExtractor = new DocumentExtractorService(docxGenerator);
   const nodeExecutors = createNodeExecutors(llm, env.N8N_WEBHOOK_SECRET);
   const n8nWorkflowDirectory = new N8nHttpWorkflowDirectory(() => runtimeConfig.getN8nConfig());
-  const emailSender = new NodemailerEmailSender(systemSettings);
+  const smtpEnvConfig = env.SMTP_TRANSPORT_MODE
+    ? {
+        mode: env.SMTP_TRANSPORT_MODE,
+        host: env.SMTP_HOST ?? null,
+        port: env.SMTP_PORT ?? null,
+        secure: env.SMTP_SECURE,
+        user: env.SMTP_USER ?? null,
+        pass: env.SMTP_PASS ?? null,
+        from: env.SMTP_FROM ?? null,
+        m365TenantId: env.M365_TENANT_ID ?? null,
+        m365ClientId: env.M365_CLIENT_ID ?? null,
+        m365ClientSecret: env.M365_CLIENT_SECRET ?? null,
+      }
+    : null;
+  const emailSender = new NodemailerEmailSender(systemSettings, smtpEnvConfig);
+  const notificationLog = new DrizzleNotificationLogRepository(db);
+  const notificationConfig = { enabled: env.NOTIFICATIONS_ENABLED, baseUrl: env.BETTER_AUTH_URL };
+  const notifyOnSessionComplete = new NotifyOnSessionComplete(
+    notificationLog,
+    emailSender,
+    users,
+    flows,
+    auditLogger,
+    notificationConfig,
+  );
+  const notifyOnFlowShared = new NotifyOnFlowShared(
+    notificationLog,
+    emailSender,
+    users,
+    auditLogger,
+    notificationConfig,
+  );
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
   const contextDocContent = new DrizzleContextDocContentRepository(db);
   const documentChunks = new DrizzleDocumentChunksRepository(db);
@@ -259,7 +293,7 @@ const build = () => {
     runtimeConfig,
     resolveSession: (token: string) => resolveSession(db, token),
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory },
-    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, reindexSource },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, reindexSource, notificationLog },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       summariseTemplate: new SummariseTemplate(llm),
@@ -314,11 +348,13 @@ const build = () => {
       listSessions: new ListSessions(sessions),
       listAllSessions: new ListAllSessions(sessions),
       getSession: new GetSession(sessions, sessionMessages, flows, flowNodes, flowEdges),
-      runTurn: new RunTurn(sessions, sessionMessages, flowEdges),
+      runTurn: new RunTurn(sessions, sessionMessages, flowEdges, notifyOnSessionComplete),
       runAutoNode: new RunAutoNode(sessions, llm, nodeExecutors, sessionStepOutputs),
-      applyAutoNodeResult: new ApplyAutoNodeResult(sessions, flowNodes, flowEdges, sessionStepOutputs),
+      applyAutoNodeResult: new ApplyAutoNodeResult(sessions, flowNodes, flowEdges, sessionStepOutputs, notifyOnSessionComplete),
       scheduleNodeEvent: new ScheduleNodeEvent(schedules, clock, llm),
-      advanceScheduledNode: new AdvanceScheduledNode(sessions, flowEdges),
+      advanceScheduledNode: new AdvanceScheduledNode(sessions, flowEdges, notifyOnSessionComplete),
+      notifyOnSessionComplete,
+      notifyOnFlowShared,
       listScheduleRuns: new ListScheduleRuns(scheduleRuns),
       overrideBranch: new OverrideBranch(sessions, flowEdges),
       heartbeatTyping: new HeartbeatTyping(sessionTyping),

@@ -216,6 +216,7 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
 // users/sessions and system settings are left intact so re-runs work.
 export const teardownE2EFixtures = async (container: Container): Promise<void> => {
   const { db } = container;
+  await db.delete(schema.app_notification_log);
   await db.delete(schema.app_session_schedule_runs);
   await db.delete(schema.app_session_schedules);
   await db.delete(schema.app_session_step_outputs);

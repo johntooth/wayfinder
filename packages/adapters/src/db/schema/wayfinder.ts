@@ -299,6 +299,44 @@ export const app_session_step_outputs = pgTable(
   }),
 );
 
+// Outbox + delivery log for outbound email (ADR-023). Rows are written as
+// `pending` inside the triggering action, then flipped to `sent`/`failed` by
+// the best-effort send. The unique index makes sends idempotent per
+// (trigger, resource, recipient).
+export const app_notification_log = pgTable(
+  "app_notification_log",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    recipient_email: text("recipient_email").notNull(),
+    recipient_user_id: uuid("recipient_user_id").references(() => core_users.id, {
+      onDelete: "set null",
+    }),
+    trigger: text("trigger", { enum: ["session_complete", "flow_shared"] }).notNull(),
+    resource_type: text("resource_type", { enum: ["session", "flow"] }).notNull(),
+    resource_id: text("resource_id").notNull(),
+    subject: text("subject").notNull(),
+    status: text("status", { enum: ["pending", "sent", "failed"] })
+      .notNull()
+      .default("pending"),
+    error: text("error"),
+    attempts: smallint("attempts").notNull().default(0),
+    sent_at: timestamp("sent_at", { withTimezone: true }),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    dedupe_unique: unique("app_notification_log_trigger_resource_recipient_unique").on(
+      t.trigger,
+      t.resource_id,
+      t.recipient_email,
+    ),
+    by_status_created: index("app_notification_log_status_created_at_idx").on(
+      t.status,
+      t.created_at,
+    ),
+  }),
+);
+
 export const admin_system_settings = pgTable(
   "admin_system_settings",
   {

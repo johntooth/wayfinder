@@ -154,6 +154,67 @@ describe("ApplyAutoNodeResult", () => {
     expect(statusUpdate).toBeDefined();
   });
 
+  it("invokes the session-complete notifier when the callback completes the session", async () => {
+    const session = makeSession(pending());
+    const { repo: sessions } = makeSessions(session);
+    const notified: Session[] = [];
+    const notifier = {
+      execute: async (input: { session: Session }) => {
+        notified.push(input.session);
+        return ok(null);
+      },
+    };
+
+    const useCase = new ApplyAutoNodeResult(
+      sessions,
+      makeNodes(),
+      makeEdges([]),
+      makeStepOutputs(),
+      notifier,
+    );
+
+    await useCase.execute({
+      sessionId: "sess-1",
+      correlationId: "corr-1",
+      nodeId: "node-1",
+      status: "completed",
+      data: { vendor: "Acme" },
+    });
+
+    expect(notified).toHaveLength(1);
+    expect(notified[0]?.status).toBe("complete");
+  });
+
+  it("does not invoke the notifier when the callback advances to a next node", async () => {
+    const session = makeSession(pending());
+    const { repo: sessions } = makeSessions(session);
+    const notified: Session[] = [];
+    const notifier = {
+      execute: async (input: { session: Session }) => {
+        notified.push(input.session);
+        return ok(null);
+      },
+    };
+
+    const useCase = new ApplyAutoNodeResult(
+      sessions,
+      makeNodes(),
+      makeEdges([edge("node-1", "node-2")]),
+      makeStepOutputs(),
+      notifier,
+    );
+
+    await useCase.execute({
+      sessionId: "sess-1",
+      correlationId: "corr-1",
+      nodeId: "node-1",
+      status: "completed",
+      data: { vendor: "Acme" },
+    });
+
+    expect(notified).toHaveLength(0);
+  });
+
   it("ignores a callback whose correlation id is not pending (duplicate/stale)", async () => {
     const session = makeSession(pending());
     const { repo: sessions } = makeSessions(session);

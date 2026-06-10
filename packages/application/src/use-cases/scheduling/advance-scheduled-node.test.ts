@@ -64,6 +64,39 @@ describe("AdvanceScheduledNode", () => {
     expect(updates[0]).toMatchObject({ status: "complete" });
   });
 
+  it("invokes the session-complete notifier when the fire completes the session", async () => {
+    const { sessions, flowEdges } = makeRepos(makeSession(), []);
+    const notified: Session[] = [];
+    const notifier = {
+      execute: async (input: { session: Session }) => {
+        notified.push(input.session);
+        return ok(null);
+      },
+    };
+    const useCase = new AdvanceScheduledNode(sessions, flowEdges, notifier);
+
+    await useCase.execute({ sessionId: "sess-1", scheduledNodeId: "node-sched" });
+
+    expect(notified).toHaveLength(1);
+    expect(notified[0]?.status).toBe("complete");
+  });
+
+  it("does not invoke the notifier when the fire advances to a next node", async () => {
+    const { sessions, flowEdges } = makeRepos(makeSession(), [edge("node-sched", "node-next")]);
+    const notified: Session[] = [];
+    const notifier = {
+      execute: async (input: { session: Session }) => {
+        notified.push(input.session);
+        return ok(null);
+      },
+    };
+    const useCase = new AdvanceScheduledNode(sessions, flowEdges, notifier);
+
+    await useCase.execute({ sessionId: "sess-1", scheduledNodeId: "node-sched" });
+
+    expect(notified).toHaveLength(0);
+  });
+
   it("reports needs_branch_choice at a fork when no choice is supplied", async () => {
     const { sessions, flowEdges, updates } = makeRepos(makeSession(), [
       edge("node-sched", "node-a"),

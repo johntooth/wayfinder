@@ -4,6 +4,7 @@ export * from "./session/index";
 export * from "./scheduling/index";
 export * from "./document/index";
 export * from "./analytics/index";
+export * from "./notifications/index";
 export * from "./create-user";
 export * from "./update-user";
 export * from "./delete-user";
