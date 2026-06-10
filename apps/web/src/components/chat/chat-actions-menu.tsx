@@ -15,8 +15,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ShowDataModal } from "./show-data-modal";
 
 interface ChatActionsMenuProps {
+  sessionId: string;
   sessionTitle: string | null;
   shareUrl: string;
   collaborateUrl: string;
@@ -26,6 +28,7 @@ interface ChatActionsMenuProps {
 }
 
 export function ChatActionsMenu({
+  sessionId,
   sessionTitle,
   shareUrl,
   collaborateUrl,
@@ -35,6 +38,7 @@ export function ChatActionsMenu({
 }: ChatActionsMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [showDataOpen, setShowDataOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(sessionTitle ?? "");
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -78,6 +82,11 @@ export function ChatActionsMenu({
     onClose();
   };
 
+  const handleShowData = () => {
+    setMenuOpen(false);
+    setShowDataOpen(true);
+  };
+
   return (
     <>
       <div className="relative" ref={menuRef}>
@@ -108,9 +117,16 @@ export function ChatActionsMenu({
                 className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
                 onClick={handleClose}
               >
-                Close
+                Abandon
               </button>
             )}
+            <button
+              type="button"
+              className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+              onClick={handleShowData}
+            >
+              Show data
+            </button>
             <button
               type="button"
               className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
@@ -159,6 +175,12 @@ export function ChatActionsMenu({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ShowDataModal
+        open={showDataOpen}
+        sessionId={sessionId}
+        onClose={() => setShowDataOpen(false)}
+      />
     </>
   );
 }

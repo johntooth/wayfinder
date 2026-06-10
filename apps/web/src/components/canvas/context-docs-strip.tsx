@@ -1,12 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { FlowContextDoc } from "@rbrasier/domain";
 import {
   CONTEXT_DOCS_ALLOWED_MIME_TYPES,
   CONTEXT_DOCS_MAX_FILE_SIZE_BYTES,
-  CONTEXT_DOCS_TOTAL_BUDGET_CHARS,
-  CONTEXT_DOCS_WARNING_THRESHOLD_CHARS,
 } from "@rbrasier/shared";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/trpc/client";
@@ -38,24 +36,6 @@ export function ContextDocsStrip({ flowId, docs, onDocsChange }: ContextDocsStri
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-
-  const totalChars = useMemo(
-    () => docs.reduce((sum, doc) => sum + (doc.extractedText?.length ?? 0), 0),
-    [docs],
-  );
-  const pctUsed = Math.min(100, Math.round((totalChars / CONTEXT_DOCS_TOTAL_BUDGET_CHARS) * 100));
-  const isOverBudget = totalChars > CONTEXT_DOCS_TOTAL_BUDGET_CHARS;
-  const isLarge = totalChars >= CONTEXT_DOCS_WARNING_THRESHOLD_CHARS;
-  const barColor = isOverBudget
-    ? "bg-red-500"
-    : isLarge
-      ? "bg-amber-500"
-      : "bg-emerald-500";
-  const textColor = isOverBudget
-    ? "text-red-600"
-    : isLarge
-      ? "text-amber-700"
-      : "text-gray-600";
 
   const removeMutation = trpc.flow.contextDoc.remove.useMutation({
     onSuccess: (_, variables) => {
@@ -104,12 +84,6 @@ export function ContextDocsStrip({ flowId, docs, onDocsChange }: ContextDocsStri
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
-
-  const warningMessage = isOverBudget
-    ? "Context exceeds the flow's budget — uploads will be rejected until you remove or shrink a doc."
-    : isLarge
-      ? "Large context — every chat turn caches this prefix, so subsequent turns are cheap, but the first turn of each 5-minute window pays the full cost."
-      : null;
 
   return (
     <div className="border-t bg-white px-4 py-3">
@@ -164,23 +138,7 @@ export function ContextDocsStrip({ flowId, docs, onDocsChange }: ContextDocsStri
         </div>
       </div>
 
-      <div className="mt-2 flex items-center gap-3">
-        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-200">
-          <div
-            className={`h-full transition-all ${barColor}`}
-            style={{ width: `${pctUsed}%` }}
-          />
-        </div>
-        <span className={`shrink-0 text-xs ${textColor}`}>
-          {formatChars(totalChars)} / {formatChars(CONTEXT_DOCS_TOTAL_BUDGET_CHARS)} ({pctUsed}%)
-        </span>
-      </div>
-
-      {(uploadError || warningMessage) && (
-        <p className={`mt-1 text-xs ${uploadError ? "text-red-500" : textColor}`}>
-          {uploadError ?? warningMessage}
-        </p>
-      )}
+      {uploadError && <p className="mt-1 text-xs text-red-500">{uploadError}</p>}
     </div>
   );
 }

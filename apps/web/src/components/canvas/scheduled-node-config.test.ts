@@ -79,6 +79,7 @@ describe("scheduledConfigFromValues", () => {
     scheduleModifier: "after",
     scheduleAnchorChoice: "node_reached",
     scheduleDescribeText: "",
+    notifyOnComplete: true,
   };
 
   it("serialises a specific schedule into a relative config and round-trips", () => {

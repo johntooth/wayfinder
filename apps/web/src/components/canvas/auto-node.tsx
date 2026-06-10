@@ -23,9 +23,8 @@ export function AutoNode({ data, selected }: NodeProps) {
     ? nodeData.instruction.slice(0, 60) + (nodeData.instruction.length > 60 ? "…" : "")
     : "No instruction yet";
 
-  const displayName = nodeData.stepNumber
-    ? `${nodeData.stepNumber}. ${nodeData.name}`
-    : nodeData.name;
+  const name = nodeData.name.trim() || "Untitled step";
+  const displayName = nodeData.stepNumber ? `${nodeData.stepNumber}. ${name}` : name;
 
   return (
     <div

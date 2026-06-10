@@ -6,6 +6,7 @@ import {
   type Session,
 } from "@rbrasier/domain";
 import type { ISessionCompleteNotifier } from "../notifications/notify-on-session-complete";
+import type { ISessionStepCompleteNotifier } from "../notifications/notify-on-step-complete";
 
 export type AdvanceScheduledNodeStatus =
   | "advanced"
@@ -46,6 +47,7 @@ export class AdvanceScheduledNode {
     private readonly sessions: ISessionRepository,
     private readonly flowEdges: IFlowEdgeRepository,
     private readonly sessionCompleteNotifier?: ISessionCompleteNotifier,
+    private readonly sessionStepCompleteNotifier?: ISessionStepCompleteNotifier,
   ) {}
 
   async execute(input: AdvanceScheduledNodeInput): Promise<Result<AdvanceScheduledNodeOutput>> {
@@ -61,6 +63,12 @@ export class AdvanceScheduledNode {
 
     const edgesResult = await this.flowEdges.listByFlow(session.flowId);
     if (edgesResult.error) return edgesResult;
+
+    // The scheduled node has fired, so the step is complete here regardless of
+    // whether the session then advances, completes, or parks at a fork.
+    void this.sessionStepCompleteNotifier
+      ?.execute({ session, completedNodeId: input.scheduledNodeId })
+      .catch(() => undefined);
 
     const outgoing = edgesResult.data.filter((edge) => edge.fromNodeId === input.scheduledNodeId);
 

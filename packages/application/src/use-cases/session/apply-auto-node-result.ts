@@ -11,6 +11,7 @@ import {
 } from "@rbrasier/domain";
 import { coerceStructuredFields } from "../document/structured-fields";
 import type { ISessionCompleteNotifier } from "../notifications/notify-on-session-complete";
+import type { ISessionStepCompleteNotifier } from "../notifications/notify-on-step-complete";
 
 export interface ApplyAutoNodeResultInput {
   sessionId: string;
@@ -35,6 +36,7 @@ export class ApplyAutoNodeResult {
     private readonly flowEdges: IFlowEdgeRepository,
     private readonly sessionStepOutputs: ISessionStepOutputRepository,
     private readonly sessionCompleteNotifier?: ISessionCompleteNotifier,
+    private readonly sessionStepCompleteNotifier?: ISessionStepCompleteNotifier,
   ) {}
 
   async execute(input: ApplyAutoNodeResultInput): Promise<Result<ApplyAutoNodeResultOutput>> {
@@ -56,6 +58,12 @@ export class ApplyAutoNodeResult {
     }
 
     await this.persistStepOutput(session.flowId, input);
+
+    // The auto node's execution has succeeded, so the step is complete here
+    // regardless of whether the session then advances or parks at a fork.
+    void this.sessionStepCompleteNotifier
+      ?.execute({ session, completedNodeId: input.nodeId })
+      .catch(() => undefined);
 
     return this.advance(session.id, session.flowId, session.currentNodeId, input.nodeId, remaining);
   }

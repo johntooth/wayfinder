@@ -94,14 +94,15 @@ test.describe('Scheduling: scheduled node behind the scheduled_node flag', () =>
     await page.getByRole('button', { name: '+ Add step' }).click();
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
 
-    const scheduledOption = page.locator('label', { hasText: /^Scheduled$/ });
+    const scheduledOption = page.getByRole('button', { name: 'Scheduled' });
     test.skip(
       !(await scheduledOption.isVisible().catch(() => false)),
       'Scheduled step type not offered — flag not picked up in this environment',
     );
-
-    await page.locator('#node-name').fill('Wait 30 days');
     await scheduledOption.click();
+
+    await expect(page.locator('#node-name')).toBeVisible({ timeout: 5_000 });
+    await page.locator('#node-name').fill('Wait 30 days');
     // "Pick a date and time" mad-lib is the default; set 30 days.
     await page.getByLabel('Amount').fill('30');
     await page.getByLabel('Unit').selectOption('d');
@@ -131,14 +132,15 @@ test.describe('Scheduling: scheduled node behind the scheduled_node flag', () =>
     await page.getByRole('button', { name: '+ Add step' }).click();
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
 
-    const scheduledOption = page.locator('label', { hasText: /^Scheduled$/ });
+    const scheduledOption = page.getByRole('button', { name: 'Scheduled' });
     test.skip(
       !(await scheduledOption.isVisible().catch(() => false)),
       'Scheduled step type not offered in this environment',
     );
-
-    await page.locator('#node-name').fill('Incomplete schedule');
     await scheduledOption.click();
+
+    await expect(page.locator('#node-name')).toBeVisible({ timeout: 5_000 });
+    await page.locator('#node-name').fill('Incomplete schedule');
     // "Type anything" needs a description before it can be saved.
     await page.locator('#schedule-when').selectOption('describe');
     await expect(page.getByRole('button', { name: /^Save$/i })).toBeDisabled();

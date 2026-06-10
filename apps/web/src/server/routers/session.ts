@@ -4,6 +4,7 @@ import { isFlowDiscoverableBy } from "@rbrasier/domain";
 import { adminProcedure, authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 import { orderStepIds } from "@/lib/step-order";
+import { buildCompletedStepData } from "@/lib/step-data";
 
 const COMPLETE_CONFIDENCE_THRESHOLD = 90;
 
@@ -119,6 +120,30 @@ export const sessionRouter = router({
       );
 
       return { ...result.data, participants };
+    }),
+
+  stepData: authenticatedProcedure
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.getSession.execute(input.sessionId);
+      if (result.error) throw toTrpcError(result.error);
+      if (!result.data) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found." });
+
+      const { session, messages, nodes, edges } = result.data;
+      if (!ctx.isAdmin && session.userId !== ctx.userId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
+      }
+
+      const outputsResult = await ctx.container.repos.sessionStepOutputs.listBySession(input.sessionId);
+      const outputs = outputsResult.error ? [] : outputsResult.data;
+
+      return buildCompletedStepData({
+        currentNodeId: session.currentNodeId,
+        messages,
+        nodes,
+        edges,
+        outputs,
+      });
     }),
 
   heartbeatTyping: authenticatedProcedure

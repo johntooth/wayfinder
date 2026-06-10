@@ -17,6 +17,13 @@ export interface SessionCompleteEmailInput {
   sessionUrl: string;
 }
 
+export interface StepCompleteEmailInput {
+  flowName: string;
+  stepName: string;
+  sessionTitle: string | null;
+  sessionUrl: string;
+}
+
 export interface FlowSharedEmailInput {
   flowName: string;
   granterName: string | null;
@@ -45,6 +52,22 @@ export const buildSessionCompleteEmail = (
     ].join("\n"),
     html: [
       `<p>Your session '${escapeHtml(sessionName)}' in the '${escapeHtml(input.flowName)}' flow is complete.</p>`,
+      `<p><a href="${escapeHtml(input.sessionUrl)}">Open the session</a></p>`,
+    ].join("\n"),
+  };
+};
+
+export const buildStepCompleteEmail = (input: StepCompleteEmailInput): EmailContent => {
+  const sessionName = input.sessionTitle ?? input.flowName;
+  return {
+    subject: `Step '${input.stepName}' is complete in '${input.flowName}'`,
+    text: [
+      `The step '${input.stepName}' in your '${sessionName}' session ('${input.flowName}' flow) is complete.`,
+      "",
+      `Open it here: ${input.sessionUrl}`,
+    ].join("\n"),
+    html: [
+      `<p>The step '${escapeHtml(input.stepName)}' in your '${escapeHtml(sessionName)}' session ('${escapeHtml(input.flowName)}' flow) is complete.</p>`,
       `<p><a href="${escapeHtml(input.sessionUrl)}">Open the session</a></p>`,
     ].join("\n"),
   };

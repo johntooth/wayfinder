@@ -75,7 +75,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
 
   const closeMutation = trpc.session.close.useMutation({
     onSuccess: () => {
-      toast.success("Chat closed");
+      toast.success("Chat abandoned");
       void utils.session.list.invalidate();
       router.push("/chats");
     },
@@ -294,6 +294,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <ChatActionsMenu
+            sessionId={sessionId}
             sessionTitle={session.title}
             shareUrl={newChatUrl}
             collaborateUrl={collaborateUrl}

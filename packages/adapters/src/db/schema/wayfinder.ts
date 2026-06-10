@@ -311,7 +311,7 @@ export const app_notification_log = pgTable(
     recipient_user_id: uuid("recipient_user_id").references(() => core_users.id, {
       onDelete: "set null",
     }),
-    trigger: text("trigger", { enum: ["session_complete", "flow_shared"] }).notNull(),
+    trigger: text("trigger", { enum: ["session_complete", "step_complete", "flow_shared"] }).notNull(),
     resource_type: text("resource_type", { enum: ["session", "flow"] }).notNull(),
     resource_id: text("resource_id").notNull(),
     subject: text("subject").notNull(),

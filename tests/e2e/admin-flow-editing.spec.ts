@@ -63,7 +63,8 @@ async function addAndConfigureStep(
   },
 ): Promise<void> {
   await page.getByRole('button', { name: '+ Add step' }).click();
-  await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
+  await page.getByRole('button', { name: 'Conversational' }).click();
+  await expect(page.locator('#node-name')).toBeVisible({ timeout: 5_000 });
 
   await page.locator('#node-name').fill(options.name);
   await page.locator('#ai-instruction').fill(options.instruction);

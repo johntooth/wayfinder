@@ -14,6 +14,7 @@ import {
   LogAuditEvent,
   LogError,
   NotifyOnSessionComplete,
+  NotifyOnStepComplete,
   PingJob,
   RegisterJob,
   TrackUsage,
@@ -35,6 +36,7 @@ import {
   DrizzleFlowRepository,
   DrizzleJobRepository,
   DrizzleNotificationLogRepository,
+  DrizzleSessionMessageRepository,
   DrizzleSessionRepository,
   DrizzleSessionStepOutputRepository,
   DrizzleSystemSettingsRepository,
@@ -71,6 +73,7 @@ export const buildContainer = (env: Env) => {
   const flowNodes = new DrizzleFlowNodeRepository(db);
   const flowEdges = new DrizzleFlowEdgeRepository(db);
   const sessionStepOutputs = new DrizzleSessionStepOutputRepository(db);
+  const sessionMessages = new DrizzleSessionMessageRepository(db);
 
   const smtpEnvConfig = env.SMTP_TRANSPORT_MODE
     ? {
@@ -93,6 +96,16 @@ export const buildContainer = (env: Env) => {
     emailSender,
     users,
     flows,
+    auditLogger,
+    { enabled: env.NOTIFICATIONS_ENABLED, baseUrl: env.WEB_BASE_URL },
+  );
+  const notifyOnStepComplete = new NotifyOnStepComplete(
+    notificationLog,
+    emailSender,
+    users,
+    flows,
+    flowNodes,
+    sessionMessages,
     auditLogger,
     { enabled: env.NOTIFICATIONS_ENABLED, baseUrl: env.WEB_BASE_URL },
   );
@@ -163,7 +176,7 @@ export const buildContainer = (env: Env) => {
     repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, systemSettings, sessions, flowNodes, flowEdges, sessionStepOutputs },
     services: { llm, errorLogger, auditLogger },
     useCases: {
-      applyAutoNodeResult: new ApplyAutoNodeResult(sessions, flowNodes, flowEdges, sessionStepOutputs, notifyOnSessionComplete),
+      applyAutoNodeResult: new ApplyAutoNodeResult(sessions, flowNodes, flowEdges, sessionStepOutputs, notifyOnSessionComplete, notifyOnStepComplete),
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
       deleteUser: new DeleteUser(users),

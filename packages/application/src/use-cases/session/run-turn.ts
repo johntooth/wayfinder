@@ -9,6 +9,7 @@ import {
   type SessionMessage,
 } from "@rbrasier/domain";
 import type { ISessionCompleteNotifier } from "../notifications/notify-on-session-complete";
+import type { ISessionStepCompleteNotifier } from "../notifications/notify-on-step-complete";
 
 export interface RunTurnInput {
   session: Session;
@@ -47,6 +48,7 @@ export class RunTurn {
     private readonly sessionMessages: ISessionMessageRepository,
     private readonly flowEdges: IFlowEdgeRepository,
     private readonly sessionCompleteNotifier?: ISessionCompleteNotifier,
+    private readonly sessionStepCompleteNotifier?: ISessionStepCompleteNotifier,
   ) {}
 
   // Persists the user message before the AI call runs, so it survives any
@@ -106,10 +108,12 @@ export class RunTurn {
     if (edgesResult.error) return edgesResult;
 
     const outgoing = edgesResult.data.filter((e) => e.fromNodeId === session.currentNodeId);
+    const completedNodeId = session.currentNodeId;
 
     if (outgoing.length === 0) {
       const updated = await this.sessions.update(session.id, { status: "complete" });
       if (updated.error) return updated;
+      this.notifyStepComplete(updated.data, completedNodeId);
       this.notifyComplete(updated.data);
       return ok({ session: updated.data, advanced: true, newNodeId: null });
     }
@@ -136,6 +140,7 @@ export class RunTurn {
     });
     if (updated.error) return updated;
 
+    this.notifyStepComplete(updated.data, completedNodeId);
     return ok({ session: updated.data, advanced: true, newNodeId });
   }
 
@@ -143,6 +148,11 @@ export class RunTurn {
   // notifier records its own outcome in the outbox and never throws.
   private notifyComplete(session: Session): void {
     void this.sessionCompleteNotifier?.execute({ session }).catch(() => undefined);
+  }
+
+  private notifyStepComplete(session: Session, completedNodeId: string | null): void {
+    if (!completedNodeId) return;
+    void this.sessionStepCompleteNotifier?.execute({ session, completedNodeId }).catch(() => undefined);
   }
 
   async execute(input: RunTurnInput): Promise<Result<RunTurnOutput>> {

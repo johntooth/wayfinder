@@ -77,7 +77,8 @@ async function createFlowAndOpenCanvas(page: Page, name: string): Promise<void> 
 /** Add a conversational step named `name` with "Generate document" output. */
 async function addConversationalDocStep(page: Page, name: string): Promise<void> {
   await page.getByRole('button', { name: '+ Add step' }).click();
-  await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
+  await page.getByRole('button', { name: 'Conversational' }).click();
+  await expect(page.locator('#node-name')).toBeVisible({ timeout: 5_000 });
 
   await page.locator('#node-name').fill(name);
   await page.locator('#ai-instruction').fill('Gather the required document information.');
@@ -155,12 +156,10 @@ async function uploadMockTemplate(page: Page, stepName: string): Promise<void> {
 /** Add an auto-step with the Mock executor and one request field. */
 async function addMockAutoStep(page: Page, name: string): Promise<void> {
   await page.getByRole('button', { name: '+ Add step' }).click();
-  await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
+  await page.getByRole('button', { name: /Automated \(n8n\)/ }).click();
+  await expect(page.locator('#node-name')).toBeVisible({ timeout: 5_000 });
 
   await page.locator('#node-name').fill(name);
-
-  const autoOption = page.locator('label', { hasText: /Automated \(n8n\)/ });
-  await autoOption.click();
   await page.locator('#auto-instruction').fill('Run the automated task.');
 
   // Use Mock executor so no live n8n needed
