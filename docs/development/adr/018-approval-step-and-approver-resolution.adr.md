@@ -3,8 +3,8 @@
 - **Status**: Proposed
 - **Date**: 2026-06-03
 - **Relates to**: ADR-010 (`INodeExecutor` / `pending_approval`), ADR-016 /
-  ADR-017 (pgvector RAG over the knowledge base), Email Notifications
-  (`INotificationSender`, M365 app registration)
+  ADR-017 (pgvector RAG over the knowledge base), ADR-023 Email Notification
+  Transport (`IEmailSender` + `app_notification_log` outbox, M365 app registration)
 
 ## Context
 
@@ -24,7 +24,8 @@ Two questions must be settled:
 
 ### Approval is its own node type
 
-Add `approval` to the `FlowNode` union (`conversational` | `auto` | `approval`).
+Add `approval` to the `FlowNode` union (`conversational` | `auto` | `scheduled` |
+`approval`).
 It is a first-class node — its own inbound/outbound edges (approve routes
 forward; reject can route back), visible on the canvas — not a flag on another
 step. Reaching it produces `status: 'pending_approval'` (the reserved value is
@@ -139,8 +140,17 @@ Decisions are `approved` | `rejected` | `changes_requested` with an optional
 - **Rejected / changes requested** → comment surfaced to the operator; session
   does not advance.
 
-Notifications reuse `INotificationSender` (`approval_requested` → approver,
-`approval_decided` → requester), non-blocking via the outbox model.
+On any decision the outcome and `decided_at` (plus `decided_by` and `comment`)
+are also projected onto the approval node's step-output metadata, so reporting
+can read the decision from the step record without joining
+`app_session_approvals`. The row stays the source of truth; the metadata is a
+denormalised copy.
+
+Notifications reuse the existing `IEmailSender` port + the `app_notification_log`
+outbox (ADR-023) — no new `INotificationSender` port. Triggers `approval_requested`
+(→ approver) and `approval_decided` (→ requester) write a `pending` outbox row in
+the deciding action's commit; the send is best-effort and non-blocking, with
+subject/body composed as application-layer string builders.
 
 ### Superseded earlier sketch
 

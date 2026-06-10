@@ -1,12 +1,13 @@
 # Phase — Step Approvals
 
 - **Status**: Sketched (awaiting `/doc-review`)
-- **Target version**: 1.24.0 (bump: **MINOR** — new node type, new tables, new
+- **Target version**: 1.37.0 (bump: **MINOR** — new node type, new tables, new
   domain ports)
 - **PRD**: `docs/development/prd/step-approvals.prd.md`
 - **ADR**: `docs/development/adr/018-approval-step-and-approver-resolution.adr.md`
 - **Depends on**: ADR-010 (`pending_approval`), ADR-016/017 (RAG over `kb_`),
-  Email Notifications (`INotificationSender` + M365 app registration)
+  Email Notifications / ADR-023 (`IEmailSender` + `app_notification_log` outbox +
+  M365 app registration)
 
 ## 1. Goal
 
@@ -30,8 +31,11 @@ Hexagonal, gate-on-pending, suggest-then-confirm:
    calls a position lookup.
 4. The operator confirms or overrides via `IPeopleDirectory.search` (federated
    Entra + HR + free email). Only the confirmed identity is sent.
-5. A decision use-case advances or routes back, snapshots on approve, audits, and
-   enqueues notifications.
+5. A decision use-case advances or routes back, snapshots on approve, audits,
+   enqueues notifications, and writes the outcome + `decided_at` (plus
+   `decided_by` and `comment`) onto the approval node's step-output metadata as a
+   denormalised projection for reporting. The `app_session_approvals` row remains
+   the source of truth.
 
 See ADR-018.
 
@@ -48,7 +52,7 @@ See ADR-018.
 | domain | `packages/domain/src/ports/hr-dataset-repository.ts` | New `IHrDatasetRepository`. |
 | application | `packages/application/src/use-cases/approvals/suggest-approver.ts` | Compute suggestion by `approverSource`. |
 | application | `packages/application/src/use-cases/approvals/confirm-and-send.ts` | Persist confirmed/override approver; notify. |
-| application | `packages/application/src/use-cases/approvals/decide-approval.ts` | approve/reject/changes; advance or route back; audit + notify. |
+| application | `packages/application/src/use-cases/approvals/decide-approval.ts` | approve/reject/changes; advance or route back; audit + notify; project outcome + `decided_at`/`decided_by`/`comment` onto step-output metadata for reporting. |
 | application | `packages/application/src/use-cases/approvals/list-pending-approvals.ts` | Approver inbox. |
 | application | `packages/application/src/use-cases/people/search-people.ts` | Federate + de-dupe directory results. |
 | application | `packages/application/src/use-cases/hr/import-hr-dataset.ts` | Parse upload → rows (as-is) + detected columns. |
@@ -115,9 +119,12 @@ No `core_users` change (the earlier `supervisor_user_id` is dropped from scope).
 
 ## 5. Notifications
 
-New triggers on `INotificationSender`: `approval_requested` (→ approver),
-`approval_decided` (→ requester). Outbox + non-blocking, per the Email
-Notifications ADR. The approver link is the same for everyone and routes to the
+New triggers via `IEmailSender` + the `app_notification_log` outbox (ADR-023):
+`approval_requested` (→ approver), `approval_decided` (→ requester). The
+triggering use-case writes a `pending` outbox row inside its own commit; the
+send is best-effort and non-blocking; subject/body are composed as
+application-layer string builders (no new `INotificationSender` port — ADR-023
+reuses the existing mailer). The approver link is the same for everyone and routes to the
 in-app approval; an unauthenticated recipient is redirected to login and returned
 afterward. No magic-link / approve-by-email path. A confirmed `approver_email`
 with no account cannot act until one exists (provisioning deferred — see §9).
@@ -176,5 +183,7 @@ Mirror PRD §10. At minimum:
       proposes the holder.
 - [ ] CSV/XLSX upload stored as-uploaded, searchable; mapping settable.
 - [ ] Approve advances + snapshots; reject/changes surface comment and hold.
+- [ ] On decision, the approval node's step-output metadata reflects the outcome
+      and `decided_at` (and `decided_by`/`comment`) for reporting.
 - [ ] Email on request and decision; audit on both; no double-decision.
 - [ ] `./validate.sh` passes; `VERSION` and `package.json#version` match.

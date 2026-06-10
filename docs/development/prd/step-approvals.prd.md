@@ -3,7 +3,7 @@
 - **Status**: Draft
 - **Date**: 2026-06-03
 - **Author**: Richy Brasier
-- **Target version**: 1.24.0  (bump: **MINOR** — new node type, new tables, new
+- **Target version**: 1.37.0  (bump: **MINOR** — new node type, new tables, new
   domain ports; additive)
 
 ## 1. Problem
@@ -133,7 +133,8 @@ hierarchy comes from Entra/HR and every route is operator-confirmed (ADR-018).
   federated `IPeopleDirectory` over Entra + HR upload + free email; schema-as-
   uploaded HR storage with a mapping; the `dynamic` (policy + RAG + lookup) flow.
 - Assumes ADR-010 (`pending_approval`), ADR-016/017 (RAG over `kb_`), and the
-  Email Notifications `INotificationSender` + M365 app registration.
+  Email Notifications transport (ADR-023): the existing `IEmailSender` port +
+  `app_notification_log` outbox + M365 app registration (no new notification port).
 - Hands the approved snapshot to the Scheduling record-regeneration procedure.
 
 ## 10. Acceptance criteria
@@ -148,6 +149,8 @@ hierarchy comes from Entra/HR and every route is operator-confirmed (ADR-018).
 - [ ] Admin can upload a CSV/XLSX; rows are stored as-uploaded and searchable;
       a column mapping can be set.
 - [ ] Approve advances + snapshots; reject/changes surface the comment and hold.
+- [ ] On decision, the approval node's step-output metadata reflects the outcome
+      and decided-at timestamp (and decided-by/comment) for reporting.
 - [ ] Approver emailed on request; requester emailed on decision; audit on both.
 - [ ] No double-decision; deciding an already-decided approval is rejected.
 - [ ] `./validate.sh` passes; `VERSION` and `package.json#version` match.
