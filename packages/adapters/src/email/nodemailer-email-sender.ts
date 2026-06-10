@@ -10,6 +10,12 @@ import {
   type SendEmailInput,
 } from "@rbrasier/domain";
 import nodemailer from "nodemailer";
+import {
+  buildEnvTransportOptions,
+  fetchM365AccessToken,
+  type EnvTransportOptions,
+  type SmtpEnvConfig,
+} from "./smtp-transport";
 
 const isConfigComplete = (config: Partial<EmailConfig> | null): config is EmailConfig =>
   Boolean(
@@ -21,22 +27,53 @@ const isConfigComplete = (config: Partial<EmailConfig> | null): config is EmailC
       config.fromAddress,
   );
 
-export class NodemailerEmailSender implements IEmailSender {
-  constructor(private readonly systemSettings: ISystemSettingsRepository) {}
+interface CachedToken {
+  value: string;
+  expiresAtMs: number;
+}
 
-  private async loadConfig(): Promise<EmailConfig | null> {
-    const result = await this.systemSettings.get(EMAIL_CONFIG_SETTING_KEY);
-    if (result.error || !result.data) return null;
-    try {
-      const parsed = JSON.parse(result.data.value) as Partial<EmailConfig>;
-      return isConfigComplete(parsed) ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
+// Refresh slightly early so a token never expires mid-handshake.
+const TOKEN_EXPIRY_MARGIN_MS = 60_000;
+
+export class NodemailerEmailSender implements IEmailSender {
+  private m365Token: CachedToken | null = null;
+
+  // When envConfig is provided (SMTP_TRANSPORT_MODE is set) it takes precedence
+  // over the admin-settings config — ADR-023 keeps notification credentials in
+  // the environment, while deployments without env vars keep using the admin UI.
+  constructor(
+    private readonly systemSettings: ISystemSettingsRepository,
+    private readonly envConfig: SmtpEnvConfig | null = null,
+  ) {}
 
   async send(input: SendEmailInput): Promise<Result<true>> {
-    const config = await this.loadConfig();
+    if (this.envConfig) return this.sendViaEnvironment(this.envConfig, input);
+    return this.sendViaAdminSettings(input);
+  }
+
+  private async sendViaEnvironment(
+    config: SmtpEnvConfig,
+    input: SendEmailInput,
+  ): Promise<Result<true>> {
+    if (!config.from) {
+      return err(domainError("VALIDATION_FAILED", "SMTP_FROM is required to send email."));
+    }
+
+    let accessToken: string | null = null;
+    if (config.mode === "oauth2") {
+      const tokenResult = await this.resolveM365Token(config);
+      if (tokenResult.error) return tokenResult;
+      accessToken = tokenResult.data;
+    }
+
+    const optionsResult = buildEnvTransportOptions(config, accessToken);
+    if (optionsResult.error) return optionsResult;
+
+    return this.deliver(this.createTransport(optionsResult.data), config.from, input);
+  }
+
+  private async sendViaAdminSettings(input: SendEmailInput): Promise<Result<true>> {
+    const config = await this.loadAdminConfig();
     if (!config) {
       return err(
         domainError("VALIDATION_FAILED", "Email is not configured. Set SMTP details in admin settings first."),
@@ -51,7 +88,19 @@ export class NodemailerEmailSender implements IEmailSender {
     });
 
     const from = config.fromName ? `"${config.fromName}" <${config.fromAddress}>` : config.fromAddress;
+    return this.deliver(transport, from, input);
+  }
 
+  private createTransport(options: EnvTransportOptions) {
+    if ("streamTransport" in options) return nodemailer.createTransport(options);
+    return nodemailer.createTransport(options);
+  }
+
+  private async deliver(
+    transport: ReturnType<NodemailerEmailSender["createTransport"]>,
+    from: string,
+    input: SendEmailInput,
+  ): Promise<Result<true>> {
     try {
       await transport.sendMail({
         from,
@@ -63,6 +112,32 @@ export class NodemailerEmailSender implements IEmailSender {
       return ok(true as const);
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to send email.", cause));
+    }
+  }
+
+  private async resolveM365Token(config: SmtpEnvConfig): Promise<Result<string>> {
+    if (this.m365Token && this.m365Token.expiresAtMs - TOKEN_EXPIRY_MARGIN_MS > Date.now()) {
+      return ok(this.m365Token.value);
+    }
+
+    const tokenResult = await fetchM365AccessToken(config, fetch);
+    if (tokenResult.error) return tokenResult;
+
+    this.m365Token = {
+      value: tokenResult.data.accessToken,
+      expiresAtMs: Date.now() + tokenResult.data.expiresInSeconds * 1000,
+    };
+    return ok(this.m365Token.value);
+  }
+
+  private async loadAdminConfig(): Promise<EmailConfig | null> {
+    const result = await this.systemSettings.get(EMAIL_CONFIG_SETTING_KEY);
+    if (result.error || !result.data) return null;
+    try {
+      const parsed = JSON.parse(result.data.value) as Partial<EmailConfig>;
+      return isConfigComplete(parsed) ? parsed : null;
+    } catch {
+      return null;
     }
   }
 }

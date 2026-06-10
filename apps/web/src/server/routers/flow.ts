@@ -278,8 +278,15 @@ export const flowRouter = router({
   grantOwner: adminProcedure
     .input(z.object({ flowId: z.string().uuid(), userId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      const before = await ctx.container.repos.flows.findById(input.flowId);
+      const previousPermissions = before.data?.permissions ?? [];
       const result = await ctx.container.useCases.grantFlowOwner.execute(input.flowId, input.userId);
       if (result.error) throw toTrpcError(result.error);
+      // Fire-and-forget: the notifier records its outcome in the outbox and a
+      // slow or failing SMTP server must never delay or break the grant.
+      void ctx.container.useCases.notifyOnFlowShared
+        .execute({ flow: result.data, previousPermissions, grantedByUserId: ctx.userId })
+        .catch(() => undefined);
       return result.data;
     }),
 

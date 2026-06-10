@@ -41,6 +41,33 @@ const serverEnvSchema = z.object({
     .string()
     .transform((v) => v === "true")
     .default("false"),
+  // Email notifications (ADR-023). When SMTP_TRANSPORT_MODE is set the env
+  // transport takes precedence over the admin-settings SMTP config.
+  NOTIFICATIONS_ENABLED: z
+    .string()
+    .transform((v) => v === "true")
+    .default("false"),
+  // Empty strings come through when .env exports blank-value lines; treat them
+  // as unset so the enum/number validations behave.
+  SMTP_TRANSPORT_MODE: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.enum(["oauth2", "smtp", "stream"]).optional(),
+  ),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.coerce.number().int().optional(),
+  ),
+  SMTP_SECURE: z
+    .string()
+    .transform((v) => v === "true")
+    .default("false"),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
+  M365_TENANT_ID: z.string().optional(),
+  M365_CLIENT_ID: z.string().optional(),
+  M365_CLIENT_SECRET: z.string().optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

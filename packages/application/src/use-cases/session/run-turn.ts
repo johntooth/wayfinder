@@ -8,6 +8,7 @@ import {
   type Session,
   type SessionMessage,
 } from "@rbrasier/domain";
+import type { ISessionCompleteNotifier } from "../notifications/notify-on-session-complete";
 
 export interface RunTurnInput {
   session: Session;
@@ -45,6 +46,7 @@ export class RunTurn {
     private readonly sessions: ISessionRepository,
     private readonly sessionMessages: ISessionMessageRepository,
     private readonly flowEdges: IFlowEdgeRepository,
+    private readonly sessionCompleteNotifier?: ISessionCompleteNotifier,
   ) {}
 
   // Persists the user message before the AI call runs, so it survives any
@@ -108,6 +110,7 @@ export class RunTurn {
     if (outgoing.length === 0) {
       const updated = await this.sessions.update(session.id, { status: "complete" });
       if (updated.error) return updated;
+      this.notifyComplete(updated.data);
       return ok({ session: updated.data, advanced: true, newNodeId: null });
     }
 
@@ -134,6 +137,12 @@ export class RunTurn {
     if (updated.error) return updated;
 
     return ok({ session: updated.data, advanced: true, newNodeId });
+  }
+
+  // Fire-and-forget so a slow SMTP server can never stall the turn; the
+  // notifier records its own outcome in the outbox and never throws.
+  private notifyComplete(session: Session): void {
+    void this.sessionCompleteNotifier?.execute({ session }).catch(() => undefined);
   }
 
   async execute(input: RunTurnInput): Promise<Result<RunTurnOutput>> {

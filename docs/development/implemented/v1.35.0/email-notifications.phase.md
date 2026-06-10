@@ -1,10 +1,13 @@
 # Phase — Email Notifications
 
-- **Status**: Sketched (awaiting `/doc-review`)
-- **Target version**: TBD (bump: **MINOR** — new table, new domain port, new
+- **Status**: Implemented (v1.35.0 — see `_implementation-summary.md` for
+  build-time deviations: the existing `IEmailSender` port was reused instead of
+  a new `INotificationSender`, and `flow.grantOwner` is the share path, not
+  `flow.assignOwner`)
+- **Target version**: 1.35.0 (bump: **MINOR** — new table, new domain port, new
   adapter)
 - **PRD**: `docs/development/prd/email-notifications.prd.md`
-- **ADR**: `docs/development/adr/014-email-notification-transport.adr.md`
+- **ADR**: `docs/development/adr/023-email-notification-transport.adr.md`
 - **Depends on**: v1.18.0 (sessions, flows, permissions, `core_audit_log`)
 
 ## 1. Goal
@@ -25,7 +28,7 @@ Hexagonal, outbox-driven:
    flips the row to `sent`/`failed`.
 3. Idempotency via a unique index on `(trigger, resource_id, recipient_email)`.
 
-See ADR-014 for transport modes and the delivery model.
+See ADR-023 for transport modes and the delivery model.
 
 ## 3. Key entities / files
 
@@ -69,7 +72,7 @@ Unique index on `(trigger, resource_id, recipient_email)` for idempotency.
 
 ## 5. Environment variables
 
-Per ADR-014: `NOTIFICATIONS_ENABLED`, `SMTP_TRANSPORT_MODE`, `SMTP_HOST`,
+Per ADR-023: `NOTIFICATIONS_ENABLED`, `SMTP_TRANSPORT_MODE`, `SMTP_HOST`,
 `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `M365_TENANT_ID`,
 `M365_CLIENT_ID`, `M365_CLIENT_SECRET`, `SMTP_FROM`. Add to `.env.example` with
 the `stream` (local sink) mode as the documented default for dev/tests.
@@ -88,7 +91,7 @@ Write the test file before each implementation file (CLAUDE.md rule).
 
 ## 7. ADR required
 
-ADR-014 (written) — transport choice, M365 OAuth2, outbox delivery model,
+ADR-023 (written) — transport choice, M365 OAuth2, outbox delivery model,
 env-var contract.
 
 ## 8. Risks / open questions

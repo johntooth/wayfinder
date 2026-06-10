@@ -28,6 +28,27 @@ const envSchema = z.object({
   // secret it requires. The heartbeat only starts when both are set.
   SCHEDULER_TICK_URL: z.string().url().optional(),
   SCHEDULER_TICK_SECRET: z.string().optional(),
+  // Email notifications (ADR-023) — the n8n callback webhook can complete a
+  // session, so this app sends the session-complete email too. Links in email
+  // bodies point at the web app.
+  NOTIFICATIONS_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value === "true"),
+  SMTP_TRANSPORT_MODE: z.enum(["oauth2", "smtp", "stream"]).optional(),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().optional(),
+  SMTP_SECURE: z
+    .string()
+    .optional()
+    .transform((value) => value === "true"),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
+  M365_TENANT_ID: z.string().optional(),
+  M365_CLIENT_ID: z.string().optional(),
+  M365_CLIENT_SECRET: z.string().optional(),
+  WEB_BASE_URL: z.string().url().default("http://localhost:3000"),
 });
 
 export type Env = z.infer<typeof envSchema>;

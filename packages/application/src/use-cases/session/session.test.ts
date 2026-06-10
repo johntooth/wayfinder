@@ -563,6 +563,59 @@ describe("RunTurn", () => {
     expect(updatedSession?.status).toBe("complete");
   });
 
+  it("invokes the session-complete notifier when the session completes", async () => {
+    const notified: Session[] = [];
+    const notifier = {
+      execute: async (input: { session: Session }) => {
+        notified.push(input.session);
+        return ok(null);
+      },
+    };
+    const notifyingUseCase = new RunTurn(sessions, sessionMessages, edges, notifier);
+
+    await notifyingUseCase.execute({
+      session,
+      flowId: "flow-1",
+      userMessage: "Finished",
+      assistantMessage: "Flow complete",
+      aiPayload: makeAiPayload(95),
+      branchChoice: null,
+    });
+
+    expect(notified).toHaveLength(1);
+    expect(notified[0]?.status).toBe("complete");
+  });
+
+  it("does not invoke the notifier when the turn advances to a next node", async () => {
+    edges.edges.set("edge-1", {
+      id: "edge-1",
+      flowId: "flow-1",
+      fromNodeId: "node-1",
+      toNodeId: "node-2",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const notified: Session[] = [];
+    const notifier = {
+      execute: async (input: { session: Session }) => {
+        notified.push(input.session);
+        return ok(null);
+      },
+    };
+    const notifyingUseCase = new RunTurn(sessions, sessionMessages, edges, notifier);
+
+    await notifyingUseCase.execute({
+      session,
+      flowId: "flow-1",
+      userMessage: "Next",
+      assistantMessage: "Moving on",
+      aiPayload: makeAiPayload(95),
+      branchChoice: null,
+    });
+
+    expect(notified).toHaveLength(0);
+  });
+
   it("persistUserMessage inserts a new user row", async () => {
     const result = await useCase.persistUserMessage({
       session,

@@ -5,6 +5,7 @@ import {
   type Result,
   type Session,
 } from "@rbrasier/domain";
+import type { ISessionCompleteNotifier } from "../notifications/notify-on-session-complete";
 
 export type AdvanceScheduledNodeStatus =
   | "advanced"
@@ -44,6 +45,7 @@ export class AdvanceScheduledNode {
   constructor(
     private readonly sessions: ISessionRepository,
     private readonly flowEdges: IFlowEdgeRepository,
+    private readonly sessionCompleteNotifier?: ISessionCompleteNotifier,
   ) {}
 
   async execute(input: AdvanceScheduledNodeInput): Promise<Result<AdvanceScheduledNodeOutput>> {
@@ -65,6 +67,9 @@ export class AdvanceScheduledNode {
     if (outgoing.length === 0) {
       const completed = await this.sessions.update(session.id, { status: "complete" });
       if (completed.error) return completed;
+      // Fire-and-forget so a slow SMTP server can never stall the fire; the
+      // notifier records its own outcome in the outbox and never throws.
+      void this.sessionCompleteNotifier?.execute({ session: completed.data }).catch(() => undefined);
       return ok({ status: "completed", session: completed.data, newNodeId: null, branchNodeIds: [] });
     }
 

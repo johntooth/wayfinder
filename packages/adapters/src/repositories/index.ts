@@ -22,3 +22,4 @@ export * from "./drizzle-schedule-run-repository";
 export * from "./drizzle-role-repository";
 export * from "./drizzle-user-role-repository";
 export * from "./drizzle-feature-flag-role-repository";
+export * from "./drizzle-notification-log-repository";

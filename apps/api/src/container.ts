@@ -13,6 +13,7 @@ import {
   ListUsers,
   LogAuditEvent,
   LogError,
+  NotifyOnSessionComplete,
   PingJob,
   RegisterJob,
   TrackUsage,
@@ -31,13 +32,16 @@ import {
   DrizzleFeatureFlagRepository,
   DrizzleFlowEdgeRepository,
   DrizzleFlowNodeRepository,
+  DrizzleFlowRepository,
   DrizzleJobRepository,
+  DrizzleNotificationLogRepository,
   DrizzleSessionRepository,
   DrizzleSessionStepOutputRepository,
   DrizzleSystemSettingsRepository,
   DrizzleUsageRepository,
   DrizzleUserRepository,
   LanguageModelAdapter,
+  NodemailerEmailSender,
   PinoLogger,
   RuntimeConfigStore,
   SchedulerWorker,
@@ -63,9 +67,35 @@ export const buildContainer = (env: Env) => {
   const jobRepo = new DrizzleJobRepository(db);
   const systemSettings = new DrizzleSystemSettingsRepository(db);
   const sessions = new DrizzleSessionRepository(db);
+  const flows = new DrizzleFlowRepository(db);
   const flowNodes = new DrizzleFlowNodeRepository(db);
   const flowEdges = new DrizzleFlowEdgeRepository(db);
   const sessionStepOutputs = new DrizzleSessionStepOutputRepository(db);
+
+  const smtpEnvConfig = env.SMTP_TRANSPORT_MODE
+    ? {
+        mode: env.SMTP_TRANSPORT_MODE,
+        host: env.SMTP_HOST ?? null,
+        port: env.SMTP_PORT ?? null,
+        secure: env.SMTP_SECURE,
+        user: env.SMTP_USER ?? null,
+        pass: env.SMTP_PASS ?? null,
+        from: env.SMTP_FROM ?? null,
+        m365TenantId: env.M365_TENANT_ID ?? null,
+        m365ClientId: env.M365_CLIENT_ID ?? null,
+        m365ClientSecret: env.M365_CLIENT_SECRET ?? null,
+      }
+    : null;
+  const emailSender = new NodemailerEmailSender(systemSettings, smtpEnvConfig);
+  const notificationLog = new DrizzleNotificationLogRepository(db);
+  const notifyOnSessionComplete = new NotifyOnSessionComplete(
+    notificationLog,
+    emailSender,
+    users,
+    flows,
+    auditLogger,
+    { enabled: env.NOTIFICATIONS_ENABLED, baseUrl: env.WEB_BASE_URL },
+  );
 
   const bedrockEnvCredentials =
     env.AWS_BEDROCK_REGION && env.AWS_BEDROCK_ACCESS_KEY_ID && env.AWS_BEDROCK_SECRET_ACCESS_KEY
@@ -133,7 +163,7 @@ export const buildContainer = (env: Env) => {
     repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, systemSettings, sessions, flowNodes, flowEdges, sessionStepOutputs },
     services: { llm, errorLogger, auditLogger },
     useCases: {
-      applyAutoNodeResult: new ApplyAutoNodeResult(sessions, flowNodes, flowEdges, sessionStepOutputs),
+      applyAutoNodeResult: new ApplyAutoNodeResult(sessions, flowNodes, flowEdges, sessionStepOutputs, notifyOnSessionComplete),
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
       deleteUser: new DeleteUser(users),

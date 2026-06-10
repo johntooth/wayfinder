@@ -10,6 +10,7 @@ import {
   type Result,
 } from "@rbrasier/domain";
 import { coerceStructuredFields } from "../document/structured-fields";
+import type { ISessionCompleteNotifier } from "../notifications/notify-on-session-complete";
 
 export interface ApplyAutoNodeResultInput {
   sessionId: string;
@@ -33,6 +34,7 @@ export class ApplyAutoNodeResult {
     private readonly flowNodes: IFlowNodeRepository,
     private readonly flowEdges: IFlowEdgeRepository,
     private readonly sessionStepOutputs: ISessionStepOutputRepository,
+    private readonly sessionCompleteNotifier?: ISessionCompleteNotifier,
   ) {}
 
   async execute(input: ApplyAutoNodeResultInput): Promise<Result<ApplyAutoNodeResultOutput>> {
@@ -107,6 +109,9 @@ export class ApplyAutoNodeResult {
         status: "complete",
       });
       if (completed.error) return completed;
+      // Fire-and-forget so a slow SMTP server can never stall the callback;
+      // the notifier records its own outcome in the outbox and never throws.
+      void this.sessionCompleteNotifier?.execute({ session: completed.data }).catch(() => undefined);
       return ok({ applied: true, advanced: true });
     }
 
