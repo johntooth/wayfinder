@@ -925,6 +925,13 @@ function SessionUploadsCard() {
   );
 }
 
+type EmailProviderChoice = "smtp" | "m365";
+
+const EMAIL_PROVIDER_LABEL: Record<EmailProviderChoice, string> = {
+  smtp: "SMTP",
+  m365: "Microsoft 365",
+};
+
 function EmailCard() {
   const utils = trpc.useUtils();
   const configQuery = trpc.settings.getEmailConfig.useQuery();
@@ -942,6 +949,7 @@ function EmailCard() {
   });
 
   const [open, setOpen] = useState(false);
+  const [provider, setProvider] = useState<EmailProviderChoice>("smtp");
   const [host, setHost] = useState("");
   const [port, setPort] = useState("587");
   const [secure, setSecure] = useState(false);
@@ -949,13 +957,21 @@ function EmailCard() {
   const [password, setPassword] = useState("");
   const [fromAddress, setFromAddress] = useState("");
   const [fromName, setFromName] = useState("");
+  const [m365TenantId, setM365TenantId] = useState("");
+  const [m365ClientId, setM365ClientId] = useState("");
+  const [m365ClientSecret, setM365ClientSecret] = useState("");
   const [testTo, setTestTo] = useState("");
 
   const config = configQuery.data;
-  const isConfigured = Boolean(config?.host && config?.username && config?.fromAddress);
+  const isConfigured = config
+    ? config.provider === "m365"
+      ? Boolean(config.m365TenantId && config.m365ClientId && config.fromAddress)
+      : Boolean(config.host && config.username && config.fromAddress)
+    : false;
 
   useEffect(() => {
     if (!open || !config) return;
+    setProvider((config.provider as EmailProviderChoice) ?? "smtp");
     setHost(config.host);
     setPort(String(config.port));
     setSecure(config.secure);
@@ -963,26 +979,43 @@ function EmailCard() {
     setPassword("");
     setFromAddress(config.fromAddress);
     setFromName(config.fromName ?? "");
+    setM365TenantId(config.m365TenantId ?? "");
+    setM365ClientId(config.m365ClientId ?? "");
+    setM365ClientSecret("");
   }, [open, config]);
 
   const handleSave = () => {
+    if (fromAddress.trim() === "") {
+      toast.error("From address is required");
+      return;
+    }
     const portNumber = Number(port);
-    if (!Number.isInteger(portNumber) || portNumber <= 0 || portNumber > 65535) {
-      toast.error("Port must be a whole number between 1 and 65535");
+    if (provider === "smtp") {
+      if (!Number.isInteger(portNumber) || portNumber <= 0 || portNumber > 65535) {
+        toast.error("Port must be a whole number between 1 and 65535");
+        return;
+      }
+      if (host.trim() === "" || username.trim() === "") {
+        toast.error("Host and username are required for SMTP");
+        return;
+      }
+    } else if (m365TenantId.trim() === "" || m365ClientId.trim() === "") {
+      toast.error("Tenant ID and client ID are required for Microsoft 365");
       return;
     }
-    if (host.trim() === "" || username.trim() === "" || fromAddress.trim() === "") {
-      toast.error("Host, username, and from address are required");
-      return;
-    }
+
     saveMutation.mutate({
+      provider,
       host: host.trim(),
-      port: portNumber,
+      port: Number.isInteger(portNumber) && portNumber > 0 ? portNumber : 587,
       secure,
       username: username.trim(),
       password: password.length > 0 ? password : null,
       fromAddress: fromAddress.trim(),
       fromName: fromName.trim().length > 0 ? fromName.trim() : null,
+      m365TenantId: m365TenantId.trim(),
+      m365ClientId: m365ClientId.trim(),
+      m365ClientSecret: m365ClientSecret.length > 0 ? m365ClientSecret : null,
     });
   };
 
@@ -1004,7 +1037,7 @@ function EmailCard() {
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <p className="text-muted-foreground">
-          SMTP settings used to send outbound email from Wayfinder.
+          Transport used to send outbound email from Wayfinder. Choose SMTP or Microsoft 365.
         </p>
         {!config ? (
           <p className="text-muted-foreground">Loading…</p>
@@ -1013,18 +1046,43 @@ function EmailCard() {
         ) : (
           <>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">SMTP host</span>
-              <span className="font-mono text-xs">
-                {config.host}:{config.port}
+              <span className="text-muted-foreground">Provider</span>
+              <span className="font-medium">
+                {EMAIL_PROVIDER_LABEL[config.provider as EmailProviderChoice] ?? config.provider}
               </span>
             </div>
+            {config.provider === "m365" ? (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Tenant</span>
+                  <span className="font-mono text-xs">{config.m365TenantId || "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Client secret</span>
+                  <span className="font-mono text-xs">
+                    {config.m365ClientSecret === "set" ? "•••• set" : "unset"}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">SMTP host</span>
+                  <span className="font-mono text-xs">
+                    {config.host}:{config.port}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Password</span>
+                  <span className="font-mono text-xs">
+                    {config.password === "set" ? "•••• set" : "unset"}
+                  </span>
+                </div>
+              </>
+            )}
             <div className="flex justify-between">
               <span className="text-muted-foreground">From</span>
               <span className="font-mono text-xs">{config.fromAddress}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Password</span>
-              <span className="font-mono text-xs">{config.password === "set" ? "•••• set" : "unset"}</span>
             </div>
           </>
         )}
@@ -1053,42 +1111,94 @@ function EmailCard() {
             <DialogTitle>Edit email settings</DialogTitle>
             <DialogCloseButton />
           </DialogHeader>
-          <DialogBody className="space-y-4">
+          <DialogBody className="max-h-[70vh] space-y-4 overflow-y-auto">
             <div className="space-y-1">
-              <Label htmlFor="email-host">SMTP host</Label>
-              <Input id="email-host" value={host} onChange={(e) => setHost(e.target.value)} placeholder="smtp.example.com" />
+              <Label htmlFor="email-provider">Provider</Label>
+              <select
+                id="email-provider"
+                value={provider}
+                onChange={(e) => setProvider(e.target.value as EmailProviderChoice)}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="smtp">SMTP</option>
+                <option value="m365">Microsoft 365</option>
+              </select>
             </div>
-            <div className="flex gap-3">
-              <div className="flex-1 space-y-1">
-                <Label htmlFor="email-port">Port</Label>
-                <Input id="email-port" value={port} onChange={(e) => setPort(e.target.value)} placeholder="587" />
-              </div>
-              <div className="flex items-center gap-2 pt-6">
-                <input
-                  id="email-secure"
-                  type="checkbox"
-                  checked={secure}
-                  onChange={(e) => setSecure(e.target.checked)}
-                  className="h-4 w-4"
-                />
-                <Label htmlFor="email-secure">Use TLS/SSL</Label>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="email-username">Username</Label>
-              <Input id="email-username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="apikey" />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="email-password">Password</Label>
-              <p className="text-xs text-muted-foreground">Leave blank to keep the stored password.</p>
-              <Input
-                id="email-password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={config?.password === "set" ? "•••••• (unchanged)" : ""}
-              />
-            </div>
+
+            {provider === "smtp" ? (
+              <>
+                <div className="space-y-1">
+                  <Label htmlFor="email-host">SMTP host</Label>
+                  <Input id="email-host" value={host} onChange={(e) => setHost(e.target.value)} placeholder="smtp.example.com" />
+                </div>
+                <div className="flex gap-3">
+                  <div className="flex-1 space-y-1">
+                    <Label htmlFor="email-port">Port</Label>
+                    <Input id="email-port" value={port} onChange={(e) => setPort(e.target.value)} placeholder="587" />
+                  </div>
+                  <div className="flex items-center gap-2 pt-6">
+                    <input
+                      id="email-secure"
+                      type="checkbox"
+                      checked={secure}
+                      onChange={(e) => setSecure(e.target.checked)}
+                      className="h-4 w-4"
+                    />
+                    <Label htmlFor="email-secure">Use TLS/SSL</Label>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="email-username">Username</Label>
+                  <Input id="email-username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="apikey" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="email-password">Password</Label>
+                  <p className="text-xs text-muted-foreground">Leave blank to keep the stored password.</p>
+                  <Input
+                    id="email-password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={config?.password === "set" ? "•••••• (unchanged)" : ""}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="rounded-md border border-[#dedad2] bg-[#f7f6f3] p-3 text-xs text-muted-foreground">
+                  Sends via Exchange Online using a Microsoft 365 app registration
+                  (client-credentials OAuth2). Grant the app the <code>SMTP.SendAsApp</code> /
+                  mail send permission and admin consent. Mail is sent as the mailbox below.
+                </p>
+                <div className="space-y-1">
+                  <Label htmlFor="email-m365-tenant">Tenant ID</Label>
+                  <Input id="email-m365-tenant" value={m365TenantId} onChange={(e) => setM365TenantId(e.target.value)} placeholder="00000000-0000-0000-0000-000000000000" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="email-m365-client">Client ID</Label>
+                  <Input id="email-m365-client" value={m365ClientId} onChange={(e) => setM365ClientId(e.target.value)} placeholder="Application (client) ID" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="email-m365-secret">Client secret</Label>
+                  <p className="text-xs text-muted-foreground">Leave blank to keep the stored secret.</p>
+                  <Input
+                    id="email-m365-secret"
+                    type="password"
+                    value={m365ClientSecret}
+                    onChange={(e) => setM365ClientSecret(e.target.value)}
+                    placeholder={config?.m365ClientSecret === "set" ? "•••••• (unchanged)" : ""}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="email-m365-mailbox">Sender mailbox (optional)</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Defaults to the from address. Set if sending as a different mailbox (UPN).
+                  </p>
+                  <Input id="email-m365-mailbox" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="no-reply@yourtenant.onmicrosoft.com" />
+                </div>
+              </>
+            )}
+
             <div className="space-y-1">
               <Label htmlFor="email-from-address">From address</Label>
               <Input id="email-from-address" value={fromAddress} onChange={(e) => setFromAddress(e.target.value)} placeholder="no-reply@example.com" />
@@ -1096,6 +1206,115 @@ function EmailCard() {
             <div className="space-y-1">
               <Label htmlFor="email-from-name">From name (optional)</Label>
               <Input id="email-from-name" value={fromName} onChange={(e) => setFromName(e.target.value)} placeholder="Wayfinder" />
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)} disabled={saveMutation.isPending}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={saveMutation.isPending}>
+              {saveMutation.isPending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
+function NotificationSettingsCard() {
+  const utils = trpc.useUtils();
+  const prefsQuery = trpc.settings.getNotificationPrefs.useQuery();
+  const saveMutation = trpc.settings.setNotificationPrefs.useMutation({
+    onSuccess: async () => {
+      toast.success("Notification settings saved");
+      await utils.settings.getNotificationPrefs.invalidate();
+      setOpen(false);
+    },
+    onError: (error) => toast.error(error.message ?? "Failed to save notification settings"),
+  });
+
+  const [open, setOpen] = useState(false);
+  const [sessionComplete, setSessionComplete] = useState(true);
+  const [flowShared, setFlowShared] = useState(true);
+
+  const prefs = prefsQuery.data;
+
+  useEffect(() => {
+    if (!open || !prefs) return;
+    setSessionComplete(prefs.sessionComplete);
+    setFlowShared(prefs.flowShared);
+  }, [open, prefs]);
+
+  const handleSave = () => {
+    saveMutation.mutate({ sessionComplete, flowShared });
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-base">Notifications</CardTitle>
+        <Button size="sm" variant="outline" onClick={() => setOpen(true)} disabled={!prefs}>
+          Edit
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-2 text-sm">
+        <p className="text-muted-foreground">
+          Control which email notifications Wayfinder sends. Requires email to be configured above.
+        </p>
+        {!prefs ? (
+          <p className="text-muted-foreground">Loading…</p>
+        ) : (
+          <>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Session complete (owner)</span>
+              <span className="font-medium">{prefs.sessionComplete ? "On" : "Off"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Flow shared</span>
+              <span className="font-medium">{prefs.flowShared ? "On" : "Off"}</span>
+            </div>
+          </>
+        )}
+      </CardContent>
+
+      <Dialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Notification settings</DialogTitle>
+            <DialogCloseButton />
+          </DialogHeader>
+          <DialogBody className="space-y-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="notify-session-complete">Session complete</Label>
+                <p className="text-xs text-muted-foreground">
+                  Emails the session owner when their chat finishes the flow (all steps complete).
+                </p>
+              </div>
+              <input
+                id="notify-session-complete"
+                type="checkbox"
+                className="mt-1 h-4 w-4 shrink-0"
+                checked={sessionComplete}
+                onChange={(e) => setSessionComplete(e.target.checked)}
+              />
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="notify-flow-shared">Flow shared</Label>
+                <p className="text-xs text-muted-foreground">
+                  Emails a user when a flow is newly shared with them (they are granted access by
+                  another user or admin).
+                </p>
+              </div>
+              <input
+                id="notify-flow-shared"
+                type="checkbox"
+                className="mt-1 h-4 w-4 shrink-0"
+                checked={flowShared}
+                onChange={(e) => setFlowShared(e.target.checked)}
+              />
             </div>
           </DialogBody>
           <DialogFooter>
@@ -1307,7 +1526,7 @@ export default function AppSettingsPage() {
       <div className="container py-8">
         <div className="space-y-6">
           <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight">Application Settings</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Configuration</h1>
             <p className="text-sm text-muted-foreground">
               Configure global behaviour for this application.
             </p>
@@ -1322,6 +1541,7 @@ export default function AppSettingsPage() {
             <StorageCard />
             <SessionUploadsCard />
             <EmailCard />
+            <NotificationSettingsCard />
             <HrDataCard />
             <EntraDirectoryCard />
           </div>

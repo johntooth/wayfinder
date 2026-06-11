@@ -35,6 +35,9 @@ import {
   ListFlowsForUser,
   ListJobs,
   ListRoles,
+  CreateRole,
+  RenameRole,
+  DeleteRole,
   ListScheduleRuns,
   ListPendingApprovals,
   ListSessions,
@@ -223,7 +226,28 @@ const build = () => {
     : null;
   const emailSender = new NodemailerEmailSender(systemSettings, smtpEnvConfig);
   const notificationLog = new DrizzleNotificationLogRepository(db);
-  const notificationConfig = { enabled: env.NOTIFICATIONS_ENABLED, baseUrl: env.BETTER_AUTH_URL };
+  // Admins toggle per-trigger notifications at runtime (no restart): read the
+  // prefs setting at send time. Triggers without an admin switch stay on.
+  const isTriggerEnabled = async (trigger: string): Promise<boolean> => {
+    if (trigger !== "session_complete" && trigger !== "flow_shared") return true;
+    // Keyed by NOTIFICATION_PREFS_SETTING_KEY (apps don't import domain directly).
+    const result = await systemSettings.get("notification_prefs");
+    if (result.error || !result.data) return true;
+    try {
+      const prefs = JSON.parse(result.data.value) as Partial<{
+        sessionComplete: boolean;
+        flowShared: boolean;
+      }>;
+      return trigger === "session_complete" ? prefs.sessionComplete !== false : prefs.flowShared !== false;
+    } catch {
+      return true;
+    }
+  };
+  const notificationConfig = {
+    enabled: env.NOTIFICATIONS_ENABLED,
+    baseUrl: env.BETTER_AUTH_URL,
+    isTriggerEnabled,
+  };
   const notifyOnSessionComplete = new NotifyOnSessionComplete(
     notificationLog,
     emailSender,
@@ -376,6 +400,9 @@ const build = () => {
       upsertFeatureFlag: new UpsertFeatureFlag(featureFlags),
       listFeatureFlags: new ListFeatureFlags(featureFlags),
       listRoles: new ListRoles(roles),
+      createRole: new CreateRole(roles),
+      renameRole: new RenameRole(roles),
+      deleteRole: new DeleteRole(roles),
       updateRolePermissions: new UpdateRolePermissions(roles),
       assignUserRole: new AssignUserRole(roles, userRoles),
       removeUserRole: new RemoveUserRole(roles, userRoles),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   domainError,
+  EMAIL_CONFIG_SETTING_KEY,
   err,
   ok,
   type ISystemSettingsRepository,
@@ -84,5 +85,46 @@ describe("NodemailerEmailSender without environment transport config", () => {
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
     expect(result.error?.message).toContain("not configured");
+  });
+
+  it("treats an M365 admin config missing tenant details as unconfigured", async () => {
+    const settings = new FakeSystemSettingsRepository();
+    settings.values.set(
+      EMAIL_CONFIG_SETTING_KEY,
+      JSON.stringify({ provider: "m365", fromAddress: "noreply@tenant.com" }),
+    );
+    const sender = new NodemailerEmailSender(settings);
+
+    const result = await sender.send({ to: "r@example.com", subject: "S", text: "T" });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toContain("not configured");
+  });
+
+  it("uses the M365 transport for a complete m365 admin config and surfaces token failures", async () => {
+    const settings = new FakeSystemSettingsRepository();
+    settings.values.set(
+      EMAIL_CONFIG_SETTING_KEY,
+      JSON.stringify({
+        provider: "m365",
+        fromAddress: "noreply@tenant.com",
+        m365TenantId: "tenant-id",
+        m365ClientId: "client-id",
+        m365ClientSecret: "client-secret",
+      }),
+    );
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      throw new Error("network down");
+    }) as typeof fetch;
+    try {
+      const sender = new NodemailerEmailSender(settings);
+      const result = await sender.send({ to: "r@example.com", subject: "S", text: "T" });
+      // Reaching the token fetch proves the M365 branch was taken.
+      expect(result.error?.code).toBe("INFRA_FAILURE");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

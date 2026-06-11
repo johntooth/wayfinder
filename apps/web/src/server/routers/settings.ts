@@ -4,6 +4,7 @@ import {
   EMAIL_CONFIG_SETTING_KEY,
   EMBEDDINGS_CONFIG_SETTING_KEY,
   N8N_CONFIG_SETTING_KEY,
+  NOTIFICATION_PREFS_SETTING_KEY,
   REGISTRATION_ENABLED_SETTING_KEY,
   SESSION_UPLOAD_CONFIG_SETTING_KEY,
   STORAGE_CONFIG_SETTING_KEY,
@@ -12,6 +13,7 @@ import {
   type BedrockCredentials,
   type EmailConfig,
   type N8nConfig,
+  type NotificationPreferences,
   type ProviderName,
   type StorageConfig,
 } from "@rbrasier/domain";
@@ -72,17 +74,22 @@ const sessionUploadConfigInputSchema = z.object({
 });
 
 const emailConfigInputSchema = z.object({
-  host: z.string().min(1),
-  port: z.number().int().min(1).max(65535),
-  secure: z.boolean(),
-  username: z.string().min(1),
-  // Empty password means "keep the stored one" — admins can't read it back.
+  provider: z.enum(["smtp", "m365"]),
+  host: z.string().default(""),
+  port: z.number().int().min(1).max(65535).default(587),
+  secure: z.boolean().default(false),
+  username: z.string().default(""),
+  // Empty secret means "keep the stored one" — admins can't read it back.
   password: z.string().nullable().optional(),
   fromAddress: z.string().email(),
   fromName: z.string().nullable().optional(),
+  m365TenantId: z.string().default(""),
+  m365ClientId: z.string().default(""),
+  m365ClientSecret: z.string().nullable().optional(),
 });
 
 const DEFAULT_EMAIL_CONFIG: EmailConfig = {
+  provider: "smtp",
   host: "",
   port: 587,
   secure: false,
@@ -90,6 +97,26 @@ const DEFAULT_EMAIL_CONFIG: EmailConfig = {
   password: "",
   fromAddress: "",
   fromName: null,
+  m365TenantId: "",
+  m365ClientId: "",
+  m365ClientSecret: "",
+};
+
+const DEFAULT_NOTIFICATION_PREFS: NotificationPreferences = {
+  sessionComplete: true,
+  flowShared: true,
+};
+
+const loadNotificationPrefs = async (
+  systemSettings: { get: (key: string) => Promise<{ data?: { value: string } | null; error?: unknown }> },
+): Promise<NotificationPreferences> => {
+  const result = await systemSettings.get(NOTIFICATION_PREFS_SETTING_KEY);
+  if (result.error || !result.data) return DEFAULT_NOTIFICATION_PREFS;
+  try {
+    return { ...DEFAULT_NOTIFICATION_PREFS, ...(JSON.parse(result.data.value) as Partial<NotificationPreferences>) };
+  } catch {
+    return DEFAULT_NOTIFICATION_PREFS;
+  }
 };
 
 const loadEmailConfig = async (
@@ -315,6 +342,7 @@ export const settingsRouter = router({
   getEmailConfig: adminProcedure.query(async ({ ctx }) => {
     const config = await loadEmailConfig(ctx.container.repos.systemSettings);
     return {
+      provider: config.provider,
       host: config.host,
       port: config.port,
       secure: config.secure,
@@ -322,6 +350,9 @@ export const settingsRouter = router({
       fromAddress: config.fromAddress,
       fromName: config.fromName,
       password: apiKeyState(config.password ?? null),
+      m365TenantId: config.m365TenantId,
+      m365ClientId: config.m365ClientId,
+      m365ClientSecret: apiKeyState(config.m365ClientSecret ?? null),
     };
   }),
 
@@ -330,6 +361,7 @@ export const settingsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const current = await loadEmailConfig(ctx.container.repos.systemSettings);
       const merged: EmailConfig = {
+        provider: input.provider,
         host: input.host,
         port: input.port,
         secure: input.secure,
@@ -337,10 +369,31 @@ export const settingsRouter = router({
         password: input.password && input.password.length > 0 ? input.password : current.password,
         fromAddress: input.fromAddress,
         fromName: input.fromName && input.fromName.length > 0 ? input.fromName : null,
+        m365TenantId: input.m365TenantId,
+        m365ClientId: input.m365ClientId,
+        m365ClientSecret:
+          input.m365ClientSecret && input.m365ClientSecret.length > 0
+            ? input.m365ClientSecret
+            : current.m365ClientSecret,
       };
       const result = await ctx.container.repos.systemSettings.set(
         EMAIL_CONFIG_SETTING_KEY,
         JSON.stringify(merged),
+      );
+      if (result.error) throw toTrpcError(result.error);
+      return { ok: true };
+    }),
+
+  getNotificationPrefs: adminProcedure.query(async ({ ctx }) => {
+    return loadNotificationPrefs(ctx.container.repos.systemSettings);
+  }),
+
+  setNotificationPrefs: adminProcedure
+    .input(z.object({ sessionComplete: z.boolean(), flowShared: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.repos.systemSettings.set(
+        NOTIFICATION_PREFS_SETTING_KEY,
+        JSON.stringify(input),
       );
       if (result.error) throw toTrpcError(result.error);
       return { ok: true };

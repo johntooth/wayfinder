@@ -33,7 +33,14 @@ export interface SessionUploadConfig {
   totalBudgetChars: number;
 }
 
+export type EmailProvider = "smtp" | "m365";
+
 export interface EmailConfig {
+  // Which transport admins configured. "smtp" uses host/port/username/password;
+  // "m365" uses the Microsoft 365 app registration (client-credentials OAuth2)
+  // to send via Exchange Online. Defaults to "smtp" for configs saved before
+  // the provider field existed.
+  provider: EmailProvider;
   host: string;
   port: number;
   secure: boolean;
@@ -41,6 +48,18 @@ export interface EmailConfig {
   password: string;
   fromAddress: string;
   fromName: string | null;
+  // Microsoft 365 (provider === "m365"). `username` doubles as the sender
+  // mailbox (UPN) when set, otherwise `fromAddress` is used.
+  m365TenantId: string;
+  m365ClientId: string;
+  m365ClientSecret: string;
+}
+
+// Admin-controlled per-trigger notification toggles. Step-complete is governed
+// per-node in flow config, so it is intentionally absent here.
+export interface NotificationPreferences {
+  sessionComplete: boolean;
+  flowShared: boolean;
 }
 
 export interface N8nConfig {
@@ -62,3 +81,4 @@ export const SESSION_UPLOAD_CONFIG_SETTING_KEY = "session_upload_config";
 export const EMAIL_CONFIG_SETTING_KEY = "email_config";
 export const EMBEDDINGS_CONFIG_SETTING_KEY = "embeddings_config";
 export const N8N_CONFIG_SETTING_KEY = "n8n_config";
+export const NOTIFICATION_PREFS_SETTING_KEY = "notification_prefs";
