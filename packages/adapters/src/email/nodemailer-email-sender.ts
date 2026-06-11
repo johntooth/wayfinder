@@ -17,15 +17,23 @@ import {
   type SmtpEnvConfig,
 } from "./smtp-transport";
 
-const isConfigComplete = (config: Partial<EmailConfig> | null): config is EmailConfig =>
-  Boolean(
-    config &&
-      config.host &&
-      config.port &&
-      config.username &&
-      config.password &&
-      config.fromAddress,
+const M365_SMTP_HOST = "smtp.office365.com";
+
+const isConfigComplete = (config: Partial<EmailConfig> | null): config is EmailConfig => {
+  if (!config) return false;
+  const provider = config.provider ?? "smtp";
+  if (provider === "m365") {
+    return Boolean(
+      config.m365TenantId &&
+        config.m365ClientId &&
+        config.m365ClientSecret &&
+        config.fromAddress,
+    );
+  }
+  return Boolean(
+    config.host && config.port && config.username && config.password && config.fromAddress,
   );
+};
 
 interface CachedToken {
   value: string;
@@ -76,15 +84,48 @@ export class NodemailerEmailSender implements IEmailSender {
     const config = await this.loadAdminConfig();
     if (!config) {
       return err(
-        domainError("VALIDATION_FAILED", "Email is not configured. Set SMTP details in admin settings first."),
+        domainError("VALIDATION_FAILED", "Email is not configured. Set email details in admin settings first."),
       );
     }
+
+    if (config.provider === "m365") return this.sendViaAdminM365(config, input);
 
     const transport = nodemailer.createTransport({
       host: config.host,
       port: config.port,
       secure: config.secure,
       auth: { user: config.username, pass: config.password },
+    });
+
+    const from = config.fromName ? `"${config.fromName}" <${config.fromAddress}>` : config.fromAddress;
+    return this.deliver(transport, from, input);
+  }
+
+  // Microsoft 365 via Exchange Online: a client-credentials token is fetched and
+  // handed to an XOAUTH2 SMTP transport (Basic Auth is being retired on M365).
+  private async sendViaAdminM365(config: EmailConfig, input: SendEmailInput): Promise<Result<true>> {
+    const mailbox = config.username && config.username.length > 0 ? config.username : config.fromAddress;
+    const envShape: SmtpEnvConfig = {
+      mode: "oauth2",
+      host: M365_SMTP_HOST,
+      port: 587,
+      secure: false,
+      user: mailbox,
+      pass: null,
+      from: config.fromAddress,
+      m365TenantId: config.m365TenantId,
+      m365ClientId: config.m365ClientId,
+      m365ClientSecret: config.m365ClientSecret,
+    };
+
+    const tokenResult = await this.resolveM365Token(envShape);
+    if (tokenResult.error) return tokenResult;
+
+    const transport = nodemailer.createTransport({
+      host: M365_SMTP_HOST,
+      port: 587,
+      secure: false,
+      auth: { type: "OAuth2", user: mailbox, accessToken: tokenResult.data },
     });
 
     const from = config.fromName ? `"${config.fromName}" <${config.fromAddress}>` : config.fromAddress;
@@ -135,7 +176,8 @@ export class NodemailerEmailSender implements IEmailSender {
     if (result.error || !result.data) return null;
     try {
       const parsed = JSON.parse(result.data.value) as Partial<EmailConfig>;
-      return isConfigComplete(parsed) ? parsed : null;
+      if (!isConfigComplete(parsed)) return null;
+      return { ...parsed, provider: parsed.provider ?? "smtp" };
     } catch {
       return null;
     }

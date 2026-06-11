@@ -32,6 +32,10 @@ export class NotifyOnFlowShared {
   // Best-effort per recipient: one failed send marks that row `failed` and
   // moves on, and the share action itself is never broken by email.
   async execute(input: NotifyOnFlowSharedInput): Promise<Result<NotificationLog[]>> {
+    if (this.config.isTriggerEnabled && !(await this.config.isTriggerEnabled("flow_shared"))) {
+      return ok([]);
+    }
+
     const newlyAdded = this.newlyAddedPermissions(input);
     if (newlyAdded.length === 0) return ok([]);
 

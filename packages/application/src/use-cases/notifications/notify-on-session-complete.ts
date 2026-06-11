@@ -6,6 +6,7 @@ import {
   type INotificationLogRepository,
   type IUserRepository,
   type NotificationLog,
+  type NotificationTrigger,
   type Result,
   type Session,
 } from "@rbrasier/domain";
@@ -16,6 +17,10 @@ export interface NotificationConfig {
   // send is skipped, leaving the row `pending` for a later sweeper.
   enabled: boolean;
   baseUrl: string;
+  // Admin-controlled per-trigger switch resolved at send time. When it resolves
+  // false the notification is skipped entirely (no outbox row): the admin opted
+  // out of this trigger. Absent ⇒ always on (back-compat for env-only callers).
+  isTriggerEnabled?: (trigger: NotificationTrigger) => Promise<boolean>;
 }
 
 export interface NotifyOnSessionCompleteInput {
@@ -45,6 +50,10 @@ export class NotifyOnSessionComplete implements ISessionCompleteNotifier {
     input: NotifyOnSessionCompleteInput,
   ): Promise<Result<NotificationLog | null>> {
     const { session } = input;
+
+    if (this.config.isTriggerEnabled && !(await this.config.isTriggerEnabled("session_complete"))) {
+      return ok(null);
+    }
 
     const ownerResult = await this.users.findById(session.userId);
     if (ownerResult.error) return ownerResult;

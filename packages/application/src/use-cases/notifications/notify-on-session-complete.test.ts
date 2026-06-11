@@ -215,7 +215,11 @@ interface Setup {
   flows: FakeFlowRepository;
 }
 
-const setup = (config: { enabled: boolean } = { enabled: true }): Setup => {
+const setup = (
+  config: { enabled: boolean; isTriggerEnabled?: (trigger: NotificationTrigger) => Promise<boolean> } = {
+    enabled: true,
+  },
+): Setup => {
   const notificationLog = new FakeNotificationLogRepository();
   const emailSender = new FakeEmailSender();
   const auditLogger = new FakeAuditLogger();
@@ -229,7 +233,11 @@ const setup = (config: { enabled: boolean } = { enabled: true }): Setup => {
     users,
     flows,
     auditLogger,
-    { enabled: config.enabled, baseUrl: "https://wayfinder.example" },
+    {
+      enabled: config.enabled,
+      baseUrl: "https://wayfinder.example",
+      isTriggerEnabled: config.isTriggerEnabled,
+    },
   );
   return { useCase, notificationLog, emailSender, auditLogger, users, flows };
 };
@@ -311,6 +319,19 @@ describe("NotifyOnSessionComplete", () => {
     expect(notificationLog.rows[0]?.status).toBe("pending");
     expect(emailSender.sent).toHaveLength(0);
     expect(auditLogger.events).toHaveLength(0);
+  });
+
+  it("skips entirely (no outbox row) when an admin disabled the session_complete trigger", async () => {
+    const { useCase, notificationLog, emailSender } = setup({
+      enabled: true,
+      isTriggerEnabled: async (trigger) => trigger !== "session_complete",
+    });
+
+    const result = await useCase.execute({ session: makeSession() });
+
+    expect(result.data).toBeNull();
+    expect(notificationLog.rows).toHaveLength(0);
+    expect(emailSender.sent).toHaveLength(0);
   });
 
   it("falls back to the flow name in the body when the session has no title", async () => {

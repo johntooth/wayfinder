@@ -167,7 +167,11 @@ interface Setup {
   users: FakeUserRepository;
 }
 
-const setup = (config: { enabled: boolean } = { enabled: true }): Setup => {
+const setup = (
+  config: { enabled: boolean; isTriggerEnabled?: (trigger: NotificationTrigger) => Promise<boolean> } = {
+    enabled: true,
+  },
+): Setup => {
   const notificationLog = new FakeNotificationLogRepository();
   const emailSender = new FakeEmailSender();
   const auditLogger = new FakeAuditLogger();
@@ -178,6 +182,7 @@ const setup = (config: { enabled: boolean } = { enabled: true }): Setup => {
   const useCase = new NotifyOnFlowShared(notificationLog, emailSender, users, auditLogger, {
     enabled: config.enabled,
     baseUrl: "https://wayfinder.example",
+    isTriggerEnabled: config.isTriggerEnabled,
   });
   return { useCase, notificationLog, emailSender, auditLogger, users };
 };
@@ -320,6 +325,23 @@ describe("NotifyOnFlowShared", () => {
     });
 
     expect(notificationLog.rows[0]?.status).toBe("pending");
+    expect(emailSender.sent).toHaveLength(0);
+  });
+
+  it("skips entirely (no outbox row) when an admin disabled the flow_shared trigger", async () => {
+    const { useCase, notificationLog, emailSender } = setup({
+      enabled: true,
+      isTriggerEnabled: async (trigger) => trigger !== "flow_shared",
+    });
+
+    const result = await useCase.execute({
+      flow: makeFlow({ permissions: [{ userId: "recipient-1", role: "viewer" }] }),
+      previousPermissions: [],
+      grantedByUserId: "granter-1",
+    });
+
+    expect(result.data).toEqual([]);
+    expect(notificationLog.rows).toHaveLength(0);
     expect(emailSender.sent).toHaveLength(0);
   });
 
