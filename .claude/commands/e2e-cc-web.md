@@ -101,6 +101,11 @@ export BASE_URL=http://localhost:3000
 export MINIO_ENDPOINT=localhost MINIO_PORT=9000 MINIO_USE_SSL=false
 export MINIO_ACCESS_KEY=S3RVER MINIO_SECRET_KEY=S3RVER MINIO_BUCKET=wayfinder-documents
 
+# Tells the suite a storage backend exists, so the storage-writing spec
+# (phase-rag-with-pgvector) runs instead of skipping. Must be visible to the
+# `npx playwright test` shell in step 5, so keep it exported there too.
+export E2E_OBJECT_STORAGE=1
+
 pnpm install --frozen-lockfile
 pnpm db:migrate
 nohup pnpm --filter @wayfinder/web dev >/tmp/web.log 2>&1 &
@@ -200,20 +205,17 @@ After the run, produce a structured report:
 
 ## Known-failing specs (pre-existing — not caused by this recipe)
 
-CI's `e2e.yml` is **red on `main`**, so a fully green local run is not the bar.
-With `@123` + `s3rver` the full suite lands at **87 passed / 8 failed / 22
-skipped**. The 8 failures reproduce independent of browser version and are app
-or test issues, not environment/external-service gaps — don't chase them here:
-
-- **Dev-mode hydration console errors** (`caret-color: transparent` injected onto
-  disabled checkboxes; the app only `suppressHydrationWarning`s one settings
-  input): `admin-settings.spec.ts:21`, `smoke.spec.ts:64` (Admin Users),
-  `phase-user-roles-permissions.spec.ts:30/45/78`.
-- **Genuine test/app mismatches**: `node-config-prompt-preview.spec.ts:35`
-  (strict-mode: two “Back to edit” buttons), `fix-logout-and-register-sidebar`
-  redirect expects `/admin` but the app lands on `/chats`,
-  `fix-prior-step-fields-stripped.spec.ts:182` (mocked template upload pill).
-
-Storage specs that previously 500'd now **pass** with `s3rver`:
-`phase-rag-with-pgvector` (both), `enhance-reindex-documents`,
+Most of the earlier failures were fixed in v1.38.1 (browser-injected
+caret-color hydration noise is now filtered centrally in `helpers/base.ts`;
+the stale roles/flags and node-config/register specs were rewritten; CI gained
+a MinIO container). Storage specs pass once `E2E_OBJECT_STORAGE=1` and `s3rver`
+are in place: `phase-rag-with-pgvector` (both), `enhance-reindex-documents`,
 `enhance-configurable-embeddings`.
+
+Two remain, and are **out of scope** for this recipe — don't chase them:
+
+- `fix-prior-step-fields-stripped.spec.ts:182` — mocked `.docx` template-upload
+  pill never renders; deterministic, needs an app/test investigation.
+- `enhance-n8n-workflow-context-mapping.spec.ts:102` — flaky: the heavy
+  `/flows/[id]/config` route can exceed the 45s test timeout on its first
+  (cold) dev-mode compile. Usually passes on a warm server.

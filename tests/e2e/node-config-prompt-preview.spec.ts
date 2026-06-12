@@ -51,7 +51,10 @@ test.describe('Admin: Node Config — Prompt Preview', () => {
     await page.screenshot({ path: 'screenshots/node-config-prompt-preview.png', fullPage: true });
 
     await expect(page.getByText(/system prompt sent to the ai for this step/i)).toBeVisible();
-    await expect(page.getByRole('button', { name: /back to edit/i })).toBeVisible();
+    // Two controls expose "Back to edit" (an icon button with that aria-label and
+    // a "← Back to edit" text button); match the icon button exactly to stay
+    // single-element under strict mode.
+    await expect(page.getByRole('button', { name: 'Back to edit', exact: true })).toBeVisible();
   });
 });
 

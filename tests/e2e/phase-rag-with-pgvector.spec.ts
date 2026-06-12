@@ -51,6 +51,14 @@ test.describe('Phase: RAG with pgvector', () => {
   test('a context document larger than the old 65 KB budget uploads and is indexed', async ({
     page,
   }) => {
+    // This is the only spec that writes bytes to the object-storage backend, so
+    // it only runs where one is provisioned (CI's MinIO service / the sandbox's
+    // s3rver). Environments without storage set nothing and it skips cleanly.
+    test.skip(
+      !process.env.E2E_OBJECT_STORAGE,
+      'Requires an object-storage backend (MinIO/s3rver); set E2E_OBJECT_STORAGE=1.',
+    );
+
     const flowId = await createFlowAndResolveId(page, `RAG Budget ${Date.now()}`);
     if (!flowId) {
       test.skip(true, 'Could not create / resolve a flow to upload into');

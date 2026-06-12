@@ -50,12 +50,14 @@ test.describe('Register page chrome', () => {
     await context.close();
   });
 
-  test('signed-in admin visiting /register is redirected to /admin', async ({ page }) => {
+  test('signed-in user visiting /register is redirected to /chats', async ({ page }) => {
     await page.goto('/register');
     await page.waitForLoadState('networkidle');
 
+    // register/page.tsx bounces any already-authenticated session to /chats (the
+    // app home); only fresh visitors see the registration form.
     await expect(page).not.toHaveURL(/\/register/);
-    await expect(page).toHaveURL(/\/admin(\/|$)/);
+    await expect(page).toHaveURL(/\/chats(\/|$)/);
     await page.screenshot({ path: 'screenshots/fix-register-redirect.png', fullPage: true });
   });
 });

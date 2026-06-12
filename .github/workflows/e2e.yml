@@ -48,6 +48,9 @@ jobs:
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: wayfinder-documents
       MINIO_USE_SSL: "false"
+      # Signals to the suite that an object-storage backend is provisioned (the
+      # MinIO step below), so storage-dependent specs run instead of skipping.
+      E2E_OBJECT_STORAGE: "1"
       BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET || 'e2e-test-secret-must-be-at-least-32-chars-long' }}
       BETTER_AUTH_URL: http://localhost:3000
       AI_DEFAULT_PROVIDER: anthropic
@@ -77,6 +80,23 @@ jobs:
       - name: Install Playwright browsers
         run: npm install && npx playwright install --with-deps chromium
         working-directory: tests/e2e
+
+      # MinIO can't run as a `services:` container (that syntax can't supply the
+      # required `server /data` command), so start it with `docker run`. The app
+      # auto-creates the bucket on boot via objectStorage.initialise().
+      - name: Start MinIO (object storage)
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio server /data
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:9000/minio/health/ready >/dev/null 2>&1; then
+              echo "MinIO ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "MinIO did not become ready" >&2; docker logs minio || true; exit 1
 
       - name: Start app
         run: pnpm --filter @wayfinder/web dev &

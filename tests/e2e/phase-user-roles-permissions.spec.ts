@@ -32,12 +32,18 @@ test.describe('Phase: User Roles & Permissions', () => {
     await page.waitForLoadState('networkidle');
     await page.screenshot({ path: 'screenshots/admin-roles.png', fullPage: true });
 
-    await expect(page.getByText(/roles\s*&\s*permissions/i)).toBeVisible();
-    await expect(page.getByRole('columnheader', { name: /everyone/i })).toBeVisible();
-    await expect(page.getByRole('columnheader', { name: /admins/i })).toBeVisible();
-    await expect(page.getByRole('columnheader', { name: /power users/i })).toBeVisible();
+    // The matrix lives under the "Permissions" card. Scope to that table (it's
+    // the one with a "Permission" column) because the Feature access card below
+    // repeats "Everyone"/"Power Users" headers, which would break strict mode.
+    await expect(page.getByRole('heading', { name: 'Permissions' })).toBeVisible();
+    const matrix = page
+      .getByRole('table')
+      .filter({ has: page.getByRole('columnheader', { name: 'Permission', exact: true }) });
+    await expect(matrix.getByRole('columnheader', { name: /everyone/i })).toBeVisible();
+    await expect(matrix.getByRole('columnheader', { name: /admins/i })).toBeVisible();
+    await expect(matrix.getByRole('columnheader', { name: /power users/i })).toBeVisible();
 
-    // The four registered permissions appear as rows.
+    // The registered permissions appear as rows.
     await expect(page.getByText('Create chats')).toBeVisible();
     await expect(page.getByText('Publish workflows to everyone')).toBeVisible();
   });
@@ -45,6 +51,10 @@ test.describe('Phase: User Roles & Permissions', () => {
   test('the Admins column is locked (checkboxes disabled)', async ({ page }) => {
     await page.goto('/admin/roles');
     await page.waitForLoadState('networkidle');
+
+    // Wait for the matrix to render before counting — the role data is hydrated
+    // client-side, so checkboxes appear a tick after networkidle.
+    await expect(page.locator('input[type="checkbox"]').first()).toBeVisible();
 
     // Every checkbox in the matrix that is disabled belongs to the immutable
     // Admins role; assert at least one disabled (locked) checkbox exists.
@@ -75,13 +85,17 @@ test.describe('Phase: User Roles & Permissions', () => {
     await page.waitForLoadState('networkidle');
   });
 
-  test('flags page shows role scoping for enabled flags', async ({ page }) => {
-    await page.goto('/admin/flags');
+  test('Feature access card scopes enabled flags by role', async ({ page }) => {
+    // Per-flag role scoping moved off /admin/flags into the Roles page
+    // "Feature access" card; each enabled flag gets a column per assignable role
+    // plus an "Everyone" column (empty allowlist ⇒ everyone, ADR-022).
+    await page.goto('/admin/roles');
     await page.waitForLoadState('networkidle');
     await page.screenshot({ path: 'screenshots/admin-flags-roles.png', fullPage: true });
 
-    // scheduled_node ships enabled; its row should expose the "Limit to roles"
-    // control (either "Everyone" when unscoped or a Power Users checkbox).
-    await expect(page.getByRole('columnheader', { name: /limit to roles/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Feature access' })).toBeVisible();
+    // "Feature" is unique to this card's table (the permission matrix uses
+    // "Permission"); "Everyone" appears in both, so don't match on it.
+    await expect(page.getByRole('columnheader', { name: 'Feature', exact: true })).toBeVisible();
   });
 });
