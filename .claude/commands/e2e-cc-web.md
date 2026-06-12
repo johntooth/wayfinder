@@ -20,6 +20,11 @@ where the Playwright/Chrome download CDNs are blocked (403). This is the
   reachable**, but the **Playwright/Chrome download CDNs return 403**, so
   `npx playwright install` fails. We sidestep this with `@sparticuz/chromium`,
   which ships a headless Chromium inside its npm tarball.
+- MinIO has no apt package and its release CDN (`dl.min.io`) is blocked (403),
+  so object storage is provided by **`s3rver`** — a pure-JS S3-compatible server
+  installed from the npm registry. The app's `MinioStorageAdapter` talks plain
+  S3 (path-style), so `s3rver` is a drop-in. This unblocks the upload/RAG specs
+  (`phase-rag-with-pgvector`, `enhance-reindex-documents`) that the CI job skips.
 
 ---
 
@@ -43,10 +48,42 @@ PGPASSWORD=postgres psql -h localhost -U postgres -d wayfinder_e2e -c "CREATE EX
 
 ---
 
-## 2. Install deps, migrate, start the app
+## 2. Object storage (S3) for the upload/RAG specs — `s3rver`
 
-The env mirrors `.github/workflows/e2e.yml`. MinIO is **not** required for the
-admin/flow/scheduling/dashboard specs (the CI job doesn't run it either).
+Run this **before** the app so storage init succeeds on first boot. `s3rver`
+validates AWS access keys; its **default credentials are `S3RVER` / `S3RVER`**
+(NOT `minioadmin`), so the app's `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` must be
+set to match (see step 3). Pre-create the bucket the app expects.
+
+```bash
+mkdir -p /tmp/s3srv && cd /tmp/s3srv && npm init -y && npm install s3rver@3.7.1
+cat > /tmp/s3srv/run.js <<'EOF'
+const S3rver = require('s3rver');
+const fs = require('fs');
+fs.rmSync('/tmp/s3-data', { recursive: true, force: true });
+fs.mkdirSync('/tmp/s3-data', { recursive: true });
+new S3rver({
+  port: 9000, address: '0.0.0.0', silent: false, directory: '/tmp/s3-data',
+  configureBuckets: [{ name: 'wayfinder-documents', configs: [] }],
+}).run((err, o) => err ? (console.error(err), process.exit(1))
+                       : console.log(`S3RVER_READY ${o.address}:${o.port}`));
+EOF
+nohup node /tmp/s3srv/run.js >/tmp/s3rver.log 2>&1 &
+# probe: curl -s -o /dev/null -w '%{http_code}\n' http://localhost:9000/  → 200
+```
+
+> Skip this only if you are running the narrow admin/flow/scheduling subset; the
+> full suite needs it (otherwise `phase-rag-with-pgvector` fails with a 500
+> `{"error":"Failed to store document"}`).
+
+---
+
+## 3. Install deps, migrate, start the app
+
+The env mirrors `.github/workflows/e2e.yml`, plus the `MINIO_*` overrides that
+point the app at `s3rver` with its default `S3RVER`/`S3RVER` credentials. The
+`MinioStorageAdapter` resolves its client lazily, so the app can start before or
+after `s3rver`, but starting storage first keeps the boot log clean.
 
 ```bash
 export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/wayfinder_e2e
@@ -59,6 +96,16 @@ export TEST_ADMIN_EMAIL=admin@example.com
 export USE_REAL_AI=false              # specs mock AI via tests/e2e/helpers/base.ts
 export BASE_URL=http://localhost:3000
 
+# Point object storage at the local s3rver (step 2). Endpoint/port/bucket match
+# the app's env defaults; only the credentials differ from minioadmin.
+export MINIO_ENDPOINT=localhost MINIO_PORT=9000 MINIO_USE_SSL=false
+export MINIO_ACCESS_KEY=S3RVER MINIO_SECRET_KEY=S3RVER MINIO_BUCKET=wayfinder-documents
+
+# Tells the suite a storage backend exists, so the storage-writing spec
+# (phase-rag-with-pgvector) runs instead of skipping. Must be visible to the
+# `npx playwright test` shell in step 5, so keep it exported there too.
+export E2E_OBJECT_STORAGE=1
+
 pnpm install --frozen-lockfile
 pnpm db:migrate
 nohup pnpm --filter @wayfinder/web dev >/tmp/web.log 2>&1 &
@@ -67,7 +114,7 @@ nohup pnpm --filter @wayfinder/web dev >/tmp/web.log 2>&1 &
 
 ---
 
-## 3. A Chromium that doesn't need the blocked CDN
+## 4. A Chromium that doesn't need the blocked CDN
 
 `@sparticuz/chromium` ships a real headless Chromium **inside its npm tarball**,
 so it installs from the reachable registry. Extract it once:
@@ -101,7 +148,7 @@ export default config;
 
 ---
 
-## 4. Run
+## 5. Run
 
 ```bash
 cd tests/e2e && npm install                       # e2e has its own package.json
@@ -118,7 +165,7 @@ npx playwright test --config playwright.local.config.ts --project=chromium --rep
 
 ---
 
-## 5. Report
+## 6. Report
 
 After the run, produce a structured report:
 
@@ -140,8 +187,35 @@ After the run, produce a structured report:
 - Specs run sequentially (`workers: 1`, shared auth state) and the DB is **not**
   reset between files, so flows created by `admin-flow-editing` are still there
   when later specs run.
-- `@sparticuz/chromium` is ~Chromium 123 while Playwright bundles a newer build;
-  basic interactions work, but if a spec needs a very new Chromium feature this
-  may not match CI exactly.
-- The background Postgres/dev-server can be reaped on container inactivity —
-  just re-run steps 1–2's `pg_ctl start` / `pnpm dev` to bring them back.
+- `@sparticuz/chromium` is ~Chromium 123 while Playwright (1.60) bundles ~143.
+  Stick with **`@sparticuz/chromium@123`**: bumping to `@143` (to match CI) was
+  tried and is *worse* — it adds flaky logout-context timeouts and does **not**
+  fix the hydration failures below, confirming those are app-level, not browser.
+- `s3rver` returns `403 InvalidAccessKeyId` if the app still uses the default
+  `minioadmin` credentials — it only accepts its own `S3RVER`/`S3RVER` pair.
+  Set `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` accordingly (step 3). If the app
+  booted before `s3rver` was up you'll see one `MinIO initialisation failed`
+  warning in `/tmp/web.log`; it's harmless — the adapter reconnects lazily on
+  the first upload, no restart needed.
+- The background Postgres/dev-server/s3rver can be reaped on container
+  inactivity — just re-run steps 1–3 (`pg_ctl start` / `node run.js` / `pnpm
+  dev`) to bring them back.
+
+---
+
+## Known-failing specs (pre-existing — not caused by this recipe)
+
+Most of the earlier failures were fixed in v1.38.1 (browser-injected
+caret-color hydration noise is now filtered centrally in `helpers/base.ts`;
+the stale roles/flags and node-config/register specs were rewritten; CI gained
+a MinIO container). Storage specs pass once `E2E_OBJECT_STORAGE=1` and `s3rver`
+are in place: `phase-rag-with-pgvector` (both), `enhance-reindex-documents`,
+`enhance-configurable-embeddings`.
+
+Two remain, and are **out of scope** for this recipe — don't chase them:
+
+- `fix-prior-step-fields-stripped.spec.ts:182` — mocked `.docx` template-upload
+  pill never renders; deterministic, needs an app/test investigation.
+- `enhance-n8n-workflow-context-mapping.spec.ts:102` — flaky: the heavy
+  `/flows/[id]/config` route can exceed the 45s test timeout on its first
+  (cold) dev-mode compile. Usually passes on a warm server.

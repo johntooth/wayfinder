@@ -42,9 +42,16 @@ export const test = base.extend<WayfinderFixtures>({
   page: async ({ page, consoleLogs }, use) => {
     // ── 1. Capture all console output ─────────────────────────────────────
     page.on('console', (msg) => {
+      const text = msg.text();
+      // Chromium injects caret-color/fdprocessedid onto <input> elements after
+      // SSR (the same browser behaviour the app notes on the settings org-name
+      // field). React's dev-only hydration check then logs a benign attribute
+      // mismatch. It is not an application error and never reaches production
+      // builds, so drop it rather than fail "no console errors" assertions.
+      if (isBenignHydrationInjection(text)) return;
       consoleLogs.push({
         type: msg.type() as ConsoleMessage['type'],
-        text: msg.text(),
+        text,
         location: msg.location().url ?? '',
         timestamp: Date.now(),
       });
@@ -111,6 +118,18 @@ export const test = base.extend<WayfinderFixtures>({
 });
 
 export { expect };
+
+/**
+ * True when a console.error is React's dev-mode hydration warning caused purely
+ * by the browser injecting caret-color / fdprocessedid onto inputs after SSR.
+ * Scoped tightly (must be a hydration message AND mention an injected attribute)
+ * so genuine hydration bugs — Date.now(), locale, bad nesting — still surface.
+ */
+function isBenignHydrationInjection(text: string): boolean {
+  const isHydrationWarning = text.includes('hydrated but some attributes of the server rendered HTML');
+  const mentionsInjectedAttribute = text.includes('caret-color') || text.includes('fdprocessedid');
+  return isHydrationWarning && mentionsInjectedAttribute;
+}
 
 // ── AI mock route handlers ─────────────────────────────────────────────────
 

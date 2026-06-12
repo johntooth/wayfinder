@@ -23,15 +23,15 @@ test.describe('Admin: Scheduled Run History', () => {
       return;
     }
 
+    // The runs list is fetched client-side, so wait for the query to resolve into
+    // either the table or the empty state (networkidle can fire while the skeleton
+    // is still up, especially on a cold CI compile).
+    await expect(
+      page.getByRole('table').or(page.getByText(/no scheduled runs yet/i)).first(),
+    ).toBeVisible();
+
     const errors = consoleLogs.filter((l) => l.type === 'error');
     expect(errors, `JS errors on /admin/schedules:\n${errors.map((e) => e.text).join('\n')}`).toHaveLength(0);
-
-    // Either the runs table or the empty state must be present.
-    const table = page.getByRole('table');
-    const emptyState = page.getByText(/no scheduled runs yet/i);
-    const hasTable = await table.isVisible().catch(() => false);
-    const hasEmpty = await emptyState.isVisible().catch(() => false);
-    expect(hasTable || hasEmpty).toBeTruthy();
   });
 
   test('schedules page is reachable from the admin sidebar', async ({ page }) => {
