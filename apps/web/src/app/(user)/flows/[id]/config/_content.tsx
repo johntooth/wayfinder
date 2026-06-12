@@ -333,18 +333,29 @@ function CanvasInner({ flowId }: { flowId: string }) {
     if (!res.ok || data.error) {
       return { error: data.error ?? "Upload failed", code: data.code };
     }
-    // Immediately reflect the extracted template fields in rfNodes so that
-    // priorStepFields picks them up for any subsequently opened step config.
-    if (data.documentTemplateFields) {
-      const uploadedFields = data.documentTemplateFields;
-      setRfNodes((nds) =>
-        nds.map((n) => {
-          if (n.id !== editingNodeId) return n;
-          const nodeConfig = ((n.data as { config?: Record<string, unknown> }).config ?? {});
-          return { ...n, data: { ...n.data, config: { ...nodeConfig, documentTemplateFields: uploadedFields } } };
-        }),
-      );
-    }
+    // Reflect the whole upload result in rfNodes immediately: the fields so
+    // priorStepFields picks them up, and the filename/path/content so the modal's
+    // initialValues re-sync (keyed on rfNodes) doesn't wipe the just-set filename
+    // pill before the next save.
+    setRfNodes((nds) =>
+      nds.map((n) => {
+        if (n.id !== editingNodeId) return n;
+        const nodeConfig = ((n.data as { config?: Record<string, unknown> }).config ?? {});
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            config: {
+              ...nodeConfig,
+              documentTemplatePath: data.path ?? null,
+              documentTemplateFilename: data.filename ?? null,
+              documentTemplateContent: data.documentTemplateContent ?? null,
+              ...(data.documentTemplateFields ? { documentTemplateFields: data.documentTemplateFields } : {}),
+            },
+          },
+        };
+      }),
+    );
     return { path: data.path!, filename: data.filename!, documentTemplateContent: data.documentTemplateContent ?? null };
   }, [editingNodeId, flowId]);
 
