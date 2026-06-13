@@ -159,6 +159,12 @@ function CanvasInner({ flowId }: { flowId: string }) {
   // orphan — while still being a real, persisted node during editing.
   const [createdNodeId, setCreatedNodeId] = useState<string | null>(null);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
+  // A connector dragged into blank space: the new node's source and drop point.
+  // The type picker resolves the type first, mirroring the Add step button.
+  const [pendingConnect, setPendingConnect] = useState<{
+    fromNodeId: string;
+    position: { x: number; y: number };
+  } | null>(null);
 
   const positionTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -279,12 +285,14 @@ function CanvasInner({ flowId }: { flowId: string }) {
     if (!paneEl) return;
     const paneRect = paneEl.getBoundingClientRect();
 
-    void createAndEditNode(
-      "conversational",
-      { x: target.clientX - paneRect.left - 112, y: target.clientY - paneRect.top - 40 },
+    // Choose the node type first (same as the Add step button); the type picker
+    // creates and wires the node once a type is chosen.
+    setPendingConnect({
       fromNodeId,
-    );
-  }, [createAndEditNode]);
+      position: { x: target.clientX - paneRect.left - 112, y: target.clientY - paneRect.top - 40 },
+    });
+    setTypePickerOpen(true);
+  }, []);
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setEditingNodeId(node.id);
@@ -388,9 +396,15 @@ function CanvasInner({ flowId }: { flowId: string }) {
 
   const handleSelectNodeType = useCallback((type: NodeConfigType) => {
     setTypePickerOpen(false);
+    if (pendingConnect) {
+      const { fromNodeId, position } = pendingConnect;
+      setPendingConnect(null);
+      void createAndEditNode(type, position, fromNodeId);
+      return;
+    }
     const xOffset = rfNodes.length > 0 ? (rfNodes[rfNodes.length - 1]?.position.x ?? 0) + 280 : 200;
     void createAndEditNode(type, { x: xOffset, y: 200 });
-  }, [rfNodes, createAndEditNode]);
+  }, [pendingConnect, rfNodes, createAndEditNode]);
 
   const handleConfigClose = useCallback(() => {
     // The author backed out of a step they just created; remove it so the
@@ -815,7 +829,10 @@ function CanvasInner({ flowId }: { flowId: string }) {
         autoNodeEnabled={autoNodeEnabled}
         scheduledNodeEnabled={scheduledNodeEnabled}
         onSelect={handleSelectNodeType}
-        onClose={() => setTypePickerOpen(false)}
+        onClose={() => {
+          setTypePickerOpen(false);
+          setPendingConnect(null);
+        }}
       />
 
       <NodeConfigModal

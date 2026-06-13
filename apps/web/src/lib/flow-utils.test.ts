@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildStepRail } from "./flow-utils";
+import { buildStepRail, computeStepNumbers } from "./flow-utils";
 
 interface TestNode {
   id: string;
@@ -83,5 +83,102 @@ describe("buildStepRail", () => {
 
   it("returns an empty rail when there are no nodes", () => {
     expect(buildStepRail([], [], null, [])).toEqual([]);
+  });
+});
+
+describe("computeStepNumbers", () => {
+  it("numbers a plain linear flow sequentially", () => {
+    const nodes = [{ id: "a" }, { id: "b" }, { id: "c" }];
+    const edges = [
+      { fromNodeId: "a", toNodeId: "b" },
+      { fromNodeId: "b", toNodeId: "c" },
+    ];
+
+    const numbers = computeStepNumbers(nodes, edges);
+
+    expect(numbers.get("a")).toBe("1");
+    expect(numbers.get("b")).toBe("2");
+    expect(numbers.get("c")).toBe("3");
+  });
+
+  it("letters parallel branches by depth and numbers the merge plainly", () => {
+    // 1 -> (2a | 2b) -> (3a | 3b) -> 4
+    const nodes = [
+      { id: "root" },
+      { id: "aTop" },
+      { id: "bTop" },
+      { id: "aMid" },
+      { id: "bMid" },
+      { id: "merge" },
+    ];
+    const edges = [
+      { fromNodeId: "root", toNodeId: "aTop" },
+      { fromNodeId: "root", toNodeId: "bTop" },
+      { fromNodeId: "aTop", toNodeId: "aMid" },
+      { fromNodeId: "bTop", toNodeId: "bMid" },
+      { fromNodeId: "aMid", toNodeId: "merge" },
+      { fromNodeId: "bMid", toNodeId: "merge" },
+    ];
+
+    const numbers = computeStepNumbers(nodes, edges);
+
+    expect(numbers.get("root")).toBe("1");
+    expect(new Set([numbers.get("aTop"), numbers.get("bTop")])).toEqual(new Set(["2a", "2b"]));
+    expect(new Set([numbers.get("aMid"), numbers.get("bMid")])).toEqual(new Set(["3a", "3b"]));
+    expect(numbers.get("merge")).toBe("4");
+  });
+
+  it("keeps a branch lettering consistent down its own path", () => {
+    const nodes = [
+      { id: "root" },
+      { id: "aTop" },
+      { id: "bTop" },
+      { id: "aMid" },
+      { id: "bMid" },
+    ];
+    const edges = [
+      { fromNodeId: "root", toNodeId: "aTop" },
+      { fromNodeId: "root", toNodeId: "bTop" },
+      { fromNodeId: "aTop", toNodeId: "aMid" },
+      { fromNodeId: "bTop", toNodeId: "bMid" },
+    ];
+
+    const numbers = computeStepNumbers(nodes, edges);
+
+    // The node discovered first on each fork keeps the same letter at every depth.
+    const topLetter = numbers.get("aTop")!.slice(-1);
+    expect(numbers.get("aMid")!.slice(-1)).toBe(topLetter);
+    const otherLetter = numbers.get("bTop")!.slice(-1);
+    expect(numbers.get("bMid")!.slice(-1)).toBe(otherLetter);
+  });
+
+  it("drops the letter when one fork runs longer than the other", () => {
+    // 1 -> (2a | 2b) -> (3a | 3b); branch a has an extra step (4) before merge (5)
+    const nodes = [
+      { id: "root" },
+      { id: "aTop" },
+      { id: "bTop" },
+      { id: "aMid" },
+      { id: "bMid" },
+      { id: "aExtra" },
+      { id: "merge" },
+    ];
+    const edges = [
+      { fromNodeId: "root", toNodeId: "aTop" },
+      { fromNodeId: "root", toNodeId: "bTop" },
+      { fromNodeId: "aTop", toNodeId: "aMid" },
+      { fromNodeId: "bTop", toNodeId: "bMid" },
+      { fromNodeId: "aMid", toNodeId: "aExtra" },
+      { fromNodeId: "aExtra", toNodeId: "merge" },
+      { fromNodeId: "bMid", toNodeId: "merge" },
+    ];
+
+    const numbers = computeStepNumbers(nodes, edges);
+
+    expect(numbers.get("root")).toBe("1");
+    expect(new Set([numbers.get("aTop"), numbers.get("bTop")])).toEqual(new Set(["2a", "2b"]));
+    expect(new Set([numbers.get("aMid"), numbers.get("bMid")])).toEqual(new Set(["3a", "3b"]));
+    expect(numbers.get("aExtra")).toBe("4");
+    expect(numbers.get("merge")).toBe("5");
   });
 });

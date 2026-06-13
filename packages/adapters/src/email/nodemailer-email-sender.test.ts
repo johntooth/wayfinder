@@ -75,6 +75,21 @@ describe("NodemailerEmailSender with environment transport config", () => {
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
+
+  it("reports the stream sink as unconfigured since it never delivers", async () => {
+    const sender = new NodemailerEmailSender(new FakeSystemSettingsRepository(), makeEnvConfig());
+
+    expect(await sender.isConfigured()).toBe(false);
+  });
+
+  it("reports a complete smtp env transport as configured", async () => {
+    const sender = new NodemailerEmailSender(
+      new FakeSystemSettingsRepository(),
+      makeEnvConfig({ mode: "smtp", host: "smtp.example.com", user: "mailer", pass: "secret" }),
+    );
+
+    expect(await sender.isConfigured()).toBe(true);
+  });
 });
 
 describe("NodemailerEmailSender without environment transport config", () => {
@@ -85,6 +100,30 @@ describe("NodemailerEmailSender without environment transport config", () => {
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
     expect(result.error?.message).toContain("not configured");
+  });
+
+  it("reports unconfigured when admin settings are empty", async () => {
+    const sender = new NodemailerEmailSender(new FakeSystemSettingsRepository());
+
+    expect(await sender.isConfigured()).toBe(false);
+  });
+
+  it("reports configured for a complete smtp admin config", async () => {
+    const settings = new FakeSystemSettingsRepository();
+    settings.values.set(
+      EMAIL_CONFIG_SETTING_KEY,
+      JSON.stringify({
+        provider: "smtp",
+        host: "smtp.example.com",
+        port: 587,
+        username: "mailer",
+        password: "secret",
+        fromAddress: "noreply@example.com",
+      }),
+    );
+    const sender = new NodemailerEmailSender(settings);
+
+    expect(await sender.isConfigured()).toBe(true);
   });
 
   it("treats an M365 admin config missing tenant details as unconfigured", async () => {

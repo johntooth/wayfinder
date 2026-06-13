@@ -59,6 +59,26 @@ export class NodemailerEmailSender implements IEmailSender {
     return this.sendViaAdminSettings(input);
   }
 
+  async isConfigured(): Promise<boolean> {
+    if (this.envConfig) return this.isEnvConfigComplete(this.envConfig);
+    return (await this.loadAdminConfig()) !== null;
+  }
+
+  // `stream` mode builds messages but never delivers them, so it does not count
+  // as a transport that can actually reach an approver.
+  private isEnvConfigComplete(config: SmtpEnvConfig): boolean {
+    if (config.mode === "stream") return false;
+    if (config.mode === "smtp") {
+      return Boolean(config.host && config.user && config.pass && config.from);
+    }
+    return Boolean(
+      config.m365TenantId &&
+        config.m365ClientId &&
+        config.m365ClientSecret &&
+        (config.user || config.from),
+    );
+  }
+
   private async sendViaEnvironment(
     config: SmtpEnvConfig,
     input: SendEmailInput,
