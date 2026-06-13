@@ -65,6 +65,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
 
   const [_regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set());
   const [overrideOpen, setOverrideOpen] = useState(false);
+  const kickoffSentRef = useRef(false);
 
   const renameMutation = trpc.session.rename.useMutation({
     onSuccess: () => {
@@ -145,7 +146,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       return { nodeId: e.toNodeId, nodeName: node?.name ?? e.toNodeId };
     });
 
-  const { messages, input, handleSubmit, isLoading, setInput, error, reload } = useChat({
+  const { messages, input, handleSubmit, isLoading, setInput, error, reload, append } = useChat({
     api: `/api/chat/${sessionId}/stream`,
     initialMessages: dbMessages.map((m) => ({
       id: m.id,
@@ -169,6 +170,31 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     void utils.session.get.invalidate({ sessionId });
   }, [sessionId, utils.session.get]);
+
+  // A freshly created session has no messages yet. Auto-send a generic kickoff
+  // message as the user so the agent responds immediately, instead of leaving
+  // the user staring at an empty thread. Read-only collaborators and inactive
+  // or deleted flows are skipped, and the ref guards against double-sends.
+  useEffect(() => {
+    if (kickoffSentRef.current) return;
+    if (!sessionData) return;
+    if (isShared) return;
+    if (sessionData.session.status !== "active") return;
+    if (sessionData.flow.deletedAt !== null) return;
+    if (sessionData.messages.length > 0) return;
+    if (messages.length > 0) return;
+    if (isLoading) return;
+
+    kickoffSentRef.current = true;
+
+    const flowName = sessionData.flow.name;
+    const firstStepName = currentNode?.name?.trim();
+    const kickoffMessage = firstStepName
+      ? `Hi! I'm ready to get started with the "${flowName}" workflow. Let's begin with the first step: ${firstStepName}.`
+      : `Hi! I'm ready to get started with the "${flowName}" workflow. Please guide me through the first step.`;
+
+    void append({ role: "user", content: kickoffMessage });
+  }, [sessionData, isShared, messages.length, isLoading, currentNode, append]);
 
   // Poll while a document is being generated so the spinner resolves automatically.
   // "pending" means generation is in flight; null treated as pending so legacy rows
