@@ -73,4 +73,14 @@ export const approvalRouter = router({
     if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
+
+  // Whether an approval request can actually be emailed. False when notifications
+  // are disabled or no transport is configured, so the gate can offer the
+  // operator a manual fallback (mailto / copy link) instead.
+  emailStatus: authenticatedProcedure.query(async ({ ctx }) => {
+    const configured =
+      ctx.container.env.NOTIFICATIONS_ENABLED &&
+      (await ctx.container.services.emailSender.isConfigured());
+    return { configured };
+  }),
 });

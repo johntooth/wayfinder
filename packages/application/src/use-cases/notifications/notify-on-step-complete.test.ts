@@ -90,6 +90,10 @@ class FakeNotificationLogRepository implements INotificationLogRepository {
 class FakeEmailSender implements IEmailSender {
   sent: SendEmailInput[] = [];
   failWith: string | null = null;
+
+  async isConfigured(): Promise<boolean> {
+    return true;
+  }
   async send(input: SendEmailInput): Promise<Result<true>> {
     if (this.failWith) return err(domainError("INFRA_FAILURE", this.failWith));
     this.sent.push(input);

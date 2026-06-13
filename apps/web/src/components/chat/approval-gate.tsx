@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Stamp } from "lucide-react";
+import { Copy, Mail, Stamp } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { trpc } from "@/trpc/client";
 interface ApprovalGateProps {
   sessionId: string;
   flowId: string;
+  flowName: string;
   nodeId: string;
   instructions: string | null;
 }
@@ -23,21 +24,29 @@ interface ChosenApprover {
 // Operator-facing gate shown when a session is parked on an approval node. It
 // raises (or loads) the pending request, shows the suggested approver, and lets
 // the operator confirm or pick "Someone else" before the request is sent.
-export function ApprovalGate({ sessionId, flowId, nodeId, instructions }: ApprovalGateProps) {
+export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions }: ApprovalGateProps) {
   const utils = trpc.useUtils();
   const [approvalId, setApprovalId] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
+  const [sentToEmail, setSentToEmail] = useState<string | null>(null);
   const [chosen, setChosen] = useState<ChosenApprover | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [query, setQuery] = useState("");
+
+  // When email cannot be delivered the operator must notify the approver by hand,
+  // so the confirm action only records the approver and surfaces manual options.
+  const emailStatusQuery = trpc.approval.emailStatus.useQuery();
+  const emailConfigured = emailStatusQuery.data?.configured ?? true;
 
   const suggest = trpc.approval.suggest.useMutation({
     onSuccess: (data) => {
       setApprovalId(data.approval.id);
       if (data.approval.approverUserId || data.approval.approverEmail) {
         setSent(true);
-        setSentTo(data.approval.approverEmail ?? data.suggestedApprover?.email ?? "the approver");
+        const email = data.approval.approverEmail ?? data.suggestedApprover?.email ?? null;
+        setSentTo(email ?? data.suggestedApprover?.name ?? "the approver");
+        setSentToEmail(email);
         return;
       }
       if (data.suggestedApprover) {
@@ -67,10 +76,11 @@ export function ApprovalGate({ sessionId, flowId, nodeId, instructions }: Approv
     onSuccess: async () => {
       setSent(true);
       setSentTo(chosen?.label ?? "the approver");
+      setSentToEmail(chosen?.email ?? null);
       await utils.session.get.invalidate({ sessionId });
-      toast.success("Approval request sent");
+      toast.success(emailConfigured ? "Approval request sent" : "Approver confirmed");
     },
-    onError: (error) => toast.error(error.message ?? "Could not send the request"),
+    onError: (error) => toast.error(error.message ?? "Could not record the request"),
   });
 
   const send = () => {
@@ -84,14 +94,65 @@ export function ApprovalGate({ sessionId, flowId, nodeId, instructions }: Approv
     });
   };
 
+  const approvalUrl = typeof window !== "undefined" ? `${window.location.origin}/approvals` : "/approvals";
+
+  const buildMailtoHref = (email: string): string => {
+    const subject = `Approval needed: '${flowName}'`;
+    const body = [
+      `You've been asked to approve a step in the '${flowName}' workflow.`,
+      ...(instructions ? ["", instructions] : []),
+      "",
+      "Review and record your decision here:",
+      approvalUrl,
+    ].join("\n");
+    return `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  };
+
+  const copyApprovalLink = async () => {
+    try {
+      await navigator.clipboard.writeText(approvalUrl);
+      toast.success("Approval link copied");
+    } catch {
+      toast.error("Could not copy the link");
+    }
+  };
+
   if (sent) {
     return (
       <div className="border-t border-[#dedad2] bg-[#fef3e2] px-5 py-4">
-        <div className="mx-auto flex max-w-2xl items-center gap-3">
-          <Stamp className="h-5 w-5 text-[#d97706]" />
-          <p className="text-[13px] text-[#92400e]">
-            Awaiting approval — sent to <span className="font-medium">{sentTo}</span>.
-          </p>
+        <div className="mx-auto flex max-w-2xl flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <Stamp className="h-5 w-5 text-[#d97706]" />
+            <p className="text-[13px] text-[#92400e]">
+              {emailConfigured ? (
+                <>
+                  Awaiting approval — sent to <span className="font-medium">{sentTo}</span>.
+                </>
+              ) : (
+                <>
+                  Awaiting approval from <span className="font-medium">{sentTo}</span>. Email isn&apos;t
+                  configured, so send the request manually.
+                </>
+              )}
+            </p>
+          </div>
+
+          {!emailConfigured && (
+            <div className="flex flex-wrap gap-2">
+              {sentToEmail && (
+                <Button asChild size="sm">
+                  <a href={buildMailtoHref(sentToEmail)}>
+                    <Mail className="h-4 w-4" />
+                    Email approver
+                  </a>
+                </Button>
+              )}
+              <Button size="sm" variant="outline" onClick={copyApprovalLink}>
+                <Copy className="h-4 w-4" />
+                Copy approval link
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -120,6 +181,12 @@ export function ApprovalGate({ sessionId, flowId, nodeId, instructions }: Approv
             </p>
           )}
         </div>
+
+        {!emailConfigured && (
+          <p className="text-[12.5px] text-[#92400e]">
+            Email isn&apos;t configured. Confirm the approver, then send them the request manually.
+          </p>
+        )}
 
         {showSearch && (
           <div className="space-y-2 rounded-[10px] border border-[#dedad2] bg-white p-3">
@@ -159,7 +226,7 @@ export function ApprovalGate({ sessionId, flowId, nodeId, instructions }: Approv
 
         <div className="flex flex-wrap gap-2">
           <Button size="sm" onClick={send} disabled={!chosen || confirmAndSend.isPending}>
-            Confirm &amp; send
+            {emailConfigured ? "Confirm & send" : "Confirm"}
           </Button>
           <Button size="sm" variant="outline" onClick={() => setShowSearch((open) => !open)}>
             Someone else

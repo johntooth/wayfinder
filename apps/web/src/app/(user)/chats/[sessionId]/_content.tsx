@@ -361,6 +361,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         <ApprovalGate
           sessionId={sessionId}
           flowId={session.flowId}
+          flowName={flow.name}
           nodeId={currentNode.id}
           instructions={(currentNode.config as { instructions?: string }).instructions ?? null}
         />

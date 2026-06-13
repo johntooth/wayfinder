@@ -282,7 +282,10 @@ export async function POST(
                 userId: authSession.userId,
                 userRole: authSession.isAdmin ? "admin" : "user",
               });
-            } else {
+            } else if (newNode.type !== "approval") {
+              // Approval nodes park the session on the operator-facing approval
+              // gate, which raises its own request — generating an AI opener here
+              // would leave a stray chat message above the gate.
               await generateInitialMessage({
                 container,
                 sessionId: session.id,

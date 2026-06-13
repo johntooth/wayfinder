@@ -50,10 +50,30 @@ export function topoSortNodes<T extends NodeLike>(nodes: T[], edges: EdgeLike[])
   return result;
 }
 
+const branchLetter = (index: number): string => {
+  // a–z, then aa, ab… for the rare fork wider than 26 branches.
+  let label = "";
+  let remaining = index;
+  do {
+    label = String.fromCharCode(97 + (remaining % 26)) + label;
+    remaining = Math.floor(remaining / 26) - 1;
+  } while (remaining >= 0);
+  return label;
+};
+
+/**
+ * Numbers each node by its depth (longest path from a root) so that the step
+ * number reflects how far through the flow a node sits. Nodes that share a depth
+ * are parallel fork branches: they take a letter suffix (2a, 2b…) ordered by the
+ * branch they belong to. A depth occupied by a single node — the step before a
+ * fork, an uneven branch's extra step, or the node a fork merges back onto —
+ * takes a plain number with no letter.
+ */
 export function computeStepNumbers(nodes: NodeLike[], edges: EdgeLike[]): Map<string, string> {
   const numbers = new Map<string, string>();
   if (nodes.length === 0) return numbers;
 
+  const knownIds = new Set(nodes.map((node) => node.id));
   const outgoingMap = new Map<string, string[]>();
   const incomingCount = new Map<string, number>();
   for (const node of nodes) {
@@ -61,33 +81,66 @@ export function computeStepNumbers(nodes: NodeLike[], edges: EdgeLike[]): Map<st
     incomingCount.set(node.id, 0);
   }
   for (const edge of edges) {
-    outgoingMap.get(edge.fromNodeId)?.push(edge.toNodeId);
+    if (!knownIds.has(edge.fromNodeId) || !knownIds.has(edge.toNodeId)) continue;
+    outgoingMap.get(edge.fromNodeId)!.push(edge.toNodeId);
     incomingCount.set(edge.toNodeId, (incomingCount.get(edge.toNodeId) ?? 0) + 1);
   }
 
-  const roots = nodes.filter((n) => (incomingCount.get(n.id) ?? 0) === 0);
-  let counter = 1;
-  const visited = new Set<string>();
-  const queue: Array<{ nodeId: string; label: string }> = roots.map((r) => ({
-    nodeId: r.id,
-    label: String(counter++),
-  }));
-
-  while (queue.length > 0) {
-    const item = queue.shift()!;
-    if (visited.has(item.nodeId)) continue;
-    visited.add(item.nodeId);
-    numbers.set(item.nodeId, item.label);
-
-    const children = (outgoingMap.get(item.nodeId) ?? []).filter((id) => !visited.has(id));
-    if (children.length === 1) {
-      queue.push({ nodeId: children[0]!, label: String(counter++) });
-    } else if (children.length > 1) {
-      const base = counter++;
-      children.forEach((childId, i) => {
-        queue.push({ nodeId: childId, label: `${base}${String.fromCharCode(97 + i)}` });
-      });
+  // Longest-path depth via bounded relaxation: each pass pushes a child past its
+  // deepest parent. Capping at node count keeps a route-back cycle from looping.
+  const depth = new Map<string, number>(nodes.map((node) => [node.id, 0]));
+  for (let pass = 0; pass < nodes.length; pass++) {
+    let changed = false;
+    for (const edge of edges) {
+      if (!knownIds.has(edge.fromNodeId) || !knownIds.has(edge.toNodeId)) continue;
+      const candidate = (depth.get(edge.fromNodeId) ?? 0) + 1;
+      if (candidate > (depth.get(edge.toNodeId) ?? 0)) {
+        depth.set(edge.toNodeId, candidate);
+        changed = true;
+      }
     }
+    if (!changed) break;
+  }
+
+  // Pre-order discovery from the roots fixes a stable left-to-right ordering, so
+  // a fork's branches keep the same letter at every depth along their path.
+  const discoveryIndex = new Map<string, number>();
+  let order = 0;
+  const roots = nodes.filter((node) => (incomingCount.get(node.id) ?? 0) === 0);
+  const startNodes = roots.length > 0 ? roots : [nodes[0]!];
+  const visit = (startId: string): void => {
+    const stack = [startId];
+    while (stack.length > 0) {
+      const nodeId = stack.pop()!;
+      if (discoveryIndex.has(nodeId)) continue;
+      discoveryIndex.set(nodeId, order++);
+      const children = outgoingMap.get(nodeId) ?? [];
+      for (let i = children.length - 1; i >= 0; i--) stack.push(children[i]!);
+    }
+  };
+  for (const root of startNodes) visit(root.id);
+  for (const node of nodes) {
+    if (!discoveryIndex.has(node.id)) discoveryIndex.set(node.id, order++);
+  }
+
+  const nodesByDepth = new Map<number, string[]>();
+  for (const node of nodes) {
+    const rank = depth.get(node.id) ?? 0;
+    const bucket = nodesByDepth.get(rank);
+    if (bucket) bucket.push(node.id);
+    else nodesByDepth.set(rank, [node.id]);
+  }
+
+  for (const [rank, ids] of nodesByDepth) {
+    ids.sort((a, b) => (discoveryIndex.get(a) ?? 0) - (discoveryIndex.get(b) ?? 0));
+    const stepNumber = rank + 1;
+    if (ids.length === 1) {
+      numbers.set(ids[0]!, String(stepNumber));
+      continue;
+    }
+    ids.forEach((nodeId, index) => {
+      numbers.set(nodeId, `${stepNumber}${branchLetter(index)}`);
+    });
   }
 
   return numbers;
