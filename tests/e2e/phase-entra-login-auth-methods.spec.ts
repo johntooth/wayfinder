@@ -35,17 +35,17 @@ const openAuthCard = async (page: import('@playwright/test').Page) => {
   return false;
 };
 
-const loginShowsMicrosoft = async (browser: import('@playwright/test').Browser) => {
+const expectLoginShowsMicrosoft = async (browser: import('@playwright/test').Browser) => {
   const context = await browser.newContext({ storageState: undefined });
-  const page = await context.newPage();
-  await page.goto('/login');
-  await page.waitForLoadState('networkidle');
-  const visible = await page
-    .getByRole('button', { name: /sign in with microsoft/i })
-    .isVisible()
-    .catch(() => false);
-  await context.close();
-  return visible;
+  try {
+    const page = await context.newPage();
+    await page.goto('/login');
+    // Web-first assertion auto-waits for the enabledAuthMethods query to resolve
+    // and the button to mount — never a non-retrying isVisible() snapshot.
+    await expect(page.getByRole('button', { name: /sign in with microsoft/i })).toBeVisible();
+  } finally {
+    await context.close();
+  }
 };
 
 test.describe('Phase: Entra login & configurable auth methods', () => {
@@ -98,7 +98,7 @@ test.describe('Phase: Entra login & configurable auth methods', () => {
     );
     await page.keyboard.press('Escape').catch(() => {});
 
-    expect(await loginShowsMicrosoft(browser)).toBe(true);
+    await expectLoginShowsMicrosoft(browser);
 
     // Restore email-only auth so global settings are left as found.
     await openAuthCard(page);
