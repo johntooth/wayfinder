@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, or } from "drizzle-orm";
 import {
   domainError,
   err,
@@ -93,17 +93,21 @@ export class DrizzleApprovalRepository implements IApprovalRepository {
     }
   }
 
-  async listPendingForApprover(approverUserId: string): Promise<Result<Approval[]>> {
+  async listPendingForApprover(input: {
+    approverUserId: string;
+    approverEmail: string | null;
+  }): Promise<Result<Approval[]>> {
     try {
+      const assigneeMatch = input.approverEmail
+        ? or(
+            eq(app_session_approvals.approver_user_id, input.approverUserId),
+            eq(app_session_approvals.approver_email, input.approverEmail),
+          )
+        : eq(app_session_approvals.approver_user_id, input.approverUserId);
       const rows = await this.db
         .select()
         .from(app_session_approvals)
-        .where(
-          and(
-            eq(app_session_approvals.approver_user_id, approverUserId),
-            eq(app_session_approvals.status, "pending"),
-          ),
-        )
+        .where(and(assigneeMatch, eq(app_session_approvals.status, "pending")))
         .orderBy(desc(app_session_approvals.created_at));
       return ok(rows.map(toEntity));
     } catch (cause) {

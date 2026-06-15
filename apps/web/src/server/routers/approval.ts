@@ -69,7 +69,12 @@ export const approvalRouter = router({
     }),
 
   listPending: authenticatedProcedure.query(async ({ ctx }) => {
-    const result = await ctx.container.useCases.listPendingApprovals.execute(ctx.userId);
+    const userResult = await ctx.container.repos.users.findById(ctx.userId);
+    if (userResult.error) throw toTrpcError(userResult.error);
+    const result = await ctx.container.useCases.listPendingApprovals.execute({
+      approverUserId: ctx.userId,
+      approverEmail: userResult.data?.email ?? null,
+    });
     if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
