@@ -55,7 +55,7 @@ the user, session, account and verification tables — no DB migration needed.
 - E2E: `apps/web/e2e/fix-better-auth-uuid-id.spec.ts` registers a fresh account
   through the UI and asserts the redirect to `/chats`.
 
-## Implementation summary (v1.47.1)
+## Implementation summary (v1.47.2)
 
 - **Root cause:** Better Auth supplied its own random string ids for the
   `core_*` auth tables, whose `id` columns are Postgres `uuid` — Postgres
@@ -69,4 +69,5 @@ the user, session, account and verification tables — no DB migration needed.
   fix, green after).
 - **E2E test added:** `fix-better-auth-uuid-id.spec.ts` drives the `/register`
   form with a fresh email and asserts the `/chats` redirect.
-- **Version bump:** PATCH `1.47.0 → 1.47.1` (bug fix, no schema impact).
+- **Version bump:** PATCH `1.47.0 → 1.47.2` (bug fix, no schema impact;
+  `1.47.1` was taken by a concurrent branch).
