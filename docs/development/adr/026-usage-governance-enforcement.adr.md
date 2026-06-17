@@ -1,21 +1,26 @@
-# ADR-026 — Usage Governance Enforcement (budget decorator on `ILanguageModel`)
+# ADR-026 — Usage Governance Enforcement (per-user cap decorator on `ILanguageModel`)
 
-- **Status**: Accepted (scoped by `cost-usage-governance.prd.md`, target v1.47.0)
-- **Date**: 2026-06-14
+- **Status**: Accepted (scoped by `cost-usage-governance.prd.md`, target v1.48.0)
+- **Date**: 2026-06-14 (revised 2026-06-17: scope reduced to **per-user caps**
+  over daily / weekly / monthly periods; the org-tier "team" model, the
+  `IOrgStructure` port, the Entra/HR resolvers, and `org_node_id` / `team_label`
+  attribution are dropped. Flow + session attribution is retained for dashboard
+  analytics only.)
 
 ## Context
 
-`cost-usage-governance.prd.md` introduces optional per-flow and per-team budgets
-that must **stop** a runaway flow, not just report it after the fact. The
-codebase already records spend: `UsageTrackingAdapter`
+`cost-usage-governance.prd.md` introduces optional per-user spend **caps** that
+must **stop** a runaway user, not just report spend after the fact. The codebase
+already records spend: `UsageTrackingAdapter`
 (`packages/adapters/src/observability/usage-tracking-adapter.ts`) decorates the
 `ILanguageModel` port and writes an `ai_usage_events` row (tokens + `cost_usd`)
 after every call. What is missing:
 
 1. **Attribution.** `ai_usage_events` records `user_id` and `conversation_id` but
-   not the originating **flow**, **session/run**, or **team**. The
-   `ILanguageModel` call inputs (`GenerateObjectInput`, `StreamTextInput`,
-   `StreamObjectInput`) carry `purpose` and `userId` but no flow/session/team.
+   not the originating **flow** or **session/run** (wanted for the dashboard's
+   spend-by-flow view). The `ILanguageModel` call inputs (`GenerateObjectInput`,
+   `StreamTextInput`, `StreamObjectInput`) carry `purpose` and `userId` but no
+   flow/session.
 2. **Enforcement.** There is no budget concept and no place that can refuse a
    call.
 
@@ -27,71 +32,44 @@ Constraints:
 - **Uniform coverage.** Every call path (the LangGraph agent, auto-nodes, ad-hoc
   calls) must be governed without sprinkling checks at each call site.
 - **Off by default.** Existing behaviour must be byte-for-byte unchanged when no
-  budget is enabled — no added latency, no blocking.
+  cap is enabled — no added latency, no blocking.
 
 ## Decision
 
-### 1. Thread call context through the port
+### 1. Thread flow/session context through the port for recording
 
-Extend the three `ILanguageModel` input types with optional `flowId`,
-`sessionId`, and `team` (the call context), alongside the existing `userId` and
-`purpose`. `team` is the acting user's resolved **org-unit node** (see §2), not a
-free-text string:
+Extend the three `ILanguageModel` input types with optional `flowId` and
+`sessionId`, alongside the existing `userId` and `purpose`. These are recorded
+for the dashboard's spend-by-flow analytics; **the enforcement key is the
+existing `userId`** — no new field is needed for enforcement:
 
 ```ts
 export interface GenerateObjectInput<TSchema = unknown> {
   readonly purpose: string;
   readonly userId?: string | null;
-  readonly flowId?: string | null;                       // new
-  readonly sessionId?: string | null;                    // new
-  readonly team?: { id: string; label: string } | null;  // new — resolved org-unit node
+  readonly flowId?: string | null;     // new — analytics only
+  readonly sessionId?: string | null;  // new — analytics only
   // …unchanged…
 }
 ```
 
-`UsageTrackingAdapter` records `org_node_id` + `team_label` onto
-`ai_usage_events`; the new enforcement decorator reads them. Calls made without
-context (no active session, or no resolvable org structure) record nulls and are
-treated as **un-scoped → not enforced**.
+`UsageTrackingAdapter` records `flow_id` + `session_id` onto `ai_usage_events`;
+the new enforcement decorator only needs `userId`. Calls made without a `userId`
+(no acting user) are treated as **un-scoped → not enforced**.
 
-### 2. "Team" is an org-tier node resolved from org structure
+### 2. "Cap" is a per-user spend limit over a period
 
-A team is **not** the free-text `core_users.team` string. It is a **node in the
-management hierarchy**, identified by a stable id, resolved on demand from the
-authoritative source — **Entra (Graph) manager chain first, the uploaded HR
-sheet as fallback** — the same precedence `GraphReportingLineResolver` already
-uses for approver resolution (ADR-018).
+A cap is scoped to a single **user**, not a flow or team. There is no org
+structure, no team node, and no roll-up. A cap has:
 
-A new domain port `IOrgStructure` generalises that existing chain-walk:
+- `userId` — the subject,
+- `period` — `daily` | `weekly` | `monthly`,
+- `limitUsd` — the ceiling,
+- `warnThresholdPct` — default 80,
+- `enabled` — default false.
 
-```ts
-export interface OrgNode {
-  readonly id: string;        // Entra object id / HR row id
-  readonly label: string;     // department / mapped `unit`
-  readonly level: number;     // depth tier (0 = top of org)
-  readonly email: string | null;
-  readonly managerId: string | null;
-}
-
-export interface IOrgStructure {
-  resolveChain(userId: string): Promise<Result<OrgNode[]>>;     // self → manager → … → top
-  listTeamOptions(userId: string): Promise<Result<OrgNode[]>>;  // dropdown options
-}
-```
-
-`EntraOrgStructure` walks `/users/{ref}/manager` to the top instead of stopping
-at hop N; `HrOrgStructure` walks the mapped `manager` column. The admin's team
-budget picker is a **level dropdown** over `listTeamOptions` — choosing a higher
-node scopes a broader org, a lower node a narrower sub-team ("up and down the
-structure").
-
-**Recording.** Each usage event records the acting user's resolved leaf node
-(`org_node_id` + cached `team_label`). **Roll-up without a materialised tree:**
-because every event carries the acting `user_id`, "spend for node X" is the sum
-over events whose author's chain contains X — resolved (and cached) at
-enforcement/dashboard time, so no org tree is stored. Budgets key on the node id,
-not the label, so renaming a unit does not orphan a budget; the cached label
-keeps it legible. This replaces the PRD's earlier "team string drift" risk.
+A user may have at most one cap per period (DB unique on `(user_id, period)`), so
+up to three caps (daily, weekly, monthly) can apply to one user at once.
 
 ### 3. Enforcement is a decorator on `ILanguageModel`, ordered outermost
 
@@ -107,23 +85,18 @@ withQuotaEnforcement(withUsageTracking(provider), budgetRepo, usageRepo, auditLo
 so the quota check runs **before** the inner usage-tracking + provider call and
 can short-circuit. Per call:
 
-1. `budgetRepo.findEnabledForFlowAndOrgNodes(flowId, orgNodeIds)`, where
-   `orgNodeIds` is the acting user's chain (leaf + every ancestor), so a budget
-   on any tier above them applies. The chain is resolved once per session via
-   `IOrgStructure` and cached/threaded, not re-hit per call. **If it returns
-   nothing, pass straight through** — this is the off-by-default zero-overhead
-   path.
-2. For each enabled budget, compute current-period spend via
-   `usageRepo.summarize` with a scope+period filter (`per_run` → `sessionId`;
-   `monthly` → since start of the calendar month, summed across every
-   `org_node_id` in the budget node's subtree for a team, or by `flowId` for a
-   flow).
+1. `budgetRepo.findEnabledForUser(userId)`. **If it returns nothing, pass
+   straight through** — this is the off-by-default zero-overhead path.
+2. For each enabled cap, compute current-period spend via `usageRepo.summarize`
+   with a `userId` + period-window filter (`daily` → since 00:00 UTC today;
+   `weekly` → since 00:00 UTC Monday; `monthly` → since the start of the current
+   UTC calendar month).
 3. `evaluateBudget(budget, spendUsd)` (pure domain) returns `ok` / `warn` /
    `blocked`.
 4. On `warn`, write a `budget.warn` `core_audit_log` event and proceed. On
    `blocked`, write `budget.blocked` and return
    `err(domainError("QUOTA_EXCEEDED", …))` **without** calling the inner model.
-5. When both a flow and a team budget apply, the **stricter** (first to block)
+5. When more than one of a user's caps applies, the **stricter** (first to block)
    wins.
 
 Returning the Result error (never throwing) keeps the Result-pattern boundary
@@ -148,36 +121,35 @@ dashboard (`utilisation`) and the enforcer alike.
 ### 5. Spend computed on the fly (no counter table in v1)
 
 Current-period spend is a `SUM(cost_usd)` over `ai_usage_events` filtered by
-scope and period window, served by `IUsageRepository.summarize` (extended
-`UsageFilter` with `flowId`, `sessionId`, `orgNodeIds`, `since`, `until`).
-Indexes on `(flow_id, created_at)` and `(org_node_id, created_at)` keep it cheap
-at current volume.
-A materialised counter is deferred (PRD §11) — the off-by-default short-circuit
-means most calls never run the query.
+`user_id` and a period window, served by `IUsageRepository.summarize` (extended
+`UsageFilter` with `userId`, `flowId`, `sessionId`, `since`, `until`). The index
+on `(user_id, created_at)` keeps it cheap at current volume. A materialised
+counter is deferred (PRD §11) — the off-by-default short-circuit means most calls
+never run the query.
 
 ### 6. Blocked → session pause, not crash
 
 A `QUOTA_EXCEEDED` Result propagates to the calling use-case (`run-turn`,
 `run-auto-node`), which pauses the session and surfaces a clear system message
-("This flow has reached its usage budget — contact an administrator to
-continue") instead of failing hard. Raising or disabling the budget lets the
-session resume on the next turn.
+("You have reached your usage cap — contact an administrator to continue")
+instead of failing hard. Raising or disabling the cap lets the session resume on
+the next turn.
 
 ## Consequences
 
 **Positive**
 
 - One enforcement point covers every call path; call sites only have to pass
-  context, not check budgets.
+  context, not check caps.
 - Mirrors the proven `UsageTrackingAdapter` pattern — same shape, same tests
   style, same wiring spot.
 - Off-by-default with a one-lookup short-circuit means existing deployments are
-  unaffected and pay no cost until a budget is enabled.
+  unaffected and pay no cost until a cap is enabled.
 - Budget logic is pure domain → trivially unit-testable and shared with the
   dashboard.
-- Team budgets key on a stable org-node id, so renaming a unit doesn't orphan a
-  budget; structure is resolved on demand (reusing the ADR-018 chain-walk), so
-  there is no org-tree to sync or keep consistent.
+- Caps key on `user_id` (a stable, already-recorded dimension), so there is no
+  org structure to resolve, sync, or keep consistent, and the enforcement key is
+  the `userId` already present on every call input.
 
 **Negative**
 
@@ -185,24 +157,19 @@ session resume on the next turn.
 - Blocking is based on already-recorded spend, so the call that crosses the limit
   still completes (last-call overshoot) and streamed calls are checked only at
   start. Acceptable for a governance ceiling; revisit with the counter table.
-- Context must be threaded through every call site; a missed site silently
-  under-records and under-enforces. Mitigated by centralising context in the
-  agent graph where sessions live.
-- Team attribution now depends on `IOrgStructure` resolving a chain (a directory
-  call). Mitigated by resolving once per session and caching; if no source is
-  configured, calls are simply un-scoped (recorded, never blocked).
+- Flow/session context must be threaded through every call site for the
+  spend-by-flow analytics; a missed site under-records that dimension (but is
+  still enforced by user).
 
 ## Open questions — to resolve at build
 
 - **Audit-event volume.** A long over-threshold run could emit a `budget.warn`
-  per call. Consider de-duplicating (one warn per scope per period) at build.
-- **`monthly` boundary.** Use deployment-local calendar month vs UTC — pick one
-  and document it; default UTC start-of-month.
-- **Disabled-vs-deleted budget** semantics during an active blocked session —
+  per call. Consider de-duplicating (one warn per user per period) at build.
+- **Period boundary.** `daily` / `weekly` / `monthly` windows default to UTC
+  (00:00 day / Monday week start / 1st of month); confirm at build whether a
+  deployment-local calendar is ever needed (out of scope for v1).
+- **Disabled-vs-deleted cap** semantics during an active blocked session —
   confirm both immediately unblock.
-- **HR node identity.** HR row ids change on re-upload; decide whether to key HR
-  org nodes on manager email instead so budgets survive re-imports.
-- **Chain cache lifetime.** The per-session cached chain must refresh if a
-  user's manager changes mid-session — pick a TTL or session-scoped cache, and
-  what to do when `IOrgStructure` is momentarily unavailable (fail open =
-  un-scoped, recorded only).
+- **Multiple caps for one user.** Daily + weekly + monthly can all be enabled;
+  confirm the stricter-wins evaluation and that the dashboard shows each cap's
+  status independently.
