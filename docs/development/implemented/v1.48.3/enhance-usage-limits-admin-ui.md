@@ -61,7 +61,7 @@ mirror the governance page.
 
 ## Version Bump
 
-PATCH — 1.48.0 → 1.48.1 (UI-only reuse of existing procedures, no schema or API
+PATCH — 1.48.2 → 1.48.3 (UI-only reuse of existing procedures, no schema or API
 surface change).
 
 ---
