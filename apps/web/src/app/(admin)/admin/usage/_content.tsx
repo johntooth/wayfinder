@@ -9,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SpendCapsCard } from "@/components/admin/spend-caps-card";
 import { trpc } from "@/trpc/client";
 
 export function AdminUsageContent() {
@@ -98,6 +99,8 @@ export function AdminUsageContent() {
           )}
         </CardContent>
       </Card>
+
+      <SpendCapsCard />
     </div>
     </div>
     </div>
