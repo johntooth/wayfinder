@@ -1,18 +1,22 @@
-# Scaling to Concurrent Load — Roadmap
+# Phase — Scaling to Concurrent Load (~500 concurrent users)
 
-- **Status**: Proposed (roadmap; individual phases to be split into ADRs)
+- **Status**: Proposed — awaiting `/doc-review`
 - **Date**: 2026-06-22
-- **Target**: ~500 concurrent active users (≈5000 registered accounts at ~10%
-  concurrency), each running document-producing AI workflows
-- **Relates to**: ADR-007 (session-scoped LangGraph), ADR-019 (in-app job
-  scheduler), ADR-026 (usage governance enforcement)
+- **Target version**: staged; each sub-phase bumps independently (P0 likely
+  MINOR — env-driven pool + cache adapter, no schema change; later phases
+  MINOR/MAJOR as noted per item)
+- **Target load**: ~500 concurrent active users (≈5000 registered accounts at
+  ~10% concurrency), each running document-producing AI workflows
+- **Depends on / Relates to**: ADR-007 (session-scoped LangGraph), ADR-019
+  (in-app job scheduler), ADR-026 (usage governance enforcement)
 
 ## Scope
 
 This document maps where Wayfinder's current design runs out of headroom on the
 path to ~500 concurrent users, and sequences the changes that get it there. It
-is a **roadmap, not a single decision** — the P0/P1/P2 items below should each
-graduate into their own ADR and `/build` phase as they are picked up.
+is a **staged phase**: the P0/P1/P2 items below are built and split into their
+own ADRs incrementally rather than landed all at once — P0 first, behind load
+tests, with later tiers driven by measured need.
 
 **In scope**: connection limits, request-path caching, LLM concurrency,
 background work, data growth, horizontal scaling, deployment shape.
