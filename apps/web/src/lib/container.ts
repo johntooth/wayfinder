@@ -146,17 +146,21 @@ import {
   RuntimeConfigStore,
   SpreadsheetParser,
   SystemClock,
+  TtlCache,
   createAuth,
+  createCachedSessionResolver,
   createDatabase,
   createNodeExecutors,
-  resolveSession,
   seedAdmin,
   seedRoles,
   withOptionalLangfuse,
   withQuotaEnforcement,
   withUsageTracking,
   type AuthMethod,
+  type ResolvedSession,
 } from "@rbrasier/adapters";
+import type { PermissionKey } from "@rbrasier/domain";
+import { createCachedPermissionResolver } from "./cached-permission-resolver";
 import { serverEnv } from "./env";
 
 const globalForContainer = globalThis as typeof globalThis & {
@@ -165,8 +169,21 @@ const globalForContainer = globalThis as typeof globalThis & {
 
 const build = () => {
   const env = serverEnv();
-  const db = createDatabase(env.DATABASE_URL);
+  const db = createDatabase(env.DATABASE_URL, env.DATABASE_POOL_MAX);
   const logger = new PinoLogger(env.NODE_ENV !== "production");
+
+  // Short-TTL caches in front of the two hottest auth lookups (session +
+  // permission resolution). Single-instance correct; promote to a shared store
+  // when running multiple instances. See the scaling-to-concurrent-load phase doc.
+  const sessionCache = new TtlCache<ResolvedSession>({
+    ttlMs: env.AUTH_CACHE_TTL_MS,
+    maxEntries: env.AUTH_CACHE_MAX_ENTRIES,
+  });
+  const permissionCache = new TtlCache<Set<PermissionKey>>({
+    ttlMs: env.AUTH_CACHE_TTL_MS,
+    maxEntries: env.AUTH_CACHE_MAX_ENTRIES,
+  });
+  const resolveCachedSession = createCachedSessionResolver(db, sessionCache);
 
   const users = new DrizzleUserRepository(db);
   const conversations = new DrizzleConversationRepository(db);
@@ -431,6 +448,12 @@ const build = () => {
     return authInstance;
   };
 
+  const getEffectivePermissions = new GetEffectivePermissions(roles, userRoles);
+  const resolveEffectivePermissions = createCachedPermissionResolver(
+    (userId, isAdmin) => getEffectivePermissions.execute(userId, isAdmin),
+    permissionCache,
+  );
+
   return {
     env,
     db,
@@ -440,7 +463,8 @@ const build = () => {
     objectStorage,
     runtimeConfig,
     connectivityTester,
-    resolveSession: (token: string) => resolveSession(db, token),
+    resolveSession: resolveCachedSession,
+    resolveEffectivePermissions,
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer },
     repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, reindexSource, notificationLog, approvals, hrDatasets },
     useCases: {
@@ -480,7 +504,7 @@ const build = () => {
       updateRolePermissions: new UpdateRolePermissions(roles),
       assignUserRole: new AssignUserRole(roles, userRoles),
       removeUserRole: new RemoveUserRole(roles, userRoles),
-      getEffectivePermissions: new GetEffectivePermissions(roles, userRoles),
+      getEffectivePermissions,
       listUsersForRole: new ListUsersForRole(roles, userRoles),
       trackUsage: new TrackUsage(usageRepo),
       getUsageSummary: new GetUsageSummary(usageRepo),
