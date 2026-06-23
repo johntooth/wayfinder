@@ -1,0 +1,20 @@
+# Throwaway harness to exercise AUTH_BYPASS in podman against the current branch.
+# Reuses the existing wayfinder-app image (bookworm-correct native node_modules)
+# and overlays the current source — no reinstall, since the KB merge added no deps.
+FROM docker.io/library/wayfinder-app:latest
+
+WORKDIR /app
+
+# .dockerignore keeps node_modules out of the context, so the image's correctly
+# built deps survive while the current branch source lands on top.
+COPY . /app
+
+# A stale production .next would make `next dev` skip recompiling the new code.
+RUN rm -rf apps/web/.next
+
+# AUTH_BYPASS is dev-only by design; the experimentation stack must run in dev.
+ENV NODE_ENV=development
+ENV AUTH_BYPASS=true
+
+EXPOSE 3000
+CMD ["pnpm", "--filter", "@wayfinder/web", "dev"]

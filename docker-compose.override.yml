@@ -1,0 +1,45 @@
+# Local app services (web + api + one-shot migrate), auto-merged with the tracked
+# docker-compose.yml (infra only). Untracked harness for podman experimentation.
+# Image is built manually first: podman build -t localhost/wayfinder-app:latest .
+services:
+  migrate:
+    image: localhost/wayfinder-app:latest
+    container_name: wayfinder-migrate
+    command: pnpm --filter @rbrasier/adapters db:migrate
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/wayfinder
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  web:
+    image: localhost/wayfinder-app:latest
+    container_name: wayfinder-web
+    command: pnpm --filter @wayfinder/web dev
+    env_file: .env
+    ports:
+      - "3300:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      storage:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  api:
+    image: localhost/wayfinder-app:latest
+    container_name: wayfinder-api
+    # tsx, not `node dist` — the internal @rbrasier/* packages publish TS source.
+    command: pnpm --filter @wayfinder/api exec tsx src/index.ts
+    env_file: .env
+    ports:
+      - "3301:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped

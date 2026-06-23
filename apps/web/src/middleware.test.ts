@@ -97,6 +97,16 @@ describe("middleware — AUTH_BYPASS (experimentation)", () => {
     expect(response.headers.get("location")).toBeNull();
   });
 
+  it("mints a session on a direct deep link to a self-protecting route like /knowledge", () => {
+    enableBypass();
+
+    const response = middleware(buildRequest("/knowledge"));
+    const location = new URL(response.headers.get("location") ?? "");
+
+    expect(location.pathname).toBe("/api/auth/bypass");
+    expect(location.searchParams.get("redirect")).toBe("/knowledge");
+  });
+
   it("ignores the flag under production and falls back to the normal login redirect", () => {
     enableBypass("production");
 

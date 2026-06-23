@@ -66,6 +66,27 @@ export const middleware = (req: NextRequest): NextResponse => {
   return NextResponse.next();
 };
 
+// /approvals, /knowledge, /sample and /settings self-protect in their server
+// layout, so the normal-auth branch above leaves them alone — but they must be
+// matched so AUTH_BYPASS can mint a session on a direct deep link to any of them
+// instead of bouncing through /login.
 export const config = {
-  matcher: ["/", "/login", "/register", "/admin/:path*", "/chats/:path*", "/chats", "/flows/:path*"],
+  matcher: [
+    "/",
+    "/login",
+    "/register",
+    "/admin/:path*",
+    "/approvals",
+    "/approvals/:path*",
+    "/chats",
+    "/chats/:path*",
+    "/flows",
+    "/flows/:path*",
+    "/knowledge",
+    "/knowledge/:path*",
+    "/sample",
+    "/sample/:path*",
+    "/settings",
+    "/settings/:path*",
+  ],
 };
