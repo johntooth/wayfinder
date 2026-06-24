@@ -1,6 +1,7 @@
 "use client";
 
 import type { ChunkStatus, CuratedChunk } from "@rbrasier/domain";
+import { useSearchParams } from "next/navigation";
 import { Fragment, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,8 +47,10 @@ const statusVariant = (status: ChunkStatus): "default" | "secondary" | "outline"
 export function KnowledgeContent() {
   const utils = trpc.useUtils();
   const flowsQuery = trpc.session.listPublishedFlows.useQuery();
+  const searchParams = useSearchParams();
+  const initialFlowId = searchParams.get("flowId") ?? "";
 
-  const [flowId, setFlowId] = useState<string>("");
+  const [flowId, setFlowId] = useState<string>(initialFlowId);
   const [statusFilter, setStatusFilter] = useState<ChunkStatus | "">("");
   const [searchText, setSearchText] = useState("");
   const [searchMode, setSearchMode] = useState<SearchMode>("semantic");
