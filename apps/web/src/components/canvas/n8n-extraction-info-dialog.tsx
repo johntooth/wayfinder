@@ -101,7 +101,7 @@ export function N8nExtractionInfoDialog({ open, onClose, variant }: N8nExtractio
           </p>
         </DialogBody>
         <DialogFooter>
-          <Button type="button" onClick={onClose} autoFocus>
+          <Button type="button" onClick={onClose}>
             Got it
           </Button>
         </DialogFooter>

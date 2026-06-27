@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useFocusOnMount } from "@/lib/use-focus-on-mount";
 
 export interface FlowSelectorFlow {
   flowId: string;
@@ -115,11 +116,12 @@ function FlowSearchInput({
   const filtered = flows.filter((flow) =>
     flow.flowName.toLowerCase().includes(searchQuery.toLowerCase()),
   );
+  const searchInputRef = useFocusOnMount<HTMLInputElement>();
 
   return (
     <div ref={containerRef} className="relative">
       <input
-        autoFocus
+        ref={searchInputRef}
         type="text"
         value={searchQuery}
         onChange={(event) => onQueryChange(event.target.value)}

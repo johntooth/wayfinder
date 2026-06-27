@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Copy, Loader2, Mail, Stamp } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,14 @@ export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions
   const [chosen, setChosen] = useState<ChosenApprover | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [query, setQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Focus the approver search box when the operator reveals it (replaces
+  // autoFocus, forbidden by jsx-a11y/no-autofocus). Gated on showSearch so it
+  // fires only in response to the user toggling search open.
+  useEffect(() => {
+    if (showSearch) searchInputRef.current?.focus();
+  }, [showSearch]);
 
   // When email cannot be delivered the operator must notify the approver by hand,
   // so the confirm action only records the approver and surfaces manual options.
@@ -207,7 +215,7 @@ export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions
         {showSearch && (
           <div className="space-y-2 rounded-[10px] border border-[#dedad2] bg-white p-3">
             <Input
-              autoFocus
+              ref={searchInputRef}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search Entra, HR, or type any email…"

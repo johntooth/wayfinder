@@ -183,7 +183,7 @@ Fee: {{ Contract Value (currency) (optional) }}`}
           </p>
         </DialogBody>
         <DialogFooter>
-          <Button type="button" onClick={onClose} autoFocus>
+          <Button type="button" onClick={onClose}>
             Got it
           </Button>
         </DialogFooter>

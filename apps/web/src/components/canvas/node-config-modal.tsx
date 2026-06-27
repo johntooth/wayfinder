@@ -16,6 +16,7 @@ import { deriveFieldKey } from "@rbrasier/domain";
 import type { FieldValueSource, PriorStepField, TemplateField } from "@rbrasier/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
 import { TemplateTagsHelpDialog } from "./template-tags-help-dialog";
@@ -542,8 +543,8 @@ export function NodeConfigModal({
               </div>
 
               <div className="space-y-1">
-                <Label>Step colour</Label>
-                <div className="flex gap-2">
+                <FieldGroupLabel id="ncm-step-colour">Step colour</FieldGroupLabel>
+                <div className="flex gap-2" role="group" aria-labelledby="ncm-step-colour">
                   {COLOURS.map((colour) => (
                     <button
                       key={colour.hex}
@@ -576,8 +577,8 @@ export function NodeConfigModal({
               </div>
 
               <div className="space-y-1">
-                <Label>Output type</Label>
-                <div className="flex gap-3">
+                <FieldGroupLabel id="ncm-output-type">Output type</FieldGroupLabel>
+                <div className="flex gap-3" role="radiogroup" aria-labelledby="ncm-output-type">
                   {(["conversation_only", "generate_document"] as const).map((type) => (
                     <label
                       key={type}
@@ -603,7 +604,7 @@ export function NodeConfigModal({
               {values.outputType === "generate_document" && (
                 <div className="space-y-1">
                   <div className="flex items-center gap-1.5">
-                    <Label>DOCX template</Label>
+                    <FieldGroupLabel>DOCX template</FieldGroupLabel>
                     <button
                       type="button"
                       aria-label="How template tags work"
@@ -773,8 +774,8 @@ export function NodeConfigModal({
               </div>
 
               <div className="space-y-1">
-                <Label>Executor</Label>
-                <div className="flex gap-3">
+                <FieldGroupLabel id="ncm-executor">Executor</FieldGroupLabel>
+                <div className="flex gap-3" role="radiogroup" aria-labelledby="ncm-executor">
                   {(["n8n", "mock"] as const).map((executor) => (
                     <label
                       key={executor}
@@ -832,8 +833,8 @@ export function NodeConfigModal({
 
               {usesN8n && values.workflowId && (
                 <>
-                  <div className="space-y-2">
-                    <Label>Add request fields</Label>
+                  <div className="space-y-2" role="group" aria-labelledby="ncm-request-fields">
+                    <FieldGroupLabel id="ncm-request-fields">Add request fields</FieldGroupLabel>
                     <p className="text-[12px] text-[#918d87]">
                       Choose where each value comes from: the AI, an earlier step, a typed value, or none.
                     </p>
@@ -913,8 +914,8 @@ export function NodeConfigModal({
                     )}
                   </div>
 
-                  <div className="space-y-1">
-                    <Label>Expected outputs (from n8n)</Label>
+                  <div className="space-y-1" role="group" aria-labelledby="ncm-expected-outputs">
+                    <FieldGroupLabel id="ncm-expected-outputs">Expected outputs (from n8n)</FieldGroupLabel>
                     <p className="text-[12px] text-[#918d87]">
                       Returned by the workflow and stored as this step&apos;s output.
                     </p>
@@ -948,8 +949,8 @@ export function NodeConfigModal({
                     onChange={setRequestLines}
                   />
                   {mockRequestFields.length > 0 && (
-                    <div className="space-y-2">
-                      <Label>Field values</Label>
+                    <div className="space-y-2" role="group" aria-labelledby="ncm-field-values">
+                      <FieldGroupLabel id="ncm-field-values">Field values</FieldGroupLabel>
                       <FieldValueList
                         fields={mockRequestFields}
                         values={values.requestFieldValues}
@@ -992,8 +993,8 @@ export function NodeConfigModal({
               )}
 
               {values.scheduleWhen === "specific" && (
-                <div className="space-y-1">
-                  <Label>Fire this step</Label>
+                <div className="space-y-1" role="group" aria-labelledby="ncm-fire-step">
+                  <FieldGroupLabel id="ncm-fire-step">Fire this step</FieldGroupLabel>
                   <ScheduleSentenceBuilder
                     number={values.scheduleNumber}
                     unit={values.scheduleUnit}

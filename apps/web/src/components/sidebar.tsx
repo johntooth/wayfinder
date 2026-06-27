@@ -343,8 +343,13 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       {/* Mobile: hamburger triggers the drawer managed by parent context */}
       {mobileOpen && (
         <>
-          {/* Backdrop */}
-          <div className="fixed inset-0 z-40 bg-[rgba(20,18,15,0.35)]" onClick={closeMobile} />
+          {/* Backdrop — a button so it is keyboard-focusable and dismissable */}
+          <button
+            type="button"
+            aria-label="Close menu"
+            className="fixed inset-0 z-40 bg-[rgba(20,18,15,0.35)]"
+            onClick={closeMobile}
+          />
           {/* Drawer */}
           <div className="fixed bottom-0 left-0 top-0 z-50 flex w-[220px] flex-col bg-white shadow-[4px_0_20px_rgba(0,0,0,.12)]">
             <div className="flex items-center justify-between border-b border-[#dedad2] px-[14px] py-[14px] pb-[12px]">

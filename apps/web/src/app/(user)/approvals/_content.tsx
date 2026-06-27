@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Copy, Mail, Stamp } from "lucide-react";
@@ -85,6 +85,7 @@ function DecisionModal({
 }) {
   const utils = trpc.useUtils();
   const [comment, setComment] = useState("");
+  const commentRef = useRef<HTMLTextAreaElement>(null);
   // Set once a decision is recorded but email could not deliver it, so the
   // approver can notify the originator by hand before the row clears.
   const [manualNotify, setManualNotify] = useState(false);
@@ -155,7 +156,17 @@ function DecisionModal({
 
   return (
     <Dialog open onOpenChange={(open) => (open ? undefined : void close())}>
-      <DialogContent>
+      <DialogContent
+        onOpenAutoFocus={(event) => {
+          // Focus the comment field instead of the dialog's first focusable
+          // element. Replaces autoFocus (jsx-a11y/no-autofocus) without ceding
+          // focus management away from Radix's focus trap.
+          if (commentRef.current) {
+            event.preventDefault();
+            commentRef.current.focus();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{DECISION_TITLE[decision]}</DialogTitle>
           <DialogDescription>
@@ -192,9 +203,9 @@ function DecisionModal({
         ) : (
           <DialogBody>
             <Textarea
+              ref={commentRef}
               aria-label="Decision comment"
               rows={3}
-              autoFocus
               value={comment}
               onChange={(event) => setComment(event.target.value)}
               placeholder={
