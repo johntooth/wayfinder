@@ -220,6 +220,22 @@ else
   fail "restart.sh does not call runMigrations — scaffolded projects cannot run migrations"
 fi
 
+# ── 15. web accessibility (WCAG 2.2 AA — jsx-a11y) ───────────────────────────
+# Runs the jsx-a11y "strict" ruleset over apps/web in isolation so a11y
+# regressions fail CI even if the general lint config is weakened. Covers the
+# machine-checkable WCAG 2.2 AA criteria (alt text, labels, ARIA, keyboard
+# handlers, no positive tabindex). Runtime-only criteria (contrast, focus
+# order, target size) are documented in docs/accessibility.md.
+section "15. web accessibility (jsx-a11y strict)"
+A11Y_CONFIG="apps/web/.eslintrc.a11y.cjs"
+if [ ! -f "$A11Y_CONFIG" ]; then
+  fail "accessibility config missing — expected $A11Y_CONFIG"
+elif pnpm --filter "@wayfinder/web" -s lint:a11y; then
+  pass "web accessibility (jsx-a11y strict)"
+else
+  fail "web accessibility — jsx-a11y violations found (see output above)"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo
 echo "──────────────────────────────────────────"
