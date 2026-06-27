@@ -47,23 +47,50 @@ relevant success criteria:
 - **Overlays/backdrops** — a click-to-dismiss backdrop is a `<button>`, not a
   `<div onClick>`, so it is keyboard-focusable and activatable.
 
+## Runtime checks (Playwright + axe-core)
+
+The criteria below only exist once the page is rendered, so they are verified at
+runtime by `tests/e2e/accessibility.spec.ts` rather than by the linter. The spec
+runs in the E2E workflow (`.github/workflows/e2e.yml`) against the seeded admin
+session, and can be run on its own:
+
+```bash
+cd tests/e2e
+npm run test:a11y      # needs the app running on http://localhost:3000
+```
+
+It uses [axe-core][axe] (the engine behind most automated audits, which computes
+the rendered accessibility tree and real colour values) plus a couple of custom
+probes:
+
+| Concern | How | WCAG SC |
+|---|---|---|
+| Text / non-text contrast | axe `color-contrast` (`wcag2aa`) | 1.4.3, 1.4.11 |
+| Computed name/role/value | axe (`wcag2a`/`aa`) | 4.1.2 |
+| Target size | axe `target-size` (`wcag22aa`) | 2.5.8 |
+| Focus visible | custom probe — Tab and assert an outline/ring/box-shadow | 2.4.7 |
+| Reflow | custom probe — no horizontal scroll at 320px width | 1.4.10 |
+
+The third-party React Flow canvas is excluded from the editor scan (we don't own
+its SVG controls).
+
 ## What still needs a manual audit
 
-Static linting cannot verify the runtime-only criteria below. Check these by
-hand (browser DevTools, keyboard-only navigation, a screen reader) when changing
-UI:
+The remaining criteria are not reliably automatable. Check these by hand
+(keyboard-only navigation, a screen reader, 200% zoom) when changing UI:
 
-- **1.4.3 Contrast (Minimum)** — text contrast ≥ 4.5:1 (≥ 3:1 for large text).
-  Colour tokens live in `src/styles/globals.css`.
-- **1.4.11 Non-text Contrast** — UI component and graphical boundaries ≥ 3:1.
-- **2.4.7 Focus Visible** & **2.4.11/2.4.13 Focus Appearance (2.2)** — every
-  interactive element shows a clearly visible focus indicator.
+- **2.4.11 / 2.4.13 Focus Appearance (2.2)** — the focus indicator is not just
+  present (covered above) but large and contrasting enough.
 - **2.4.3 Focus Order** — focus moves in a logical order; modals trap focus
   (Radix handles this) and restore it on close.
-- **2.5.8 Target Size (Minimum) (2.2)** — interactive targets are ≥ 24×24 CSS px
-  (or have sufficient spacing).
+- **1.4.4 Resize Text** — usable at 200% zoom (the spec checks 320px reflow but
+  not text-only zoom).
 - **3.3.7 Redundant Entry** & **3.3.8 Accessible Authentication (2.2)** — don't
   force re-entry of information; don't rely on cognitive function tests for auth.
-- **1.4.10 Reflow / 1.4.4 Resize Text** — usable at 320px width and 200% zoom.
+- **2.5.7 Dragging Movements (2.2)** — drag operations (e.g. the flow canvas)
+  have a single-pointer alternative.
+
+Colour tokens live in `src/styles/globals.css`.
 
 [jsx-a11y]: https://github.com/jsx-eslint/eslint-plugin-jsx-a11y
+[axe]: https://github.com/dequelabs/axe-core
