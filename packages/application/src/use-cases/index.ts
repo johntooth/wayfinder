@@ -12,6 +12,7 @@ export * from "./hr/index";
 export * from "./feedback/index";
 export * from "./knowledge/index";
 export * from "./skill/index";
+export * from "./mcp/index";
 export * from "./create-user";
 export * from "./update-user";
 export * from "./delete-user";

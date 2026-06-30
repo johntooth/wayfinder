@@ -39,6 +39,13 @@ import {
   ArchiveSkill,
   RestoreSkill,
   ResolveStepSkills,
+  RegisterMcpServer,
+  UpdateMcpServer,
+  ListMcpServers,
+  DisableMcpServer,
+  EnableMcpServer,
+  TestMcpServer,
+  ListMcpServersWithTools,
   IsFeatureEnabled,
   IsFeatureEnabledForUser,
   ListAllSessions,
@@ -132,6 +139,9 @@ import {
   DrizzleHrDatasetRepository,
   DrizzleSkillRepository,
   SkillParser,
+  DrizzleMcpServerRepository,
+  AiSdkMcpClient,
+  McpServerDirectory,
   DrizzleJobRepository,
   DrizzleNotificationLogRepository,
   DrizzleReindexSourceRepository,
@@ -369,6 +379,9 @@ const build = () => {
   const hrDatasets = new DrizzleHrDatasetRepository(db);
   const skills = new DrizzleSkillRepository(db);
   const skillParser = new SkillParser();
+  const mcpServers = new DrizzleMcpServerRepository(db);
+  const mcpClient = new AiSdkMcpClient();
+  const mcpServerDirectory = new McpServerDirectory(mcpServers, mcpClient);
   const spreadsheetParser = new SpreadsheetParser();
   // Reuses the Email-Notifications M365 app registration (ADR-018), degrading to
   // HR/manual resolution when the added Graph scopes are not yet consented.
@@ -493,7 +506,7 @@ const build = () => {
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, skillParser },
-    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, skills },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, skills, mcpServers },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       updateDocumentFields: new UpdateDocumentFields(
@@ -638,6 +651,13 @@ const build = () => {
       archiveSkill: new ArchiveSkill(skills),
       restoreSkill: new RestoreSkill(skills),
       resolveStepSkills: new ResolveStepSkills(skills),
+      registerMcpServer: new RegisterMcpServer(mcpServers),
+      updateMcpServer: new UpdateMcpServer(mcpServers),
+      listMcpServers: new ListMcpServers(mcpServers),
+      disableMcpServer: new DisableMcpServer(mcpServers),
+      enableMcpServer: new EnableMcpServer(mcpServers),
+      testMcpServer: new TestMcpServer(mcpServers, mcpClient),
+      listMcpServersWithTools: new ListMcpServersWithTools(mcpServerDirectory),
     },
   };
 };
