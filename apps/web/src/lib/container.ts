@@ -32,6 +32,13 @@ import {
   GrantFlowOwner,
   HeartbeatTyping,
   ImportHrDataset,
+  CreateSkill,
+  UpdateSkill,
+  ListSkills,
+  GetSkill,
+  ArchiveSkill,
+  RestoreSkill,
+  ResolveStepSkills,
   IsFeatureEnabled,
   IsFeatureEnabledForUser,
   ListAllSessions,
@@ -123,6 +130,8 @@ import {
   DrizzleFlowRepository,
   DrizzleFlowVersionRepository,
   DrizzleHrDatasetRepository,
+  DrizzleSkillRepository,
+  SkillParser,
   DrizzleJobRepository,
   DrizzleNotificationLogRepository,
   DrizzleReindexSourceRepository,
@@ -358,6 +367,8 @@ const build = () => {
 
   const approvals = new DrizzleApprovalRepository(db);
   const hrDatasets = new DrizzleHrDatasetRepository(db);
+  const skills = new DrizzleSkillRepository(db);
+  const skillParser = new SkillParser();
   const spreadsheetParser = new SpreadsheetParser();
   // Reuses the Email-Notifications M365 app registration (ADR-018), degrading to
   // HR/manual resolution when the added Graph scopes are not yet consented.
@@ -481,8 +492,8 @@ const build = () => {
     connectivityTester,
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
-    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer },
-    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets },
+    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, skillParser },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, skills },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       updateDocumentFields: new UpdateDocumentFields(
@@ -620,6 +631,13 @@ const build = () => {
         new AiColumnMappingDetector(llm),
       ),
       setColumnMapping: new SetColumnMapping(hrDatasets),
+      createSkill: new CreateSkill(skills, skillParser),
+      updateSkill: new UpdateSkill(skills, skillParser),
+      listSkills: new ListSkills(skills),
+      getSkill: new GetSkill(skills),
+      archiveSkill: new ArchiveSkill(skills),
+      restoreSkill: new RestoreSkill(skills),
+      resolveStepSkills: new ResolveStepSkills(skills),
     },
   };
 };

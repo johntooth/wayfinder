@@ -1,5 +1,6 @@
 import type { FieldValueSource } from "./field-value-source";
 import type { ScheduleAnchor, ScheduleKind } from "./session-schedule";
+import type { ParsedSkill } from "./skill";
 import type { TemplateField } from "./template-field";
 
 export type FlowNodeType = "conversational" | "auto" | "scheduled" | "approval";
@@ -34,6 +35,12 @@ export interface ConversationalNodeConfig {
   // the operator clicks Proceed, instead of auto-advancing. Absent/false keeps
   // today's auto-advance behaviour.
   requireConfirmation?: boolean;
+  // Ids of library skills (app_skills) applied to this step, in author order
+  // (ADR-031). Resolved to their current version at prompt-build time.
+  skillRefs?: string[];
+  // A one-off skill uploaded directly onto this step, not stored in the library.
+  // Injected after any referenced skills.
+  inlineSkill?: ParsedSkill | null;
 }
 
 export type NodeExecutorKind = "n8n" | "mock";

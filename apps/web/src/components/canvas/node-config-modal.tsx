@@ -84,6 +84,8 @@ export interface NodeConfigValues {
   documentTemplateContent?: string | null;
   allowManualEdit: boolean;
   requireConfirmation: boolean;
+  // Ids of library skills (app_skills) attached to this conversational step.
+  skillRefs: string[];
   instruction: string;
   executor: "n8n" | "mock";
   workflowId: string | null;
@@ -131,6 +133,7 @@ const DEFAULT_VALUES: NodeConfigValues = {
   documentTemplateContent: null,
   allowManualEdit: true,
   requireConfirmation: false,
+  skillRefs: [],
   instruction: "",
   executor: "n8n",
   workflowId: null,
@@ -253,6 +256,15 @@ export function NodeConfigModal({
   const responseParsed = parseFieldLines(responseLines);
 
   const usesN8n = isAuto && values.executor === "n8n";
+  const skillsQuery = trpc.skill.list.useQuery(undefined, { enabled: open && isConversational });
+  const skills = skillsQuery.data ?? [];
+  const toggleSkill = (id: string) => {
+    const next = values.skillRefs.includes(id)
+      ? values.skillRefs.filter((existing) => existing !== id)
+      : [...values.skillRefs, id];
+    set("skillRefs", next);
+  };
+
   const workflowsQuery = trpc.n8n.listWorkflows.useQuery(undefined, { enabled: open && usesN8n });
   const workflows = workflowsQuery.data ?? [];
   const selectedWorkflow = workflows.find((workflow) => workflow.id === values.workflowId) ?? null;
@@ -573,6 +585,39 @@ export function NodeConfigModal({
                   onChange={(e) => set("aiInstruction", e.target.value)}
                   placeholder="Describe what the AI should do in this step…"
                 />
+              </div>
+
+              <div className="space-y-1">
+                <Label>Skills</Label>
+                <p className="text-[12px] text-[#857f76]">
+                  Attach reusable skills to steer the AI. Upload skills on the
+                  Skills page.
+                </p>
+                {skills.length === 0 ? (
+                  <p className="text-[13px] text-[#857f76]">No skills available yet.</p>
+                ) : (
+                  <div className="space-y-1.5 rounded-[9px] border border-[#dedad2] p-2.5">
+                    {skills.map((skill) => (
+                      <label
+                        key={skill.id}
+                        className="flex cursor-pointer items-start gap-2 text-[13px]"
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={values.skillRefs.includes(skill.id)}
+                          onChange={() => toggleSkill(skill.id)}
+                        />
+                        <span>
+                          <span className="font-medium">{skill.name}</span>
+                          {skill.description ? (
+                            <span className="text-[#857f76]"> — {skill.description}</span>
+                          ) : null}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">

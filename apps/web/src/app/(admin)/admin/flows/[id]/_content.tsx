@@ -378,6 +378,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         documentTemplateStructuredContent: hasTemplate ? (existingNodeConfig.documentTemplateStructuredContent ?? null) : null,
         allowManualEdit: values.allowManualEdit,
         requireConfirmation: values.neverDone ? false : values.requireConfirmation,
+        skillRefs: values.skillRefs,
         notifyOnComplete: values.notifyOnComplete,
       };
     };
@@ -611,6 +612,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         documentTemplateContent: (editingConfig.documentTemplateContent as string | null) ?? null,
         allowManualEdit: (editingConfig.allowManualEdit as boolean | undefined) ?? true,
         requireConfirmation: Boolean(editingConfig.requireConfirmation),
+        skillRefs: (editingConfig.skillRefs as string[] | undefined) ?? [],
         instruction: (editingConfig.instruction as string | null) ?? "",
         executor: (editingConfig.executor as "n8n" | "mock" | undefined) ?? "n8n",
         workflowId: (editingConfig.workflowId as string | null) ?? null,

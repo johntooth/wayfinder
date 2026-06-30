@@ -104,6 +104,9 @@ export async function POST(
   });
   const retrievedChunks = retrievalResult.error ? [] : retrievalResult.data;
 
+  const skillsResult = await container.useCases.resolveStepSkills.execute(nodeConfig);
+  const resolvedSkills = skillsResult.error ? [] : skillsResult.data;
+
   const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
     nodeConfig,
     retrievedChunks,
@@ -114,6 +117,7 @@ export async function POST(
     globalInstructions,
     expertRole: flow.expertRole,
     userProfile,
+    resolvedSkills,
   });
   if (systemPromptResult.error) return new Response("Failed to build prompt", { status: 500 });
 

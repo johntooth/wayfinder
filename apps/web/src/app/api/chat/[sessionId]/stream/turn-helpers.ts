@@ -401,6 +401,9 @@ export async function generateInitialMessage(input: GenerateInitialMessageInput)
       ? []
       : buildPromptSessionUploads(uploadsResult.data, uploadConfig.totalBudgetChars);
 
+    const skillsResult = await container.useCases.resolveStepSkills.execute(newNodeConfig);
+    const resolvedSkills = skillsResult.error ? [] : skillsResult.data;
+
     const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
       nodeConfig: newNodeConfig,
       retrievedChunks,
@@ -411,6 +414,7 @@ export async function generateInitialMessage(input: GenerateInitialMessageInput)
       globalInstructions,
       expertRole: flow.expertRole,
       userProfile,
+      resolvedSkills,
     });
     if (systemPromptResult.error) return;
 
