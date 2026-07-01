@@ -5,6 +5,7 @@ import type {
   IMcpServerRepository,
   ListMcpServersInput,
   McpServer,
+  McpServerKind,
   McpServerWithTools,
   McpTool,
   McpToolRef,
@@ -17,6 +18,7 @@ export class RegisterMcpServer {
   async execute(input: {
     label: string;
     url: string;
+    kind?: McpServerKind;
     credentialRef?: string | null;
     createdByUserId?: string | null;
   }): Promise<Result<McpServer>> {
@@ -31,6 +33,7 @@ export class RegisterMcpServer {
     return this.servers.create({
       label,
       url,
+      kind: input.kind,
       credentialRef: input.credentialRef?.trim() ? input.credentialRef.trim() : null,
       createdByUserId: input.createdByUserId ?? null,
     });
@@ -44,6 +47,7 @@ export class UpdateMcpServer {
     id: string;
     label?: string;
     url?: string;
+    kind?: McpServerKind;
     credentialRef?: string | null;
   }): Promise<Result<McpServer>> {
     if (input.url !== undefined && !isHttpUrl(input.url.trim())) {
@@ -52,6 +56,7 @@ export class UpdateMcpServer {
     return this.servers.update(input.id, {
       label: input.label?.trim(),
       url: input.url?.trim(),
+      kind: input.kind,
       credentialRef:
         input.credentialRef === undefined
           ? undefined

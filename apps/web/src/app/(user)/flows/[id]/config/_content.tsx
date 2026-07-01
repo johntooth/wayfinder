@@ -165,6 +165,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [rfNodes, setRfNodes] = useState<Node[]>([]);
   const [rfEdges, setRfEdges] = useState<Edge[]>([]);
   const [contextDocs, setContextDocs] = useState<FlowContextDoc[]>([]);
+  const [contextMcpServerIds, setContextMcpServerIds] = useState<string[]>([]);
   const [flowName, setFlowName] = useState("");
   const [flowDescription, setFlowDescription] = useState<string>("");
   const [flowIcon, setFlowIcon] = useState<string>("");
@@ -179,6 +180,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const autoNodeEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "auto_node" }).data ?? false;
   const scheduledNodeEnabled =
     trpc.featureFlag.isEnabledForMe.useQuery({ key: "scheduled_node" }).data ?? false;
+  const mcpEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "mcp" }).data ?? false;
+  const skillsEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "skills" }).data ?? false;
   const [editingMetadata, setEditingMetadata] = useState(false);
 
   const [configOpen, setConfigOpen] = useState(false);
@@ -233,6 +236,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
     setRfNodes(data.nodes.map((n) => toRfNode(n, null)));
     setRfEdges(data.edges.map(toRfEdge));
     setContextDocs(data.flow.contextDocs);
+    setContextMcpServerIds(data.flow.contextMcpServerIds ?? []);
     setFlowName(data.flow.name);
     setFlowDescription(data.flow.description ?? "");
     setFlowIcon(data.flow.icon ?? "");
@@ -430,6 +434,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
           requestFields: values.requestFields,
           requestFieldValues: values.requestFieldValues,
           responseFields: values.responseFields,
+          requireConfirmation: values.requireConfirmation,
         };
       }
       const hasTemplate = values.outputType === "generate_document" && !!values.documentTemplatePath;
@@ -865,12 +870,20 @@ function CanvasInner({ flowId }: { flowId: string }) {
         )}
       </div>
 
-      <ContextDocsStrip flowId={flowId} docs={contextDocs} onDocsChange={setContextDocs} />
+      <ContextDocsStrip
+        flowId={flowId}
+        docs={contextDocs}
+        onDocsChange={setContextDocs}
+        mcpEnabled={mcpEnabled}
+        contextMcpServerIds={contextMcpServerIds}
+        onContextMcpServerIdsChange={setContextMcpServerIds}
+      />
 
       <NodeTypePickerModal
         open={typePickerOpen}
         autoNodeEnabled={autoNodeEnabled}
         scheduledNodeEnabled={scheduledNodeEnabled}
+        mcpNodeEnabled={mcpEnabled}
         onSelect={handleSelectNodeType}
         onClose={() => setTypePickerOpen(false)}
       />
@@ -883,6 +896,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         onDelete={editingNodeId ? handleNodeDelete : undefined}
         onClose={handleConfigClose}
         isSaving={isSavingConfig}
+        skillsEnabled={skillsEnabled}
+        mcpEnabled={mcpEnabled}
         priorStepFields={priorStepFields}
         onUploadTemplate={editingNodeId ? handleUploadTemplate : undefined}
       />

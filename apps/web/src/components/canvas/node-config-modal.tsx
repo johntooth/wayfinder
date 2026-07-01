@@ -1,7 +1,7 @@
 "use client";
 
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
-import { Check, Copy, Eye, HelpCircle, Pencil, X } from "lucide-react";
+import { Check, Copy, Eye, HelpCircle, Pencil, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,6 +27,7 @@ import {
   ReadOnlyFieldList,
 } from "./field-value-selector";
 import { ScheduleSentenceBuilder } from "./schedule-sentence-builder";
+import { SkillPickerModal } from "./skill-picker-modal";
 import { N8nExtractionInfoDialog } from "./n8n-extraction-info-dialog";
 import type {
   ScheduleModifier,
@@ -120,6 +121,10 @@ interface NodeConfigModalProps {
   onDelete?: () => void;
   onClose: () => void;
   isSaving?: boolean;
+  // Power-user feature gates (ADR-022). Skills attach-to-step and the MCP action
+  // node's server picker are hidden unless the caller is entitled.
+  skillsEnabled?: boolean;
+  mcpEnabled?: boolean;
   // Fields declared by steps earlier in the flow, offered as value sources.
   priorStepFields?: PriorStepField[];
   onUploadTemplate?: (file: File, currentValues: NodeConfigValues) => Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string; code?: string }>;
@@ -205,6 +210,8 @@ export function NodeConfigModal({
   onDelete,
   onClose,
   isSaving = false,
+  skillsEnabled = false,
+  mcpEnabled = false,
   priorStepFields = [],
   onUploadTemplate,
 }: NodeConfigModalProps) {
@@ -234,6 +241,7 @@ export function NodeConfigModal({
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [infoVariant, setInfoVariant] = useState<"inputs" | "outputs">("inputs");
   const [infoOpen, setInfoOpen] = useState(false);
+  const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const set = <K extends keyof NodeConfigValues>(key: K, value: NodeConfigValues[K]) =>
@@ -265,29 +273,26 @@ export function NodeConfigModal({
   const responseParsed = parseFieldLines(responseLines);
 
   const usesN8n = isAuto && values.executor === "n8n";
+  // The action node's server picker only offers write-capable `actions` servers;
+  // `context` servers are attached flow-wide, not per node (ADR-032).
   const mcpServersQuery = trpc.mcpServer.listWithTools.useQuery(undefined, {
-    enabled: open && (isMcp || isConversational),
+    enabled: open && isMcp && mcpEnabled,
   });
-  const mcpServers = mcpServersQuery.data ?? [];
-  const selectedMcpServer = mcpServers.find((entry) => entry.server.id === values.mcpServerId) ?? null;
-  const isToolAllowed = (serverId: string, toolName: string) =>
-    values.allowedMcpToolRefs.some((ref) => ref.serverId === serverId && ref.toolName === toolName);
-  const toggleAllowedTool = (serverId: string, toolName: string) => {
-    const next = isToolAllowed(serverId, toolName)
-      ? values.allowedMcpToolRefs.filter(
-          (ref) => !(ref.serverId === serverId && ref.toolName === toolName),
-        )
-      : [...values.allowedMcpToolRefs, { serverId, toolName }];
-    set("allowedMcpToolRefs", next);
-  };
-  const skillsQuery = trpc.skill.list.useQuery(undefined, { enabled: open && isConversational });
-  const skills = skillsQuery.data ?? [];
-  const toggleSkill = (id: string) => {
-    const next = values.skillRefs.includes(id)
-      ? values.skillRefs.filter((existing) => existing !== id)
-      : [...values.skillRefs, id];
-    set("skillRefs", next);
-  };
+  const actionServers = (mcpServersQuery.data ?? []).filter(
+    (entry) => entry.server.kind === "actions",
+  );
+  const selectedMcpServer = actionServers.find((entry) => entry.server.id === values.mcpServerId) ?? null;
+
+  // Selected skills are resolved to names for the chips beside the AI instructions.
+  const skillsQuery = trpc.skill.list.useQuery(undefined, {
+    enabled: open && isConversational && skillsEnabled,
+  });
+  const skillsById = new Map((skillsQuery.data ?? []).map((skill) => [skill.id, skill]));
+  const removeSkill = (id: string) =>
+    set(
+      "skillRefs",
+      values.skillRefs.filter((existing) => existing !== id),
+    );
 
   const workflowsQuery = trpc.n8n.listWorkflows.useQuery(undefined, { enabled: open && usesN8n });
   const workflows = workflowsQuery.data ?? [];
@@ -620,8 +625,45 @@ export function NodeConfigModal({
 
               {isConversational && (
               <>
-              <div className="space-y-1">
-                <Label htmlFor="ai-instruction">Instructions for the AI</Label>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="ai-instruction">Instructions for the AI</Label>
+                  {skillsEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => setSkillPickerOpen(true)}
+                      className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+                      aria-label="Add skills"
+                    >
+                      <Sparkles size={13} />
+                      {values.skillRefs.length > 0 ? `Skills · ${values.skillRefs.length}` : "Add skills"}
+                    </button>
+                  )}
+                </div>
+                {skillsEnabled && values.skillRefs.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {values.skillRefs.map((id) => {
+                      const skill = skillsById.get(id);
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1 rounded-full border border-[#c5d0f7] bg-[#eef1fc] px-2 py-0.5 text-[11px] text-[#3a5fd9]"
+                        >
+                          <Sparkles size={10} />
+                          {skill?.name ?? "Skill"}
+                          <button
+                            type="button"
+                            aria-label={`Remove ${skill?.name ?? "skill"}`}
+                            className="text-[#3a5fd9] hover:text-[#25439c]"
+                            onClick={() => removeSkill(id)}
+                          >
+                            <X size={11} />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
                 <Textarea
                   id="ai-instruction"
                   required
@@ -630,88 +672,6 @@ export function NodeConfigModal({
                   onChange={(e) => set("aiInstruction", e.target.value)}
                   placeholder="Describe what the AI should do in this step…"
                 />
-              </div>
-
-              <div className="space-y-1">
-                <FieldGroupLabel id="ncm-skills">Skills</FieldGroupLabel>
-                <p className="text-[12px] text-[#857f76]">
-                  Attach reusable skills to steer the AI. Upload skills on the Skills page.
-                </p>
-                {skills.length === 0 ? (
-                  <p className="text-[13px] text-[#857f76]">No skills available yet.</p>
-                ) : (
-                  <div
-                    className="space-y-1.5 rounded-[9px] border border-[#dedad2] p-2.5"
-                    role="group"
-                    aria-labelledby="ncm-skills"
-                  >
-                    {skills.map((skill) => (
-                      <label
-                        key={skill.id}
-                        className="flex cursor-pointer items-start gap-2 text-[13px]"
-                      >
-                        <input
-                          type="checkbox"
-                          className="mt-0.5"
-                          checked={values.skillRefs.includes(skill.id)}
-                          onChange={() => toggleSkill(skill.id)}
-                        />
-                        <span>
-                          <span className="font-medium">{skill.name}</span>
-                          {skill.description ? (
-                            <span className="text-[#857f76]"> — {skill.description}</span>
-                          ) : null}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-1">
-                <FieldGroupLabel id="ncm-mcp-tools">MCP tools</FieldGroupLabel>
-                <p className="text-[12px] text-[#857f76]">
-                  Let the AI call these tools mid-conversation. Register servers on the MCP
-                  Servers page.
-                </p>
-                {mcpServers.length === 0 ? (
-                  <p className="text-[13px] text-[#857f76]">No MCP servers available.</p>
-                ) : (
-                  <div
-                    className="space-y-2 rounded-[9px] border border-[#dedad2] p-2.5"
-                    role="group"
-                    aria-labelledby="ncm-mcp-tools"
-                  >
-                    {mcpServers.map((entry) => (
-                      <div key={entry.server.id} className="space-y-1">
-                        <p className="text-[12px] font-medium text-[#5a5650]">{entry.server.label}</p>
-                        {entry.tools.length === 0 ? (
-                          <p className="text-[12px] text-[#857f76]">No tools discovered.</p>
-                        ) : (
-                          entry.tools.map((tool) => (
-                            <label
-                              key={tool.name}
-                              className="flex cursor-pointer items-start gap-2 text-[13px]"
-                            >
-                              <input
-                                type="checkbox"
-                                className="mt-0.5"
-                                checked={isToolAllowed(entry.server.id, tool.name)}
-                                onChange={() => toggleAllowedTool(entry.server.id, tool.name)}
-                              />
-                              <span>
-                                <span className="font-medium">{tool.name}</span>
-                                {tool.description ? (
-                                  <span className="text-[#857f76]"> — {tool.description}</span>
-                                ) : null}
-                              </span>
-                            </label>
-                          ))
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
 
               <div className="space-y-1">
@@ -1223,15 +1183,16 @@ export function NodeConfigModal({
                   }}
                 >
                   <option value="">Select a server…</option>
-                  {mcpServers.map((entry) => (
+                  {actionServers.map((entry) => (
                     <option key={entry.server.id} value={entry.server.id}>
                       {entry.server.label}
                     </option>
                   ))}
                 </select>
-                {!mcpServersQuery.isLoading && mcpServers.length === 0 && (
+                {!mcpServersQuery.isLoading && actionServers.length === 0 && (
                   <p className="text-[12px] text-[#918d87]">
-                    No active MCP servers. Register one on the MCP Servers page.
+                    No active action (write) MCP servers. Register one on the MCP Servers page and
+                    set its type to Actions.
                   </p>
                 )}
               </div>
@@ -1297,6 +1258,32 @@ export function NodeConfigModal({
                 lines={responseLines}
                 onChange={setResponseLines}
               />
+
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-0.5">
+                  <Label htmlFor="mcp-require-confirmation">Confirm before running (human in the loop)</Label>
+                  <p className="text-[12px] text-[#6d6a65]">
+                    Show the operator the resolved tool arguments and wait for them to click Proceed
+                    before this write action runs. Recommended for anything that changes data.
+                  </p>
+                </div>
+                <button
+                  id="mcp-require-confirmation"
+                  type="button"
+                  role="switch"
+                  aria-checked={values.requireConfirmation}
+                  onClick={() => set("requireConfirmation", !values.requireConfirmation)}
+                  className={`relative mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                    values.requireConfirmation ? "bg-[#1f8a4c]" : "bg-[#d7d3cc]"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      values.requireConfirmation ? "translate-x-4" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
               </>
               )}
 
@@ -1358,6 +1345,12 @@ export function NodeConfigModal({
         open={infoOpen}
         variant={infoVariant}
         onClose={() => setInfoOpen(false)}
+      />
+      <SkillPickerModal
+        open={skillPickerOpen}
+        selectedIds={values.skillRefs}
+        onChange={(ids) => set("skillRefs", ids)}
+        onClose={() => setSkillPickerOpen(false)}
       />
     </Dialog>
   );

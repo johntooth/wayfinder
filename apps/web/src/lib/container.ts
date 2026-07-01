@@ -49,6 +49,8 @@ import {
   ListMcpServersWithTools,
   ResolveStepTools,
   RunMcpNode,
+  PrepareMcpNode,
+  ConfirmMcpNode,
   IsFeatureEnabled,
   IsFeatureEnabledForUser,
   ListAllSessions,
@@ -85,6 +87,7 @@ import {
   RegisterJob,
   ReindexAllDocuments,
   RemoveContextDoc,
+  SetFlowContextMcpServers,
   RemoveSessionUpload,
   RemoveUserRole,
   RetrieveDocumentChunks,
@@ -572,6 +575,7 @@ const build = () => {
       deleteFlowEdge: new DeleteFlowEdge(flowEdges),
       addContextDoc: new AddContextDoc(flows),
       removeContextDoc: new RemoveContextDoc(flows),
+      setFlowContextMcpServers: new SetFlowContextMcpServers(flows, mcpServers),
       addSessionUpload: new AddSessionUpload(sessionUploads),
       removeSessionUpload: new RemoveSessionUpload(sessionUploads),
       retrieveDocumentChunks: new RetrieveDocumentChunks(embeddings, documentChunks),
@@ -666,6 +670,8 @@ const build = () => {
       listMcpServersWithTools: new ListMcpServersWithTools(mcpServerDirectory),
       resolveStepTools: new ResolveStepTools(mcpServers),
       runMcpNode: new RunMcpNode(sessions, llm, mcpServers, mcpClient, sessionStepOutputs),
+      prepareMcpNode: new PrepareMcpNode(sessions, llm, mcpServers, sessionStepOutputs),
+      confirmMcpNode: new ConfirmMcpNode(mcpServers, mcpClient),
     },
   };
 };

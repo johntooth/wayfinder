@@ -32,6 +32,7 @@ export const mcpServerRouter = router({
       z.object({
         label: z.string().min(1),
         url: z.string().min(1),
+        kind: z.enum(["context", "actions"]).optional(),
         credentialRef: z.string().nullable().optional(),
       }),
     )
@@ -40,6 +41,7 @@ export const mcpServerRouter = router({
       const result = await ctx.container.useCases.registerMcpServer.execute({
         label: input.label,
         url: input.url,
+        kind: input.kind,
         credentialRef: input.credentialRef ?? null,
         createdByUserId: ctx.userId,
       });
@@ -53,6 +55,7 @@ export const mcpServerRouter = router({
         id: z.string().uuid(),
         label: z.string().min(1).optional(),
         url: z.string().min(1).optional(),
+        kind: z.enum(["context", "actions"]).optional(),
         credentialRef: z.string().nullable().optional(),
       }),
     )

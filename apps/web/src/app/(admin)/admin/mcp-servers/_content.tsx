@@ -22,6 +22,7 @@ export function AdminMcpServersContent() {
 
   const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
+  const [kind, setKind] = useState<"context" | "actions">("context");
   const [credentialRef, setCredentialRef] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, string>>({});
@@ -32,6 +33,7 @@ export function AdminMcpServersContent() {
     onSuccess: () => {
       setLabel("");
       setUrl("");
+      setKind("context");
       setCredentialRef("");
       setError(null);
       invalidate();
@@ -55,6 +57,7 @@ export function AdminMcpServersContent() {
     register.mutate({
       label,
       url,
+      kind,
       credentialRef: credentialRef.trim() ? credentialRef.trim() : null,
     });
   };
@@ -73,7 +76,7 @@ export function AdminMcpServersContent() {
               reference names an environment variable holding the bearer token —
               the secret itself is never stored here.
             </p>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="mcp-label">Label</Label>
                 <Input
@@ -91,6 +94,18 @@ export function AdminMcpServersContent() {
                   onChange={(event) => setUrl(event.target.value)}
                   placeholder="https://mcp.example.com/sse"
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="mcp-kind">Type</Label>
+                <select
+                  id="mcp-kind"
+                  className="flex h-10 w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#3a5fd9] focus:bg-white focus:outline-none"
+                  value={kind}
+                  onChange={(event) => setKind(event.target.value as "context" | "actions")}
+                >
+                  <option value="context">Context (read-only) — grounds the AI flow-wide</option>
+                  <option value="actions">Actions (write) — runs in a confirmed action step</option>
+                </select>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="mcp-cred">Credential ref (env var)</Label>
@@ -121,6 +136,7 @@ export function AdminMcpServersContent() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Label</TableHead>
+                    <TableHead>Type</TableHead>
                     <TableHead>URL</TableHead>
                     <TableHead>Credential</TableHead>
                     <TableHead>Status</TableHead>
@@ -131,6 +147,11 @@ export function AdminMcpServersContent() {
                   {serversQuery.data.map((server) => (
                     <TableRow key={server.id}>
                       <TableCell className="font-medium">{server.label}</TableCell>
+                      <TableCell>
+                        <Badge variant={server.kind === "actions" ? "default" : "outline"}>
+                          {server.kind === "actions" ? "Actions" : "Context"}
+                        </Badge>
+                      </TableCell>
                       <TableCell className="font-mono text-xs">{server.url}</TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground">
                         {server.credentialRef ?? "—"}

@@ -61,9 +61,14 @@ const adminNav: NavGroup[] = [
       { href: "/admin/dashboards/flows", icon: BarChart2, label: "Flow Usage" },
       { href: "/admin/sessions", icon: MessageSquare, label: "All Chats" },
       { href: "/admin/flows", icon: GitBranch, label: "Flows" },
+      { href: "/admin/settings", icon: Settings, label: "Configuration" },
+    ],
+  },
+  {
+    label: "Flow Settings",
+    items: [
       { href: "/admin/skills", icon: Sparkles, label: "Skills" },
       { href: "/admin/mcp-servers", icon: Plug, label: "MCP Servers" },
-      { href: "/admin/settings", icon: Settings, label: "Configuration" },
     ],
   },
   {
@@ -190,18 +195,22 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     (userQuery.data?.isAdmin ?? false) ||
     (userQuery.data?.permissions ?? []).includes("knowledge:curate");
   const baseNav = isAdmin ? adminNav : userNav;
-  const nav: NavGroup[] = canCurate
-    ? [
-        {
-          ...baseNav[0]!,
-          items: [
-            ...baseNav[0]!.items,
-            { href: "/knowledge", icon: BookOpen, label: "Knowledge" },
-          ],
-        },
-        ...baseNav.slice(1),
-      ]
-    : baseNav;
+  const knowledgeItem: NavItem = { href: "/knowledge", icon: BookOpen, label: "Knowledge" };
+  // Curators reach Knowledge from their primary nav. For admins it belongs with the
+  // other flow-authoring surfaces under "Flow Settings"; for users it sits in the
+  // single top group.
+  const nav: NavGroup[] = !canCurate
+    ? baseNav
+    : isAdmin
+      ? baseNav.map((group) =>
+          group.label === "Flow Settings"
+            ? { ...group, items: [...group.items, knowledgeItem] }
+            : group,
+        )
+      : [
+          { ...baseNav[0]!, items: [...baseNav[0]!.items, knowledgeItem] },
+          ...baseNav.slice(1),
+        ];
   const homeHref = isAdmin ? "/admin/flows" : "/chats";
 
   const recentChats = isAdmin

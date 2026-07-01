@@ -81,6 +81,11 @@ export interface McpNodeConfig {
   // means `ai` (matching AutoNodeConfig's default).
   requestFieldValues?: Record<string, FieldValueSource>;
   responseFields?: TemplateField[];
+  // Human-in-the-loop gate for write actions (ADR-032). When true (the default —
+  // absent is treated as true), reaching the node resolves the tool arguments and
+  // parks the session on the operator-confirmation gate; the tool only runs once
+  // the operator clicks Proceed. When false, the call fires automatically.
+  requireConfirmation?: boolean;
 }
 
 export interface ScheduledNodeConfig {

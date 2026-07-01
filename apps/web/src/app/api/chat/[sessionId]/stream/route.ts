@@ -118,6 +118,7 @@ export async function POST(
   const gatheredContextWithTools = await runMcpToolPrepass({
     container,
     nodeConfig,
+    contextMcpServerIds: flow.contextMcpServerIds,
     dbMessages,
     lastUserMessage,
     gatheredContext,
