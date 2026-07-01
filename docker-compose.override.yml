@@ -43,3 +43,20 @@ services:
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
+
+  # One-shot: builds a two-step PIA flow from tests/e2e/fixtures by driving the
+  # same container use cases/services the product's own endpoints use. Idempotent
+  # — skips if the flow already exists, so it is safe across stack restarts.
+  seed-pia:
+    image: localhost/wayfinder-app:latest
+    container_name: wayfinder-seed-pia
+    command: pnpm --filter @wayfinder/web exec tsx scripts/seed-pia-flow.ts
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      storage:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"

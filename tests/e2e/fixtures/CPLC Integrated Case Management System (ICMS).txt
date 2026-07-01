@@ -1,0 +1,58 @@
+# PROJECT INITIATION DOCUMENT (PID)
+**Project Name:** CPLC Integrated Case Management System (ICMS)
+**Entity:** Cute Puppies and Lizards Commission (CPLC) – *Statutory Authority*
+**Document Version:** 2.1 (Final Requirements Baseline)
+**Date:** 24 October 2025
+
+## 1. Project Context & Drivers
+The CPLC is transitioning from fragmented, legacy on-premise databases to a centralized, cloud-based ICMS. This project is driven by the recent *Companion Animals and Reptile Welfare Amendment Act 2025*, which mandates stricter tracking of exotic reptile ownership and requires mandatory cross-referencing with the National Animal Abuse Registry (NAAR) for all puppy adoptions.
+
+## 2. Scope & Objectives
+*   **In Scope:**
+    *   Public-facing adoption portal (web & mobile).
+    *   Internal staff dashboard for CPLC Adoptions & Compliance Officers.
+    *   Automated API integrations with Local Councils (for statutory pet registration) and Partner Vet Clinics.
+    *   Integration with the National Animal Abuse Registry (NAAR) and a third-party ID verification service (SecureID Verify).
+*   **Out of Scope:** Financial processing (handled by the existing state-wide payment gateway), public education campaigns.
+*   **Key Cohorts:** General public adopters, approved Partner Vets, Local Council Rangers, and participants in the "Junior Reptile Keeper Program" (minors under 16).
+
+## 3. Data Dictionary & Information Flows
+### 3.1 Data Collected
+*   **Adopter PII:** Full name, DOB, physical address, contact details, and a scanned copy of a Government-issued Photo ID (Driver Licence/Passport) for statutory identity verification.
+*   **Sensitive/Demographic Data:** For the "Junior Reptile Keeper Program", data regarding the minor’s age and the legal guardian’s consent/PII is collected.
+*   **Animal Data:** Species, breed, microchip number, desexing status, behavioral aggression assessments, and veterinary health records.
+
+### 3.2 Information Flows & Disclosures
+1.  **Collection & Verification:** Adopter submits PII and ID scan via portal $\rightarrow$ Routed to *SecureID Verify* (third-party) for liveness check $\rightarrow$ Verified status returned to CPLC ICMS. ID scan is immediately deleted by the third party.
+2.  **Statutory Checking:** ICMS automatically queries the NAAR API using the adopter's DOB/Name to check for prior animal cruelty offenses.
+3.  **Disclosure (Councils):** Upon adoption finalization, ICMS pushes adopter PII and animal microchip data to the relevant Local Council API for mandatory statutory registration.
+4.  **Disclosure (Vets):** ICMS shares *only* the animal's medical and microchip data with the adopter's nominated Partner Vet Clinic via REST API. Adopter PII is strictly excluded from this payload.
+
+## 4. System Architecture & Integrations
+*   **Hosting:** Hosted on a commercial cloud provider (CSP) with data centers strictly located in Sydney and Melbourne, Australia. The CSP is ISO 27001 and IRAP assessed.
+*   **Encryption:** TLS 1.3 for data in transit; AES-256 for data at rest.
+*   **Authentication:**
+    *   *Public:* Username/Password + SMS OTP.
+    *   *CPLC Staff:* Mandatory hardware-token MFA integrated with CPLC Active Directory.
+*   **Third-Party Contracts:** Data Processing Agreements (DPAs) and Information Sharing Agreements (ISAs) are being drafted for the CSP, SecureID Verify, and Partner Vet Clinics.
+
+## 5. User Roles & Access Management (RBAC)
+*   **Public Adopter:** View own application status, update own contact details, download adoption certificate.
+*   **CPLC Adoptions Officer:** View adopter PII, update animal records, process adoptions.
+*   **CPLC Compliance Officer:** Access to NAAR check results and Local Council data sharing logs.
+*   **Partner Vet Clinic:** Access *only* to animal medical records for their specific region. No access to adopter PII.
+*   **System Administrator:** Manage user provisioning and view system audit logs. *Cannot* view decrypted adopter ID scans or NAAR results (requires dual-authorization).
+
+## 6. Data Lifecycle & Retention
+*   **Adopter PII & ID Scans:** Retained for 3 years post-adoption for statutory warranty and dispute resolution, then securely destroyed.
+*   **Animal Health/Microchip Data:** Retained for the life of the animal + 7 years (per State Archives retention schedules).
+*   **Junior Program Data:** Destroyed when the minor turns 18, unless they transition to an adult adoption.
+*   **Audit Logs:** Retained for 7 years for security and compliance auditing.
+
+## 7. Pre-emptive Privacy & Security Considerations
+*Note for Privacy Officer: The following areas require specific focus during the PIA compliance check.*
+*   **APP 2 (Anonymity):** Anonymity is impracticable. The *Amendment Act 2025* legally requires CPLC to verify identity to prevent animal hoarding and cross-reference the NAAR.
+*   **APP 3 (Collection):** Collection of ID scans is mandated by law. We are mitigating risk by using a third-party (SecureID Verify) so CPLC does not store the raw ID images long-term.
+*   **Vulnerable Cohorts:** The "Junior Reptile Keeper Program" involves minors. Collection notices and consent flows must be explicitly tailored for legal guardians.
+*   **APP 6 & 8 (Disclosure & Cross-Border):** Data is shared with Local Councils (statutory exception). Cloud hosting is domestic, but the CSP's terms of service must be reviewed to ensure no offshore subcontractor access.
+*   **APP 11 (Security):** High risk regarding the "trusted insider" accessing NAAR or adopter PII without cause. Mitigated by strict RBAC, MFA, and automated alerts for bulk data exports.
