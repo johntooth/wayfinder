@@ -93,21 +93,3 @@ resource "aws_route_table_association" "private" {
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private.id
 }
-
-# Defined here (not in the ecs module) so database and semchunk can reference
-# the web tasks as a traffic source without creating a module cycle.
-resource "aws_security_group" "web_service" {
-  name        = "${var.project_name}-web-service"
-  description = "Wayfinder web tasks"
-  vpc_id      = aws_vpc.this.id
-
-  egress {
-    description = "all outbound (S3, Secrets Manager, ECR, AI providers, sidecar)"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = { Name = "${var.project_name}-web-service" }
-}

@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars and adjust. Secrets never go in this file.
+
+aws_region = "eu-west-2"
+
+# Environments are exposed as https://<env>.<base_domain>. The certificate
+# must cover *.<base_domain> (ACM, in the same region as the ALB).
+base_domain     = "wayfinder.example.com"
+certificate_arn = "arn:aws:acm:eu-west-2:123456789012:certificate/..."
+
+# Shared database server — size for the number of environments you expect.
+# db_instance_class      = "db.t4g.small"
+# db_allocated_storage   = 20
+# db_skip_final_snapshot = true   # dev accounts only

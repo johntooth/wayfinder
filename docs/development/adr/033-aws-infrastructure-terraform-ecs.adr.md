@@ -1,6 +1,8 @@
 # ADR-033 — AWS Infrastructure via Terraform on ECS Fargate
 
-- **Status**: Accepted (implemented in v1.57.0)
+- **Status**: Accepted (implemented in v1.57.0) — **amended by ADR-034** (v1.58.0): the
+  single-root layout is restructured into a shared core + per-environment stamps; tool,
+  compute, and secrets decisions below are unchanged
 - **Date**: 2026-07-01
 - **Relates to**: ADR-030 (semchunk sidecar), ADR-016/017 (pgvector + embeddings), ADR-002 (multi-provider AI, incl. Bedrock)
 

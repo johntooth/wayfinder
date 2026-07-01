@@ -263,15 +263,18 @@ else
   else
     fail "terraform fmt — run 'terraform -chdir=infra/aws fmt -recursive'"
   fi
-  if [ -d infra/aws/.terraform ]; then
-    if terraform -chdir=infra/aws validate > /dev/null; then
-      pass "terraform validate"
+  # Two roots (ADR-034): core is applied once, environments once per stamp.
+  for TF_ROOT in infra/aws/core infra/aws/environments; do
+    if [ -d "$TF_ROOT/.terraform" ]; then
+      if terraform -chdir="$TF_ROOT" validate > /dev/null; then
+        pass "terraform validate ($TF_ROOT)"
+      else
+        fail "terraform validate — see 'terraform -chdir=$TF_ROOT validate'"
+      fi
     else
-      fail "terraform validate — see 'terraform -chdir=infra/aws validate'"
+      skip "terraform validate ($TF_ROOT) — run 'terraform -chdir=$TF_ROOT init -backend=false' first"
     fi
-  else
-    skip "terraform validate — run 'terraform -chdir=infra/aws init -backend=false' first"
-  fi
+  done
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────

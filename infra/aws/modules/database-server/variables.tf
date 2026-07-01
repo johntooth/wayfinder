@@ -21,8 +21,3 @@ variable "allocated_storage" {
 variable "skip_final_snapshot" {
   type = bool
 }
-
-variable "client_security_group_ids" {
-  description = "Security groups allowed to reach Postgres"
-  type        = list(string)
-}

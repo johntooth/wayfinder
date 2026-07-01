@@ -1,12 +1,9 @@
-resource "aws_ecr_repository" "semchunk" {
-  name = "${var.project_name}-semchunk"
-}
-
-# Reachable only from the web service's security group — the sidecar is an
-# internal dependency and must never sit behind the public load balancer.
+# Per-environment semantic-chunking sidecar (ADR-030). Reachable only from the
+# owning environment's web service — never from the load balancer or other
+# environments.
 resource "aws_security_group" "semchunk" {
-  name        = "${var.project_name}-semchunk"
-  description = "Semantic chunking sidecar"
+  name        = var.service_name
+  description = "Semantic chunking sidecar (${var.service_name})"
   vpc_id      = var.vpc_id
 
   egress {
@@ -17,7 +14,7 @@ resource "aws_security_group" "semchunk" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = { Name = "${var.project_name}-semchunk" }
+  tags = { Name = var.service_name }
 }
 
 resource "aws_vpc_security_group_ingress_rule" "from_web" {
@@ -29,12 +26,12 @@ resource "aws_vpc_security_group_ingress_rule" "from_web" {
 }
 
 resource "aws_cloudwatch_log_group" "semchunk" {
-  name              = "/ecs/${var.project_name}-semchunk"
+  name              = "/ecs/${var.service_name}"
   retention_in_days = 30
 }
 
 resource "aws_ecs_task_definition" "semchunk" {
-  family                   = "${var.project_name}-semchunk"
+  family                   = var.service_name
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   cpu                      = tostring(var.cpu)
@@ -44,7 +41,7 @@ resource "aws_ecs_task_definition" "semchunk" {
   container_definitions = jsonencode([
     {
       name      = "semchunk"
-      image     = "${aws_ecr_repository.semchunk.repository_url}:${var.image_tag}"
+      image     = var.image
       essential = true
 
       portMappings = [
@@ -64,7 +61,7 @@ resource "aws_ecs_task_definition" "semchunk" {
 }
 
 resource "aws_ecs_service" "semchunk" {
-  name            = "semchunk"
+  name            = var.service_name
   cluster         = var.cluster_arn
   task_definition = aws_ecs_task_definition.semchunk.arn
   desired_count   = 1
@@ -75,8 +72,8 @@ resource "aws_ecs_service" "semchunk" {
     security_groups = [aws_security_group.semchunk.id]
   }
 
-  # Publishes the sidecar as http://semchunk:8000 inside the namespace — the
-  # exact SEMCHUNK_URL the web task is given (ADR-033 Decision 3).
+  # The alias is environment-scoped (semchunk-<env>) because the Service
+  # Connect namespace is shared by every stamped environment (ADR-034).
   service_connect_configuration {
     enabled   = true
     namespace = var.namespace_arn
@@ -86,7 +83,7 @@ resource "aws_ecs_service" "semchunk" {
 
       client_alias {
         port     = 8000
-        dns_name = "semchunk"
+        dns_name = var.dns_alias
       }
     }
   }

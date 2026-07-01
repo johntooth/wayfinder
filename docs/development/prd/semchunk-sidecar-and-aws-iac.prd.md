@@ -131,6 +131,16 @@ None. Chunks produced by either chunker are stored identically in `kb_document_c
       teardown, and secrets population.
 - [ ] `./validate.sh` passes; `VERSION` and root `package.json` bumped to 1.57.0 together.
 
+## 10a. Addendum (v1.58.0) — environment blueprint
+
+Post-ship, the fork owner clarified the deployment goal: the repo should act as a **blueprint
+third parties use to stamp Wayfinder environments on demand** (shared core infrastructure,
+cheap per-environment stamps), not a single hand-applied environment. That extension is covered
+by ADR-034 and `docs/development/to-be-implemented/aws-environment-blueprint.phase.md`
+(target 1.58.0); its goals and acceptance criteria live in that phase doc rather than being
+retrofitted into §3/§10 above. "CI/CD pipeline for infra" below remains future work — the
+blueprint adds only an optional `workflow_dispatch` stamp trigger, not a pipeline.
+
 ## 11. Out of scope / future work
 
 - Corpus-wide re-chunk + re-embed migration and curated-state carry-forward (ADR-030

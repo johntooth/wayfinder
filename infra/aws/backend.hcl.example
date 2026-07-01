@@ -1,0 +1,4 @@
+# Copy to backend.hcl (gitignored) after the one-time state-bucket bootstrap,
+# then run in each root:  terraform init -backend-config=../backend.hcl
+bucket = "<your-terraform-state-bucket>"
+region = "<region>"

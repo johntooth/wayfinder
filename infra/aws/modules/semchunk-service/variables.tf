@@ -1,5 +1,11 @@
-variable "project_name" {
-  type = string
+variable "service_name" {
+  description = "Unique per environment, e.g. wayfinder-tenant-a-semchunk"
+  type        = string
+}
+
+variable "dns_alias" {
+  description = "Service Connect DNS name, e.g. semchunk-tenant-a"
+  type        = string
 }
 
 variable "aws_region" {
@@ -26,8 +32,9 @@ variable "execution_role_arn" {
   type = string
 }
 
-variable "image_tag" {
-  type = string
+variable "image" {
+  description = "Full image reference including tag"
+  type        = string
 }
 
 variable "cpu" {
@@ -39,6 +46,6 @@ variable "memory" {
 }
 
 variable "client_security_group_id" {
-  description = "Security group of the web tasks allowed to call the sidecar"
+  description = "Security group of the owning environment's web tasks"
   type        = string
 }
