@@ -15,6 +15,11 @@ export interface ChunkOptions {
 
 const PLACEHOLDER_PATTERN = /\{\{.*?\}\}/g;
 
+// Shared with the semchunk adapter — placeholders are a Wayfinder concern and
+// must be stripped before text leaves the process (the sidecar is generic).
+export const stripTemplatePlaceholders = (text: string): string =>
+  text.replace(PLACEHOLDER_PATTERN, " ").replace(/[ \t]{2,}/g, " ");
+
 const splitIntoParagraphs = (text: string): string[] =>
   text
     .split(/\n\s*\n/)
@@ -65,9 +70,7 @@ export const chunkText = (text: string, options: ChunkOptions = {}): string[] =>
   const maxChars = targetTokens * CHARS_PER_TOKEN;
   const overlapChars = overlapTokens * CHARS_PER_TOKEN;
 
-  const cleaned = options.stripPlaceholders
-    ? text.replace(PLACEHOLDER_PATTERN, " ").replace(/[ \t]{2,}/g, " ")
-    : text;
+  const cleaned = options.stripPlaceholders ? stripTemplatePlaceholders(text) : text;
 
   const units = buildUnits(cleaned, maxChars);
   if (units.length === 0) return [];

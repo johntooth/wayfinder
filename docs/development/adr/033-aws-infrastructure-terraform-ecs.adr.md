@@ -1,6 +1,6 @@
 # ADR-033 — AWS Infrastructure via Terraform on ECS Fargate
 
-- **Status**: Proposed
+- **Status**: Accepted (implemented in v1.57.0)
 - **Date**: 2026-07-01
 - **Relates to**: ADR-030 (semchunk sidecar), ADR-016/017 (pgvector + embeddings), ADR-002 (multi-provider AI, incl. Bedrock)
 

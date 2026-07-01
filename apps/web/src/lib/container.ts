@@ -127,6 +127,9 @@ import {
   DocxGenerator,
   DocumentExtractorService,
   DocumentIndexingService,
+  FallbackChunker,
+  FixedWindowChunker,
+  SemchunkChunker,
   DrizzleApprovalRepository,
   DrizzleAuditLogger,
   DrizzleContextDocContentRepository,
@@ -421,7 +424,15 @@ const build = () => {
       cacheDir: env.EMBEDDINGS_CACHE_DIR,
     },
   });
-  const documentIndexer = new DocumentIndexingService(embeddings, documentChunks);
+  const chunker =
+    env.CHUNKER_PROVIDER === "semchunk"
+      ? new FallbackChunker(
+          new SemchunkChunker({ baseUrl: env.SEMCHUNK_URL, timeoutMs: env.SEMCHUNK_TIMEOUT_MS }),
+          new FixedWindowChunker(),
+          logger,
+        )
+      : new FixedWindowChunker();
+  const documentIndexer = new DocumentIndexingService(embeddings, documentChunks, chunker);
   const reindexSource = new DrizzleReindexSourceRepository(db);
   const connectivityTester = new CompositeConnectivityTester({
     runtimeConfig,

@@ -27,6 +27,11 @@ const serverEnvSchema = z.object({
   AWS_BEDROCK_REGION: z.string().optional(),
   AWS_BEDROCK_ACCESS_KEY_ID: z.string().optional(),
   AWS_BEDROCK_SECRET_ACCESS_KEY: z.string().optional(),
+  // Chunking (ADR-030): "semchunk" routes indexing through the sidecar with
+  // automatic fixed-window fallback; "fixed" (default) never touches the network.
+  CHUNKER_PROVIDER: z.enum(["fixed", "semchunk"]).default("fixed"),
+  SEMCHUNK_URL: z.string().url().default("http://localhost:8000"),
+  SEMCHUNK_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
   // Embeddings (ADR-017): default provider + local-model controls. The admin
   // setting overrides EMBEDDINGS_PROVIDER at runtime.
   EMBEDDINGS_PROVIDER: z.enum(["local", "openai"]).default("local"),

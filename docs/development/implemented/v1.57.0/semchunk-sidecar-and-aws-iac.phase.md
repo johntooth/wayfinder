@@ -1,6 +1,6 @@
 # Phase — Semchunk Sidecar (Opt-In) & AWS Infrastructure-as-Code
 
-- **Status**: To be implemented (run `/doc-review` before `/build`)
+- **Status**: Implemented in v1.57.0 (see `semchunk-sidecar-and-aws-iac.summary.md`)
 - **Target version**: **MINOR** — 1.56.0 → 1.57.0 (new feature + new deployable service; no schema change)
 - **PRD**: `docs/development/prd/semchunk-sidecar-and-aws-iac.prd.md`
 - **ADRs**: ADR-030 (semchunk sidecar — Accepted, opt-in scope), ADR-033 (AWS via Terraform on ECS Fargate)

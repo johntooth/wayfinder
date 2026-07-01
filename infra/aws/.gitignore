@@ -1,0 +1,7 @@
+# Local Terraform working files — state lives in the S3 backend and
+# terraform.tfvars may point at real environments.
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+terraform.tfvars

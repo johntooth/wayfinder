@@ -36,6 +36,29 @@ services:
       timeout: 5s
       retries: 6
 
+  # Optional semantic-chunking sidecar (ADR-030). Start with:
+  #   docker compose --profile semchunk up
+  # then set CHUNKER_PROVIDER=semchunk and SEMCHUNK_URL=http://localhost:8000
+  # on the web app. The default profile is unaffected when this is off.
+  semchunk:
+    build: ./services/semchunk
+    container_name: wayfinder-semchunk
+    profiles: ["semchunk"]
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz', timeout=4)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
   langfuse:
     image: langfuse/langfuse:2
     container_name: wayfinder-langfuse

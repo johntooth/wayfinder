@@ -1,0 +1,27 @@
+# Copy to terraform.tfvars and adjust. Secrets never go in this file — they
+# live in AWS Secrets Manager (see README.md).
+
+aws_region = "eu-west-2"
+
+# Semantic chunking sidecar (ADR-030). Flipping this deploys/destroys the
+# sidecar service AND wires/unwires the web task's CHUNKER_PROVIDER +
+# SEMCHUNK_URL in the same apply.
+enable_semchunk = false
+
+# Image tags in the ECR repositories this configuration creates.
+web_image_tag      = "latest"
+semchunk_image_tag = "latest"
+
+# HTTPS: ACM certificate for your domain. Leave empty for plain HTTP (dev only).
+certificate_arn = ""
+
+# Public URL used for auth callbacks (BETTER_AUTH_URL). Leave empty to derive
+# from the ALB DNS name (dev only — use your real domain in production).
+public_url = ""
+
+ai_default_provider = "anthropic"
+
+# Dev-environment cost knobs.
+# db_instance_class      = "db.t4g.micro"
+# db_skip_final_snapshot = true
+# web_desired_count      = 1

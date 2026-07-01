@@ -1,0 +1,30 @@
+# Production Wayfinder web image (ADR-033). Unlike the dev-only root Dockerfile
+# (next dev, AUTH_BYPASS active), this runs a real `next build` and starts with
+# NODE_ENV=production, which hard-disables the dev auth bypass.
+#
+# Build from the repo root:  docker build -f Dockerfile.web -t wayfinder-web .
+#
+# The runtime stage keeps the full workspace because `next start` runs
+# migrations first (scripts/migrate-if-configured.sh → drizzle-kit) and the
+# serverExternalPackages (onnxruntime-node, pino, …) resolve from node_modules
+# at runtime. Slimming to a standalone output is future work.
+FROM node:20-bookworm AS build
+
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
+
+WORKDIR /app
+COPY . /app
+RUN pnpm install --frozen-lockfile
+
+# Placeholder secrets: next build evaluates env validation at build time; real
+# values are injected at runtime (ECS task definition / compose env_file).
+ENV NODE_ENV=production
+RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" \
+    BETTER_AUTH_SECRET="build-time-placeholder-secret" \
+    pnpm --filter @wayfinder/web build
+
+EXPOSE 3000
+
+CMD ["pnpm", "--filter", "@wayfinder/web", "start"]
