@@ -503,6 +503,20 @@ const build = () => {
     permissionCache,
   );
 
+  // AUTH_BYPASS (experimentation, never production): collapse session resolution
+  // to the seed admin so a stale or non-admin cookie left in the browser can't
+  // strand the experimenter without permissions. The middleware still mints a
+  // real cookie for the presence guards; this guarantees the identity behind it.
+  const authBypassEnabled = () =>
+    process.env.AUTH_BYPASS === "true" && process.env.NODE_ENV !== "production";
+
+  const resolveBypassAdmin = async (): Promise<{ userId: string; isAdmin: boolean } | null> => {
+    if (!env.ADMIN_SEED_EMAIL) return null;
+    const adminResult = await users.findByEmail(env.ADMIN_SEED_EMAIL);
+    if ("error" in adminResult || !adminResult.data) return null;
+    return { userId: adminResult.data.id, isAdmin: true };
+  };
+
   return {
     env,
     db,
@@ -512,7 +526,13 @@ const build = () => {
     objectStorage,
     runtimeConfig,
     connectivityTester,
-    resolveSession: resolveCachedSession,
+    resolveSession: async (token: string) => {
+      if (authBypassEnabled()) {
+        const admin = await resolveBypassAdmin();
+        if (admin) return admin;
+      }
+      return resolveCachedSession(token);
+    },
     resolveEffectivePermissions,
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, skillParser, mcpToolPrepass },
     repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, skills, mcpServers },

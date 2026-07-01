@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { middleware } from "./middleware";
 
@@ -47,5 +47,71 @@ describe("middleware — protected routes", () => {
     const response = middleware(buildRequest("/chats", "any-token-value"));
 
     expect(response.headers.get("location")).toBeNull();
+  });
+});
+
+describe("middleware — AUTH_BYPASS (experimentation)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  const enableBypass = (nodeEnv = "development") => {
+    vi.stubEnv("AUTH_BYPASS", "true");
+    vi.stubEnv("NODE_ENV", nodeEnv);
+  };
+
+  it("redirects an uncookied request to the bypass minting endpoint", () => {
+    enableBypass();
+
+    const response = middleware(buildRequest("/chats"));
+    const location = new URL(response.headers.get("location") ?? "");
+
+    expect(response.status).toBe(307);
+    expect(location.pathname).toBe("/api/auth/bypass");
+    expect(location.searchParams.get("redirect")).toBe("/chats");
+  });
+
+  it("sends /login and /register straight to the minting endpoint so the login screen never renders", () => {
+    enableBypass();
+
+    const response = middleware(buildRequest("/login"));
+    const location = new URL(response.headers.get("location") ?? "");
+
+    expect(location.pathname).toBe("/api/auth/bypass");
+    expect(location.searchParams.get("redirect")).toBe("/chats");
+  });
+
+  it("redirects an already-cookied visitor away from /login to /chats", () => {
+    enableBypass();
+
+    const response = middleware(buildRequest("/login", "any-token-value"));
+
+    expect(new URL(response.headers.get("location") ?? "").pathname).toBe("/chats");
+  });
+
+  it("lets an already-cookied visitor through to a protected route", () => {
+    enableBypass();
+
+    const response = middleware(buildRequest("/chats", "any-token-value"));
+
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("mints a session on a direct deep link to a self-protecting route like /knowledge", () => {
+    enableBypass();
+
+    const response = middleware(buildRequest("/knowledge"));
+    const location = new URL(response.headers.get("location") ?? "");
+
+    expect(location.pathname).toBe("/api/auth/bypass");
+    expect(location.searchParams.get("redirect")).toBe("/knowledge");
+  });
+
+  it("ignores the flag under production and falls back to the normal login redirect", () => {
+    enableBypass("production");
+
+    const response = middleware(buildRequest("/chats"));
+
+    expect(new URL(response.headers.get("location") ?? "").pathname).toBe("/login");
   });
 });
