@@ -19,6 +19,7 @@ export class RegisterMcpServer {
     label: string;
     url: string;
     kind?: McpServerKind;
+    businessSelectable?: boolean;
     credentialRef?: string | null;
     createdByUserId?: string | null;
   }): Promise<Result<McpServer>> {
@@ -34,6 +35,7 @@ export class RegisterMcpServer {
       label,
       url,
       kind: input.kind,
+      businessSelectable: input.businessSelectable,
       credentialRef: input.credentialRef?.trim() ? input.credentialRef.trim() : null,
       createdByUserId: input.createdByUserId ?? null,
     });
@@ -48,6 +50,7 @@ export class UpdateMcpServer {
     label?: string;
     url?: string;
     kind?: McpServerKind;
+    businessSelectable?: boolean;
     credentialRef?: string | null;
   }): Promise<Result<McpServer>> {
     if (input.url !== undefined && !isHttpUrl(input.url.trim())) {
@@ -57,6 +60,7 @@ export class UpdateMcpServer {
       label: input.label?.trim(),
       url: input.url?.trim(),
       kind: input.kind,
+      businessSelectable: input.businessSelectable,
       credentialRef:
         input.credentialRef === undefined
           ? undefined
@@ -120,6 +124,24 @@ export class ListMcpServersWithTools {
 
   async execute(): Promise<Result<McpServerWithTools[]>> {
     return this.directory.listServersWithTools();
+  }
+}
+
+// The `context` MCP servers a caller may attach to a flow. `canSelectAll` is true
+// for a power user / admin (holds the `mcp` flag); a business user gets only the
+// servers an admin has opened up via `businessSelectable`. `actions` servers are
+// never returned here — they run through the confirmed action node, not context.
+export class ListSelectableContextMcpServers {
+  constructor(private readonly directory: IMcpServerDirectory) {}
+
+  async execute(canSelectAll: boolean): Promise<Result<McpServerWithTools[]>> {
+    const result = await this.directory.listServersWithTools();
+    if (result.error) return result;
+
+    const selectable = result.data.filter(
+      (entry) => entry.server.kind === "context" && (canSelectAll || entry.server.businessSelectable),
+    );
+    return ok(selectable);
   }
 }
 

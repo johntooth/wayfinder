@@ -349,16 +349,27 @@ export const flowRouter = router({
 
   contextMcp: router({
     // Replaces the flow-wide context MCP server allow-list. The use-case keeps only
-    // active `context`-kind servers, so passing an actions server is a no-op.
+    // active `context`-kind servers, so passing an actions server is a no-op. A
+    // caller without the `mcp` flag is a business user, so their allow-list is
+    // further restricted to business-selectable servers — resolved here, not
+    // trusted from the client.
     setServers: authenticatedProcedure
       .input(z.object({ flowId: z.string().uuid(), serverIds: z.array(z.string().uuid()) }))
       .mutation(async ({ ctx, input }) => {
         if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
           throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
         }
+        const flag = await ctx.container.useCases.isFeatureEnabledForUser.execute(
+          ctx.userId,
+          "mcp",
+          ctx.isAdmin,
+        );
+        if (flag.error) throw toTrpcError(flag.error);
+
         const result = await ctx.container.useCases.setFlowContextMcpServers.execute(
           input.flowId,
           input.serverIds,
+          !flag.data,
         );
         if (result.error) throw toTrpcError(result.error);
         syncDraft(ctx.container, input.flowId);

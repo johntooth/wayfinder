@@ -27,12 +27,30 @@ export const mcpServerRouter = router({
     return result.data;
   }),
 
+  // The `context` servers the caller may attach flow-wide. A power user / admin
+  // (holds the `mcp` flag) gets all of them; a business user gets only the
+  // servers an admin has marked business-selectable. The `mcp` flag is resolved
+  // server-side so the client can never widen its own allow-list.
+  listContextForMe: authenticatedProcedure.query(async ({ ctx }) => {
+    const flag = await ctx.container.useCases.isFeatureEnabledForUser.execute(
+      ctx.userId,
+      "mcp",
+      ctx.isAdmin,
+    );
+    if (flag.error) throw toTrpcError(flag.error);
+
+    const result = await ctx.container.useCases.listSelectableContextMcpServers.execute(flag.data);
+    if (result.error) throw toTrpcError(result.error);
+    return result.data;
+  }),
+
   register: authenticatedProcedure
     .input(
       z.object({
         label: z.string().min(1),
         url: z.string().min(1),
         kind: z.enum(["context", "actions"]).optional(),
+        businessSelectable: z.boolean().optional(),
         credentialRef: z.string().nullable().optional(),
       }),
     )
@@ -42,6 +60,7 @@ export const mcpServerRouter = router({
         label: input.label,
         url: input.url,
         kind: input.kind,
+        businessSelectable: input.businessSelectable,
         credentialRef: input.credentialRef ?? null,
         createdByUserId: ctx.userId,
       });
@@ -56,6 +75,7 @@ export const mcpServerRouter = router({
         label: z.string().min(1).optional(),
         url: z.string().min(1).optional(),
         kind: z.enum(["context", "actions"]).optional(),
+        businessSelectable: z.boolean().optional(),
         credentialRef: z.string().nullable().optional(),
       }),
     )

@@ -49,6 +49,7 @@ const actionsServer: McpServer = {
   label: "Jira",
   transport: "sse",
   kind: "actions",
+  businessSelectable: false,
   url: "https://mcp.example.com/sse",
   credentialRef: null,
   status: "active",

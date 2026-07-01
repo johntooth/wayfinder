@@ -131,6 +131,9 @@ export const admin_mcp_servers = pgTable("admin_mcp_servers", {
   // Read-only context server vs write-capable actions server (ADR-032). Existing
   // rows default to `context`, the safe read-only classification.
   kind: text("kind", { enum: ["context", "actions"] }).notNull().default("context"),
+  // Whether a business user (without the power-user `mcp` flag) may select this
+  // server into a flow. Defaults false: servers are admin-only until opened up.
+  business_selectable: boolean("business_selectable").notNull().default(false),
   url: text("url").notNull(),
   credential_ref: text("credential_ref"),
   status: text("status", { enum: ["active", "disabled"] }).notNull().default("active"),

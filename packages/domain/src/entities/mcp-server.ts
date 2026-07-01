@@ -17,6 +17,10 @@ export interface McpServer {
   readonly label: string;
   readonly transport: McpTransport;
   readonly kind: McpServerKind;
+  // Whether a plain business user (without the power-user `mcp` flag) may select
+  // this server into a flow. Independent of `kind`: an admin opens a server up
+  // explicitly. Only `context` servers are ever reachable this way.
+  readonly businessSelectable: boolean;
   readonly url: string;
   readonly credentialRef: string | null;
   readonly status: McpServerStatus;
@@ -29,6 +33,7 @@ export interface NewMcpServer {
   readonly label: string;
   readonly transport?: McpTransport;
   readonly kind?: McpServerKind;
+  readonly businessSelectable?: boolean;
   readonly url: string;
   readonly credentialRef?: string | null;
   readonly createdByUserId?: string | null;
@@ -37,6 +42,7 @@ export interface NewMcpServer {
 export interface McpServerUpdate {
   readonly label?: string;
   readonly kind?: McpServerKind;
+  readonly businessSelectable?: boolean;
   readonly url?: string;
   readonly credentialRef?: string | null;
 }

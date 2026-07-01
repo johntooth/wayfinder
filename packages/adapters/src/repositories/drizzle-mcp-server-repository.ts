@@ -19,6 +19,7 @@ const toEntity = (row: typeof admin_mcp_servers.$inferSelect): McpServer => ({
   label: row.label,
   transport: row.transport,
   kind: row.kind,
+  businessSelectable: row.business_selectable,
   url: row.url,
   credentialRef: row.credential_ref,
   status: row.status,
@@ -38,6 +39,7 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
           label: input.label,
           transport: input.transport ?? "sse",
           kind: input.kind ?? "context",
+          business_selectable: input.businessSelectable ?? false,
           url: input.url,
           credential_ref: input.credentialRef ?? null,
           created_by_user_id: input.createdByUserId ?? null,
@@ -64,6 +66,7 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
         .set({
           label: patch.label ?? current.label,
           kind: patch.kind ?? current.kind,
+          business_selectable: patch.businessSelectable ?? current.business_selectable,
           url: patch.url ?? current.url,
           credential_ref:
             patch.credentialRef === undefined ? current.credential_ref : patch.credentialRef,

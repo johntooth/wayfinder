@@ -8,6 +8,7 @@ const server = (overrides: Partial<McpServer>): McpServer => ({
   label: "S",
   transport: "sse",
   kind: "context",
+  businessSelectable: false,
   url: "https://mcp.example.com/sse",
   credentialRef: null,
   status: "active",
@@ -41,13 +42,41 @@ describe("SetFlowContextMcpServers", () => {
     ];
     const { flows, setContextMcpServers } = makeFlows();
 
-    await new SetFlowContextMcpServers(flows, makeServers(servers)).execute("flow-1", [
-      "ctx-active",
-      "ctx-disabled",
-      "actions",
-      "does-not-exist",
-    ]);
+    await new SetFlowContextMcpServers(flows, makeServers(servers)).execute(
+      "flow-1",
+      ["ctx-active", "ctx-disabled", "actions", "does-not-exist"],
+      false,
+    );
 
     expect(setContextMcpServers).toHaveBeenCalledWith("flow-1", ["ctx-active"]);
+  });
+
+  it("drops non-business-selectable servers when the caller is restricted", async () => {
+    const servers = [
+      server({ id: "ctx-open", kind: "context", businessSelectable: true }),
+      server({ id: "ctx-closed", kind: "context", businessSelectable: false }),
+    ];
+    const { flows, setContextMcpServers } = makeFlows();
+
+    await new SetFlowContextMcpServers(flows, makeServers(servers)).execute(
+      "flow-1",
+      ["ctx-open", "ctx-closed"],
+      true,
+    );
+
+    expect(setContextMcpServers).toHaveBeenCalledWith("flow-1", ["ctx-open"]);
+  });
+
+  it("keeps a non-business-selectable server when the caller is unrestricted", async () => {
+    const servers = [server({ id: "ctx-closed", kind: "context", businessSelectable: false })];
+    const { flows, setContextMcpServers } = makeFlows();
+
+    await new SetFlowContextMcpServers(flows, makeServers(servers)).execute(
+      "flow-1",
+      ["ctx-closed"],
+      false,
+    );
+
+    expect(setContextMcpServers).toHaveBeenCalledWith("flow-1", ["ctx-closed"]);
   });
 });

@@ -41,8 +41,9 @@ interface ContextDocsStripProps {
   flowId: string;
   docs: FlowContextDoc[];
   onDocsChange: (docs: FlowContextDoc[]) => void;
-  // Flow-wide context MCP (ADR-032). Hidden entirely unless the author holds the
-  // `mcp` feature flag.
+  // Flow-wide context MCP (ADR-032). True when the author holds the power-user
+  // `mcp` flag. A business user without it can still see the section when the
+  // admin has opened up at least one business-selectable context server.
   mcpEnabled?: boolean;
   contextMcpServerIds?: string[];
   onContextMcpServerIdsChange?: (ids: string[]) => void;
@@ -67,10 +68,12 @@ export function ContextDocsStrip({
     },
   });
 
-  const serversQuery = trpc.mcpServer.listWithTools.useQuery(undefined, { enabled: mcpEnabled });
-  const contextServers = (serversQuery.data ?? []).filter(
-    (entry) => entry.server.kind === "context",
-  );
+  // The server returns exactly the `context` servers this caller may select —
+  // all of them for a power user, only business-selectable ones otherwise.
+  const serversQuery = trpc.mcpServer.listContextForMe.useQuery();
+  const contextServers = serversQuery.data ?? [];
+  // A business user still gets the section when the admin has whitelisted a server.
+  const mcpVisible = mcpEnabled || contextServers.length > 0;
   const serverLabelById = new Map(contextServers.map((entry) => [entry.server.id, entry.server.label]));
   const setServersMutation = trpc.flow.contextMcp.setServers.useMutation();
 
@@ -160,7 +163,7 @@ export function ContextDocsStrip({
             );
           })}
 
-          {mcpEnabled &&
+          {mcpVisible &&
             contextMcpServerIds.map((serverId) => (
               <div
                 key={serverId}
@@ -208,7 +211,7 @@ export function ContextDocsStrip({
           >
             {uploading ? "Uploading…" : "Upload doc"}
           </Button>
-          {mcpEnabled && (
+          {mcpVisible && (
             <Button size="sm" variant="outline" onClick={() => setMcpPickerOpen(true)}>
               <Plug size={14} />
               Add MCP
@@ -219,7 +222,7 @@ export function ContextDocsStrip({
 
       {uploadError && <p className="mt-1 text-xs text-red-500">{uploadError}</p>}
 
-      {mcpEnabled && (
+      {mcpVisible && (
         <Dialog open={mcpPickerOpen} onOpenChange={(open) => !open && setMcpPickerOpen(false)}>
           <DialogContent className="max-w-md">
             <DialogHeader>

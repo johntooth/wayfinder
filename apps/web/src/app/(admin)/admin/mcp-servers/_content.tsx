@@ -23,6 +23,7 @@ export function AdminMcpServersContent() {
   const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
   const [kind, setKind] = useState<"context" | "actions">("context");
+  const [businessSelectable, setBusinessSelectable] = useState(false);
   const [credentialRef, setCredentialRef] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, string>>({});
@@ -34,6 +35,7 @@ export function AdminMcpServersContent() {
       setLabel("");
       setUrl("");
       setKind("context");
+      setBusinessSelectable(false);
       setCredentialRef("");
       setError(null);
       invalidate();
@@ -42,6 +44,7 @@ export function AdminMcpServersContent() {
   });
   const disable = trpc.mcpServer.disable.useMutation({ onSuccess: invalidate });
   const enable = trpc.mcpServer.enable.useMutation({ onSuccess: invalidate });
+  const update = trpc.mcpServer.update.useMutation({ onSuccess: invalidate });
   const test = trpc.mcpServer.test.useMutation({
     onSuccess: (data, variables) =>
       setTestResult((prev) => ({
@@ -58,6 +61,7 @@ export function AdminMcpServersContent() {
       label,
       url,
       kind,
+      businessSelectable: kind === "context" ? businessSelectable : false,
       credentialRef: credentialRef.trim() ? credentialRef.trim() : null,
     });
   };
@@ -117,6 +121,21 @@ export function AdminMcpServersContent() {
                 />
               </div>
             </div>
+            {kind === "context" ? (
+              <label className="flex items-start gap-2 text-sm text-[#1a1814]">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={businessSelectable}
+                  onChange={(event) => setBusinessSelectable(event.target.checked)}
+                />
+                <span>
+                  Business-user selectable — allow flow authors without the power-user MCP
+                  permission to add this server as flow-wide context. Leave off for admin-only
+                  servers.
+                </span>
+              </label>
+            ) : null}
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
             <Button onClick={submit} disabled={register.isPending || !label.trim() || !url.trim()}>
               {register.isPending ? "Registering…" : "Register server"}
@@ -137,6 +156,7 @@ export function AdminMcpServersContent() {
                   <TableRow>
                     <TableHead>Label</TableHead>
                     <TableHead>Type</TableHead>
+                    <TableHead>Selectable</TableHead>
                     <TableHead>URL</TableHead>
                     <TableHead>Credential</TableHead>
                     <TableHead>Status</TableHead>
@@ -151,6 +171,29 @@ export function AdminMcpServersContent() {
                         <Badge variant={server.kind === "actions" ? "default" : "outline"}>
                           {server.kind === "actions" ? "Actions" : "Context"}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {server.kind === "context" ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            aria-pressed={server.businessSelectable}
+                            aria-label={`${
+                              server.businessSelectable ? "Disable" : "Enable"
+                            } business-user selection for ${server.label}`}
+                            onClick={() =>
+                              update.mutate({
+                                id: server.id,
+                                businessSelectable: !server.businessSelectable,
+                              })
+                            }
+                            disabled={update.isPending}
+                          >
+                            {server.businessSelectable ? "Business ✓" : "Admin only"}
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="font-mono text-xs">{server.url}</TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground">

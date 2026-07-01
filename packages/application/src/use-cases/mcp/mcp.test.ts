@@ -1,11 +1,13 @@
 import { domainError, err, ok } from "@rbrasier/domain";
 import type {
+  IMcpServerDirectory,
   IMcpClient,
   IMcpServerRepository,
   ListMcpServersInput,
   McpServer,
   McpServerStatus,
   McpServerUpdate,
+  McpServerWithTools,
   McpTool,
   McpToolCallOutput,
   NewMcpServer,
@@ -16,6 +18,7 @@ import {
   DisableMcpServer,
   EnableMcpServer,
   ListMcpServers,
+  ListSelectableContextMcpServers,
   RegisterMcpServer,
   ResolveStepTools,
   TestMcpServer,
@@ -33,6 +36,8 @@ class InMemoryMcpServerRepository implements IMcpServerRepository {
       id: `mcp-${this.sequence}`,
       label: input.label,
       transport: input.transport ?? "sse",
+      kind: input.kind ?? "context",
+      businessSelectable: input.businessSelectable ?? false,
       url: input.url,
       credentialRef: input.credentialRef ?? null,
       status: "active",
@@ -51,6 +56,8 @@ class InMemoryMcpServerRepository implements IMcpServerRepository {
     const updated: McpServer = {
       ...current,
       label: patch.label ?? current.label,
+      kind: patch.kind ?? current.kind,
+      businessSelectable: patch.businessSelectable ?? current.businessSelectable,
       url: patch.url ?? current.url,
       credentialRef:
         patch.credentialRef === undefined ? current.credentialRef : patch.credentialRef,
@@ -128,6 +135,21 @@ describe("RegisterMcpServer", () => {
     });
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
+
+  it("defaults businessSelectable to false and records it when set", async () => {
+    const closed = await new RegisterMcpServer(repository).execute({
+      label: "Closed",
+      url: "https://a.example/sse",
+    });
+    expect(closed.data?.businessSelectable).toBe(false);
+
+    const open = await new RegisterMcpServer(repository).execute({
+      label: "Open",
+      url: "https://b.example/sse",
+      businessSelectable: true,
+    });
+    expect(open.data?.businessSelectable).toBe(true);
+  });
 });
 
 describe("UpdateMcpServer", () => {
@@ -158,6 +180,20 @@ describe("UpdateMcpServer", () => {
     expect(result.error).toBeUndefined();
     expect(result.data?.label).toBe("New");
     expect(result.data?.url).toBe("https://new.example/sse");
+  });
+
+  it("toggles businessSelectable without touching other fields", async () => {
+    const repository = new InMemoryMcpServerRepository();
+    const created = await new RegisterMcpServer(repository).execute({
+      label: "S",
+      url: "https://s.example/sse",
+    });
+    const result = await new UpdateMcpServer(repository).execute({
+      id: created.data!.id,
+      businessSelectable: true,
+    });
+    expect(result.data?.businessSelectable).toBe(true);
+    expect(result.data?.label).toBe("S");
   });
 });
 
@@ -262,6 +298,59 @@ describe("ResolveStepTools", () => {
     const result = await new ResolveStepTools(repository).execute([
       { serverId: "x", toolName: "search" },
     ]);
+    expect(result.error?.code).toBe("INFRA_FAILURE");
+  });
+});
+
+describe("ListSelectableContextMcpServers", () => {
+  const entry = (overrides: Partial<McpServer>): McpServerWithTools => ({
+    server: {
+      id: "s",
+      label: "S",
+      transport: "sse",
+      kind: "context",
+      businessSelectable: false,
+      url: "https://mcp.example.com/sse",
+      credentialRef: null,
+      status: "active",
+      createdByUserId: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    },
+    tools: [],
+  });
+
+  const directoryOf = (entries: McpServerWithTools[]): IMcpServerDirectory => ({
+    listServersWithTools: async () => ok(entries),
+  });
+
+  const entries = [
+    entry({ id: "ctx-open", kind: "context", businessSelectable: true }),
+    entry({ id: "ctx-closed", kind: "context", businessSelectable: false }),
+    entry({ id: "actions-open", kind: "actions", businessSelectable: true }),
+  ];
+
+  it("returns all context servers when the caller may select all", async () => {
+    const result = await new ListSelectableContextMcpServers(directoryOf(entries)).execute(true);
+    expect(result.data?.map((item) => item.server.id)).toEqual(["ctx-open", "ctx-closed"]);
+  });
+
+  it("returns only business-selectable context servers otherwise", async () => {
+    const result = await new ListSelectableContextMcpServers(directoryOf(entries)).execute(false);
+    expect(result.data?.map((item) => item.server.id)).toEqual(["ctx-open"]);
+  });
+
+  it("never returns an actions server, even one marked selectable", async () => {
+    const result = await new ListSelectableContextMcpServers(directoryOf(entries)).execute(false);
+    expect(result.data?.some((item) => item.server.kind === "actions")).toBe(false);
+  });
+
+  it("propagates a directory error", async () => {
+    const failing: IMcpServerDirectory = {
+      listServersWithTools: async () => err(domainError("INFRA_FAILURE", "unreachable")),
+    };
+    const result = await new ListSelectableContextMcpServers(failing).execute(true);
     expect(result.error?.code).toBe("INFRA_FAILURE");
   });
 });
