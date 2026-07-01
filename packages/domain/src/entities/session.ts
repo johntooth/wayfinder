@@ -2,12 +2,17 @@
 // when the originator chooses "Close request" (no route-back).
 export type SessionStatus = "active" | "complete" | "abandoned" | "cancelled";
 
-// In-flight auto-node execution awaiting an n8n callback, keyed by correlationId
-// on Session.pendingExecutions. sentAt makes a stuck execution observable.
+// In-flight node execution keyed by correlationId on Session.pendingExecutions.
+// `pending` is an auto-node call awaiting an n8n callback. `awaiting_confirmation`
+// is an MCP action node whose arguments have been resolved and are parked for the
+// operator to confirm before the tool is actually called (ADR-032); `args` holds
+// the resolved tool arguments so what the operator previews is exactly what runs.
+// sentAt makes a stuck execution observable.
 export interface PendingExecution {
   nodeId: string;
-  status: "pending";
+  status: "pending" | "awaiting_confirmation";
   sentAt: string;
+  args?: Record<string, unknown>;
 }
 
 export type PendingExecutions = Record<string, PendingExecution>;

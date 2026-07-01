@@ -1,0 +1,1 @@
+ALTER TABLE "admin_mcp_servers" ADD COLUMN "business_selectable" boolean DEFAULT false NOT NULL;

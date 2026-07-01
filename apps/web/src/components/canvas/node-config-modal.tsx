@@ -1,7 +1,7 @@
 "use client";
 
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
-import { Check, Copy, Eye, HelpCircle, Pencil, X } from "lucide-react";
+import { Check, Copy, Eye, HelpCircle, Pencil, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { deriveFieldKey } from "@rbrasier/domain";
-import type { FieldValueSource, PriorStepField, TemplateField } from "@rbrasier/domain";
+import type { FieldValueSource, McpToolRef, PriorStepField, TemplateField } from "@rbrasier/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FieldGroupLabel } from "@/components/ui/field-group-label";
@@ -27,6 +27,7 @@ import {
   ReadOnlyFieldList,
 } from "./field-value-selector";
 import { ScheduleSentenceBuilder } from "./schedule-sentence-builder";
+import { SkillPickerModal } from "./skill-picker-modal";
 import { N8nExtractionInfoDialog } from "./n8n-extraction-info-dialog";
 import type {
   ScheduleModifier,
@@ -57,7 +58,7 @@ function isAdvancedField(key: string): boolean {
   return [...ADVANCED_REQUEST_FIELD_KEYS].some((prefix) => key.startsWith(`${prefix}.`));
 }
 
-export type NodeConfigType = "conversational" | "auto" | "scheduled" | "approval";
+export type NodeConfigType = "conversational" | "auto" | "scheduled" | "approval" | "mcp";
 
 export type ApproverSourceMode =
   | "first_level_supervisor"
@@ -85,10 +86,16 @@ export interface NodeConfigValues {
   documentTemplateContent?: string | null;
   allowManualEdit: boolean;
   requireConfirmation: boolean;
+  // Ids of library skills (app_skills) attached to this conversational step.
+  skillRefs: string[];
+  // MCP tools this conversational step may call mid-conversation (ADR-032).
+  allowedMcpToolRefs: McpToolRef[];
   instruction: string;
   executor: "n8n" | "mock";
   workflowId: string | null;
   webhookUrl: string;
+  mcpServerId: string;
+  mcpToolName: string;
   requestFields: TemplateField[];
   requestFieldValues: Record<string, FieldValueSource>;
   responseFields: TemplateField[];
@@ -114,6 +121,10 @@ interface NodeConfigModalProps {
   onDelete?: () => void;
   onClose: () => void;
   isSaving?: boolean;
+  // Power-user feature gates (ADR-022). Skills attach-to-step and the MCP action
+  // node's server picker are hidden unless the caller is entitled.
+  skillsEnabled?: boolean;
+  mcpEnabled?: boolean;
   // Fields declared by steps earlier in the flow, offered as value sources.
   priorStepFields?: PriorStepField[];
   onUploadTemplate?: (file: File, currentValues: NodeConfigValues) => Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string; code?: string }>;
@@ -132,10 +143,14 @@ const DEFAULT_VALUES: NodeConfigValues = {
   documentTemplateContent: null,
   allowManualEdit: true,
   requireConfirmation: false,
+  skillRefs: [],
+  allowedMcpToolRefs: [],
   instruction: "",
   executor: "n8n",
   workflowId: null,
   webhookUrl: "",
+  mcpServerId: "",
+  mcpToolName: "",
   requestFields: [],
   requestFieldValues: {},
   responseFields: [],
@@ -195,6 +210,8 @@ export function NodeConfigModal({
   onDelete,
   onClose,
   isSaving = false,
+  skillsEnabled = false,
+  mcpEnabled = false,
   priorStepFields = [],
   onUploadTemplate,
 }: NodeConfigModalProps) {
@@ -224,6 +241,7 @@ export function NodeConfigModal({
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [infoVariant, setInfoVariant] = useState<"inputs" | "outputs">("inputs");
   const [infoOpen, setInfoOpen] = useState(false);
+  const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const set = <K extends keyof NodeConfigValues>(key: K, value: NodeConfigValues[K]) =>
@@ -250,10 +268,32 @@ export function NodeConfigModal({
   const isScheduled = values.type === "scheduled";
   const isApproval = values.type === "approval";
   const isConversational = values.type === "conversational";
+  const isMcp = values.type === "mcp";
   const requestParsed = parseFieldLines(requestLines);
   const responseParsed = parseFieldLines(responseLines);
 
   const usesN8n = isAuto && values.executor === "n8n";
+  // The action node's server picker only offers write-capable `actions` servers;
+  // `context` servers are attached flow-wide, not per node (ADR-032).
+  const mcpServersQuery = trpc.mcpServer.listWithTools.useQuery(undefined, {
+    enabled: open && isMcp && mcpEnabled,
+  });
+  const actionServers = (mcpServersQuery.data ?? []).filter(
+    (entry) => entry.server.kind === "actions",
+  );
+  const selectedMcpServer = actionServers.find((entry) => entry.server.id === values.mcpServerId) ?? null;
+
+  // Selected skills are resolved to names for the chips beside the AI instructions.
+  const skillsQuery = trpc.skill.list.useQuery(undefined, {
+    enabled: open && isConversational && skillsEnabled,
+  });
+  const skillsById = new Map((skillsQuery.data ?? []).map((skill) => [skill.id, skill]));
+  const removeSkill = (id: string) =>
+    set(
+      "skillRefs",
+      values.skillRefs.filter((existing) => existing !== id),
+    );
+
   const workflowsQuery = trpc.n8n.listWorkflows.useQuery(undefined, { enabled: open && usesN8n });
   const workflows = workflowsQuery.data ?? [];
   const selectedWorkflow = workflows.find((workflow) => workflow.id === values.workflowId) ?? null;
@@ -344,6 +384,8 @@ export function NodeConfigModal({
         (values.scheduleModifier === "on" || Number(values.scheduleNumber) > 0)));
 
   const approvalValid = Boolean(values.name.trim()) && Boolean(values.approverSource);
+  const mcpValid =
+    Boolean(values.name.trim()) && Boolean(values.mcpServerId) && Boolean(values.mcpToolName);
 
   const canSave = isAuto
     ? autoValid
@@ -351,7 +393,9 @@ export function NodeConfigModal({
       ? scheduledValid
       : isApproval
         ? approvalValid
-        : conversationalValid;
+        : isMcp
+          ? mcpValid
+          : conversationalValid;
 
   const saveN8nAuto = (): NodeConfigValues => {
     const customTemplateFields: TemplateField[] = customFields
@@ -396,10 +440,27 @@ export function NodeConfigModal({
     };
   };
 
+  const saveMcp = (): NodeConfigValues => {
+    const keys = new Set(requestParsed.fields.map((field) => field.key));
+    const prunedValues = Object.fromEntries(
+      Object.entries(values.requestFieldValues).filter(([key]) => keys.has(key)),
+    );
+    return {
+      ...values,
+      requestFields: requestParsed.fields,
+      requestFieldValues: prunedValues,
+      responseFields: responseParsed.fields,
+    };
+  };
+
   const handleSave = () => {
     if (!canSave) return;
     if (isAuto) {
       onSave(usesN8n ? saveN8nAuto() : saveMockAuto());
+      return;
+    }
+    if (isMcp) {
+      onSave(saveMcp());
       return;
     }
     onSave(values);
@@ -564,8 +625,45 @@ export function NodeConfigModal({
 
               {isConversational && (
               <>
-              <div className="space-y-1">
-                <Label htmlFor="ai-instruction">Instructions for the AI</Label>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="ai-instruction">Instructions for the AI</Label>
+                  {skillsEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => setSkillPickerOpen(true)}
+                      className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+                      aria-label="Add skills"
+                    >
+                      <Sparkles size={13} />
+                      {values.skillRefs.length > 0 ? `Skills · ${values.skillRefs.length}` : "Add skills"}
+                    </button>
+                  )}
+                </div>
+                {skillsEnabled && values.skillRefs.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {values.skillRefs.map((id) => {
+                      const skill = skillsById.get(id);
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1 rounded-full border border-[#c5d0f7] bg-[#eef1fc] px-2 py-0.5 text-[11px] text-[#3a5fd9]"
+                        >
+                          <Sparkles size={10} />
+                          {skill?.name ?? "Skill"}
+                          <button
+                            type="button"
+                            aria-label={`Remove ${skill?.name ?? "skill"}`}
+                            className="text-[#3a5fd9] hover:text-[#25439c]"
+                            onClick={() => removeSkill(id)}
+                          >
+                            <X size={11} />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
                 <Textarea
                   id="ai-instruction"
                   required
@@ -1071,6 +1169,124 @@ export function NodeConfigModal({
               </>
               )}
 
+              {isMcp && (
+              <>
+              <div className="space-y-1">
+                <Label htmlFor="mcp-server">MCP server</Label>
+                <select
+                  id="mcp-server"
+                  className={SCHEDULE_SELECT_CLASS}
+                  value={values.mcpServerId}
+                  onChange={(e) => {
+                    set("mcpServerId", e.target.value);
+                    set("mcpToolName", "");
+                  }}
+                >
+                  <option value="">Select a server…</option>
+                  {actionServers.map((entry) => (
+                    <option key={entry.server.id} value={entry.server.id}>
+                      {entry.server.label}
+                    </option>
+                  ))}
+                </select>
+                {!mcpServersQuery.isLoading && actionServers.length === 0 && (
+                  <p className="text-[12px] text-[#918d87]">
+                    No active action (write) MCP servers. Register one on the MCP Servers page and
+                    set its type to Actions.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="mcp-tool">Tool</Label>
+                {selectedMcpServer && selectedMcpServer.tools.length === 0 ? (
+                  <Input
+                    id="mcp-tool"
+                    value={values.mcpToolName}
+                    onChange={(e) => set("mcpToolName", e.target.value)}
+                    placeholder="Type the tool name (server exposed none / unreachable)"
+                  />
+                ) : (
+                  <select
+                    id="mcp-tool"
+                    className={SCHEDULE_SELECT_CLASS}
+                    value={values.mcpToolName}
+                    disabled={!selectedMcpServer}
+                    onChange={(e) => set("mcpToolName", e.target.value)}
+                  >
+                    <option value="">Select a tool…</option>
+                    {selectedMcpServer?.tools.map((tool) => (
+                      <option key={tool.name} value={tool.name}>
+                        {tool.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="mcp-instruction">Instructions for resolving inputs</Label>
+                <Textarea
+                  id="mcp-instruction"
+                  rows={3}
+                  value={values.instruction}
+                  onChange={(e) => set("instruction", e.target.value)}
+                  placeholder="Describe how to fill the tool's request fields from the conversation…"
+                />
+              </div>
+
+              <TemplateFieldEditor
+                label="Request fields (tool arguments)"
+                helpText="Fields sent as the tool's arguments. Use the same Label (type) syntax as document templates."
+                lines={requestLines}
+                onChange={setRequestLines}
+              />
+              {requestParsed.fields.length > 0 && (
+                <div className="space-y-2">
+                  <FieldGroupLabel id="ncm-mcp-field-values">Field values</FieldGroupLabel>
+                  <FieldValueList
+                    fields={requestParsed.fields}
+                    values={values.requestFieldValues}
+                    onChange={setFieldValue}
+                    priorStepFields={priorStepFields}
+                  />
+                </div>
+              )}
+              <TemplateFieldEditor
+                label="Response fields (use a field with key “output” to capture the result)"
+                helpText="The tool result is provided under the key output. Add a response field named Output to store it."
+                lines={responseLines}
+                onChange={setResponseLines}
+              />
+
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-0.5">
+                  <Label htmlFor="mcp-require-confirmation">Confirm before running (human in the loop)</Label>
+                  <p className="text-[12px] text-[#6d6a65]">
+                    Show the operator the resolved tool arguments and wait for them to click Proceed
+                    before this write action runs. Recommended for anything that changes data.
+                  </p>
+                </div>
+                <button
+                  id="mcp-require-confirmation"
+                  type="button"
+                  role="switch"
+                  aria-checked={values.requireConfirmation}
+                  onClick={() => set("requireConfirmation", !values.requireConfirmation)}
+                  className={`relative mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                    values.requireConfirmation ? "bg-[#1f8a4c]" : "bg-[#d7d3cc]"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      values.requireConfirmation ? "translate-x-4" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+              </>
+              )}
+
               <div className="flex items-start justify-between gap-3 border-t border-[#ece9e3] pt-3">
                 <div className="space-y-0.5">
                   <Label htmlFor="notify-on-complete">Notify chat participants when step complete</Label>
@@ -1129,6 +1345,12 @@ export function NodeConfigModal({
         open={infoOpen}
         variant={infoVariant}
         onClose={() => setInfoOpen(false)}
+      />
+      <SkillPickerModal
+        open={skillPickerOpen}
+        selectedIds={values.skillRefs}
+        onChange={(ids) => set("skillRefs", ids)}
+        onClose={() => setSkillPickerOpen(false)}
       />
     </Dialog>
   );
