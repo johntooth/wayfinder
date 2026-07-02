@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Stamp a Wayfinder environment (ADR-034): one command per environment.
 #
-#   new-environment.sh <name> [--enable-semchunk] [--plan]
+#   new-environment.sh <name> [--enable-semchunk] [--plan] [--via-tunnel [port]]
 #                             [--web-tag <tag>] [--semchunk-tag <tag>]
+#
+# --via-tunnel stamps through the SSM database tunnel (start it first:
+# scripts/db-tunnel.sh). Default tunnel port 5433.
 #
 # Prerequisites (see ../README.md): core stack applied, backend configured in
 # ../environments/versions.tf, terraform.tfvars present in ../environments,
@@ -31,10 +34,18 @@ ENABLE_SEMCHUNK="false"
 ACTION="apply"
 WEB_TAG=""
 SEMCHUNK_TAG=""
+TUNNEL_PORT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --enable-semchunk) ENABLE_SEMCHUNK="true" ;;
     --plan) ACTION="plan" ;;
+    --via-tunnel)
+      TUNNEL_PORT="5433"
+      if [ $# -gt 1 ] && [[ "$2" =~ ^[0-9]+$ ]]; then
+        TUNNEL_PORT="$2"
+        shift
+      fi
+      ;;
     --web-tag)
       WEB_TAG="${2:?--web-tag needs a value}"
       shift
@@ -60,6 +71,14 @@ command -v terraform > /dev/null || {
 VAR_ARGS=(-var "env_name=$ENV_NAME" -var "enable_semchunk=$ENABLE_SEMCHUNK")
 [ -n "$WEB_TAG" ] && VAR_ARGS+=(-var "web_image_tag=$WEB_TAG")
 [ -n "$SEMCHUNK_TAG" ] && VAR_ARGS+=(-var "semchunk_image_tag=$SEMCHUNK_TAG")
+if [ -n "$TUNNEL_PORT" ]; then
+  if ! (exec 3<> "/dev/tcp/127.0.0.1/$TUNNEL_PORT") 2> /dev/null; then
+    echo "error: nothing listening on localhost:$TUNNEL_PORT — start the tunnel first:" >&2
+    echo "       $SCRIPT_DIR/db-tunnel.sh $TUNNEL_PORT" >&2
+    exit 1
+  fi
+  VAR_ARGS+=(-var "database_host_override=127.0.0.1" -var "database_port_override=$TUNNEL_PORT")
+fi
 
 cd "$ENVIRONMENTS_DIR"
 terraform workspace select -or-create "$ENV_NAME"

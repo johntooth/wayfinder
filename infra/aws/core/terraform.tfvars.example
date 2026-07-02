@@ -1,11 +1,21 @@
-# Copy to terraform.tfvars and adjust. Secrets never go in this file.
+# Copy to terraform.tfvars and adjust — or let ../scripts/bootstrap.sh write
+# this file for you. Secrets never go in this file.
 
 aws_region = "eu-west-2"
 
-# Environments are exposed as https://<env>.<base_domain>. The certificate
-# must cover *.<base_domain> (ACM, in the same region as the ALB).
-base_domain     = "wayfinder.example.com"
-certificate_arn = "arn:aws:acm:eu-west-2:123456789012:certificate/..."
+# Environments are exposed as https://<env>.<base_domain>.
+base_domain = "wayfinder.example.com"
+
+# Simplest path: give the hosted zone for base_domain and core issues the
+# wildcard certificate itself (and environment stamps get automatic DNS).
+route53_zone_id = "Z0123456789ABC"
+
+# Alternative: bring your own ACM wildcard cert (same region as the ALB) if
+# DNS lives outside Route53. An explicit ARN always wins over auto-issuance.
+# certificate_arn = "arn:aws:acm:eu-west-2:123456789012:certificate/..."
+
+# SSM bastion for environment stamping via scripts/db-tunnel.sh (~$4/mo).
+# enable_bastion = true
 
 # Shared database server — size for the number of environments you expect.
 # db_instance_class      = "db.t4g.small"

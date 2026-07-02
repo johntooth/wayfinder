@@ -5,7 +5,8 @@
 aws_region   = "eu-west-2"
 state_bucket = "<your-terraform-state-bucket>"
 
-# Optional: hosted zone for automatic <env>.<base_domain> DNS records.
+# DNS records for <env>.<base_domain>: inherited from core's route53_zone_id
+# by default. Uncomment to override; "" disables DNS for these stamps.
 # route53_zone_id = "Z0123456789ABC"
 
 # Defaults every stamped environment inherits unless overridden per apply.

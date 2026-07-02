@@ -66,3 +66,13 @@ output "database_security_group_id" {
 output "database_master_secret_arn" {
   value = module.database_server.master_secret_arn
 }
+
+output "route53_zone_id" {
+  description = "Inherited by environment stamps for their DNS records; empty means none"
+  value       = var.route53_zone_id
+}
+
+output "bastion_instance_id" {
+  description = "Target for scripts/db-tunnel.sh; null when the bastion is disabled"
+  value       = var.enable_bastion ? aws_instance.bastion[0].id : null
+}

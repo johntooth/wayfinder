@@ -42,8 +42,10 @@ provider "aws" {
 # terraform runner therefore needs a network path to RDS at plan/apply time —
 # see ../README.md for the three supported options (ADR-034 Decision 2).
 provider "postgresql" {
-  host            = local.database_master.host
-  port            = local.database_master.port
+  # Overrides point the provider at the SSM tunnel (--via-tunnel); the stamped
+  # DATABASE_URL always carries the real in-VPC host.
+  host            = var.database_host_override != "" ? var.database_host_override : local.database_master.host
+  port            = var.database_port_override != 0 ? var.database_port_override : local.database_master.port
   username        = local.database_master.username
   password        = local.database_master.password
   database        = "postgres"

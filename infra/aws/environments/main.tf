@@ -5,6 +5,9 @@ locals {
 
   core            = data.terraform_remote_state.core.outputs
   database_master = jsondecode(data.aws_secretsmanager_secret_version.database_master.secret_string)
+
+  # null inherits core's zone; "" explicitly skips DNS for this environment.
+  route53_zone_id = var.route53_zone_id == null ? local.core.route53_zone_id : var.route53_zone_id
 }
 
 data "terraform_remote_state" "core" {
@@ -38,7 +41,7 @@ module "environment" {
   alb_zone_id           = local.core.alb_zone_id
   https_listener_arn    = local.core.https_listener_arn
   base_domain           = local.core.base_domain
-  route53_zone_id       = var.route53_zone_id
+  route53_zone_id       = local.route53_zone_id
 
   database_host              = local.core.database_host
   database_port              = local.core.database_port

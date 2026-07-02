@@ -18,11 +18,31 @@ application-visible (database, S3 bucket, secrets, IAM, services, hostname).
         └─────────────────────────┘      └──────────────────────────────┘
 ```
 
-Requirements: a domain (`base_domain`) with a wildcard ACM certificate — every environment is
-`https://<env>.<base_domain>`; there is deliberately no HTTP/path fallback (ADR-034 Decision 3).
-Langfuse is not provisioned; point `LANGFUSE_*` at Langfuse Cloud or your own instance.
+Requirements: a domain (`base_domain`) — every environment is `https://<env>.<base_domain>`;
+there is deliberately no HTTP/path fallback (ADR-034 Decision 3). Langfuse is not provisioned;
+point `LANGFUSE_*` at Langfuse Cloud or your own instance.
 
-## 1. One-time bootstrap
+## Quick start (three commands)
+
+With the domain's hosted zone in Route53, `aws`/`terraform`/`docker` installed, and AWS
+credentials configured:
+
+```bash
+./scripts/bootstrap.sh --region eu-west-2 --state-bucket my-tf-state \
+  --base-domain wayfinder.example.com --route53-zone-id Z0123456789ABC
+
+./scripts/db-tunnel.sh &                       # SSM tunnel for stamping
+./scripts/new-environment.sh dev --via-tunnel  # first environment
+```
+
+Bootstrap is idempotent (re-run it after any failure) and does everything in §1–2 below:
+state bucket, config files, core apply — **including issuing the wildcard ACM certificate via
+the hosted zone** — and building/pushing both images. If DNS lives outside Route53, pass
+`--certificate-arn` with a pre-issued `*.<base_domain>` cert instead of `--route53-zone-id`.
+Each stamp prints its URL plus the two follow-ups (AI-key secret, pgvector). The sections
+below are the manual path and the reference detail.
+
+## 1. One-time bootstrap (manual path)
 
 State bucket (Terraform cannot create its own backend):
 
@@ -38,10 +58,16 @@ cp backend.hcl.example backend.hcl   # fill in bucket + region (gitignored)
 
 ```bash
 cd core
-cp terraform.tfvars.example terraform.tfvars   # base_domain, certificate_arn, region
+cp terraform.tfvars.example terraform.tfvars   # region, base_domain, route53_zone_id or certificate_arn
 terraform init -backend-config=../backend.hcl
 terraform apply
 ```
+
+Certificate: set `route53_zone_id` and core issues + DNS-validates `*.<base_domain>` itself
+(issuance hangs if the zone doesn't actually serve the domain's NS records); or set
+`certificate_arn` to bring your own — an explicit ARN always wins. Core also provisions an
+SSM bastion for environment stamping (`enable_bastion = true` by default, ≈ $4/mo — see
+"Database connectivity" below).
 
 Then build and push the shared images (from the repo root):
 
@@ -88,15 +114,25 @@ App migrations run automatically on container start.
 
 Environment stamps create Postgres roles/databases via the `cyrilgdn/postgresql` provider, so
 **the machine running terraform needs a network path to the shared RDS server** at plan/apply
-time (ADR-034 Decision 2). Three supported options:
+time (ADR-034 Decision 2).
 
-- run terraform from inside the VPC (bastion/CI runner in a private subnet);
-- SSM port-forward through any instance in the VPC:
-  `aws ssm start-session --target <instance> --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters host=<rds-address>,portNumber=5432,localPortNumber=5432`;
-- temporarily add your IP to the database security group (remove it afterwards).
+**Default path — the core bastion (zero setup):**
 
-Whatever the path, add an ingress rule on the core database security group for the runner —
-the stamps only open access for their own web tasks.
+```bash
+./scripts/db-tunnel.sh &                            # SSM port-forward, local port 5433
+./scripts/new-environment.sh tenant-a --via-tunnel  # provider goes via the tunnel
+./scripts/destroy-environment.sh tenant-a --via-tunnel
+```
+
+`--via-tunnel` only redirects the terraform provider; the environment's stored `DATABASE_URL`
+keeps the real in-VPC host. Needs the AWS Session Manager plugin
+(`aws ssm start-session` must work). The bastion is SSM-only — no key pair, no inbound ports,
+IMDSv2 — and `enable_bastion = false` in core removes it.
+
+Alternatives if the bastion is disabled: run terraform from inside the VPC (CI runner in a
+private subnet), or temporarily add your IP to the database security group (remove it
+afterwards). Either way the runner needs its own ingress rule on the core database security
+group — stamps only open access for their own web tasks (and the bastion).
 
 ### From the GitHub Actions UI
 
@@ -129,7 +165,8 @@ destroyed with `terraform -chdir=core destroy` only once no environments remain.
 ## Cost notes
 
 Core is the floor: single NAT gateway ≈ $32/mo + shared RDS `db.t4g.small` ≈ $25/mo + ALB
-≈ $17/mo ≈ **$75/month** before any environment. Each environment adds one 1 vCPU/2 GB Fargate
+≈ $17/mo + SSM bastion (t4g.nano) ≈ $4/mo ≈ **$78/month** before any environment
+(`enable_bastion = false` shaves the last item). Each environment adds one 1 vCPU/2 GB Fargate
 task ≈ $30/mo (+ ≈ $9/mo with the semchunk sidecar at 0.25 vCPU/512 MB) plus cents for
 S3/Secrets. Size `db_instance_class` for the number of environments — the shared server is a
 deliberate noisy-neighbour trade-off (ADR-034); fully isolated stamping is future work.

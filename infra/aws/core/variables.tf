@@ -21,8 +21,21 @@ variable "base_domain" {
 }
 
 variable "certificate_arn" {
-  description = "ACM certificate covering *.<base_domain>"
+  description = "ACM certificate covering *.<base_domain>; empty means core issues one via route53_zone_id (ADR-035)"
   type        = string
+  default     = ""
+}
+
+variable "route53_zone_id" {
+  description = "Hosted zone for <base_domain> — enables certificate auto-issuance and is inherited by environment stamps for DNS records; empty disables both"
+  type        = string
+  default     = ""
+}
+
+variable "enable_bastion" {
+  description = "Provision the SSM bastion used by scripts/db-tunnel.sh for environment stamping (ADR-035)"
+  type        = bool
+  default     = true
 }
 
 variable "db_instance_class" {

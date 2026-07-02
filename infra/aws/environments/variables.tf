@@ -27,9 +27,25 @@ variable "env_name" {
 }
 
 variable "route53_zone_id" {
-  description = "Optional hosted zone for <env>.<base_domain> records; empty skips DNS"
+  description = "Hosted zone for <env>.<base_domain> records; null inherits core's zone, empty string skips DNS"
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+# Provider-only overrides for stamping through the SSM tunnel
+# (scripts/db-tunnel.sh + --via-tunnel). The environment's stored DATABASE_URL
+# always keeps the real in-VPC RDS host.
+variable "database_host_override" {
+  description = "Host the postgresql provider connects to; empty uses the RDS address"
   type        = string
   default     = ""
+}
+
+variable "database_port_override" {
+  description = "Port the postgresql provider connects to; 0 uses the RDS port"
+  type        = number
+  default     = 0
 }
 
 variable "web_image_tag" {
