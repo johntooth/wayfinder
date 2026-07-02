@@ -1,5 +1,6 @@
 import { err, ok } from "@rbrasier/domain";
 import type {
+  IChunker,
   IDocumentChunkRepository,
   IDocumentIndexer,
   IEmbeddingsProvider,
@@ -7,7 +8,6 @@ import type {
   NewDocumentChunk,
   Result,
 } from "@rbrasier/domain";
-import { chunkText } from "./text-chunker";
 
 export type { IndexDocumentInput };
 
@@ -18,15 +18,19 @@ export class DocumentIndexingService implements IDocumentIndexer {
   constructor(
     private readonly embeddings: IEmbeddingsProvider,
     private readonly chunks: IDocumentChunkRepository,
+    private readonly chunker: IChunker,
   ) {}
 
   async indexDocument(input: IndexDocumentInput): Promise<Result<{ chunkCount: number }>> {
     const deleteResult = await this.chunks.deleteByStoragePath(input.storagePath);
     if (deleteResult.error) return err(deleteResult.error);
 
-    const pieces = chunkText(input.text, {
+    const chunkResult = await this.chunker.chunk(input.text, {
       stripPlaceholders: input.sourceType === "template",
     });
+    if (chunkResult.error) return err(chunkResult.error);
+
+    const pieces = chunkResult.data;
     if (pieces.length === 0) return ok({ chunkCount: 0 });
 
     const newChunks: NewDocumentChunk[] = [];

@@ -38,6 +38,7 @@ export * from "./chunk-curation-repository";
 export * from "./answer-feedback-repository";
 export * from "./hybrid-retriever";
 export * from "./document-indexer";
+export * from "./chunker";
 export * from "./reindex-source-repository";
 export * from "./clock";
 export * from "./schedule-repository";

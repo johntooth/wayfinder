@@ -250,6 +250,33 @@ else
   fail "web accessibility — jsx-a11y violations found (see output above)"
 fi
 
+# ── 16. terraform formatting + validity (only when terraform is installed) ───
+# CI has no AWS tooling, so this is best-effort: present binary → enforce.
+section "16. infra/aws terraform fmt + validate"
+if ! command -v terraform &>/dev/null; then
+  skip "terraform not installed — run 'terraform fmt -check -recursive' + 'terraform validate' in infra/aws before shipping infra changes"
+elif [ ! -d infra/aws ]; then
+  skip "infra/aws not present"
+else
+  if terraform -chdir=infra/aws fmt -check -recursive > /dev/null; then
+    pass "terraform fmt"
+  else
+    fail "terraform fmt — run 'terraform -chdir=infra/aws fmt -recursive'"
+  fi
+  # Two roots (ADR-034): core is applied once, environments once per stamp.
+  for TF_ROOT in infra/aws/core infra/aws/environments; do
+    if [ -d "$TF_ROOT/.terraform" ]; then
+      if terraform -chdir="$TF_ROOT" validate > /dev/null; then
+        pass "terraform validate ($TF_ROOT)"
+      else
+        fail "terraform validate — see 'terraform -chdir=$TF_ROOT validate'"
+      fi
+    else
+      skip "terraform validate ($TF_ROOT) — run 'terraform -chdir=$TF_ROOT init -backend=false' first"
+    fi
+  done
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo
 echo "──────────────────────────────────────────"

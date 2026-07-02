@@ -1,8 +1,15 @@
 # ADR-030 — Target Chunking Strategy: `semchunk` Sidecar (Deferred)
 
-- **Status**: Proposed — **target / deferred** (no code in the v1.51.0 phase)
-- **Date**: 2026-06-23
-- **Relates to**: ADR-016 (re-embedding strategy), ADR-017 (configurable embeddings)
+- **Status**: Accepted — **opt-in scope** (Decision 1 executed by the v1.57.0 phase; Decision 2's corpus migration remains deferred)
+- **Date**: 2026-06-23 (amended 2026-07-01)
+- **Relates to**: ADR-016 (re-embedding strategy), ADR-017 (configurable embeddings), ADR-033 (AWS infrastructure)
+
+> **Amendment (2026-07-01):** the semchunk-sidecar-and-aws-iac phase implements Decision 1
+> exactly as the opt-in variant anticipated below: the sidecar is enabled per-deployment via
+> `CHUNKER_PROVIDER=semchunk` and applies to **newly indexed documents only**, with the
+> fixed-window chunker as automatic fallback. The re-embedding migration and curated-state
+> carry-forward (Decision 2) are still deferred to their own phase and remain this ADR's
+> open question.
 
 ## Context
 
