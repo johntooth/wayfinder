@@ -85,8 +85,11 @@ export async function appendShortcomingsToContext(
   container: Container,
   messageId: string,
   items: string[],
+  // The gate's grade, persisted onto the message so an operator override can
+  // later record what was overridden without re-running the evaluation.
+  grade?: DocumentGenerationConfidence | null,
 ): Promise<void> {
-  if (items.length === 0) return;
+  if (items.length === 0 && !grade) return;
   const existing = await container.repos.sessionMessages.findById(messageId);
   if (existing.error || !existing.data || !existing.data.aiPayload) return;
 
@@ -94,6 +97,7 @@ export async function appendShortcomingsToContext(
   const mergedPayload: AiTurnPayload = {
     ...existing.data.aiPayload,
     contextGathered: [...existing.data.aiPayload.contextGathered, ...outstanding],
+    documentGenerationConfidence: grade ?? existing.data.aiPayload.documentGenerationConfidence,
   };
 
   await container.repos.sessionMessages.updateAiPayload(messageId, mergedPayload).catch(() => undefined);
@@ -1135,6 +1139,71 @@ async function confirmMcpAction(input: {
   return ok({ advanced: true, needsManualBranch: false, newNodeId });
 }
 
+export interface LogGateOverrideInput {
+  container: Container;
+  session: Session;
+  completedNode: FlowNode;
+  messages: SessionMessage[];
+  confirmedByUserId: string;
+}
+
+// A generate_document step reaches the awaiting state only via a failed
+// pre-generation evaluation (it does not use requireConfirmation, and the gate
+// returns before that branch), so Proceeding one is an override of the automated
+// check. Overriding is restricted to admins (see confirmStep).
+export function isGenerationGateOverride(completedNode: FlowNode, session: Session): boolean {
+  const config = completedNode.config as unknown as ConversationalNodeConfig;
+  return (
+    completedNode.type === "conversational" &&
+    config.outputType === "generate_document" &&
+    session.awaitingConfirmationNodeId === completedNode.id
+  );
+}
+
+// Records an admin's override of the pre-generation check to both the audit log
+// (compliance) and the operational event log (ops visibility). Best-effort:
+// logging must never block the override. Caller must have already authorised it.
+export async function logGateOverride(input: LogGateOverrideInput): Promise<void> {
+  const { container, session, completedNode, messages, confirmedByUserId } = input;
+  const lastAssistant = [...messages]
+    .reverse()
+    .find((message) => message.role === "assistant" && message.stepNodeId === completedNode.id);
+  const grade = lastAssistant?.aiPayload?.documentGenerationConfidence ?? null;
+  const missingInformation = (lastAssistant?.aiPayload?.contextGathered ?? [])
+    .filter((item) => item.key === OUTSTANDING_CONTEXT_KEY)
+    .map((item) => item.value);
+
+  await container.services.auditLogger
+    .log({
+      actorId: confirmedByUserId,
+      action: "document.generation_gate_override",
+      resourceType: "session",
+      resourceId: session.id,
+      metadata: {
+        nodeId: completedNode.id,
+        guidanceAlignmentConfidence: grade?.guidanceAlignmentConfidence ?? null,
+        criteriaAlignmentConfidence: grade?.criteriaAlignmentConfidence ?? null,
+        missingInformation,
+      },
+    })
+    .catch(() => undefined);
+
+  await container.services.errorLogger
+    .log({
+      level: "warn",
+      message: "Admin overrode the pre-generation check and generated the document anyway.",
+      stack: null,
+      page: `api/chat/${session.id}/stream`,
+      metadata: {
+        nodeId: completedNode.id,
+        overriddenByUserId: confirmedByUserId,
+        guidanceAlignmentConfidence: grade?.guidanceAlignmentConfidence ?? null,
+        criteriaAlignmentConfidence: grade?.criteriaAlignmentConfidence ?? null,
+      },
+    })
+    .catch(() => undefined);
+}
+
 // Orchestrates an operator Proceed: recompute the branch for a fork, run the
 // ConfirmStepAdvance use-case, then fire the shared advance side effects so the
 // outcome matches auto-advance (ADR-026). An MCP action node instead fires its
@@ -1149,6 +1218,16 @@ export async function confirmStep(input: ConfirmStepInput): Promise<Result<Confi
 
   if (completedNode.type === "mcp") {
     return confirmMcpAction({ container, session, flow, nodes, completedNode, confirmedByUserId, isAdmin });
+  }
+
+  // Overriding a failed pre-generation check is an admin-only action. A non-admin
+  // Proceed on a gate-blocked document step is a no-op (the UI never offers it to
+  // them); an admin's override is recorded before it advances.
+  if (isGenerationGateOverride(completedNode, session)) {
+    if (!isAdmin) {
+      return ok({ advanced: false, needsManualBranch: false, newNodeId: null });
+    }
+    await logGateOverride({ container, session, completedNode, messages, confirmedByUserId });
   }
 
   const branchChoice = await recomputeBranchChoice(container, session, nodes, edges, messages);

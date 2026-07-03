@@ -9,6 +9,8 @@ import {
   buildPromptSessionUploads,
   generateDocument,
   generateInitialMessage,
+  isGenerationGateOverride,
+  logGateOverride,
   OUTSTANDING_CONTEXT_KEY,
   streamGapFollowup,
 } from "./turn-helpers";
@@ -782,5 +784,88 @@ describe("AiTurnPayload typing guard", () => {
       contextGathered: [{ key: "k", value: "v" }],
     };
     expect(payload.contextGathered.length).toBe(1);
+  });
+});
+
+describe("isGenerationGateOverride", () => {
+  const docNode = (): FlowNode =>
+    makeNode({
+      id: "doc-node",
+      type: "conversational",
+      config: { outputType: "generate_document", documentTemplatePath: "x" } as unknown as FlowNode["config"],
+    });
+  const awaiting = (nodeId: string | null): Session =>
+    ({ id: "s", currentNodeId: "doc-node", awaitingConfirmationNodeId: nodeId } as unknown as Session);
+
+  it("is true for a gate-blocked generate_document step (awaiting itself)", () => {
+    expect(isGenerationGateOverride(docNode(), awaiting("doc-node"))).toBe(true);
+  });
+
+  it("is false for a non-document step", () => {
+    const node = makeNode({
+      id: "doc-node",
+      type: "conversational",
+      config: { outputType: "conversation_only" } as unknown as FlowNode["config"],
+    });
+    expect(isGenerationGateOverride(node, awaiting("doc-node"))).toBe(false);
+  });
+
+  it("is false when the step is not awaiting via the gate", () => {
+    expect(isGenerationGateOverride(docNode(), awaiting(null))).toBe(false);
+  });
+});
+
+describe("logGateOverride", () => {
+  const gateBlockedMessage = (): SessionMessage =>
+    makeAssistantMessage({
+      id: "gate-msg",
+      stepNodeId: "doc-node",
+      aiPayload: {
+        response: "drafted",
+        rationale: "r",
+        stepCompleteConfidence: 95,
+        contextGathered: [
+          { key: "Project", value: "CityConnect" },
+          { key: OUTSTANDING_CONTEXT_KEY, value: "Stakeholder consultation evidence" },
+          { key: OUTSTANDING_CONTEXT_KEY, value: "APP compliance assessment" },
+        ],
+        documentGenerationConfidence: {
+          guidanceAlignmentConfidence: 62,
+          guidanceAlignmentRationale: "partial",
+          criteriaAlignmentConfidence: 55,
+          criteriaAlignmentRationale: "partial",
+        },
+      },
+    });
+
+  it("audits and event-logs the override with the grade and missing information", async () => {
+    const auditLog = vi.fn().mockResolvedValue({ data: true, error: null });
+    const errorLog = vi.fn().mockResolvedValue({ data: true, error: null });
+    const container = {
+      services: { auditLogger: { log: auditLog }, errorLogger: { log: errorLog } },
+    } as unknown as Parameters<typeof logGateOverride>[0]["container"];
+
+    await logGateOverride({
+      container,
+      session: { id: "sess-1", currentNodeId: "doc-node", awaitingConfirmationNodeId: "doc-node" } as unknown as Session,
+      completedNode: makeNode({ id: "doc-node" }),
+      messages: [gateBlockedMessage()],
+      confirmedByUserId: "admin-1",
+    });
+
+    expect(auditLog).toHaveBeenCalledTimes(1);
+    const auditArg = auditLog.mock.calls[0]![0];
+    expect(auditArg.action).toBe("document.generation_gate_override");
+    expect(auditArg.actorId).toBe("admin-1");
+    expect(auditArg.resourceId).toBe("sess-1");
+    expect(auditArg.metadata.nodeId).toBe("doc-node");
+    expect(auditArg.metadata.guidanceAlignmentConfidence).toBe(62);
+    expect(auditArg.metadata.criteriaAlignmentConfidence).toBe(55);
+    expect(auditArg.metadata.missingInformation).toEqual([
+      "Stakeholder consultation evidence",
+      "APP compliance assessment",
+    ]);
+    expect(errorLog).toHaveBeenCalledTimes(1);
+    expect(errorLog.mock.calls[0]![0].level).toBe("warn");
   });
 });

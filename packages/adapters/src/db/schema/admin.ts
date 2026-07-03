@@ -121,13 +121,14 @@ export const admin_feature_flag_roles = pgTable(
   }),
 );
 
-// Admin-registered remote MCP servers (ADR-032). Only SSE transport is supported.
-// `credential_ref` points at the secret store; the secret itself is never stored
-// here and never returned to a client.
+// Admin-registered remote MCP servers (ADR-032 §1: remote HTTP/SSE). `sse` is
+// the legacy default; `streamable-http` targets the newer MCP streamable-HTTP
+// endpoint. `credential_ref` points at the secret store; the secret itself is
+// never stored here and never returned to a client.
 export const admin_mcp_servers = pgTable("admin_mcp_servers", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   label: text("label").notNull(),
-  transport: text("transport", { enum: ["sse"] }).notNull().default("sse"),
+  transport: text("transport", { enum: ["sse", "streamable-http"] }).notNull().default("sse"),
   // Read-only context server vs write-capable actions server (ADR-032). Existing
   // rows default to `context`, the safe read-only classification.
   kind: text("kind", { enum: ["context", "actions"] }).notNull().default("context"),

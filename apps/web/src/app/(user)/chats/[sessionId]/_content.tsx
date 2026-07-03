@@ -131,6 +131,14 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const awaitingConfirmationNodeId = sessionData?.session.awaitingConfirmationNodeId ?? null;
   const isAwaitingConfirmation =
     awaitingConfirmationNodeId !== null && awaitingConfirmationNodeId === currentNodeId;
+  // A generate_document step awaits only via a failed pre-generation check, so its
+  // Proceed card is an admin-only, audited override rather than a plain hand-over.
+  const isGenerationGateOverride =
+    isAwaitingConfirmation &&
+    currentNode?.type === "conversational" &&
+    (currentNode.config as { outputType?: string }).outputType === "generate_document";
+  // Non-admins stay blocked on a failed gate; only admins get the override card.
+  const showConfirmCard = isAwaitingConfirmation && (!isGenerationGateOverride || isAdmin);
 
   const senderNamesById = useMemo(() => {
     const namesById: Record<string, string> = {};
@@ -413,9 +421,10 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         </div>
       )}
 
-      {isAwaitingConfirmation && currentNode && session.status === "active" && !isReadOnly && (
+      {showConfirmCard && currentNode && session.status === "active" && !isReadOnly && (
         <ConfirmStepCard
           stepName={currentNode.name}
+          variant={isGenerationGateOverride ? "override" : "confirm"}
           onProceed={() => confirmStepMutation.mutate({ sessionId })}
           isPending={confirmStepMutation.isPending}
         />

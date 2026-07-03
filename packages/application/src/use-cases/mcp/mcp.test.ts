@@ -136,6 +136,21 @@ describe("RegisterMcpServer", () => {
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
 
+  it("defaults transport to sse and records an explicit streamable-http", async () => {
+    const sseDefault = await new RegisterMcpServer(repository).execute({
+      label: "Default",
+      url: "https://a.example/sse",
+    });
+    expect(sseDefault.data?.transport).toBe("sse");
+
+    const streamable = await new RegisterMcpServer(repository).execute({
+      label: "Streamable",
+      url: "https://b.example/mcp",
+      transport: "streamable-http",
+    });
+    expect(streamable.data?.transport).toBe("streamable-http");
+  });
+
   it("defaults businessSelectable to false and records it when set", async () => {
     const closed = await new RegisterMcpServer(repository).execute({
       label: "Closed",

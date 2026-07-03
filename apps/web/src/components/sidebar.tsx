@@ -23,6 +23,7 @@ import {
   Sparkles,
   Stamp,
   Users,
+  Workflow,
   X,
 } from "lucide-react";
 import { useSidebar } from "@/components/sidebar-context";
@@ -69,6 +70,7 @@ const adminNav: NavGroup[] = [
     items: [
       { href: "/admin/skills", icon: Sparkles, label: "Skills" },
       { href: "/admin/mcp-servers", icon: Plug, label: "MCP Servers" },
+      { href: "/admin/settings#n8n-integration", icon: Workflow, label: "Workflows (n8n)" },
     ],
   },
   {

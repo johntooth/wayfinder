@@ -1,7 +1,9 @@
 export type McpServerStatus = "active" | "disabled";
 
-// Only remote SSE transport is supported (ADR-032). Local/stdio is out of scope.
-export type McpTransport = "sse";
+// Remote HTTP transports only (ADR-032 §1: "remote HTTP/SSE"). `sse` is the
+// legacy default; `streamable-http` targets servers exposing the newer MCP
+// streamable-HTTP endpoint. Local/stdio (process-spawning) is out of scope.
+export type McpTransport = "sse" | "streamable-http";
 
 // How a server is used in flows. `context` servers are read-only grounding,
 // selected flow-wide and offered to the conversational AI as tools. `actions`

@@ -348,8 +348,21 @@ export async function POST(
               .reverse()
               .find((m) => m.role === "assistant" && m.stepNodeId === session.currentNodeId);
         if (thresholdMessage) {
-          await appendShortcomingsToContext(container, thresholdMessage.id, evaluation.missingInformation);
+          await appendShortcomingsToContext(container, thresholdMessage.id, evaluation.missingInformation, {
+            guidanceAlignmentConfidence: evaluation.guidanceAlignmentConfidence,
+            guidanceAlignmentRationale: evaluation.guidanceAlignmentRationale,
+            criteriaAlignmentConfidence: evaluation.criteriaAlignmentConfidence,
+            criteriaAlignmentRationale: evaluation.criteriaAlignmentRationale,
+          });
         }
+
+        // Hold the step in the awaiting state so an admin has a path of recourse:
+        // the operator UI offers an audited "Generate anyway" override (admins
+        // only) instead of leaving the step a dead-end. The step stays active and
+        // chattable; a later passing turn clears the flag on advance.
+        await container.repos.sessions
+          .update(session.id, { awaitingConfirmationNodeId: session.currentNodeId })
+          .catch(() => undefined);
 
         await streamGapFollowup({
           container,
@@ -394,6 +407,13 @@ export async function POST(
       }
 
       if (runResult.data.advanced) {
+        // A prior failed gate may have set the override-awaiting flag on this
+        // step; a passing turn has now advanced it, so clear the stale flag.
+        if (session.awaitingConfirmationNodeId === currentNode.id) {
+          await container.repos.sessions
+            .update(session.id, { awaitingConfirmationNodeId: null })
+            .catch(() => undefined);
+        }
         await applyAdvanceSideEffects({
           container,
           session: runResult.data.session,

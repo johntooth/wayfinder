@@ -789,7 +789,8 @@ function N8nIntegrationCard({ connectivity }: { connectivity: ConnectivityContro
   };
 
   return (
-    <Card>
+    // Anchor target for the "Workflows (n8n)" item under the Flow Settings nav.
+    <Card id="n8n-integration" className="scroll-mt-20">
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-base">n8n Integration</CardTitle>
         <Button size="sm" variant="outline" onClick={() => setOpen(true)} disabled={!config}>
