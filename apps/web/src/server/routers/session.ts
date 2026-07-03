@@ -137,13 +137,16 @@ export const sessionRouter = router({
       for (const message of messages) {
         if (message.senderUserId) senderIds.add(message.senderUserId);
       }
-      const participants = await Promise.all(
-        [...senderIds].map(async (id) => {
-          const userResult = await ctx.container.repos.users.findById(id);
-          const name = userResult.error ? null : userResult.data?.name ?? null;
-          return { id, name };
-        }),
+      // One IN query instead of one findById per participant per poll
+      // (scaling wall #6).
+      const usersResult = await ctx.container.repos.users.findByIds([...senderIds]);
+      const namesById = new Map(
+        (usersResult.error ? [] : usersResult.data).map((user) => [user.id, user.name] as const),
       );
+      const participants = [...senderIds].map((id) => ({
+        id,
+        name: namesById.get(id) ?? null,
+      }));
 
       return { ...result.data, participants, readOnly };
     }),

@@ -28,6 +28,10 @@ const envSchema = z.object({
     .optional()
     .transform((value) => value !== "false"),
   SCHEDULER_TICK_MS: z.coerce.number().int().positive().optional(),
+  // How many independent heartbeat workers to run. Each tick claims a disjoint
+  // batch via FOR UPDATE SKIP LOCKED (ADR-019), so N workers drain a backlog N×
+  // faster with no schema change. Keep at 1 unless a backlog is observed.
+  SCHEDULER_WORKER_COUNT: z.coerce.number().int().positive().default(1),
   // Full URL of the web app's internal scheduler tick endpoint and the shared
   // secret it requires. The heartbeat only starts when both are set.
   SCHEDULER_TICK_URL: z.string().url().optional(),

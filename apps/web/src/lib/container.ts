@@ -123,6 +123,7 @@ import {
   DrizzleFlowNodeRepository,
   DrizzleFlowRepository,
   DrizzleFlowVersionRepository,
+  CachedFlowVersionRepository,
   DrizzleHrDatasetRepository,
   DrizzleJobRepository,
   DrizzleNotificationLogRepository,
@@ -150,6 +151,7 @@ import {
   HrPeopleDirectory,
   LangGraphAgentRunner,
   LanguageModelAdapter,
+  LlmCallGovernor,
   createEmbeddingsProvider,
   MinioStorageAdapter,
   N8nHttpWorkflowDirectory,
@@ -173,8 +175,12 @@ import {
   type AuthMethod,
   type ResolvedSession,
 } from "@rbrasier/adapters";
-import type { PermissionKey } from "@rbrasier/domain";
+import type { FlowVersion, PermissionKey } from "@rbrasier/domain";
 import { createCachedPermissionResolver } from "./cached-permission-resolver";
+import {
+  createCachedAdminSettings,
+  type ResolvedAdminSettings,
+} from "./cached-admin-settings";
 import { serverEnv } from "./env";
 
 const globalForContainer = globalThis as typeof globalThis & {
@@ -214,7 +220,12 @@ const build = () => {
   const flows = new DrizzleFlowRepository(db);
   const flowNodes = new DrizzleFlowNodeRepository(db);
   const flowEdges = new DrizzleFlowEdgeRepository(db);
-  const flowVersions = new DrizzleFlowVersionRepository(db);
+  // Published versions are immutable snapshots, so cache getById per version id
+  // (scaling wall #4) — the runner re-reads the pinned snapshot every turn/poll.
+  const flowVersions = new CachedFlowVersionRepository(
+    new DrizzleFlowVersionRepository(db),
+    new TtlCache<FlowVersion>({ ttlMs: env.FLOW_VERSION_CACHE_TTL_MS, maxEntries: 256 }),
+  );
   const sessions = new DrizzleSessionRepository(db);
   const sessionMessages = new DrizzleSessionMessageRepository(db);
   const sessionUploads = new DrizzleSessionUploadRepository(db);
@@ -262,7 +273,34 @@ const build = () => {
         : undefined,
   });
 
-  const baseLlm = new LanguageModelAdapter(env.AI_DEFAULT_PROVIDER, runtimeConfig);
+  // Near-static admin settings cache (scaling wall #4): the chat stream route
+  // reads org name, global instructions, and upload config every turn; front
+  // them with the same TtlCache shape as the auth caches so a turn no longer
+  // pays three settings reads.
+  const adminSettingsCache = new TtlCache<ResolvedAdminSettings>({
+    ttlMs: env.ADMIN_SETTINGS_CACHE_TTL_MS,
+    maxEntries: 1,
+  });
+  const adminSettings = createCachedAdminSettings(
+    {
+      getSystemSetting: async (key) => {
+        const result = await systemSettings.get(key);
+        return result.error ? null : (result.data ?? null);
+      },
+      getSessionUploadConfig: () => runtimeConfig.getSessionUploadConfig(),
+    },
+    adminSettingsCache,
+  );
+
+  // Shared per-instance provider-call governor (scaling wall #5): bounds
+  // concurrent in-flight LLM calls and retries rate limits / transient failures.
+  // The same instance governs both the port (LanguageModelAdapter) and the chat
+  // stream route's direct SDK calls, so one budget covers every provider request.
+  const llmGovernor = new LlmCallGovernor({
+    maxConcurrent: env.LLM_MAX_CONCURRENCY,
+    maxAttempts: env.LLM_MAX_ATTEMPTS,
+  });
+  const baseLlm = new LanguageModelAdapter(env.AI_DEFAULT_PROVIDER, runtimeConfig, llmGovernor);
   // Decorator order (ADR-026 §3): quota enforcement is outermost so it blocks
   // before the inner usage-tracking + provider call runs. The same enforcer is
   // shared with the chat stream route, which calls the SDK outside the port.
@@ -479,10 +517,11 @@ const build = () => {
     logger,
     objectStorage,
     runtimeConfig,
+    adminSettings,
     connectivityTester,
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
-    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer },
+    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor },
     repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),

@@ -157,22 +157,30 @@ export const buildContainer = (env: Env) => {
   // each interval and reports health to job_registry. The firing logic itself
   // lives behind that endpoint (where the AI turn machinery is). Only started
   // when both the URL and shared secret are configured.
-  const schedulerWorker =
-    env.SCHEDULER_TICK_URL && env.SCHEDULER_TICK_SECRET
-      ? new SchedulerWorker(
-          new HttpTickFirer(env.SCHEDULER_TICK_URL, env.SCHEDULER_TICK_SECRET),
-          jobRepo,
-          logger,
-          { tickIntervalMs: env.SCHEDULER_TICK_MS },
+  // One worker per configured slot; the SKIP LOCKED claim keeps their batches
+  // disjoint, so running several simply drains the queue faster (ADR-019).
+  const schedulerTickUrl = env.SCHEDULER_TICK_URL;
+  const schedulerTickSecret = env.SCHEDULER_TICK_SECRET;
+  const schedulerWorkers =
+    schedulerTickUrl && schedulerTickSecret
+      ? Array.from(
+          { length: env.SCHEDULER_WORKER_COUNT },
+          () =>
+            new SchedulerWorker(
+              new HttpTickFirer(schedulerTickUrl, schedulerTickSecret),
+              jobRepo,
+              logger,
+              { tickIntervalMs: env.SCHEDULER_TICK_MS },
+            ),
         )
-      : null;
+      : [];
 
   return {
     env,
     db,
     logger,
     runtimeConfig,
-    schedulerWorker,
+    schedulerWorkers,
     repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, systemSettings, sessions, flowNodes, flowEdges, sessionStepOutputs },
     services: { llm, errorLogger, auditLogger },
     useCases: {

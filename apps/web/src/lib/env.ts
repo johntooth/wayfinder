@@ -13,6 +13,23 @@ const serverEnvSchema = z.object({
   // has not yet promoted this cache to a shared store). See the scaling-new-infrastructure phase doc.
   AUTH_CACHE_TTL_MS: z.coerce.number().int().nonnegative().default(5000),
   AUTH_CACHE_MAX_ENTRIES: z.coerce.number().int().positive().default(10000),
+  // Per-instance ceiling on concurrent in-flight provider (LLM) calls. A single
+  // turn issues several model calls, so under concurrent load this is what keeps a
+  // web instance from stampeding a provider past its TPM/RPM limits (scaling wall
+  // #5). 0 disables the limit (unbounded, the prior behaviour).
+  LLM_MAX_CONCURRENCY: z.coerce.number().int().nonnegative().default(0),
+  // Attempts (not retries) per provider call; backoff is applied only to rate
+  // limits and transient 5xx/network errors, honouring any Retry-After header.
+  LLM_MAX_ATTEMPTS: z.coerce.number().int().positive().default(4),
+  // TTL for the near-static admin settings (org name, global instructions,
+  // upload config) the chat stream route reads every turn (scaling wall #4).
+  // They change only on an admin edit, so seconds of staleness is fine. 0
+  // disables the cache (every turn re-reads).
+  ADMIN_SETTINGS_CACHE_TTL_MS: z.coerce.number().int().nonnegative().default(30_000),
+  // TTL for cached published flow-version snapshots (scaling wall #4). Published
+  // versions are immutable, so this can be generous; a long TTL just keeps hot
+  // snapshots resident. 0 disables the cache.
+  FLOW_VERSION_CACHE_TTL_MS: z.coerce.number().int().nonnegative().default(300_000),
   BETTER_AUTH_SECRET: z.string().min(16),
   BETTER_AUTH_URL: z.string().url().default("http://localhost:3000"),
   ADMIN_SEED_EMAIL: z.string().email().optional(),
@@ -20,6 +37,10 @@ const serverEnvSchema = z.object({
   // Shared secret the API scheduler heartbeat presents to the internal tick
   // endpoint. The endpoint refuses to fire unless this is set and matches.
   SCHEDULER_TICK_SECRET: z.string().optional(),
+  // How many due schedules one tick claims and fires. Raise it (with more API
+  // workers) to drain a backlog faster; the claim is FOR UPDATE SKIP LOCKED so
+  // concurrent ticks never double-fire (ADR-019, scaling wall #8).
+  SCHEDULER_BATCH_SIZE: z.coerce.number().int().positive().default(50),
   AI_DEFAULT_PROVIDER: z.enum(["anthropic", "openai", "mistral", "bedrock"]).default("anthropic"),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),

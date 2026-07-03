@@ -21,6 +21,10 @@ import {
   streamGapFollowup,
 } from "./turn-helpers";
 
+// The most recent turns the model is given as context, mirrored from the
+// client's own slice so the two agree (scaling wall #1).
+const CONTEXT_WINDOW_MESSAGES = 20;
+
 const getSessionToken = (req: Request): string | null => {
   const cookie = req.headers.get("cookie");
   if (!cookie) return null;
@@ -77,36 +81,34 @@ export async function POST(
   // rather than a 0-100 percentage, which would otherwise auto-advance every turn.
   const realThreshold = normaliseAdvanceConfidenceThreshold(nodeConfig.advanceConfidenceThreshold);
 
-  const orgSettingResult = await container.repos.systemSettings.get("organisation_name");
-  const organisationName = orgSettingResult.error ? null : (orgSettingResult.data?.value ?? null);
+  const gatheredContext = buildGatheredContext(dbMessages);
 
-  const globalInstructionsResult = await container.repos.systemSettings.get("global_prompt");
-  const globalInstructions = globalInstructionsResult.error
-    ? null
-    : (globalInstructionsResult.data?.value ?? null);
+  // These reads are mutually independent, so run them as one round-trip instead
+  // of six serial awaits while a pool connection is held (scaling wall #4). The
+  // near-static admin settings come from a short-TTL cache rather than the DB.
+  const [adminSettings, uploadsResult, userResult, retrievalResult] = await Promise.all([
+    container.adminSettings.get(),
+    // Inject the user's own attachments into the turn independent of RAG: a thin
+    // message ("here is the solution") retrieves nothing, so without this the
+    // agent never sees the file it was just given.
+    container.repos.sessionUploads.listBySession(sessionId),
+    container.repos.users.findById(authSession.userId),
+    container.useCases.retrieveDocumentChunks.execute({
+      flowId: flow.id,
+      sessionId,
+      query: lastUserMessage,
+    }),
+  ]);
 
-  // Inject the user's own attachments into the turn independent of RAG: a thin
-  // message ("here is the solution") retrieves nothing, so without this the agent
-  // never sees the file it was just given.
-  const uploadsResult = await container.repos.sessionUploads.listBySession(sessionId);
-  const uploadConfig = await container.runtimeConfig.getSessionUploadConfig();
+  const organisationName = adminSettings.organisationName;
+  const globalInstructions = adminSettings.globalInstructions;
   const sessionUploads = uploadsResult.error
     ? []
-    : buildPromptSessionUploads(uploadsResult.data, uploadConfig.totalBudgetChars);
-
-  const userResult = await container.repos.users.findById(authSession.userId);
+    : buildPromptSessionUploads(uploadsResult.data, adminSettings.uploadConfig.totalBudgetChars);
   const userProfile =
     userResult.error || !userResult.data
       ? null
       : { name: userResult.data.name, role: userResult.data.role, team: userResult.data.team };
-
-  const gatheredContext = buildGatheredContext(dbMessages);
-
-  const retrievalResult = await container.useCases.retrieveDocumentChunks.execute({
-    flowId: flow.id,
-    sessionId,
-    query: lastUserMessage,
-  });
   const retrievedChunks = retrievalResult.error ? [] : retrievalResult.data;
 
   const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
@@ -136,10 +138,16 @@ export async function POST(
       return { id: node.id, name: node.name, purpose };
     });
 
-  const coreMessages = dbMessages.map((m) => ({
-    role: m.role as "user" | "assistant" | "system",
-    content: m.content,
-  }));
+  // Server-side context window: the model sees only the most recent turns, the
+  // same 20 the client already slices to (scaling wall #1). Bounding it here (not
+  // trusting a client-supplied transcript) keeps prompt size and read cost flat
+  // as a session's history grows unbounded.
+  const coreMessages = dbMessages
+    .slice(-CONTEXT_WINDOW_MESSAGES)
+    .map((m) => ({
+      role: m.role as "user" | "assistant" | "system",
+      content: m.content,
+    }));
 
   // The model sees the attachment marker; the persisted user message stays the
   // raw text the user typed (persistUserMessage uses lastUserMessage).
@@ -246,12 +254,16 @@ export async function POST(
         }
         const branchPromptResult = container.services.sessionAgent.buildBranchChoicePrompt({ branchNodes });
         if (branchPromptResult.error) return null;
-        const branchResult = await generateObject({
-          model: branchingModel,
-          schema: branchChoiceSchema,
-          system: branchPromptResult.data,
-          messages: messagesWithNew,
-        }).catch(() => null);
+        const branchResult = await container.services.llmGovernor
+          .run(() =>
+            generateObject({
+              model: branchingModel,
+              schema: branchChoiceSchema,
+              system: branchPromptResult.data,
+              messages: messagesWithNew,
+            }),
+          )
+          .catch(() => null);
         if (branchResult) {
           recordTokenUsage(
             container.repos.usageRepo,
@@ -327,7 +339,12 @@ export async function POST(
           throw cause instanceof Error ? cause : new Error(failResult.error.message);
         }
 
-        const refreshed = await container.repos.sessionMessages.listBySession(session.id);
+        // Only the just-persisted assistant turn is needed, so read the tail
+        // rather than the whole history (scaling wall #1).
+        const refreshed = await container.repos.sessionMessages.latestBySession(
+          session.id,
+          CONTEXT_WINDOW_MESSAGES,
+        );
         const thresholdMessage = refreshed.error
           ? null
           : [...refreshed.data]

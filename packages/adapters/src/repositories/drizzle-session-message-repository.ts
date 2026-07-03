@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql, type SQL } from "drizzle-orm";
 import {
   domainError,
   err,
@@ -13,6 +13,25 @@ import {
 } from "@rbrasier/domain";
 import type { Database } from "../db/client";
 import { app_session_messages } from "../db/schema/wayfinder";
+
+// Newest `limit` rows for a session. Ordered DESC so the LIMIT keeps the tail;
+// the repository reverses the result back to chronological order. Bounding this
+// read is the core of scaling wall #1 — the whole history is never scanned.
+export const buildLatestBySessionStatement = (sessionId: string, limit: number): SQL => sql`
+  SELECT * FROM ${app_session_messages}
+  WHERE ${app_session_messages.session_id} = ${sessionId}
+  ORDER BY ${app_session_messages.created_at} DESC
+  LIMIT ${limit}
+`;
+
+// Rows created strictly after the cursor, chronological — the incremental delta
+// a poller/replay needs instead of the full transcript.
+export const buildListSinceStatement = (sessionId: string, afterCreatedAt: Date): SQL => sql`
+  SELECT * FROM ${app_session_messages}
+  WHERE ${app_session_messages.session_id} = ${sessionId}
+    AND ${app_session_messages.created_at} > ${afterCreatedAt}
+  ORDER BY ${app_session_messages.created_at} ASC
+`;
 
 const toEntity = (row: typeof app_session_messages.$inferSelect): SessionMessage => ({
   id: row.id,
@@ -76,6 +95,33 @@ export class DrizzleSessionMessageRepository implements ISessionMessageRepositor
       return ok(rows.map(toEntity));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list session messages.", cause));
+    }
+  }
+
+  async latestBySession(sessionId: string, limit: number): Promise<Result<SessionMessage[]>> {
+    if (!Number.isInteger(limit) || limit <= 0) {
+      return err(domainError("VALIDATION_FAILED", "latestBySession limit must be a positive integer."));
+    }
+    try {
+      const rows = (await this.db.execute(
+        buildLatestBySessionStatement(sessionId, limit),
+      )) as unknown as (typeof app_session_messages.$inferSelect)[];
+      // Query returns newest-first so the LIMIT keeps the tail; hand back the
+      // caller a chronological slice.
+      return ok(rows.map(toEntity).reverse());
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to load latest session messages.", cause));
+    }
+  }
+
+  async listSince(sessionId: string, afterCreatedAt: Date): Promise<Result<SessionMessage[]>> {
+    try {
+      const rows = (await this.db.execute(
+        buildListSinceStatement(sessionId, afterCreatedAt),
+      )) as unknown as (typeof app_session_messages.$inferSelect)[];
+      return ok(rows.map(toEntity));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to load session messages since cursor.", cause));
     }
   }
 
