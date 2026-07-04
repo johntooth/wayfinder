@@ -95,7 +95,7 @@
   (+ `.test.ts`)
 - `packages/adapters/src/retention/retention-worker.ts` (+ `.test.ts`) and
   `index.ts`
-- `packages/adapters/drizzle/0029_group_d_retention_created_at_indexes.sql`
+- `packages/adapters/drizzle/0028_scaling_current_stack_groups_b_c_d.sql`
   (+ meta snapshot/journal)
 - `load/config.js`, `load/scenarios/{smoke,chat-turn,session-read}.js`,
   `load/README.md`
@@ -119,7 +119,9 @@
 
 ## Migrations run
 
-`0029_group_d_retention_created_at_indexes.sql` — creates
+> **Rebase note (merge with main):** main independently shipped migration `0027_clumsy_bushwacker` (usage-limit tiers) while this branch was open. To keep the migration chain linear, the Group B/C/D schema deltas were regenerated on top of main as a single migration, `0028_scaling_current_stack_groups_b_c_d.sql`. The DDL is identical; only the file numbering changed.
+
+`0028_scaling_current_stack_groups_b_c_d.sql` — creates
 `core_audit_log_created_at_idx`, `ai_usage_events_created_at_idx`,
 `app_error_log_created_at_idx`, `app_notification_log_created_at_idx`, and
 `app_session_messages_created_at_idx`. Index-only; no data change.

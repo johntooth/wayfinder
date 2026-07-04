@@ -91,7 +91,7 @@
 - `packages/adapters/src/repositories/drizzle-session-repository.test.ts` (lease SQL)
 - `packages/application/src/use-cases/session/resolve-session-access.ts` (+ `.test.ts`)
 - `packages/application/src/use-cases/session/revoke-session-participant.ts` (+ `.test.ts`)
-- `packages/adapters/drizzle/0027_group_b_turn_lease_versioning_participants.sql`
+- `packages/adapters/drizzle/0028_scaling_current_stack_groups_b_c_d.sql`
 - `tests/e2e/phase-scaling-current-stack-group-b.spec.ts`
 
 ## Files modified
@@ -116,7 +116,9 @@
 
 ## Migrations run
 
-`0027_group_b_turn_lease_versioning_participants.sql` — adds the lease/version
+> **Rebase note (merge with main):** main independently shipped migration `0027_clumsy_bushwacker` (usage-limit tiers) while this branch was open. To keep the migration chain linear, the Group B/C/D schema deltas were regenerated on top of main as a single migration, `0028_scaling_current_stack_groups_b_c_d.sql`. The DDL is identical; only the file numbering changed.
+
+`0028_scaling_current_stack_groups_b_c_d.sql` — adds the lease/version
 columns to `app_sessions` (all nullable or defaulted, so existing rows are valid)
 and creates `app_session_participants`. No data back-fill needed (the owner is
 implied by `app_sessions.user_id`).

@@ -91,7 +91,7 @@
 - `packages/adapters/src/messaging/create-session-event-bus.ts`
 - `packages/adapters/src/messaging/index.ts`
 - `apps/web/src/app/api/sessions/[sessionId]/events/route.ts`
-- `packages/adapters/drizzle/0028_group_c_message_seq_and_retire_typing.sql`
+- `packages/adapters/drizzle/0028_scaling_current_stack_groups_b_c_d.sql`
 - `tests/e2e/phase-scaling-current-stack-group-c.spec.ts`
 
 ## Files modified
@@ -123,7 +123,9 @@
 
 ## Migrations run
 
-`0028_group_c_message_seq_and_retire_typing.sql` — adds `seq bigserial` (with an
+> **Rebase note (merge with main):** main independently shipped migration `0027_clumsy_bushwacker` (usage-limit tiers) while this branch was open. To keep the migration chain linear, the Group B/C/D schema deltas were regenerated on top of main as a single migration, `0028_scaling_current_stack_groups_b_c_d.sql`. The DDL is identical; only the file numbering changed.
+
+`0028_scaling_current_stack_groups_b_c_d.sql` — adds `seq bigserial` (with an
 owned sequence, so existing rows are back-filled sequentially) and its index to
 `app_session_messages`, and drops `app_session_typing`.
 

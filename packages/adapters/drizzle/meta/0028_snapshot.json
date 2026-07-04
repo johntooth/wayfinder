@@ -1,6 +1,6 @@
 {
-  "id": "44f646d1-cf76-4ae6-b655-37d1302e5569",
-  "prevId": "2a076c35-2746-4709-a57e-e61e6c1f59ee",
+  "id": "953cc407-8b16-47c6-94c5-4793e562f1cc",
+  "prevId": "3f898852-c3ac-4674-939a-f540b7e947b4",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -168,7 +168,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "core_audit_log_created_at_idx": {
+          "name": "core_audit_log_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
@@ -1287,6 +1303,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "ai_usage_events_created_at_idx": {
+          "name": "ai_usage_events_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -1420,6 +1451,21 @@
             },
             {
               "expression": "page",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "app_error_log_created_at_idx": {
+          "name": "app_error_log_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2185,6 +2231,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "app_notification_log_created_at_idx": {
+          "name": "app_notification_log_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -2585,6 +2646,21 @@
             },
             {
               "expression": "seq",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "app_session_messages_created_at_idx": {
+          "name": "app_session_messages_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3664,11 +3740,24 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'user'"
+        },
+        "role_key": {
+          "name": "role_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "user_id": {
           "name": "user_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "period": {
           "name": "period",
@@ -3696,6 +3785,16 @@
           "notNull": true,
           "default": false
         },
+        "scope_ref": {
+          "name": "scope_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "generated": {
+            "as": "COALESCE(\"user_id\"::text, \"role_key\", 'everyone')",
+            "type": "stored"
+          }
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3712,17 +3811,17 @@
         }
       },
       "indexes": {
-        "app_usage_budgets_user_id_period_unique": {
-          "name": "app_usage_budgets_user_id_period_unique",
+        "app_usage_budgets_period_scope_ref_unique": {
+          "name": "app_usage_budgets_period_scope_ref_unique",
           "columns": [
             {
-              "expression": "user_id",
+              "expression": "period",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             },
             {
-              "expression": "period",
+              "expression": "scope_ref",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
