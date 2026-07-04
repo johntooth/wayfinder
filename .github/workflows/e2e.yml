@@ -2,9 +2,9 @@ name: E2E Tests (Playwright)
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, "release/**"]
   push:
-    branches: [main]
+    branches: [main, "release/**"]
   workflow_dispatch:
     inputs:
       use_real_ai:
