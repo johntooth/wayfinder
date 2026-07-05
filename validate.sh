@@ -250,6 +250,94 @@ else
   fail "web accessibility — jsx-a11y violations found (see output above)"
 fi
 
+# ── 16. source file size guard ────────────────────────────────────────────────
+# Large files concentrate change risk and merge conflicts. Warn at 700 lines,
+# fail at 800. Test files are excluded (covered by review, not by this ratchet).
+# The allowlist holds legacy offenders scheduled for decomposition in
+# docs/development/to-be-implemented/code-quality-hot-paths-and-decomposition.phase.md
+# — they warn instead of failing. NEVER add new entries; only remove them.
+section "16. source file size (warn ≥ 700, fail ≥ 800 lines)"
+SIZE_WARN_LINES=700
+SIZE_FAIL_LINES=800
+SIZE_LEGACY_ALLOWLIST=(
+  "apps/web/src/app/(admin)/admin/settings/page.tsx"
+  "apps/web/src/components/canvas/node-config-modal.tsx"
+  "apps/web/src/app/(user)/flows/[id]/config/_content.tsx"
+  "apps/web/src/app/(admin)/admin/flows/[id]/_content.tsx"
+  "apps/web/src/app/api/chat/[sessionId]/stream/turn-helpers.ts"
+)
+SIZE_FAILURES=""
+SIZE_WARNINGS=""
+while IFS= read -r source_file; do
+  line_count=$(wc -l < "$source_file")
+  [ "$line_count" -lt "$SIZE_WARN_LINES" ] && continue
+  is_legacy=false
+  for legacy_file in "${SIZE_LEGACY_ALLOWLIST[@]}"; do
+    if [ "$source_file" = "$legacy_file" ]; then is_legacy=true; break; fi
+  done
+  if [ "$line_count" -ge "$SIZE_FAIL_LINES" ] && [ "$is_legacy" = false ]; then
+    SIZE_FAILURES+="  $line_count  $source_file\n"
+  else
+    SIZE_WARNINGS+="  $line_count  $source_file\n"
+  fi
+done < <(find packages/*/src apps/*/src -type f \( -name "*.ts" -o -name "*.tsx" \) \
+  ! -name "*.test.ts" ! -name "*.test.tsx" ! -name "*.spec.ts" 2>/dev/null)
+if [ -n "$SIZE_WARNINGS" ]; then
+  warn "files at or above $SIZE_WARN_LINES lines — split when next touched:"
+  printf '%b' "$SIZE_WARNINGS"
+fi
+if [ -z "$SIZE_FAILURES" ]; then
+  pass "no non-legacy source file at or above $SIZE_FAIL_LINES lines"
+else
+  fail "source files at or above $SIZE_FAIL_LINES lines — decompose before shipping:"
+  printf '%b' "$SIZE_FAILURES"
+fi
+
+# ── 17. application layer purity ─────────────────────────────────────────────
+# Allowlist counterpart to the ESLint denylist: packages/application may import
+# only @rbrasier/domain and @rbrasier/shared. A denylist misses newly added
+# dependencies; this catches any non-relative import outside the two packages.
+section "17. packages/application imports only @rbrasier/domain and @rbrasier/shared"
+APPLICATION_LEAKS=$(grep -rnE "from ['\"][^.]" packages/application/src \
+    --include="*.ts" --exclude="*.test.ts" 2>/dev/null \
+  | grep -vE "from ['\"]@rbrasier/(domain|shared)['\"/]" \
+  | grep -vE "^[^:]+:[0-9]+:\s*//")
+if [ -z "$APPLICATION_LEAKS" ]; then
+  pass "application purity"
+else
+  fail "application purity — imports outside @rbrasier/domain and @rbrasier/shared:"
+  echo "$APPLICATION_LEAKS"
+fi
+
+# ── 18. apps do not import the ORM directly ──────────────────────────────────
+# Apps wire adapters; they must not talk to Drizzle or the driver themselves.
+# e2e-fixtures.ts is exempt: test seeding writes rows the product deliberately
+# exposes no API for.
+section "18. apps/* do not import drizzle-orm or postgres directly"
+APP_ORM_LEAKS=$(grep -rnE "from ['\"](drizzle-orm|postgres)['\"/]" apps/web/src apps/api/src \
+    --include="*.ts" --include="*.tsx" 2>/dev/null \
+  | grep -v "e2e-fixtures.ts" \
+  | grep -vE "^[^:]+:[0-9]+:\s*//")
+if [ -z "$APP_ORM_LEAKS" ]; then
+  pass "apps do not import the ORM"
+else
+  fail "apps import the ORM directly — go through @rbrasier/adapters:"
+  echo "$APP_ORM_LEAKS"
+fi
+
+# ── 19. no focused tests ─────────────────────────────────────────────────────
+# A committed .only silently skips the rest of the suite in CI.
+section "19. no describe.only / it.only / test.only committed"
+FOCUSED_TESTS=$(grep -rnE "\b(describe|it|test)\.only\(" \
+    packages/*/src apps/*/src tests \
+    --include="*.test.ts" --include="*.test.tsx" --include="*.spec.ts" 2>/dev/null)
+if [ -z "$FOCUSED_TESTS" ]; then
+  pass "no focused tests"
+else
+  fail "focused tests found — remove .only:"
+  echo "$FOCUSED_TESTS"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo
 echo "──────────────────────────────────────────"
