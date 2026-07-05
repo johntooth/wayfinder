@@ -62,6 +62,9 @@ On a working branch off `main` (`release-prep/alpha-(M+1)`):
   to `release/alpha-M`
 - Update the branch table in `CONTRIBUTING.md` §2 (branch name and version
   lines)
+- Update the **Quickstart** section of `README.md`: the "Current release"
+  line (alpha number, version line, branch name) and the `--branch` argument
+  of the `git clone` command must both point at `release/alpha-M`
 - Run `./validate.sh` (the version-sync check must pass)
 - Commit (`chore: start alpha-(M+1)`), push, and open a PR against `main`
   via `mcp__github__create_pull_request`

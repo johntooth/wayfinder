@@ -141,8 +141,9 @@ When `main` is feature-complete for alpha-N:
    to `(N+1).0.0` and commit (`chore: start alpha-(N+1)`).
 
 3. **Update the current-alpha references**: the **Release Branching** section
-   of `CLAUDE.md` (and its mirror in `AGENTS.md`), and the branch table in
-   `CONTRIBUTING.md`.
+   of `CLAUDE.md` (and its mirror in `AGENTS.md`), the branch table in
+   `CONTRIBUTING.md`, and the **Quickstart** in `README.md` (the "Current
+   release" line and the `git clone --branch` argument).
 
 4. **Retire the previous release branch**: `release/alpha-(N-1)` stops
    receiving changes — critical fixes only, at maintainer discretion.
