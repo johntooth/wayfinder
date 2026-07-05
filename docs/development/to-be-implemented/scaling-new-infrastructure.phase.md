@@ -11,9 +11,14 @@
   - Connection pooler and read replica: infra only, no code bump (the
     `DATABASE_LISTEN_URL` caveat in item 1 is part of the event-bus slice)
 - **Depends on / relates to**:
-  - [`scaling-current-stack.phase.md`](./scaling-current-stack.phase.md) —
-    do that phase first; it delivers most of the headroom to ~500 concurrent
-    users and none of it is blocked on infrastructure decisions.
+  - [`scaling-current-stack.phase.md`](../implemented/v1.58.0/scaling-current-stack.phase.md)
+    (implemented v1.58.0) — delivered most of the headroom to ~500
+    concurrent users without infrastructure decisions; "companion phase
+    doc" references below point there.
+  - [`code-quality-hot-paths-and-decomposition.phase.md`](./code-quality-hot-paths-and-decomposition.phase.md) —
+    the code-only companion from the 2026-07-05 review; its `IRateLimiter`
+    (group F) and cache seams are what items 2 and 7 promote to shared
+    services.
   - `implemented/v1.49.0/scaling-p0-pool-and-auth-cache.md` — the env-driven
     pool and the in-process auth cache this phase promotes to shared services.
   - ADR-017 (embedding providers), ADR-019 (in-app scheduler, queue
@@ -52,18 +57,31 @@ here until the last code slice lands (the former roadmap's convention).
    `LISTEN/NOTIFY` event-bus adapter needs one session-mode connection, so
    it must take a direct DB URL (`DATABASE_LISTEN_URL`, defaulting to
    `DATABASE_URL`) while the app pool goes through the pooler.
-2. **Redis — the three promotions.** One managed Redis unlocks three things
-   at once, all behind seams that already exist:
+2. **Redis — the promotions.** One managed Redis unlocks all of these at
+   once, all behind seams that already exist:
    - **Shared auth cache**: the v1.49.0 in-process `TtlCache` fronting
      session + permission resolution is single-instance correct; promote it
      to Redis so invalidation (logout, role change) is honoured across
      instances within TTL. The cache sits behind a clean seam precisely to
      make this swap local.
+   - **Shared admin-settings and flow-version caches** (2026-07-05 review):
+     the same `TtlCache` shape also fronts the near-static admin settings
+     and the immutable published flow-version snapshots
+     (`apps/web/src/lib/container.ts`). The flow-version cache is
+     immutable-keyed and merely loses hit rate per instance; the
+     admin-settings cache serves stale org config across instances after an
+     admin edit until TTL. Promote both alongside the auth cache — same
+     port, same swap.
    - **Event-bus adapter 2**: Redis pub/sub drops in behind the
      `ISessionEventBus` port (companion phase doc, group C), replacing the
      per-instance Postgres LISTEN connection and scaling fan-out
      independently of the database. No client or event-vocabulary change.
    - **Queue backend** for item 3.
+   - **Shared rate-limit state**: the in-process `IRateLimiter` on auth +
+     chat endpoints (code-quality phase doc, group F) enforces N× the
+     configured budget at N instances; back it with Redis
+     (fixed-window/token-bucket via `INCR`+`EXPIRE`) when instance
+     count > 1.
 3. **A real job queue for fire-and-forget work** (companion phase doc, wall #7).
    Document generation, title generation, embedding/indexing, extraction,
    and email currently run detached inside the web process — a deploy or
@@ -88,6 +106,18 @@ here until the last code slice lands (the former roadmap's convention).
    S3 — parametrise endpoint/region/credentials for native S3. Azure Blob
    needs a small new `IObjectStorage` adapter, or keep the S3 API via a
    MinIO gateway.
+7. **Cluster-aware LLM call governor** (2026-07-05 review). The
+   `LlmCallGovernor` bounding concurrent in-flight provider calls
+   (`LLM_MAX_CONCURRENCY`, scaling wall #5) is per-instance, so N instances
+   allow N× the configured concurrency against the provider's TPM/RPM
+   limits. Two options when going multi-instance, in order of preference:
+   - **Document the per-instance math** (set
+     `LLM_MAX_CONCURRENCY = provider budget ÷ instances`) — zero code,
+     acceptable while instance count is small and static.
+   - **Shared semaphore in Redis** (token bucket / `INCR`-with-TTL slots)
+     behind the existing governor interface once autoscaling makes the
+     static split wrong. Retry/backoff behaviour stays local; only the
+     concurrency budget becomes shared.
 
 ---
 
