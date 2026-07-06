@@ -1,0 +1,182 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Wayfinder sandbox-lease blueprint. Stands up a self-contained, zero-config
+  Wayfinder dev/demo instance inside a GovAI Innovation Sandbox leased account.
+  Host = one SageMaker notebook instance running the Wayfinder docker-compose
+  bundle; AI = Amazon Bedrock via the notebook execution role (no API key).
+  Deploy as a service-managed CloudFormation StackSet targeting the Active
+  (leased) OU so it materialises the moment an account is leased.
+
+# ---------------------------------------------------------------------------
+# ASSUMPTIONS (confirm against the active-lease guardrail SCP before relying on
+# this — they were NOT verifiable from the un-leased pool account, which denies
+# everything but SSM). Evidence for these comes from the advanced-rag-workshop
+# blueprint, which proves the guardrail permits SageMaker + Bedrock + IAM:
+#   1. sagemaker:CreateNotebookInstance (+ lifecycle config) is allowed.
+#   2. bedrock:InvokeModel[WithResponseStream] is allowed for the model in
+#      BedrockModelId, AND that model's access is already enabled in the account
+#      (Bedrock model access cannot be turned on from CloudFormation — the
+#      account baseline / guardrail must enable it, exactly as the RAG workshop
+#      lists it as a prerequisite).
+#   3. Outbound internet from the notebook is allowed (git clone, image pulls,
+#      npm). Notebook is non-VPC (DirectInternetAccess=Enabled) to avoid needing
+#      any ec2:* permissions from the lease principal.
+# ---------------------------------------------------------------------------
+
+Parameters:
+  WayfinderGitUrl:
+    Type: String
+    Description: Git URL the notebook clones Wayfinder from (must be reachable from the lease account — public repo, or a pre-authenticated URL).
+    Default: https://github.com/johntooth/wayfinder.git
+  WayfinderGitRef:
+    Type: String
+    Description: Branch or tag to check out.
+    Default: main
+  BedrockModelId:
+    Type: String
+    Description: >-
+      Bedrock model/inference-profile id Wayfinder invokes. Use an APAC
+      cross-region inference profile (modern Claude on Bedrock is not invokable
+      as a raw foundation-model id). Default matches the model family the
+      workshop guardrail is known to enable.
+    Default: apac.anthropic.claude-3-5-haiku-20241022-v1:0
+  NotebookInstanceType:
+    Type: String
+    Description: Notebook size. Needs headroom for a docker build + Postgres + two Node processes.
+    Default: ml.t3.xlarge
+    AllowedValues: [ml.t3.large, ml.t3.xlarge, ml.t3.2xlarge]
+  VolumeSizeInGB:
+    Type: Number
+    Description: EBS size for the notebook (image build layers + volumes).
+    Default: 50
+    MinValue: 30
+
+Resources:
+
+  # Execution role for the notebook. Least-privilege: Bedrock invoke + its own
+  # CloudWatch logs. No S3/RDS/ECS — the whole app stack is in-container.
+  NotebookRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: sagemaker.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: wayfinder-bedrock-invoke
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: InvokeBedrock
+                Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource:
+                  # The inference profile Wayfinder targets, plus the underlying
+                  # foundation models the profile fans out to across APAC.
+                  - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*
+                  - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/anthropic.*
+                  - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.titan-embed*
+              - Sid: OwnLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/*
+
+  # on-start runs on every notebook boot and is idempotent. SageMaker kills
+  # lifecycle scripts after 5 minutes, so the heavy work (clone/build/compose)
+  # is detached with setsid+nohup and logged to SageMaker/wayfinder-bootstrap.log.
+  LifecycleConfig:
+    Type: AWS::SageMaker::NotebookInstanceLifecycleConfig
+    Properties:
+      NotebookInstanceLifecycleConfigName: !Sub ${AWS::StackName}-lifecycle
+      OnStart:
+        - Content:
+            Fn::Base64: !Sub |
+              #!/bin/bash
+              set -eux
+
+              cat >/home/ec2-user/SageMaker/wayfinder-bootstrap.sh <<'BOOT'
+              #!/bin/bash
+              set -eux
+              export HOME=/root
+              cd /home/ec2-user/SageMaker
+
+              # docker compose v2 plugin (notebook AMIs ship dockerd, not always compose v2)
+              if ! docker compose version >/dev/null 2>&1; then
+                mkdir -p /usr/libexec/docker/cli-plugins
+                curl -sSL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+                  -o /usr/libexec/docker/cli-plugins/docker-compose
+                chmod +x /usr/libexec/docker/cli-plugins/docker-compose
+              fi
+
+              if [ ! -d wayfinder/.git ]; then
+                git clone ${WayfinderGitUrl} wayfinder
+              fi
+              cd wayfinder
+              git fetch --all --tags
+              git checkout ${WayfinderGitRef}
+
+              # Lease runtime env: Bedrock via the notebook role (deliberately no
+              # keys -> AWS SDK default credential chain -> IMDS), in-container MinIO.
+              cat > .env.lease <<ENV
+              NODE_ENV=production
+              DATABASE_URL=postgresql://postgres:postgres@localhost:5432/wayfinder
+              AI_DEFAULT_PROVIDER=bedrock
+              AWS_REGION=${AWS::Region}
+              AWS_BEDROCK_REGION=${AWS::Region}
+              AWS_BEDROCK_ACCESS_KEY_ID=
+              AWS_BEDROCK_SECRET_ACCESS_KEY=
+              WAYFINDER_BEDROCK_MODEL=${BedrockModelId}
+              MINIO_ENDPOINT=localhost
+              MINIO_PORT=9000
+              MINIO_USE_SSL=false
+              MINIO_ACCESS_KEY=minioadmin
+              MINIO_SECRET_KEY=minioadmin
+              MINIO_BUCKET=wayfinder-documents
+              CHUNKER_PROVIDER=fixed
+              ENV
+
+              # Single image used by migrate/web/api.
+              docker build -t wayfinder-app:latest .
+
+              docker compose \
+                -f infra/aws/lease-blueprint/docker-compose.lease.yml \
+                --env-file .env.lease up -d
+              BOOT
+
+              chmod +x /home/ec2-user/SageMaker/wayfinder-bootstrap.sh
+              nohup setsid bash /home/ec2-user/SageMaker/wayfinder-bootstrap.sh \
+                > /home/ec2-user/SageMaker/wayfinder-bootstrap.log 2>&1 &
+
+  Notebook:
+    Type: AWS::SageMaker::NotebookInstance
+    Properties:
+      NotebookInstanceName: !Sub ${AWS::StackName}-wayfinder
+      InstanceType: !Ref NotebookInstanceType
+      RoleArn: !GetAtt NotebookRole.Arn
+      LifecycleConfigName: !GetAtt LifecycleConfig.NotebookInstanceLifecycleConfigName
+      VolumeSizeInGB: !Ref VolumeSizeInGB
+      DirectInternetAccess: Enabled     # non-VPC: no ec2:* needed from the lease principal
+      RootAccess: Enabled               # required to drive dockerd
+      InstanceMetadataServiceConfiguration:
+        MinimumInstanceMetadataServiceVersion: "2"
+
+Outputs:
+  WayfinderUrl:
+    Description: >-
+      Open the notebook (SageMaker console -> Notebook instances -> Open
+      JupyterLab) then browse the proxied app. Web UI is under /proxy/3000/,
+      API under /proxy/3001/. (Next.js served under a proxy sub-path needs
+      basePath set — see README "Access & the proxy sub-path".)
+    Value: !Sub https://${AWS::StackName}-wayfinder.notebook.${AWS::Region}.sagemaker.aws/proxy/3000/
+  BootstrapLog:
+    Description: Tail this on the notebook to watch first-boot provisioning.
+    Value: /home/ec2-user/SageMaker/wayfinder-bootstrap.log
+  NotebookRoleArn:
+    Value: !GetAtt NotebookRole.Arn
