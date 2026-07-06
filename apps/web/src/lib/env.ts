@@ -27,6 +27,10 @@ const serverEnvSchema = z.object({
   AWS_BEDROCK_REGION: z.string().optional(),
   AWS_BEDROCK_ACCESS_KEY_ID: z.string().optional(),
   AWS_BEDROCK_SECRET_ACCESS_KEY: z.string().optional(),
+  // Pins the Bedrock model id for every AI purpose. For deployments (e.g. a
+  // sandbox lease) where only one guardrail-enabled model exists and the
+  // default snapshots are unavailable. Applied only when the provider is bedrock.
+  WAYFINDER_BEDROCK_MODEL: z.string().optional(),
   // Chunking (ADR-030): "semchunk" routes indexing through the sidecar with
   // automatic fixed-window fallback; "fixed" (default) never touches the network.
   CHUNKER_PROVIDER: z.enum(["fixed", "semchunk"]).default("fixed"),

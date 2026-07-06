@@ -16,6 +16,9 @@ const envSchema = z.object({
   AWS_BEDROCK_REGION: z.string().optional(),
   AWS_BEDROCK_ACCESS_KEY_ID: z.string().optional(),
   AWS_BEDROCK_SECRET_ACCESS_KEY: z.string().optional(),
+  // Pins the Bedrock model id for every AI purpose (sandbox-lease deployments
+  // with a single guardrail-enabled model). Applied only when provider=bedrock.
+  WAYFINDER_BEDROCK_MODEL: z.string().optional(),
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
   LANGFUSE_HOST: z.string().url().optional(),

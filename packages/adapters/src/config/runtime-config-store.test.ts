@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  AI_CONFIG_SETTING_KEY,
   type AiConfig,
   type ISystemSettingsRepository,
   type StorageConfig,
@@ -72,6 +71,25 @@ describe("RuntimeConfigStore — bedrock defaults", () => {
     expect(config.models.documentGeneration).toBe(
       "anthropic.claude-sonnet-4-5-20250929-v1:0",
     );
+  });
+
+  it("applies an env model override across every purpose", async () => {
+    const pinned = "apac.anthropic.claude-3-5-haiku-20241022-v1:0";
+    const store = new RuntimeConfigStore(
+      makeRepo(null),
+      makeEnv({
+        provider: "bedrock",
+        models: { chat: pinned, documentGeneration: pinned, branching: pinned },
+      }),
+    );
+
+    const config = await store.getAiConfig();
+
+    expect(config.models).toEqual({
+      chat: pinned,
+      documentGeneration: pinned,
+      branching: pinned,
+    });
   });
 
   it("falls back to env bedrock credentials when no stored value", async () => {

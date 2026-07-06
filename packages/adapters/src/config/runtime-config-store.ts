@@ -75,6 +75,10 @@ export interface EnvDefaults {
   embeddingsProvider: EmbeddingsProvider;
   n8n?: N8nConfig;
   entra?: EntraCredentials;
+  // Per-purpose model overrides sourced from the environment, e.g. a sandbox
+  // lease pinning the one Bedrock model its guardrail enables. Merged over the
+  // provider defaults; a stored admin AI config still wins.
+  models?: Partial<Record<AiPurpose, string>>;
 }
 
 const DEFAULT_N8N_CONFIG: N8nConfig = { baseUrl: "", apiKey: "" };
@@ -262,7 +266,7 @@ const parseDocumentGenerationConfig = (
 const buildEnvAiConfig = (env: EnvDefaults): AiConfig => ({
   provider: env.provider,
   apiKeys: env.apiKeys,
-  models: DEFAULT_MODELS_FOR[env.provider],
+  models: { ...DEFAULT_MODELS_FOR[env.provider], ...env.models },
 });
 
 const buildEnvEmbeddingsConfig = (env: EnvDefaults): EmbeddingsConfig => ({

@@ -81,26 +81,27 @@ but SSM). Check them against the **active-lease guardrail SCP**:
       is the safe default; Sonnet/Opus only if the baseline enables them).
 - [ ] Outbound internet from a non-VPC notebook is permitted (git + image pulls).
 
-## Code changes Wayfinder still needs for true zero-config
+## App-side support (landed alongside this blueprint)
 
-The blueprint is ready, but three things in the app repo make it *actually*
-turnkey. None is large:
+The three changes that make the app actually turnkey under a lease are now in
+the repo:
 
-1. **Read the Bedrock model from env.** `packages/adapters/src/ai/providers.ts`
-   hardcodes the bedrock default (`anthropic.claude-sonnet-4-5-…`, a raw
-   foundation-model id that isn't even on-demand invokable). The blueprint sets
-   `WAYFINDER_BEDROCK_MODEL` in `.env.lease`; wire the runtime config to honour
-   it and default it to an `apac.` inference-profile id.
-2. **Pass ambient creds through.** Confirm `apps/*/lib/container.ts` sends
-   `aiKeys.bedrock` as **undefined** when `AWS_BEDROCK_ACCESS_KEY_ID` is empty
-   (not `{region, accessKeyId:"", …}`). `factory.ts` already coerces absent →
-   `null`, and `providers.ts` already does `createAmazonBedrock({})` → IMDS role.
-   Empty strings would break that chain.
-3. **Next.js base path under the proxy.** The app is reached at
-   `…/proxy/3000/`. Set Next.js `basePath`/`assetPrefix` (e.g. from an env var)
-   so assets resolve under the sub-path — otherwise the SPA loads blank. For a
-   quick demo you can instead SSH-tunnel the port; for the hosted-in-lease
-   experience, basePath is the fix.
+1. **Bedrock model from env.** `WAYFINDER_BEDROCK_MODEL` (honoured only when
+   `AI_DEFAULT_PROVIDER=bedrock`) pins the model for every AI purpose, overriding
+   the built-in defaults. The blueprint sets it in `.env.lease` — default an
+   `apac.` inference-profile id, since modern Claude on Bedrock isn't invokable
+   as a raw foundation-model id.
+2. **Ambient credentials.** `apps/*/lib/container.ts` already resolves the
+   Bedrock creds to `null` when the static keys are absent, and
+   `providers.ts` does `createAmazonBedrock({})` → the AWS default credential
+   chain → the notebook execution role via IMDS. So empty keys in `.env.lease`
+   = auth by role, no key. (Region resolves from `AWS_REGION`.)
+3. **Next.js base path.** `WAYFINDER_BASE_PATH` sets Next.js `basePath` so assets
+   resolve under a proxy sub-path. The blueprint sets it to `/proxy/absolute/3000`
+   and hands out the matching `/proxy/absolute/3000/` URL. (The *absolute* proxy
+   form preserves the prefix; the plain `/proxy/3000/` form strips it and the SPA
+   loads blank. To skip the proxy entirely, SSH-tunnel the port and leave
+   `WAYFINDER_BASE_PATH` unset.)
 
 ## Follow-up (not needed for a demo lease)
 

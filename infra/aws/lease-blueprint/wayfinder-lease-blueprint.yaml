@@ -140,6 +140,7 @@ Resources:
               MINIO_SECRET_KEY=minioadmin
               MINIO_BUCKET=wayfinder-documents
               CHUNKER_PROVIDER=fixed
+              WAYFINDER_BASE_PATH=/proxy/absolute/3000
               ENV
 
               # Single image used by migrate/web/api.
@@ -171,10 +172,11 @@ Outputs:
   WayfinderUrl:
     Description: >-
       Open the notebook (SageMaker console -> Notebook instances -> Open
-      JupyterLab) then browse the proxied app. Web UI is under /proxy/3000/,
-      API under /proxy/3001/. (Next.js served under a proxy sub-path needs
-      basePath set — see README "Access & the proxy sub-path".)
-    Value: !Sub https://${AWS::StackName}-wayfinder.notebook.${AWS::Region}.sagemaker.aws/proxy/3000/
+      JupyterLab) then browse the proxied app. The bundle sets Next.js basePath
+      to match the *absolute* proxy prefix, so open the app at
+      /proxy/absolute/3000/ (the absolute form preserves the prefix the app
+      expects; the plain /proxy/3000/ form strips it and the SPA loads blank).
+    Value: !Sub https://${AWS::StackName}-wayfinder.notebook.${AWS::Region}.sagemaker.aws/proxy/absolute/3000/
   BootstrapLog:
     Description: Tail this on the notebook to watch first-boot provisioning.
     Value: /home/ec2-user/SageMaker/wayfinder-bootstrap.log

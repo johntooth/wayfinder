@@ -264,6 +264,15 @@ const build = () => {
         }
       : null;
 
+  const bedrockModelOverride =
+    env.AI_DEFAULT_PROVIDER === "bedrock" && env.WAYFINDER_BEDROCK_MODEL
+      ? {
+          chat: env.WAYFINDER_BEDROCK_MODEL,
+          documentGeneration: env.WAYFINDER_BEDROCK_MODEL,
+          branching: env.WAYFINDER_BEDROCK_MODEL,
+        }
+      : undefined;
+
   const runtimeConfig = new RuntimeConfigStore(systemSettings, {
     provider: env.AI_DEFAULT_PROVIDER,
     apiKeys: {
@@ -272,6 +281,7 @@ const build = () => {
       mistral: env.MISTRAL_API_KEY ?? null,
       bedrock: bedrockEnvCredentials,
     },
+    models: bedrockModelOverride,
     storage: {
       endpoint: env.MINIO_ENDPOINT,
       port: env.MINIO_PORT,

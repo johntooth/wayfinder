@@ -1,8 +1,14 @@
 import type { NextConfig } from "next";
 
+// Serve the app under a URL sub-path when set (e.g. a SageMaker notebook's
+// `/proxy/absolute/3000` prefix in a sandbox lease) so asset URLs resolve.
+// Unset for root-hosted deployments — no behaviour change.
+const basePath = process.env.WAYFINDER_BASE_PATH?.replace(/\/+$/, "") || undefined;
+
 const config: NextConfig = {
   reactStrictMode: true,
   typedRoutes: true,
+  ...(basePath ? { basePath } : {}),
   transpilePackages: [
     "@rbrasier/domain",
     "@rbrasier/application",
