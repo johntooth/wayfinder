@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
-// Serve the app under a URL sub-path when set (e.g. a SageMaker notebook's
-// `/proxy/absolute/3000` prefix in a sandbox lease) so asset URLs resolve.
+// Serve the app under a URL sub-path when set (e.g. a reverse proxy's
+// `/proxy/absolute/3000` prefix) so asset URLs resolve.
 // Unset for root-hosted deployments — no behaviour change.
 const basePath = process.env.WAYFINDER_BASE_PATH?.replace(/\/+$/, "") || undefined;
 

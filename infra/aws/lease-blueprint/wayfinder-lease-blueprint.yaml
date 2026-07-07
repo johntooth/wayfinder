@@ -1,37 +1,48 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  Wayfinder sandbox-lease blueprint. Stands up a self-contained, zero-config
-  Wayfinder dev/demo instance inside a GovAI Innovation Sandbox leased account.
-  Host = one SageMaker notebook instance running the Wayfinder docker-compose
-  bundle; AI = Amazon Bedrock via the notebook execution role (no API key).
-  Deploy as a service-managed CloudFormation StackSet targeting the Active
-  (leased) OU so it materialises the moment an account is leased.
+  Wayfinder sandbox-lease blueprint. Stands up a self-contained,
+  zero-config Wayfinder dev/demo instance inside a GovAI Innovation Sandbox
+  leased account. Host = one EC2 instance in a purpose-built VPC. Backing
+  services (Postgres + MinIO) run under docker-compose; the app itself is built
+  and run natively with Node.js + pnpm at /opt/wayfinder. AI = Amazon Bedrock via
+  the instance role (no API key). Access is SSM port-forward -> localhost:3000
+  (no inbound ports, no SSH key). Deploy as a service-managed CloudFormation
+  StackSet targeting the Active (leased) OU so it materialises the moment an
+  account is leased.
 
 # ---------------------------------------------------------------------------
 # ASSUMPTIONS (confirm against the active-lease guardrail SCP before relying on
 # this — they were NOT verifiable from the un-leased pool account, which denies
-# everything but SSM). Evidence for these comes from the advanced-rag-workshop
-# blueprint, which proves the guardrail permits SageMaker + Bedrock + IAM:
-#   1. sagemaker:CreateNotebookInstance (+ lifecycle config) is allowed.
-#   2. bedrock:InvokeModel[WithResponseStream] is allowed for the model in
-#      BedrockModelId, AND that model's access is already enabled in the account
-#      (Bedrock model access cannot be turned on from CloudFormation — the
-#      account baseline / guardrail must enable it, exactly as the RAG workshop
-#      lists it as a prerequisite).
-#   3. Outbound internet from the notebook is allowed (git clone, image pulls,
-#      npm). Notebook is non-VPC (DirectInternetAccess=Enabled) to avoid needing
-#      any ec2:* permissions from the lease principal.
+# everything but SSM):
+#   1. ec2:* (VPC, subnet, IGW, route table, security group, RunInstances) and
+#      iam:PassRole to the instance profile are allowed for the lease principal,
+#      and the chosen InstanceType isn't blocked by a cost guardrail.
+#   2. bedrock:InvokeModel[WithResponseStream] is allowed for BedrockModelId, AND
+#      that model's access is already enabled in the account (CloudFormation
+#      cannot enable Bedrock model access — the account baseline must).
+#   3. Outbound internet is allowed (git clone, image pulls, npm) and the SSM
+#      endpoints are reachable so Session Manager port-forwarding works — this is
+#      the only access path; the instance has no inbound rules and no key pair.
 # ---------------------------------------------------------------------------
 
 Parameters:
   WayfinderGitUrl:
     Type: String
-    Description: Git URL the notebook clones Wayfinder from (must be reachable from the lease account — public repo, or a pre-authenticated URL).
+    Description: Git URL the instance clones Wayfinder from (must be reachable from the lease account — public repo, or a pre-authenticated URL).
     Default: https://github.com/johntooth/wayfinder.git
   WayfinderGitRef:
     Type: String
     Description: Branch or tag to check out.
     Default: main
+  AppMode:
+    Type: String
+    Description: >-
+      demo = zero-config: NODE_ENV=development, AUTH_BYPASS on, dev servers —
+      port-forward lands you straight in the app (the "just Request Lease" path).
+      production = pnpm build && pnpm start, NODE_ENV=production, real auth — the
+      first visitor must register an admin at /admin/register.
+    Default: demo
+    AllowedValues: [demo, production]
   BedrockModelId:
     Type: String
     Description: >-
@@ -40,30 +51,113 @@ Parameters:
       as a raw foundation-model id). Default matches the model family the
       workshop guardrail is known to enable.
     Default: apac.anthropic.claude-3-5-haiku-20241022-v1:0
-  NotebookInstanceType:
+  InstanceType:
     Type: String
-    Description: Notebook size. Needs headroom for a docker build + Postgres + two Node processes.
-    Default: ml.t3.xlarge
-    AllowedValues: [ml.t3.large, ml.t3.xlarge, ml.t3.2xlarge]
+    Description: Instance size. Needs headroom for a pnpm build + Postgres + MinIO + two Node processes.
+    Default: t3.xlarge
+    AllowedValues: [t3.large, t3.xlarge, t3.2xlarge]
   VolumeSizeInGB:
     Type: Number
-    Description: EBS size for the notebook (image build layers + volumes).
+    Description: Root EBS size (node_modules + build output + container volumes).
     Default: 50
     MinValue: 30
+  VpcCidr:
+    Type: String
+    Description: CIDR for the blueprint's own VPC (self-contained; must not overlap anything the lease principal peers with).
+    Default: 10.20.0.0/16
+  SubnetCidr:
+    Type: String
+    Description: CIDR for the public subnet the instance launches into.
+    Default: 10.20.1.0/24
+  LatestAl2023Ami:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Description: Resolves to the latest Amazon Linux 2023 AMI (ships the SSM agent + dnf). Leave as default.
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
 
 Resources:
 
-  # Execution role for the notebook. Least-privilege: Bedrock invoke + its own
-  # CloudWatch logs. No S3/RDS/ECS — the whole app stack is in-container.
-  NotebookRole:
+  # --- Network: VPC + public subnet + IGW + route table ---------------------
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - { Key: Name, Value: !Sub "${AWS::StackName}-vpc" }
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - { Key: Name, Value: !Sub "${AWS::StackName}-igw" }
+
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref SubnetCidr
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true     # public IP so the instance reaches Bedrock/SSM/git/npm without a NAT gateway
+      Tags:
+        - { Key: Name, Value: !Sub "${AWS::StackName}-subnet" }
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub "${AWS::StackName}-rt" }
+
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  SubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref Subnet
+      RouteTableId: !Ref RouteTable
+
+  # Security group explicitly bound to the VPC. NO inbound rules — access is
+  # exclusively via SSM Session Manager port-forwarding (agent-initiated,
+  # outbound only). Egress-all lets the agent reach SSM and the bootstrap pull
+  # git/images/npm and invoke Bedrock.
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Wayfinder lease instance — egress only; access via SSM port-forward.
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: All outbound (SSM, Bedrock, git, container registries, npm).
+      Tags:
+        - { Key: Name, Value: !Sub "${AWS::StackName}-sg" }
+
+  # --- IAM: instance role — SSM core + Bedrock invoke -----------------------
+  InstanceRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
           - Effect: Allow
-            Principal: { Service: sagemaker.amazonaws.com }
+            Principal: { Service: ec2.amazonaws.com }
             Action: sts:AssumeRole
+      ManagedPolicyArns:
+        # Registers the instance with Session Manager (the whole access path).
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
       Policies:
         - PolicyName: wayfinder-bedrock-invoke
           PolicyDocument:
@@ -75,110 +169,194 @@ Resources:
                   - bedrock:InvokeModel
                   - bedrock:InvokeModelWithResponseStream
                 Resource:
-                  # The inference profile Wayfinder targets, plus the underlying
-                  # foundation models the profile fans out to across APAC.
                   - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*
                   - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/anthropic.*
                   - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.titan-embed*
-              - Sid: OwnLogs
-                Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/*
 
-  # on-start runs on every notebook boot and is idempotent. SageMaker kills
-  # lifecycle scripts after 5 minutes, so the heavy work (clone/build/compose)
-  # is detached with setsid+nohup and logged to SageMaker/wayfinder-bootstrap.log.
-  LifecycleConfig:
-    Type: AWS::SageMaker::NotebookInstanceLifecycleConfig
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
     Properties:
-      NotebookInstanceLifecycleConfigName: !Sub ${AWS::StackName}-lifecycle
-      OnStart:
-        - Content:
-            Fn::Base64: !Sub |
-              #!/bin/bash
-              set -eux
+      Roles: [!Ref InstanceRole]
 
-              cat >/home/ec2-user/SageMaker/wayfinder-bootstrap.sh <<'BOOT'
-              #!/bin/bash
-              set -eux
-              export HOME=/root
-              cd /home/ec2-user/SageMaker
-
-              # docker compose v2 plugin (notebook AMIs ship dockerd, not always compose v2)
-              if ! docker compose version >/dev/null 2>&1; then
-                mkdir -p /usr/libexec/docker/cli-plugins
-                curl -sSL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
-                  -o /usr/libexec/docker/cli-plugins/docker-compose
-                chmod +x /usr/libexec/docker/cli-plugins/docker-compose
-              fi
-
-              if [ ! -d wayfinder/.git ]; then
-                git clone ${WayfinderGitUrl} wayfinder
-              fi
-              cd wayfinder
-              git fetch --all --tags
-              git checkout ${WayfinderGitRef}
-
-              # Lease runtime env: Bedrock via the notebook role (deliberately no
-              # keys -> AWS SDK default credential chain -> IMDS), in-container MinIO.
-              cat > .env.lease <<ENV
-              NODE_ENV=production
-              DATABASE_URL=postgresql://postgres:postgres@localhost:5432/wayfinder
-              AI_DEFAULT_PROVIDER=bedrock
-              AWS_REGION=${AWS::Region}
-              AWS_BEDROCK_REGION=${AWS::Region}
-              AWS_BEDROCK_ACCESS_KEY_ID=
-              AWS_BEDROCK_SECRET_ACCESS_KEY=
-              WAYFINDER_BEDROCK_MODEL=${BedrockModelId}
-              MINIO_ENDPOINT=localhost
-              MINIO_PORT=9000
-              MINIO_USE_SSL=false
-              MINIO_ACCESS_KEY=minioadmin
-              MINIO_SECRET_KEY=minioadmin
-              MINIO_BUCKET=wayfinder-documents
-              CHUNKER_PROVIDER=fixed
-              WAYFINDER_BASE_PATH=/proxy/absolute/3000
-              ENV
-
-              # Single image used by migrate/web/api.
-              docker build -t wayfinder-app:latest .
-
-              docker compose \
-                -f infra/aws/lease-blueprint/docker-compose.lease.yml \
-                --env-file .env.lease up -d
-              BOOT
-
-              chmod +x /home/ec2-user/SageMaker/wayfinder-bootstrap.sh
-              nohup setsid bash /home/ec2-user/SageMaker/wayfinder-bootstrap.sh \
-                > /home/ec2-user/SageMaker/wayfinder-bootstrap.log 2>&1 &
-
-  Notebook:
-    Type: AWS::SageMaker::NotebookInstance
+  # --- Compute: the EC2 host ------------------------------------------------
+  # user-data is idempotent-ish first-boot provisioning. cloud-init caps a run,
+  # so the heavy work (clone -> compose up -> pnpm install/build -> start) is
+  # driven by systemd units that survive reboots and restart on failure.
+  # Progress is logged to /var/log/wayfinder-bootstrap.log.
+  Instance:
+    Type: AWS::EC2::Instance
     Properties:
-      NotebookInstanceName: !Sub ${AWS::StackName}-wayfinder
-      InstanceType: !Ref NotebookInstanceType
-      RoleArn: !GetAtt NotebookRole.Arn
-      LifecycleConfigName: !GetAtt LifecycleConfig.NotebookInstanceLifecycleConfigName
-      VolumeSizeInGB: !Ref VolumeSizeInGB
-      DirectInternetAccess: Enabled     # non-VPC: no ec2:* needed from the lease principal
-      RootAccess: Enabled               # required to drive dockerd
-      InstanceMetadataServiceConfiguration:
-        MinimumInstanceMetadataServiceVersion: "2"
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref LatestAl2023Ami
+      IamInstanceProfile: !Ref InstanceProfile
+      SubnetId: !Ref Subnet
+      SecurityGroupIds: [!Ref InstanceSecurityGroup]
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: !Ref VolumeSizeInGB
+            VolumeType: gp3
+            DeleteOnTermination: true
+      MetadataOptions:
+        HttpTokens: required          # IMDSv2 only
+        HttpEndpoint: enabled
+      Tags:
+        - { Key: Name, Value: !Sub "${AWS::StackName}-wayfinder" }
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+          exec > >(tee -a /var/log/wayfinder-bootstrap.log) 2>&1
+          echo "wayfinder bootstrap starting $(date -u)"
+
+          APP_DIR=/opt/wayfinder
+          APP_MODE="${AppMode}"
+
+          # --- packages: docker, git, Node.js 20, pnpm --------------------------
+          dnf install -y docker git
+          systemctl enable --now docker
+
+          # Docker Compose as BOTH the CLI plugin (`docker compose`) and the
+          # standalone binary (`docker-compose`), per the reference setup.
+          COMPOSE_URL=https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64
+          install -d -m 0755 /usr/libexec/docker/cli-plugins
+          curl -sSL "$COMPOSE_URL" -o /usr/libexec/docker/cli-plugins/docker-compose
+          chmod +x /usr/libexec/docker/cli-plugins/docker-compose
+          curl -sSL "$COMPOSE_URL" -o /usr/local/bin/docker-compose
+          chmod +x /usr/local/bin/docker-compose
+
+          # Node.js 20 (needed to build/run the app natively) + pnpm via corepack.
+          curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+          dnf install -y nodejs
+          corepack enable
+          corepack prepare pnpm@9.12.0 --activate
+
+          # --- source: /opt/wayfinder, readable by all users --------------------
+          install -d -m 0755 "$APP_DIR"
+          if [ ! -d "$APP_DIR/.git" ]; then
+            git clone --branch "${WayfinderGitRef}" "${WayfinderGitUrl}" "$APP_DIR"
+          fi
+          cd "$APP_DIR"
+          git fetch --all --tags
+          git checkout "${WayfinderGitRef}"
+          chmod -R a+rX "$APP_DIR"
+
+          # --- .env via heredoc with a unique delimiter (no indentation issues) -
+          # Quoted delimiter => the shell does NOT expand $VARS; the CloudFormation
+          # values below are already substituted by Fn::Sub. AUTH_BYPASS / NODE_ENV
+          # are set from APP_MODE just after this block.
+          cat > "$APP_DIR/.env" <<'WAYFINDER_ENV_EOF'
+          APP_NAME=wayfinder
+          WEB_PORT=3000
+          API_PORT=3001
+          DATABASE_URL=postgresql://postgres:postgres@localhost:5432/wayfinder
+          AUTH_METHOD=email-password
+          BETTER_AUTH_URL=http://localhost:3000
+          ADMIN_SEED_EMAIL=admin@example.com
+          AI_DEFAULT_PROVIDER=bedrock
+          AWS_REGION=${AWS::Region}
+          AWS_BEDROCK_REGION=${AWS::Region}
+          AWS_BEDROCK_ACCESS_KEY_ID=
+          AWS_BEDROCK_SECRET_ACCESS_KEY=
+          WAYFINDER_BEDROCK_MODEL=${BedrockModelId}
+          WAYFINDER_BASE_PATH=
+          MINIO_ENDPOINT=localhost
+          MINIO_PORT=9000
+          MINIO_USE_SSL=false
+          MINIO_ACCESS_KEY=minioadmin
+          MINIO_SECRET_KEY=minioadmin
+          MINIO_BUCKET=wayfinder-documents
+          CHUNKER_PROVIDER=fixed
+          NOTIFICATIONS_ENABLED=false
+          SMTP_TRANSPORT_MODE=stream
+          WAYFINDER_ENV_EOF
+
+          # A 32-byte auth secret (required by Better Auth).
+          echo "BETTER_AUTH_SECRET=$(openssl rand -hex 32)" >> "$APP_DIR/.env"
+
+          # Mode-specific auth/runtime flags.
+          if [ "$APP_MODE" = "production" ]; then
+            echo "NODE_ENV=production" >> "$APP_DIR/.env"
+            echo "AUTH_BYPASS=false"   >> "$APP_DIR/.env"
+          else
+            echo "NODE_ENV=development" >> "$APP_DIR/.env"
+            echo "AUTH_BYPASS=true"     >> "$APP_DIR/.env"
+          fi
+
+          # --- backing services: Postgres + MinIO via docker-compose ------------
+          # Only these two — the app runs natively, not in a container.
+          docker compose -f docker-compose.yml up -d postgres storage
+
+          # --- app: install, (build if prod), migrate --------------------------
+          pnpm install --frozen-lockfile
+          if [ "$APP_MODE" = "production" ]; then
+            pnpm build
+          fi
+          # Gate the app on a clean schema (start scripts also migrate-if-configured).
+          until docker exec wayfinder-postgres pg_isready -U postgres; do sleep 2; done
+          pnpm --filter @rbrasier/adapters db:migrate || true
+
+          # --- systemd units so the app is durably up when the user connects ----
+          if [ "$APP_MODE" = "production" ]; then
+            WEB_CMD="pnpm --filter @wayfinder/web start"
+            API_CMD="pnpm --filter @wayfinder/api start"
+          else
+            WEB_CMD="pnpm --filter @wayfinder/web dev"
+            API_CMD="pnpm --filter @wayfinder/api exec tsx src/index.ts"
+          fi
+
+          cat > /etc/systemd/system/wayfinder-web.service <<UNIT_EOF
+          [Unit]
+          Description=Wayfinder web (:3000)
+          After=docker.service network-online.target
+          Wants=docker.service
+          [Service]
+          WorkingDirectory=$APP_DIR
+          EnvironmentFile=$APP_DIR/.env
+          ExecStart=/usr/bin/env $WEB_CMD
+          Restart=always
+          RestartSec=5
+          [Install]
+          WantedBy=multi-user.target
+          UNIT_EOF
+
+          cat > /etc/systemd/system/wayfinder-api.service <<UNIT_EOF
+          [Unit]
+          Description=Wayfinder api (:3001)
+          After=docker.service network-online.target
+          Wants=docker.service
+          [Service]
+          WorkingDirectory=$APP_DIR
+          EnvironmentFile=$APP_DIR/.env
+          ExecStart=/usr/bin/env $API_CMD
+          Restart=always
+          RestartSec=5
+          [Install]
+          WantedBy=multi-user.target
+          UNIT_EOF
+
+          systemctl daemon-reload
+          systemctl enable --now wayfinder-api.service wayfinder-web.service
+          echo "wayfinder bootstrap finished $(date -u)"
 
 Outputs:
-  WayfinderUrl:
+  InstanceId:
+    Description: EC2 instance id — the SSM target.
+    Value: !Ref Instance
+  PortForwardCommand:
     Description: >-
-      Open the notebook (SageMaker console -> Notebook instances -> Open
-      JupyterLab) then browse the proxied app. The bundle sets Next.js basePath
-      to match the *absolute* proxy prefix, so open the app at
-      /proxy/absolute/3000/ (the absolute form preserves the prefix the app
-      expects; the plain /proxy/3000/ form strips it and the SPA loads blank).
-    Value: !Sub https://${AWS::StackName}-wayfinder.notebook.${AWS::Region}.sagemaker.aws/proxy/absolute/3000/
+      Run this from any machine with AWS creds for the lease account + the SSM
+      plugin, then open http://localhost:3000. This is the only step the user
+      takes after the lease is granted.
+    Value: !Sub >-
+      aws ssm start-session --region ${AWS::Region} --target ${Instance}
+      --document-name AWS-StartPortForwardingSession
+      --parameters '{"portNumber":["3000"],"localPortNumber":["3000"]}'
+  AppUrl:
+    Description: Open after starting the port-forward above.
+    Value: http://localhost:3000
   BootstrapLog:
-    Description: Tail this on the notebook to watch first-boot provisioning.
-    Value: /home/ec2-user/SageMaker/wayfinder-bootstrap.log
-  NotebookRoleArn:
-    Value: !GetAtt NotebookRole.Arn
+    Description: Tail this on the instance (via SSM shell) to watch first-boot provisioning.
+    Value: /var/log/wayfinder-bootstrap.log
+  InstanceRoleArn:
+    Value: !GetAtt InstanceRole.Arn
