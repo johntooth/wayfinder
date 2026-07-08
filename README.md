@@ -10,7 +10,7 @@ follow it via a chat interface; the AI handles all prompting, branching, and doc
 ---
 
 
-https://github.com/user-attachments/assets/1386b56f-7b85-4c0c-90d5-df930b9b08d3
+https://github.com/user-attachments/assets/ca76d73d-c064-4711-ad75-48fd14eafaf2
 
 
 ---
