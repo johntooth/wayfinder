@@ -30,6 +30,7 @@ import type { ConversationalNodeData } from "@/components/canvas/conversational-
 import { ConversationalNode } from "@/components/canvas/conversational-node";
 import type { AutoNodeData } from "@/components/canvas/auto-node";
 import { AutoNode } from "@/components/canvas/auto-node";
+import { McpNode, type McpNodeData } from "@/components/canvas/mcp-node";
 import type { ScheduledNodeData } from "@/components/canvas/scheduled-node";
 import { ScheduledNode } from "@/components/canvas/scheduled-node";
 import type { ApprovalNodeData } from "@/components/canvas/approval-node";
@@ -55,6 +56,7 @@ const NODE_TYPES = {
   autoNode: AutoNode,
   scheduledNode: ScheduledNode,
   approvalNode: ApprovalNode,
+  mcpNode: McpNode,
 };
 
 const DEBOUNCE_MS = 600;
@@ -108,6 +110,17 @@ const toRfNode = (node: RawNode, stepNumber: number | null): Node => {
       config: node.config,
     };
     return { id: node.id, type: "approvalNode", position: { x: node.positionX, y: node.positionY }, data };
+  }
+
+  if (node.type === "mcp") {
+    const data: McpNodeData = {
+      name: node.name,
+      colour: node.colour,
+      toolName: (node.config.toolName as string | null) ?? null,
+      stepNumber,
+      config: node.config,
+    };
+    return { id: node.id, type: "mcpNode", position: { x: node.positionX, y: node.positionY }, data };
   }
 
   const data: ConversationalNodeData = {
@@ -373,6 +386,16 @@ function CanvasInner({ flowId }: { flowId: string }) {
           notifyOnComplete: values.notifyOnComplete,
         };
       }
+      if (values.type === "mcp") {
+        return {
+          instruction: values.instruction,
+          serverId: values.mcpServerId,
+          toolName: values.mcpToolName,
+          requestFields: values.requestFields,
+          requestFieldValues: values.requestFieldValues,
+          responseFields: values.responseFields,
+        };
+      }
       const hasTemplate = values.outputType === "generate_document" && !!values.documentTemplatePath;
       return {
         aiInstruction: values.aiInstruction,
@@ -387,6 +410,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         allowManualEdit: values.allowManualEdit,
         requireConfirmation: values.neverDone ? false : values.requireConfirmation,
         skillRefs: values.skillRefs,
+        allowedMcpToolRefs: values.allowedMcpToolRefs,
         notifyOnComplete: values.notifyOnComplete,
       };
     };
@@ -602,7 +626,9 @@ function CanvasInner({ flowId }: { flowId: string }) {
               ? "scheduled"
               : editingNode?.type === "approvalNode"
                 ? "approval"
-                : "conversational",
+                : editingNode?.type === "mcpNode"
+                  ? "mcp"
+                  : "conversational",
         approverSource:
           (editingConfig.approverSource as
             | "first_level_supervisor"
@@ -616,6 +642,9 @@ function CanvasInner({ flowId }: { flowId: string }) {
         neverDone: Boolean(editingConfig.neverDone),
         outputType: (editingConfig.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
         skillRefs: (editingConfig.skillRefs as string[] | undefined) ?? [],
+        allowedMcpToolRefs:
+          (editingConfig.allowedMcpToolRefs as NodeConfigValues["allowedMcpToolRefs"] | undefined) ??
+          [],
         documentTemplatePath: (editingConfig.documentTemplatePath as string | null) ?? null,
         documentTemplateFilename: (editingConfig.documentTemplateFilename as string | null) ?? null,
         documentTemplateContent: (editingConfig.documentTemplateContent as string | null) ?? null,
@@ -625,6 +654,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         executor: (editingConfig.executor as "n8n" | "mock" | undefined) ?? "n8n",
         workflowId: (editingConfig.workflowId as string | null) ?? null,
         webhookUrl: (editingConfig.webhookUrl as string | null) ?? "",
+        mcpServerId: (editingConfig.serverId as string | null) ?? "",
+        mcpToolName: (editingConfig.toolName as string | null) ?? "",
         requestFields: readFields(editingConfig.requestFields),
         requestFieldValues:
           (editingConfig.requestFieldValues as Record<string, FieldValueSource> | undefined) ?? {},
