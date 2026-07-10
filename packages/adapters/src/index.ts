@@ -23,4 +23,5 @@ export * from "./retention/index";
 export * from "./directory/index";
 export * from "./hr/index";
 export * from "./skills/index";
+export * from "./mcp/index";
 export * from "./factory";

@@ -73,7 +73,7 @@ interface RawNode {
   id: string;
   name: string;
   colour: string | null;
-  type?: "conversational" | "auto" | "scheduled" | "approval";
+  type?: "conversational" | "auto" | "scheduled" | "approval" | "mcp";
   positionX: number;
   positionY: number;
   config: Record<string, unknown>;

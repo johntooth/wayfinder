@@ -54,3 +54,6 @@ export * from "./spreadsheet-parser";
 export * from "./column-mapping-detector";
 export * from "./skill-parser";
 export * from "./skill-repository";
+export * from "./mcp-client";
+export * from "./mcp-server-directory";
+export * from "./mcp-server-repository";

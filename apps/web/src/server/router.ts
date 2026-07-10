@@ -9,6 +9,7 @@ import { flowVersionRouter } from "./routers/flow-version";
 import { governanceRouter } from "./routers/governance";
 import { hrRouter } from "./routers/hr";
 import { knowledgeRouter } from "./routers/knowledge";
+import { mcpServerRouter } from "./routers/mcp-server";
 import { messageRouter } from "./routers/message";
 import { n8nRouter } from "./routers/n8n";
 import { peopleRouter } from "./routers/people";
@@ -43,6 +44,7 @@ export const appRouter = router({
   knowledge: knowledgeRouter,
   feedback: feedbackRouter,
   skill: skillRouter,
+  mcpServer: mcpServerRouter,
 });
 
 export type AppRouter = typeof appRouter;
