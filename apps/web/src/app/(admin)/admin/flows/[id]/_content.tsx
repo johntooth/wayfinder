@@ -386,6 +386,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         documentTemplateStructuredContent: hasTemplate ? (existingNodeConfig.documentTemplateStructuredContent ?? null) : null,
         allowManualEdit: values.allowManualEdit,
         requireConfirmation: values.neverDone ? false : values.requireConfirmation,
+        skillRefs: values.skillRefs,
         notifyOnComplete: values.notifyOnComplete,
       };
     };
@@ -614,6 +615,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         doneWhen: (editingConfig.doneWhen as string | null) ?? "",
         neverDone: Boolean(editingConfig.neverDone),
         outputType: (editingConfig.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
+        skillRefs: (editingConfig.skillRefs as string[] | undefined) ?? [],
         documentTemplatePath: (editingConfig.documentTemplatePath as string | null) ?? null,
         documentTemplateFilename: (editingConfig.documentTemplateFilename as string | null) ?? null,
         documentTemplateContent: (editingConfig.documentTemplateContent as string | null) ?? null,
