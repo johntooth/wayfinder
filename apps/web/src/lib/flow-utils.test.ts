@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildStepRail, computeStepNumbers } from "./flow-utils";
+import { buildStepRail, compareStepLabels, computeStepNumbers } from "./flow-utils";
 
 interface TestNode {
   id: string;
@@ -180,5 +180,42 @@ describe("computeStepNumbers", () => {
     expect(new Set([numbers.get("aMid"), numbers.get("bMid")])).toEqual(new Set(["3a", "3b"]));
     expect(numbers.get("aExtra")).toBe("4");
     expect(numbers.get("merge")).toBe("5");
+  });
+
+  it("numbers a linear chain sequentially past ten steps", () => {
+    const nodes = Array.from({ length: 11 }, (_, index) => ({ id: `n${index + 1}` }));
+    const edges = Array.from({ length: 10 }, (_, index) => ({
+      fromNodeId: `n${index + 1}`,
+      toNodeId: `n${index + 2}`,
+    }));
+
+    const numbers = computeStepNumbers(nodes, edges);
+
+    const depths = nodes.map((node) => Number.parseInt(numbers.get(node.id)!, 10));
+    expect(depths).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(numbers.get("n10")).toBe("10");
+  });
+});
+
+describe("compareStepLabels", () => {
+  it("orders by numeric depth first", () => {
+    expect(compareStepLabels("1", "2")).toBeLessThan(0);
+    expect(compareStepLabels("3", "2")).toBeGreaterThan(0);
+    expect(compareStepLabels("2", "2")).toBe(0);
+  });
+
+  it("orders same-depth fork branches by their letter", () => {
+    // The flow-config editor treats "2a" as strictly earlier than "2b", so a
+    // step reads a sibling branch's fields as available prior-step values.
+    expect(compareStepLabels("2a", "2b")).toBeLessThan(0);
+    expect(compareStepLabels("2b", "2a")).toBeGreaterThan(0);
+    expect(compareStepLabels("2", "2a")).toBeLessThan(0);
+  });
+
+  it("does not mis-rank ten before two the way a string compare would", () => {
+    // Regression guard: "10" < "2" as strings, but step 10 comes after step 2.
+    expect("10" < "2").toBe(true);
+    expect(compareStepLabels("10", "2")).toBeGreaterThan(0);
+    expect(compareStepLabels("2", "10")).toBeLessThan(0);
   });
 });
