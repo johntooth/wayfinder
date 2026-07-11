@@ -7,7 +7,7 @@
  *            listed, disable/enable it, and is blocked on an invalid URL.
  *
  * Visual spec:
- *   /admin/mcp-servers → "Register an MCP server" card (Label / SSE URL /
+ *   /admin/mcp-servers → "Register an MCP server" card (Label / Transport / URL /
  *   Credential ref inputs + Register button) and a "Registered servers" table
  *   with Test / Disable / Enable actions per row.
  *
@@ -21,7 +21,7 @@ test.describe('MCP servers', () => {
     await page.goto('/admin/mcp-servers');
 
     await page.getByLabel('Label').fill('E2E GitHub');
-    await page.getByLabel('SSE URL').fill('https://mcp.example.com/sse');
+    await page.getByLabel('URL', { exact: true }).fill('https://mcp.example.com/sse');
     await page.getByLabel(/credential ref/i).fill('MCP_E2E_TOKEN');
     await page.getByRole('button', { name: /register server/i }).click();
 
@@ -34,7 +34,7 @@ test.describe('MCP servers', () => {
     await page.goto('/admin/mcp-servers');
 
     await page.getByLabel('Label').fill('Bad Server');
-    await page.getByLabel('SSE URL').fill('not-a-url');
+    await page.getByLabel('URL', { exact: true }).fill('not-a-url');
     await page.getByRole('button', { name: /register server/i }).click();
 
     await expect(page.getByText(/valid http\(s\) URL/i)).toBeVisible();

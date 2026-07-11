@@ -20,7 +20,9 @@ import { test, expect } from './helpers/base';
 test.describe('MCP flow consumption', () => {
   test('an author can add an MCP Tool step from the node picker', async ({ page }) => {
     await page.goto('/admin/flows');
-    await page.getByRole('link', { name: /flow/i }).first().click();
+    await page.getByRole('link', { name: 'Configure Flow' }).first().click();
+    // The admin editor was consolidated into the single canonical route.
+    await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 });
 
     await page.getByRole('button', { name: /add step/i }).first().click();
     await page.getByText('MCP Tool', { exact: true }).click();
@@ -30,7 +32,9 @@ test.describe('MCP flow consumption', () => {
 
   test('a conversational step exposes an allowed MCP tools picker', async ({ page }) => {
     await page.goto('/admin/flows');
-    await page.getByRole('link', { name: /flow/i }).first().click();
+    await page.getByRole('link', { name: 'Configure Flow' }).first().click();
+    // The admin editor was consolidated into the single canonical route.
+    await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 });
 
     // Open the first conversational step's config (double-click its canvas node).
     await page.locator('.react-flow__node').first().dblclick();
