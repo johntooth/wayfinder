@@ -19,6 +19,7 @@ export class RegisterMcpServer {
     label: string;
     url: string;
     transport?: McpTransport;
+    communicatesExternally?: boolean;
     credentialRef?: string | null;
     createdByUserId?: string | null;
   }): Promise<Result<McpServer>> {
@@ -34,6 +35,7 @@ export class RegisterMcpServer {
       label,
       url,
       transport: input.transport,
+      communicatesExternally: input.communicatesExternally,
       credentialRef: input.credentialRef?.trim() ? input.credentialRef.trim() : null,
       createdByUserId: input.createdByUserId ?? null,
     });
@@ -47,6 +49,7 @@ export class UpdateMcpServer {
     id: string;
     label?: string;
     url?: string;
+    communicatesExternally?: boolean;
     credentialRef?: string | null;
   }): Promise<Result<McpServer>> {
     if (input.url !== undefined && !isHttpUrl(input.url.trim())) {
@@ -55,6 +58,7 @@ export class UpdateMcpServer {
     return this.servers.update(input.id, {
       label: input.label?.trim(),
       url: input.url?.trim(),
+      communicatesExternally: input.communicatesExternally,
       credentialRef:
         input.credentialRef === undefined
           ? undefined
@@ -149,7 +153,9 @@ export class ResolveStepTools {
 
     for (const ref of refs) {
       const server = activeById.get(ref.serverId);
-      if (!server) continue;
+      // Externally-communicating servers are not usable in flows at this stage —
+      // drop the ref so a reclassified server can never reach the tool-loop.
+      if (!server || server.communicatesExternally) continue;
       keptRefs.push(ref);
       usedServers.set(server.id, server);
     }

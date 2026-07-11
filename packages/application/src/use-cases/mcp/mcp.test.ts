@@ -35,6 +35,7 @@ class InMemoryMcpServerRepository implements IMcpServerRepository {
       transport: input.transport ?? "sse",
       url: input.url,
       credentialRef: input.credentialRef ?? null,
+      communicatesExternally: input.communicatesExternally ?? false,
       status: "active",
       createdByUserId: input.createdByUserId ?? null,
       createdAt: now,
@@ -54,6 +55,7 @@ class InMemoryMcpServerRepository implements IMcpServerRepository {
       url: patch.url ?? current.url,
       credentialRef:
         patch.credentialRef === undefined ? current.credentialRef : patch.credentialRef,
+      communicatesExternally: patch.communicatesExternally ?? current.communicatesExternally,
     };
     this.rows[index] = updated;
     return ok(updated);
@@ -233,6 +235,22 @@ describe("ResolveStepTools", () => {
 
     const result = await new ResolveStepTools(repository).execute([
       { serverId: id, toolName: "search" },
+    ]);
+
+    expect(result.data?.refs).toEqual([]);
+    expect(result.data?.servers).toEqual([]);
+  });
+
+  it("drops refs to an externally-communicating server (internal-only in flows)", async () => {
+    const repository = new InMemoryMcpServerRepository();
+    const server = await new RegisterMcpServer(repository).execute({
+      label: "Integration",
+      url: "https://ext.example/sse",
+      communicatesExternally: true,
+    });
+
+    const result = await new ResolveStepTools(repository).execute([
+      { serverId: server.data!.id, toolName: "search" },
     ]);
 
     expect(result.data?.refs).toEqual([]);

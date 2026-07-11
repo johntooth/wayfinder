@@ -9,6 +9,7 @@ const serverWith = (overrides: Partial<McpServer>): McpServer => ({
   transport: "sse",
   url: "https://mcp.example.com/sse",
   credentialRef: null,
+  communicatesExternally: false,
   status: "active",
   createdByUserId: null,
   createdAt: new Date(),

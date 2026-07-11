@@ -21,8 +21,12 @@ export class McpServerDirectory implements IMcpServerDirectory {
     const serversResult = await this.servers.list();
     if (serversResult.error) return err(serversResult.error);
 
+    // Flow authors only ever see internal servers (spellcheck, calculation);
+    // externally-communicating integrations are registered but not offered here.
+    const internalServers = serversResult.data.filter((server) => !server.communicatesExternally);
+
     const withTools: McpServerWithTools[] = [];
-    for (const server of serversResult.data) {
+    for (const server of internalServers) {
       const toolsResult = await this.client.listTools(server);
       withTools.push({ server, tools: toolsResult.error ? [] : toolsResult.data });
     }

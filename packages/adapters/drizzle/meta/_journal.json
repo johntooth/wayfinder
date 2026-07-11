@@ -218,6 +218,13 @@
       "when": 1783689104755,
       "tag": "0030_nappy_mysterio",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1783746303509,
+      "tag": "0031_lyrical_rockslide",
+      "breakpoints": true
     }
   ]
 }

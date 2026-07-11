@@ -131,6 +131,9 @@ export const admin_mcp_servers = pgTable("admin_mcp_servers", {
   transport: text("transport", { enum: ["sse", "streamable-http"] }).notNull().default("sse"),
   url: text("url").notNull(),
   credential_ref: text("credential_ref"),
+  // Admin classification: does this server communicate outside Wayfinder? Existing
+  // rows default to the safe internal classification (ADR-032).
+  communicates_externally: boolean("communicates_externally").notNull().default(false),
   status: text("status", { enum: ["active", "disabled"] }).notNull().default("active"),
   created_by_user_id: uuid("created_by_user_id").references(() => core_users.id, {
     onDelete: "set null",

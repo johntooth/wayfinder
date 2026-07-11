@@ -23,6 +23,7 @@ export function AdminMcpServersContent() {
   const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
   const [transport, setTransport] = useState<"sse" | "streamable-http">("sse");
+  const [communicatesExternally, setCommunicatesExternally] = useState(false);
   const [credentialRef, setCredentialRef] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, string>>({});
@@ -34,6 +35,7 @@ export function AdminMcpServersContent() {
       setLabel("");
       setUrl("");
       setTransport("sse");
+      setCommunicatesExternally(false);
       setCredentialRef("");
       setError(null);
       invalidate();
@@ -58,6 +60,7 @@ export function AdminMcpServersContent() {
       label,
       url,
       transport,
+      communicatesExternally,
       credentialRef: credentialRef.trim() ? credentialRef.trim() : null,
     });
   };
@@ -117,6 +120,22 @@ export function AdminMcpServersContent() {
                 />
               </div>
             </div>
+            <div className="space-y-1">
+              <label htmlFor="mcp-external" className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  id="mcp-external"
+                  type="checkbox"
+                  checked={communicatesExternally}
+                  onChange={(event) => setCommunicatesExternally(event.target.checked)}
+                />
+                Permitted to communicate outside Wayfinder
+              </label>
+              <p className="pl-6 text-xs text-muted-foreground">
+                Leave off for self-contained utilities (spellcheck, calculation) — these are
+                usable in flows and governed by document review. Turn on for external
+                integrations; those are registered here but not yet selectable in flows.
+              </p>
+            </div>
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
             <Button onClick={submit} disabled={register.isPending || !label.trim() || !url.trim()}>
               {register.isPending ? "Registering…" : "Register server"}
@@ -138,6 +157,7 @@ export function AdminMcpServersContent() {
                     <TableHead>Label</TableHead>
                     <TableHead>URL</TableHead>
                     <TableHead>Transport</TableHead>
+                    <TableHead>Scope</TableHead>
                     <TableHead>Credential</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -150,6 +170,11 @@ export function AdminMcpServersContent() {
                       <TableCell className="font-mono text-xs">{server.url}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {server.transport === "streamable-http" ? "Streamable HTTP" : "SSE"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={server.communicatesExternally ? "outline" : "default"}>
+                          {server.communicatesExternally ? "External" : "Internal"}
+                        </Badge>
                       </TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground">
                         {server.credentialRef ?? "—"}

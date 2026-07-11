@@ -14,6 +14,12 @@ export interface McpServer {
   readonly transport: McpTransport;
   readonly url: string;
   readonly credentialRef: string | null;
+  // Admin classification: does this server communicate outside Wayfinder? `false`
+  // is a self-contained internal utility (spellcheck, calculation) governed by the
+  // existing document human-review gate and offered to flow authors; `true` is an
+  // external integration — registered but not selectable in flows at this stage
+  // (integration-grade governance is future work).
+  readonly communicatesExternally: boolean;
   readonly status: McpServerStatus;
   readonly createdByUserId: string | null;
   readonly createdAt: Date;
@@ -25,6 +31,7 @@ export interface NewMcpServer {
   readonly transport?: McpTransport;
   readonly url: string;
   readonly credentialRef?: string | null;
+  readonly communicatesExternally?: boolean;
   readonly createdByUserId?: string | null;
 }
 
@@ -32,6 +39,7 @@ export interface McpServerUpdate {
   readonly label?: string;
   readonly url?: string;
   readonly credentialRef?: string | null;
+  readonly communicatesExternally?: boolean;
 }
 
 // A tool discovered on a server. `inputSchema` is the tool's JSON-schema input

@@ -20,6 +20,7 @@ const toEntity = (row: typeof admin_mcp_servers.$inferSelect): McpServer => ({
   transport: row.transport,
   url: row.url,
   credentialRef: row.credential_ref,
+  communicatesExternally: row.communicates_externally,
   status: row.status,
   createdByUserId: row.created_by_user_id,
   createdAt: row.created_at,
@@ -38,6 +39,7 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
           transport: input.transport ?? "sse",
           url: input.url,
           credential_ref: input.credentialRef ?? null,
+          communicates_externally: input.communicatesExternally ?? false,
           created_by_user_id: input.createdByUserId ?? null,
         })
         .returning();
@@ -64,6 +66,8 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
           url: patch.url ?? current.url,
           credential_ref:
             patch.credentialRef === undefined ? current.credential_ref : patch.credentialRef,
+          communicates_externally:
+            patch.communicatesExternally ?? current.communicates_externally,
           updated_at: new Date(),
         })
         .where(eq(admin_mcp_servers.id, id))

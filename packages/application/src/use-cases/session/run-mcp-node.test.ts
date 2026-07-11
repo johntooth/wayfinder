@@ -98,6 +98,7 @@ const activeServer: McpServer = {
   transport: "sse",
   url: "https://mcp.example.com/sse",
   credentialRef: null,
+  communicatesExternally: false,
   status: "active",
   createdByUserId: null,
   createdAt: new Date(),
@@ -184,6 +185,19 @@ describe("RunMcpNode", () => {
       makeSessions(makeSession()),
       makeLanguageModel(),
       makeServers({ ...activeServer, status: "disabled" }),
+      makeClient(),
+      makeStepOutputs(),
+      clock,
+    ).execute({ session: makeSession(), flow: makeFlow(), node: makeNode(baseConfig), messages: makeMessages(), userId: "user-1" });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("refuses to call an externally-communicating server", async () => {
+    const result = await new RunMcpNode(
+      makeSessions(makeSession()),
+      makeLanguageModel(),
+      makeServers({ ...activeServer, communicatesExternally: true }),
       makeClient(),
       makeStepOutputs(),
       clock,
