@@ -22,6 +22,7 @@ export function AdminMcpServersContent() {
 
   const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
+  const [transport, setTransport] = useState<"sse" | "streamable-http">("sse");
   const [credentialRef, setCredentialRef] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, string>>({});
@@ -32,6 +33,7 @@ export function AdminMcpServersContent() {
     onSuccess: () => {
       setLabel("");
       setUrl("");
+      setTransport("sse");
       setCredentialRef("");
       setError(null);
       invalidate();
@@ -55,6 +57,7 @@ export function AdminMcpServersContent() {
     register.mutate({
       label,
       url,
+      transport,
       credentialRef: credentialRef.trim() ? credentialRef.trim() : null,
     });
   };
@@ -73,7 +76,7 @@ export function AdminMcpServersContent() {
               reference names an environment variable holding the bearer token —
               the secret itself is never stored here.
             </p>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1.5">
                 <Label htmlFor="mcp-label">Label</Label>
                 <Input
@@ -84,7 +87,19 @@ export function AdminMcpServersContent() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="mcp-url">SSE URL</Label>
+                <Label htmlFor="mcp-transport">Transport</Label>
+                <select
+                  id="mcp-transport"
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                  value={transport}
+                  onChange={(event) => setTransport(event.target.value as "sse" | "streamable-http")}
+                >
+                  <option value="sse">SSE</option>
+                  <option value="streamable-http">Streamable HTTP</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="mcp-url">URL</Label>
                 <Input
                   id="mcp-url"
                   value={url}
@@ -122,6 +137,7 @@ export function AdminMcpServersContent() {
                   <TableRow>
                     <TableHead>Label</TableHead>
                     <TableHead>URL</TableHead>
+                    <TableHead>Transport</TableHead>
                     <TableHead>Credential</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -132,6 +148,9 @@ export function AdminMcpServersContent() {
                     <TableRow key={server.id}>
                       <TableCell className="font-medium">{server.label}</TableCell>
                       <TableCell className="font-mono text-xs">{server.url}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {server.transport === "streamable-http" ? "Streamable HTTP" : "SSE"}
+                      </TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground">
                         {server.credentialRef ?? "—"}
                       </TableCell>

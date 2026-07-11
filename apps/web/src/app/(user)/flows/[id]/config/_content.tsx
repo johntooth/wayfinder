@@ -179,6 +179,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const autoNodeEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "auto_node" }).data ?? false;
   const scheduledNodeEnabled =
     trpc.featureFlag.isEnabledForMe.useQuery({ key: "scheduled_node" }).data ?? false;
+  const mcpEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "mcp" }).data ?? false;
+  const skillsEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "skills" }).data ?? false;
   const [editingMetadata, setEditingMetadata] = useState(false);
 
   const [configOpen, setConfigOpen] = useState(false);
@@ -873,6 +875,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         open={typePickerOpen}
         autoNodeEnabled={autoNodeEnabled}
         scheduledNodeEnabled={scheduledNodeEnabled}
+        mcpNodeEnabled={mcpEnabled}
         onSelect={handleSelectNodeType}
         onClose={() => setTypePickerOpen(false)}
       />
@@ -886,6 +889,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         onClose={handleConfigClose}
         isSaving={isSavingConfig}
         priorStepFields={priorStepFields}
+        skillsEnabled={skillsEnabled}
+        mcpEnabled={mcpEnabled}
         onUploadTemplate={editingNodeId ? handleUploadTemplate : undefined}
       />
 

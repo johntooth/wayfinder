@@ -11,6 +11,7 @@ import {
   type LanguageModelV1,
   type ToolSet,
 } from "ai";
+import { buildMcpTransport } from "./ai-sdk-mcp-client";
 
 export interface McpToolPrepassInput {
   model: LanguageModelV1;
@@ -56,7 +57,7 @@ export class McpToolPrepass {
       for (const server of input.servers) {
         const allowed = input.allowedToolNamesByServer[server.id] ?? [];
         if (allowed.length === 0) continue;
-        const client = await experimental_createMCPClient({ transport: transportFor(server) });
+        const client = await experimental_createMCPClient({ transport: buildMcpTransport(server) });
         clients.push(client);
         const serverTools = (await client.tools()) as ToolSet;
         tools = { ...tools, ...selectAllowedTools(serverTools, allowed) };
@@ -90,11 +91,3 @@ export class McpToolPrepass {
   }
 }
 
-function transportFor(server: McpServer): { type: "sse"; url: string; headers?: Record<string, string> } {
-  const headers: Record<string, string> = {};
-  if (server.credentialRef) {
-    const token = process.env[server.credentialRef];
-    if (token) headers.Authorization = `Bearer ${token}`;
-  }
-  return { type: "sse", url: server.url, headers };
-}

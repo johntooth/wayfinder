@@ -1,7 +1,9 @@
 export type McpServerStatus = "active" | "disabled";
 
-// Only remote SSE transport is supported (ADR-032). Local/stdio is out of scope.
-export type McpTransport = "sse";
+// Remote HTTP transports only (ADR-032 §1: "remote HTTP/SSE"). `sse` is the
+// legacy default; `streamable-http` targets servers exposing the newer MCP
+// streamable-HTTP endpoint. Local/stdio (process-spawning) is out of scope.
+export type McpTransport = "sse" | "streamable-http";
 
 // An admin-registered remote MCP server. `credentialRef` points at the secret
 // store — the secret itself never leaves the adapter layer and is never returned

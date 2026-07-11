@@ -122,6 +122,11 @@ interface NodeConfigModalProps {
   isSaving?: boolean;
   // Fields declared by steps earlier in the flow, offered as value sources.
   priorStepFields?: PriorStepField[];
+  // Power-user feature flags (ADR-022). When off, the conversational Skills and
+  // MCP-tools sections are hidden — a step never offers a capability the author's
+  // organisation has not enabled.
+  skillsEnabled?: boolean;
+  mcpEnabled?: boolean;
   onUploadTemplate?: (file: File, currentValues: NodeConfigValues) => Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string; code?: string }>;
 }
 
@@ -206,6 +211,8 @@ export function NodeConfigModal({
   onClose,
   isSaving = false,
   priorStepFields = [],
+  skillsEnabled = false,
+  mcpEnabled = false,
   onUploadTemplate,
 }: NodeConfigModalProps) {
   const utils = trpc.useUtils();
@@ -632,6 +639,7 @@ export function NodeConfigModal({
                 />
               </div>
 
+              {skillsEnabled && (
               <div className="space-y-1">
                 <FieldGroupLabel id="ncm-skills">Skills</FieldGroupLabel>
                 <p className="text-[12px] text-[#857f76]">
@@ -665,6 +673,9 @@ export function NodeConfigModal({
                 )}
               </div>
 
+              )}
+
+              {mcpEnabled && (
               <div className="space-y-1">
                 <FieldGroupLabel id="ncm-mcp-tools">MCP tools</FieldGroupLabel>
                 <p className="text-[12px] text-[#857f76]">
@@ -706,6 +717,8 @@ export function NodeConfigModal({
                   </div>
                 )}
               </div>
+
+              )}
 
               <div className="space-y-1">
                 <FieldGroupLabel id="ncm-output-type">Output type</FieldGroupLabel>

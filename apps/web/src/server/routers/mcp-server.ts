@@ -32,6 +32,7 @@ export const mcpServerRouter = router({
       z.object({
         label: z.string().min(1),
         url: z.string().min(1),
+        transport: z.enum(["sse", "streamable-http"]).optional(),
         credentialRef: z.string().nullable().optional(),
       }),
     )
@@ -40,6 +41,7 @@ export const mcpServerRouter = router({
       const result = await ctx.container.useCases.registerMcpServer.execute({
         label: input.label,
         url: input.url,
+        transport: input.transport,
         credentialRef: input.credentialRef ?? null,
         createdByUserId: ctx.userId,
       });

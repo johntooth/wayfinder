@@ -8,6 +8,7 @@ import type {
   McpServerWithTools,
   McpTool,
   McpToolRef,
+  McpTransport,
   Result,
 } from "@rbrasier/domain";
 
@@ -17,6 +18,7 @@ export class RegisterMcpServer {
   async execute(input: {
     label: string;
     url: string;
+    transport?: McpTransport;
     credentialRef?: string | null;
     createdByUserId?: string | null;
   }): Promise<Result<McpServer>> {
@@ -31,6 +33,7 @@ export class RegisterMcpServer {
     return this.servers.create({
       label,
       url,
+      transport: input.transport,
       credentialRef: input.credentialRef?.trim() ? input.credentialRef.trim() : null,
       createdByUserId: input.createdByUserId ?? null,
     });

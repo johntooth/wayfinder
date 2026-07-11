@@ -9,9 +9,10 @@ import {
   type McpToolCallOutput,
   type Result,
 } from "@rbrasier/domain";
-import { experimental_createMCPClient } from "ai";
+import { experimental_createMCPClient, type MCPTransport } from "ai";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
-type SseTransportConfig = { type: "sse"; url: string; headers?: Record<string, string> };
+type SseTransportConfig = { type: "sse"; url: string; headers: Record<string, string> };
 
 // Shape of an MCP CallToolResult we care about — the SDK returns richer content,
 // but tool output is flattened to text for injection/persistence (ADR-032).
@@ -60,7 +61,7 @@ export class AiSdkMcpClient implements IMcpClient {
   ): Promise<Result<T>> {
     let client: Awaited<ReturnType<typeof experimental_createMCPClient>> | null = null;
     try {
-      client = await experimental_createMCPClient({ transport: transportFor(server) });
+      client = await experimental_createMCPClient({ transport: buildMcpTransport(server) });
       return await run(client);
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", failureMessage, cause));
@@ -76,7 +77,22 @@ export class AiSdkMcpClient implements IMcpClient {
   }
 }
 
-function transportFor(server: McpServer): SseTransportConfig {
+// Resolves a server descriptor to the transport the AI SDK MCP client accepts:
+// the built-in SSE shorthand for `sse` servers, or a StreamableHTTPClientTransport
+// instance for `streamable-http` servers (ADR-032 §1). Exported for unit testing.
+export function buildMcpTransport(server: McpServer): SseTransportConfig | MCPTransport {
+  const headers = resolveAuthHeaders(server);
+  if (server.transport === "streamable-http") {
+    // The MCP SDK's Transport implements the AI SDK MCPTransport surface
+    // (start/send/close/onmessage) — verified in node_modules/@modelcontextprotocol/sdk.
+    return new StreamableHTTPClientTransport(new URL(server.url), {
+      requestInit: { headers },
+    }) as unknown as MCPTransport;
+  }
+  return { type: "sse", url: server.url, headers };
+}
+
+function resolveAuthHeaders(server: McpServer): Record<string, string> {
   const headers: Record<string, string> = {};
   // credentialRef names an environment variable holding a bearer token. The
   // secret value never leaves this layer (ADR-032).
@@ -84,7 +100,7 @@ function transportFor(server: McpServer): SseTransportConfig {
     const token = process.env[server.credentialRef];
     if (token) headers.Authorization = `Bearer ${token}`;
   }
-  return { type: "sse", url: server.url, headers };
+  return headers;
 }
 
 function flattenResult(result: ToolResult): string {
