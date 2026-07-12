@@ -120,4 +120,17 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
       return err(domainError("INFRA_FAILURE", "Failed to update MCP server status.", cause));
     }
   }
+
+  async delete(id: string): Promise<Result<void>> {
+    try {
+      const [row] = await this.db
+        .delete(admin_mcp_servers)
+        .where(eq(admin_mcp_servers.id, id))
+        .returning();
+      if (!row) return err(domainError("NOT_FOUND", "MCP server not found."));
+      return ok(undefined);
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to delete MCP server.", cause));
+    }
+  }
 }

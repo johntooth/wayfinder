@@ -86,6 +86,17 @@ export const mcpServerRouter = router({
       return result.data;
     }),
 
+  // Permanent removal. Steps referencing a deleted server drop the stale tool
+  // refs silently at resolve time (ResolveStepTools), so no cascade is needed.
+  delete: authenticatedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx.isAdmin);
+      const result = await ctx.container.useCases.deleteMcpServer.execute(input.id);
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
   // Connection test — lists the server's tools so the admin can confirm reach
   // and credentials before using it in a flow.
   test: authenticatedProcedure

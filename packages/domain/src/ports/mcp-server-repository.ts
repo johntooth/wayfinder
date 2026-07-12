@@ -16,4 +16,5 @@ export interface IMcpServerRepository {
   findById(id: string): Promise<Result<McpServer | null>>;
   list(input?: ListMcpServersInput): Promise<Result<McpServer[]>>;
   setStatus(id: string, status: McpServerStatus): Promise<Result<McpServer>>;
+  delete(id: string): Promise<Result<void>>;
 }

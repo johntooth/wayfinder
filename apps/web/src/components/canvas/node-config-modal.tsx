@@ -22,6 +22,7 @@ import { TemplateTagsHelpDialog } from "./template-tags-help-dialog";
 import { parseFieldLines } from "./template-field-editor";
 import { N8nExtractionInfoDialog } from "./n8n-extraction-info-dialog";
 import { SkillPickerModal } from "./skill-picker-modal";
+import { McpPickerModal } from "./mcp-picker-modal";
 import type {
   ScheduleModifier,
   ScheduleUnit,
@@ -236,6 +237,7 @@ export function NodeConfigModal({
   const [infoVariant, setInfoVariant] = useState<"inputs" | "outputs">("inputs");
   const [infoOpen, setInfoOpen] = useState(false);
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
+  const [mcpPickerOpen, setMcpPickerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const set = <K extends keyof NodeConfigValues>(key: K, value: NodeConfigValues[K]) =>
@@ -645,8 +647,7 @@ export function NodeConfigModal({
                       skillsById={skillsById}
                       onOpenSkillPicker={() => setSkillPickerOpen(true)}
                       removeSkill={removeSkill}
-                      mcpServers={mcpServers}
-                      isToolAllowed={isToolAllowed}
+                      onOpenMcpPicker={() => setMcpPickerOpen(true)}
                       toggleAllowedTool={toggleAllowedTool}
                     />
                   )}
@@ -773,6 +774,13 @@ export function NodeConfigModal({
         selectedIds={values.skillRefs}
         onChange={(ids) => set("skillRefs", ids)}
         onClose={() => setSkillPickerOpen(false)}
+      />
+      <McpPickerModal
+        open={mcpPickerOpen}
+        servers={mcpServers}
+        isToolAllowed={isToolAllowed}
+        toggleAllowedTool={toggleAllowedTool}
+        onClose={() => setMcpPickerOpen(false)}
       />
     </Dialog>
   );

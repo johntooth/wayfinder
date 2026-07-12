@@ -1,8 +1,7 @@
 "use client";
 
 import { type ChangeEvent, type RefObject } from "react";
-import { HelpCircle, Sparkles, X } from "lucide-react";
-import type { McpServerWithTools } from "@rbrasier/domain";
+import { HelpCircle, Plug, Sparkles, X } from "lucide-react";
 import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -38,8 +37,7 @@ export interface NodeConfigModalConversationalProps {
   skillsById: Map<string, SkillSummary>;
   onOpenSkillPicker: () => void;
   removeSkill: (id: string) => void;
-  mcpServers: McpServerWithTools[];
-  isToolAllowed: (serverId: string, toolName: string) => boolean;
+  onOpenMcpPicker: () => void;
   toggleAllowedTool: (serverId: string, toolName: string) => void;
 }
 
@@ -60,8 +58,7 @@ export function NodeConfigModalConversational({
   skillsById,
   onOpenSkillPicker,
   removeSkill,
-  mcpServers,
-  isToolAllowed,
+  onOpenMcpPicker,
   toggleAllowedTool,
 }: NodeConfigModalConversationalProps) {
   return (
@@ -69,17 +66,32 @@ export function NodeConfigModalConversational({
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <Label htmlFor="ai-instruction">Instructions for the AI</Label>
-          {skillsEnabled && (
-            <button
-              type="button"
-              onClick={onOpenSkillPicker}
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
-              aria-label="Add skills"
-            >
-              <Sparkles size={13} />
-              {values.skillRefs.length > 0 ? `Skills · ${values.skillRefs.length}` : "Add skills"}
-            </button>
-          )}
+          <div className="flex items-center gap-1">
+            {skillsEnabled && (
+              <button
+                type="button"
+                onClick={onOpenSkillPicker}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+                aria-label="Add skills"
+              >
+                <Sparkles size={13} />
+                {values.skillRefs.length > 0 ? `Skills · ${values.skillRefs.length}` : "Add skills"}
+              </button>
+            )}
+            {mcpEnabled && (
+              <button
+                type="button"
+                onClick={onOpenMcpPicker}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+                aria-label="Add MCP tools"
+              >
+                <Plug size={13} />
+                {values.allowedMcpToolRefs.length > 0
+                  ? `MCP · ${values.allowedMcpToolRefs.length}`
+                  : "Add MCP"}
+              </button>
+            )}
+          </div>
         </div>
         {skillsEnabled && values.skillRefs.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
@@ -105,6 +117,27 @@ export function NodeConfigModalConversational({
             })}
           </div>
         )}
+        {mcpEnabled && values.allowedMcpToolRefs.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {values.allowedMcpToolRefs.map((ref) => (
+              <span
+                key={`${ref.serverId}:${ref.toolName}`}
+                className="inline-flex items-center gap-1 rounded-full border border-[#cbd8c5] bg-[#eef4ea] px-2 py-0.5 text-[11px] text-[#3f7a2e]"
+              >
+                <Plug size={10} />
+                {ref.toolName}
+                <button
+                  type="button"
+                  aria-label={`Remove ${ref.toolName}`}
+                  className="text-[#3f7a2e] hover:text-[#2c5920]"
+                  onClick={() => toggleAllowedTool(ref.serverId, ref.toolName)}
+                >
+                  <X size={11} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <Textarea
           id="ai-instruction"
           required
@@ -114,49 +147,6 @@ export function NodeConfigModalConversational({
           placeholder="Describe what the AI should do in this step…"
         />
       </div>
-
-      {mcpEnabled && (
-        <div className="space-y-1">
-          <FieldGroupLabel id="ncm-mcp-tools">MCP tools</FieldGroupLabel>
-          <p className="text-[12px] text-[#857f76]">
-            Let the AI call these tools mid-conversation. Register servers on the MCP Servers page.
-          </p>
-          {mcpServers.length === 0 ? (
-            <p className="text-[13px] text-[#857f76]">No MCP servers available.</p>
-          ) : (
-            <div className="space-y-2 rounded-[9px] border border-[#dedad2] p-2.5">
-              {mcpServers.map((entry) => (
-                <div key={entry.server.id} className="space-y-1">
-                  <p className="text-[12px] font-medium text-[#5a5650]">{entry.server.label}</p>
-                  {entry.tools.length === 0 ? (
-                    <p className="text-[12px] text-[#857f76]">No tools discovered.</p>
-                  ) : (
-                    entry.tools.map((tool) => (
-                      <label
-                        key={tool.name}
-                        className="flex cursor-pointer items-start gap-2 text-[13px]"
-                      >
-                        <input
-                          type="checkbox"
-                          className="mt-0.5"
-                          checked={isToolAllowed(entry.server.id, tool.name)}
-                          onChange={() => toggleAllowedTool(entry.server.id, tool.name)}
-                        />
-                        <span>
-                          <span className="font-medium">{tool.name}</span>
-                          {tool.description ? (
-                            <span className="text-[#857f76]"> — {tool.description}</span>
-                          ) : null}
-                        </span>
-                      </label>
-                    ))
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       <div className="space-y-1">
         <FieldGroupLabel id="ncm-output-type">Output type</FieldGroupLabel>

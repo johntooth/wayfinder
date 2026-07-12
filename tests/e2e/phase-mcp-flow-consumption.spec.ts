@@ -9,7 +9,7 @@
  * Visual spec:
  *   Canvas "Add step" → node-type picker includes "MCP Tool"; the MCP step
  *   config exposes a "MCP server" selector. A conversational step's config shows
- *   an "MCP tools" section.
+ *   an "Add MCP" button beside the AI instructions that opens a tool picker modal.
  *
  * Assumes an authenticated admin plus at least one flow and one registered MCP
  * server. Requires a running stack; not executed in the migration sandbox.
@@ -35,6 +35,9 @@ test.describe('MCP flow consumption', () => {
     // Open the first conversational step's config (double-click its canvas node).
     await page.locator('.react-flow__node').first().dblclick();
 
-    await expect(page.getByText('MCP tools', { exact: true })).toBeVisible();
+    // The MCP picker now lives behind an "Add MCP" button beside the AI
+    // instructions, mirroring the skills picker, rather than an inline section.
+    await page.getByRole('button', { name: 'Add MCP tools' }).click();
+    await expect(page.getByRole('heading', { name: 'Add MCP tools' })).toBeVisible();
   });
 });

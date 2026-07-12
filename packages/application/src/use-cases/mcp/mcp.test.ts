@@ -13,6 +13,7 @@ import type {
 } from "@rbrasier/domain";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  DeleteMcpServer,
   DisableMcpServer,
   EnableMcpServer,
   ListMcpServers,
@@ -76,6 +77,13 @@ class InMemoryMcpServerRepository implements IMcpServerRepository {
     if (index === -1) return err(domainError("NOT_FOUND", "MCP server not found."));
     this.rows[index] = { ...this.rows[index]!, status };
     return ok(this.rows[index]!);
+  }
+
+  async delete(id: string): Promise<Result<void>> {
+    const index = this.rows.findIndex((row) => row.id === id);
+    if (index === -1) return err(domainError("NOT_FOUND", "MCP server not found."));
+    this.rows.splice(index, 1);
+    return ok(undefined);
   }
 }
 
@@ -165,6 +173,28 @@ describe("Disable / Enable / List", () => {
     await new EnableMcpServer(repository).execute(first.data!.id);
     const reactivated = await new ListMcpServers(repository).execute();
     expect(reactivated.data).toHaveLength(2);
+  });
+});
+
+describe("DeleteMcpServer", () => {
+  it("permanently removes a server so it no longer lists", async () => {
+    const repository = new InMemoryMcpServerRepository();
+    const register = new RegisterMcpServer(repository);
+    const first = await register.execute({ label: "A", url: "https://a.example/sse" });
+    await register.execute({ label: "B", url: "https://b.example/sse" });
+
+    const result = await new DeleteMcpServer(repository).execute(first.data!.id);
+    expect(result.error).toBeUndefined();
+
+    const remaining = await new ListMcpServers(repository).execute({ includeDisabled: true });
+    expect(remaining.data).toHaveLength(1);
+    expect(remaining.data![0]?.label).toBe("B");
+  });
+
+  it("returns NOT_FOUND for an unknown server", async () => {
+    const repository = new InMemoryMcpServerRepository();
+    const result = await new DeleteMcpServer(repository).execute("missing");
+    expect(result.error?.code).toBe("NOT_FOUND");
   });
 });
 

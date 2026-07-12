@@ -93,6 +93,14 @@ export class EnableMcpServer {
   }
 }
 
+export class DeleteMcpServer {
+  constructor(private readonly servers: IMcpServerRepository) {}
+
+  async execute(id: string): Promise<Result<void>> {
+    return this.servers.delete(id);
+  }
+}
+
 export interface TestMcpServerOutput {
   readonly toolCount: number;
   readonly tools: McpTool[];

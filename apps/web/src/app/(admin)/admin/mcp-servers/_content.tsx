@@ -27,6 +27,7 @@ export function AdminMcpServersContent() {
   const [credentialRef, setCredentialRef] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, string>>({});
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const invalidate = () => void utils.mcpServer.list.invalidate();
 
@@ -44,6 +45,13 @@ export function AdminMcpServersContent() {
   });
   const disable = trpc.mcpServer.disable.useMutation({ onSuccess: invalidate });
   const enable = trpc.mcpServer.enable.useMutation({ onSuccess: invalidate });
+  const remove = trpc.mcpServer.delete.useMutation({
+    onSuccess: () => {
+      setConfirmDeleteId(null);
+      invalidate();
+    },
+    onError: (cause) => setError(cause.message),
+  });
   const test = trpc.mcpServer.test.useMutation({
     onSuccess: (data, variables) =>
       setTestResult((prev) => ({
@@ -215,6 +223,34 @@ export function AdminMcpServersContent() {
                             disabled={enable.isPending}
                           >
                             Enable
+                          </Button>
+                        )}
+                        {confirmDeleteId === server.id ? (
+                          <>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => remove.mutate({ id: server.id })}
+                              disabled={remove.isPending}
+                            >
+                              {remove.isPending ? "Deleting…" : "Confirm"}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setConfirmDeleteId(null)}
+                              disabled={remove.isPending}
+                            >
+                              Cancel
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setConfirmDeleteId(server.id)}
+                          >
+                            Delete
                           </Button>
                         )}
                       </TableCell>

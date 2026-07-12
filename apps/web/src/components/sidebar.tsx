@@ -57,16 +57,19 @@ const userNav: NavGroup[] = [
 interface AdminNavContext {
   readonly skillsEnabled: boolean;
   readonly mcpEnabled: boolean;
+  readonly canCurate: boolean;
 }
 
-const buildAdminNav = ({ skillsEnabled, mcpEnabled }: AdminNavContext): NavGroup[] => {
+const buildAdminNav = ({ skillsEnabled, mcpEnabled, canCurate }: AdminNavContext): NavGroup[] => {
   // Skills + MCP Servers are hidden when their feature flag is disabled — an
   // admin who turned the flag off should not see the surface it controls.
   // Admins can still re-enable via /admin/flags in the Advanced group.
   const flowSettingsItems: NavItem[] = [];
   if (skillsEnabled) flowSettingsItems.push({ href: "/admin/skills", icon: Sparkles, label: "Skills" });
   if (mcpEnabled) flowSettingsItems.push({ href: "/admin/mcp-servers", icon: Plug, label: "MCP Servers" });
-  flowSettingsItems.push({ href: "/knowledge", icon: BookOpen, label: "Knowledge" });
+  // Knowledge lives only in Flow Settings; the page still enforces
+  // knowledge:curate regardless (ADR-021).
+  if (canCurate) flowSettingsItems.push({ href: "/knowledge", icon: BookOpen, label: "Knowledge" });
 
   const groups: NavGroup[] = [
     {
@@ -219,21 +222,9 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   const adminNav = buildAdminNav({
     skillsEnabled: skillsFlagQuery.data ?? false,
     mcpEnabled: mcpFlagQuery.data ?? false,
+    canCurate,
   });
-  const baseNav = isAdmin ? adminNav : userNav;
-  const nav: NavGroup[] =
-    isAdmin && canCurate
-      ? [
-          {
-            ...baseNav[0]!,
-            items: [
-              ...baseNav[0]!.items,
-              { href: "/knowledge", icon: BookOpen, label: "Knowledge" },
-            ],
-          },
-          ...baseNav.slice(1),
-        ]
-      : baseNav;
+  const nav: NavGroup[] = isAdmin ? adminNav : userNav;
   const homeHref = isAdmin ? "/admin/flows" : "/chats";
 
   const recentChats = isAdmin
