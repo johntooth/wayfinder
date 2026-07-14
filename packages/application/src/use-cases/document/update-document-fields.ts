@@ -22,11 +22,16 @@ import {
 } from "@rbrasier/domain";
 import { documentSummarySchema, type DocumentData, type GroupItems } from "@rbrasier/shared";
 import { buildRenderData } from "./render-data";
+import { validateGroupItems } from "./group-edit";
 
 export interface UpdateDocumentFieldsInput {
   messageId: string;
   editedByUserId: string;
   values: Record<string, string>;
+  // Edited repeating-group items keyed by the group field's key. A group absent
+  // here keeps the items extracted at generation (a scalar-only edit); a group
+  // present replaces them wholesale after validation.
+  groupItems?: Record<string, Array<Record<string, string>>>;
 }
 
 export interface DocumentFieldError {
@@ -89,10 +94,13 @@ export class UpdateDocumentFields {
     const fields = fieldsResult.data;
 
     const validation = this.validateValues(fields, input.values);
-    if (validation.fieldErrors.length > 0) {
-      return ok({ fieldErrors: validation.fieldErrors });
+    const groupValidation = this.validateGroups(fields, input.groupItems ?? {});
+    const fieldErrors = [...validation.fieldErrors, ...groupValidation.errors];
+    if (fieldErrors.length > 0) {
+      return ok({ fieldErrors });
     }
     const values = validation.values;
+    const submittedItemsByKey = groupValidation.itemsByKey;
 
     const stepOutputResult = await this.sessionStepOutputs.findByMessageId(input.messageId);
     if (stepOutputResult.error) return stepOutputResult;
@@ -101,17 +109,18 @@ export class UpdateDocumentFields {
       return err(domainError("NOT_FOUND", "No step output found for this document."));
     }
 
-    // Groups are not manually editable in v1, so preserve the items extracted at
-    // generation — otherwise a scalar-field edit would re-render the document and
-    // step output with the group blanked.
+    // A group not submitted in this edit keeps the items extracted at generation
+    // — otherwise a scalar-only edit would re-render with the group blanked.
     const priorItemsByKey = new Map<string, GroupItems>();
     for (const priorField of stepOutput.fields) {
       if (priorField.items) priorItemsByKey.set(priorField.key, priorField.items);
     }
+    const itemsFor = (key: string): GroupItems =>
+      submittedItemsByKey.get(key) ?? priorItemsByKey.get(key) ?? [];
 
     const renderValues: DocumentData = { ...values };
     for (const field of fields) {
-      if (field.type === "group") renderValues[field.key] = priorItemsByKey.get(field.key) ?? [];
+      if (field.type === "group") renderValues[field.key] = itemsFor(field.key);
     }
 
     const generateResult = this.documentGenerator.generate({
@@ -137,7 +146,7 @@ export class UpdateDocumentFields {
           type: field.type,
           ...(field.options ? { options: field.options } : {}),
           value: "",
-          items: priorItemsByKey.get(field.key) ?? [],
+          items: itemsFor(field.key),
         };
       }
       return {
@@ -152,7 +161,10 @@ export class UpdateDocumentFields {
     const updateOutputResult = await this.sessionStepOutputs.updateFields(stepOutput.id, newFields);
     if (updateOutputResult.error) return updateOutputResult;
 
-    const changes = this.diffChanges(fields, previousValues, values);
+    const changes = [
+      ...this.diffChanges(fields, previousValues, values),
+      ...this.diffGroupChanges(fields, priorItemsByKey, itemsFor),
+    ];
     const editedAt = new Date().toISOString();
     const edit: DocumentEdit = {
       editedAt,
@@ -253,6 +265,43 @@ export class UpdateDocumentFields {
       values[field.key] = validated.data;
     }
     return { values, fieldErrors };
+  }
+
+  private validateGroups(
+    fields: TemplateField[],
+    submitted: Record<string, Array<Record<string, string>>>,
+  ): { itemsByKey: Map<string, GroupItems>; errors: DocumentFieldError[] } {
+    const itemsByKey = new Map<string, GroupItems>();
+    const errors: DocumentFieldError[] = [];
+    for (const field of fields) {
+      if (field.type !== "group") continue;
+      const rawItems = submitted[field.key];
+      if (rawItems === undefined) continue;
+      const validated = validateGroupItems(field, rawItems);
+      if (validated.errors.length > 0) {
+        errors.push(...validated.errors);
+        continue;
+      }
+      itemsByKey.set(field.key, validated.items);
+    }
+    return { itemsByKey, errors };
+  }
+
+  private diffGroupChanges(
+    fields: TemplateField[],
+    priorItemsByKey: Map<string, GroupItems>,
+    itemsFor: (key: string) => GroupItems,
+  ): DocumentFieldChange[] {
+    const changes: DocumentFieldChange[] = [];
+    for (const field of fields) {
+      if (field.type !== "group") continue;
+      const previous = JSON.stringify(priorItemsByKey.get(field.key) ?? []);
+      const next = JSON.stringify(itemsFor(field.key));
+      if (previous !== next) {
+        changes.push({ key: field.key, previousValue: previous, newValue: next });
+      }
+    }
+    return changes;
   }
 
   private diffChanges(

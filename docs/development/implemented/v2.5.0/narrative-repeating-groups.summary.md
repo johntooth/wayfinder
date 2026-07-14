@@ -109,8 +109,11 @@ integration test proves a group renders end-to-end.)
 - **No nested groups/sections** — single level only in v1.
 - **Count-only reporting** — no per-item columns or side-by-side item comparison;
   a group is not offered as a numeric filter in the field report (display-only).
-- **Groups are not manually editable** — items are preserved on edit but the
-  manual field editor does not surface group items (as with section gates).
+- ~~**Groups are not manually editable** — items are preserved on edit but the
+  manual field editor does not surface group items (as with section gates).~~
+  **Resolved in v2.5.1** — the "Show data" modal renders a group as a table and
+  the edit dialog offers a full add/remove/edit item editor. See
+  [`../v2.5.1/enhance-repeating-group-editing.summary.md`](../v2.5.1/enhance-repeating-group-editing.summary.md).
 - **External classification (n8n auto-node) and a conversational
   `structured_extraction` output** remain deferred; both consume this same
   `Array<Record<string,string>>` primitive as a small additive follow-on.
