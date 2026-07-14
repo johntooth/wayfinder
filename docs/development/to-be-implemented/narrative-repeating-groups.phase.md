@@ -1,9 +1,15 @@
 # Phase — Repeating / Structured Groups (Narrative templates, Phase 3)
 
-- **Status**: Sketched (awaiting `/doc-review`)
-- **Target version**: TBD (bump: **MINOR** — new field shape, boundary type
-  change, step-output schema change)
+- **Status**: Scoped — decisions locked in **ADR-032**; ready for `/build`
+- **Target version**: v2.5.0 (bump: **MINOR** — new field shape, boundary type
+  change, additive step-output field)
 - **Depends on**: v1.19.0 (narrative field type + optional sections)
+- **ADR**: [`adr/032-repeating-structured-groups.adr.md`](../adr/032-repeating-structured-groups.adr.md)
+  — settles the tag-classification rule, extraction schema, item cap, and the
+  step-output/reporting decisions this doc left open.
+- **Scope**: repeating groups in document templates **only**. External-classifier
+  output (n8n auto-node) and a conversational `structured_extraction` output type
+  are **deferred** — see ADR-032 *Deferred*.
 - **Deferred deliberately**: this is the one piece of narrative-template support
   that breaks the current `Record<string, string>` data binding. Do **not** build
   it speculatively — wait until a real template needs an iterated, structured list.
@@ -62,16 +68,22 @@ That distinction forces changes Phase 1 and 2 specifically avoided:
    with the group rather than emitting them as top-level fields. This is the main
    new parsing work — current `collectRawTags` is paragraph-flat.
 3. **AI extraction** — `extractStructuredFields` returns a flat
-   `Record<string, string>` today. Groups need a nested object schema
-   (`z.record(z.union([z.string(), z.array(z.record(z.string()))]))` or a
-   purpose-built schema). The model must emit an array; cap item count.
+   `Record<string, string>` today. Groups use the widened
+   `z.record(z.union([z.string(), z.array(z.record(z.string()))]))` schema
+   (ADR-032 §3). The model emits an array capped at `itemCap` (**default 20**,
+   overridable per group via `{{#name (max: N)}}`), with each sub-field key
+   required per item. Coercion is best-effort (drop invalid items, blank missing
+   sub-fields, never fail the turn) plus a **soft completeness note** on an empty
+   array or an item missing a required sub-field.
 4. **Render binding** — widen `GenerateDocxInput.data` to allow
    `Array<Record<string, string>>` values (already `string | boolean`; add the
    array arm). docxtemplater's `paragraphLoop` already iterates arrays.
-5. **Step output + reporting** — either (a) persist groups in a separate field
-   shape and surface only a per-session **count** column in `computeFieldReport`,
-   or (b) keep groups entirely out of step outputs and derive counts at write
-   time. Decide in the ADR. Prose/items never become spreadsheet columns.
+5. **Step output + reporting** — **decided (ADR-032 §4)**: persist groups
+   **additively** on `StepOutputField` (`items?: Array<Record<string,string>>`
+   alongside the untouched `value: string`), and surface only a per-session
+   **count** column in `computeFieldReport`. Additive shape → no data migration;
+   group data lives in session context and can flow to later steps. Prose/items
+   never become spreadsheet columns.
 
 ## 4. Key entities / files
 
@@ -88,27 +100,41 @@ That distinction forces changes Phase 1 and 2 specifically avoided:
 | apps/web | `template-tags-help-dialog.tsx` | document repeating-group syntax. |
 | apps/web | `admin/field-report-section.tsx` | render/filter a count column. |
 
-## 5. Risks / open questions
+## 5. Risks / open questions (resolved in ADR-032)
 
-- **Schema migration** for `StepOutputField` if groups are persisted inline —
-  existing rows are `value: string`. Prefer an additive shape over a breaking one.
-- **Prompt reliability** — models are less reliable emitting nested arrays with
-  consistent sub-field keys; needs per-item constraints and a hard item cap.
-- **Nested sections** — a group inside an optional section (and vice versa);
-  decide whether to support nesting in v1.
-- **Reporting semantics** — agree exactly what is reportable (count only?
-  per-sub-field aggregates are out of scope).
+- **Schema migration** — *resolved*: additive `items?` on `StepOutputField`;
+  `value: string` untouched, so no data migration and existing reports keep
+  working (ADR-032 §4).
+- **Prompt reliability** — *mitigated*: hard item cap (default 20), required
+  per-item sub-field keys, best-effort drop-invalid coercion, and a soft
+  completeness note on empty/thin arrays (ADR-032 §3, §5). Single-level-only
+  (no nesting) is the main reliability lever.
+- **Nested sections** — *resolved*: **not supported in v1**; a group inside a
+  section (or vice versa) is a validation error raised by the upload dry-run
+  (ADR-032 §2). Deferred to a later phase.
+- **Reporting semantics** — *resolved*: **count-only** per-session column; no
+  per-item columns, no per-sub-field aggregates, no cross-item comparison in v1
+  (ADR-032 §4).
+- **Implicit classification** — *accepted risk*: adding an inner tag to a block
+  meant as a boolean gate reclassifies it as a group. Surfaced by the upload
+  dry-run + help dialog; not eliminated (ADR-032 §2).
 
 ## 6. Acceptance criteria (draft)
 
 - [ ] A `{{#group}} … {{/group}}` block with inner tags parses into a `group`
       field with `itemFields`, and a plain `{{#section}}` still parses as a
       boolean gate.
-- [ ] The AI emits a capped array of records; the document renders one block per
-      item with template-controlled layout.
+- [ ] The AI emits an array capped at `itemCap` (default 20, overridable via
+      `{{#name (max: N)}}`); the document renders one block per item with
+      template-controlled layout.
+- [ ] An empty array or an item missing a required sub-field surfaces a soft
+      completeness note; coercion never fails the turn.
+- [ ] A group nested in a section (or a section/group nested in a group) is
+      rejected by the upload dry-run with a clear message.
 - [ ] Reporting shows at most a per-session count for a group — never per-item
       columns and never prose.
-- [ ] `StepOutputField` change is additive; existing reports keep working.
-- [ ] `./validate.sh` passes; `VERSION` and `package.json#version` match.
-- [ ] An ADR records the tag-classification rule, the extraction schema, and the
-      reporting/step-output decision.
+- [ ] `StepOutputField` change is additive (`items?` added; `value` untouched);
+      existing reports keep working with no data migration.
+- [ ] `./validate.sh` passes; `VERSION` and `package.json#version` match at v2.5.0.
+- [ ] ADR-032 records the tag-classification rule, the extraction schema, the
+      item cap, and the reporting/step-output decision. ✔ (written)
