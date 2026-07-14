@@ -20,7 +20,7 @@ import {
   type StepOutputField,
   type TemplateField,
 } from "@rbrasier/domain";
-import { documentSummarySchema } from "@rbrasier/shared";
+import { documentSummarySchema, type DocumentData, type GroupItems } from "@rbrasier/shared";
 import { buildRenderData } from "./render-data";
 
 export interface UpdateDocumentFieldsInput {
@@ -94,9 +94,29 @@ export class UpdateDocumentFields {
     }
     const values = validation.values;
 
+    const stepOutputResult = await this.sessionStepOutputs.findByMessageId(input.messageId);
+    if (stepOutputResult.error) return stepOutputResult;
+    const stepOutput = stepOutputResult.data;
+    if (!stepOutput) {
+      return err(domainError("NOT_FOUND", "No step output found for this document."));
+    }
+
+    // Groups are not manually editable in v1, so preserve the items extracted at
+    // generation — otherwise a scalar-field edit would re-render the document and
+    // step output with the group blanked.
+    const priorItemsByKey = new Map<string, GroupItems>();
+    for (const priorField of stepOutput.fields) {
+      if (priorField.items) priorItemsByKey.set(priorField.key, priorField.items);
+    }
+
+    const renderValues: DocumentData = { ...values };
+    for (const field of fields) {
+      if (field.type === "group") renderValues[field.key] = priorItemsByKey.get(field.key) ?? [];
+    }
+
     const generateResult = this.documentGenerator.generate({
       templateBytes,
-      data: buildRenderData(fields, values),
+      data: buildRenderData(fields, renderValues),
     });
     if (generateResult.error) return generateResult;
 
@@ -108,21 +128,26 @@ export class UpdateDocumentFields {
     );
     if (putResult.error) return putResult;
 
-    const stepOutputResult = await this.sessionStepOutputs.findByMessageId(input.messageId);
-    if (stepOutputResult.error) return stepOutputResult;
-    const stepOutput = stepOutputResult.data;
-    if (!stepOutput) {
-      return err(domainError("NOT_FOUND", "No step output found for this document."));
-    }
-
     const previousValues = new Map(stepOutput.fields.map((field) => [field.key, field.value]));
-    const newFields: StepOutputField[] = fields.map((field) => ({
-      key: field.key,
-      label: field.label,
-      type: field.type,
-      ...(field.options ? { options: field.options } : {}),
-      value: values[field.key] ?? "",
-    }));
+    const newFields: StepOutputField[] = fields.map((field) => {
+      if (field.type === "group") {
+        return {
+          key: field.key,
+          label: field.label,
+          type: field.type,
+          ...(field.options ? { options: field.options } : {}),
+          value: "",
+          items: priorItemsByKey.get(field.key) ?? [],
+        };
+      }
+      return {
+        key: field.key,
+        label: field.label,
+        type: field.type,
+        ...(field.options ? { options: field.options } : {}),
+        value: values[field.key] ?? "",
+      };
+    });
 
     const updateOutputResult = await this.sessionStepOutputs.updateFields(stepOutput.id, newFields);
     if (updateOutputResult.error) return updateOutputResult;

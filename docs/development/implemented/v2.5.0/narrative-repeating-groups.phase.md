@@ -1,6 +1,6 @@
 # Phase — Repeating / Structured Groups (Narrative templates, Phase 3)
 
-- **Status**: Scoped — decisions locked in **ADR-032**; ready for `/build`
+- **Status**: Implemented in v2.5.0 (see `narrative-repeating-groups.summary.md`)
 - **Target version**: v2.5.0 (bump: **MINOR** — new field shape, boundary type
   change, additive step-output field)
 - **Depends on**: v1.19.0 (narrative field type + optional sections)
@@ -57,12 +57,16 @@ That distinction forces changes Phase 1 and 2 specifically avoided:
 
 ## 3. Approach (sketch — to be hardened in `/doc-review` + an ADR)
 
-1. **Tag model** — reuse the `{{#name}} … {{/name}}` section syntax but classify
-   a group as *repeating* when its body contains its own `{{sub-field}}` tags. A
-   `section` with no inner tags stays a Phase-2 boolean gate; a `section` whose
-   body has inner tags becomes a `group` whose `itemFields: TemplateField[]` are
-   parsed from the body. Likely a new `TemplateFieldType` `"group"` plus an
-   `itemFields` property on `TemplateField`.
+1. **Tag model** — reuse the `{{#name}} … {{/name}}` section syntax; a block
+   becomes a *repeating group* when its open tag carries an explicit `(repeat)`
+   annotation (`{{#Recommendations (repeat)}} … {{/Recommendations}}`). A
+   `section` without `(repeat)` stays a Phase-2 boolean gate with its inner tags
+   as top-level fields (v1.19.0 unchanged); a `(repeat)` block becomes a `group`
+   whose `itemFields: TemplateField[]` are parsed from the body. New
+   `TemplateFieldType` `"group"` plus `itemFields`/`itemCap` on `TemplateField`.
+   (The explicit marker replaces the originally-scoped implicit rule, which was
+   found during `/build` to regress shipped narrative-in-section — see ADR-032
+   §2.)
 2. **Parsing** — `docx-generator` already preserves section sigils (v1.19.0). It
    must additionally associate the inner tags between `{{#name}}` and `{{/name}}`
    with the group rather than emitting them as top-level fields. This is the main
@@ -115,17 +119,18 @@ That distinction forces changes Phase 1 and 2 specifically avoided:
 - **Reporting semantics** — *resolved*: **count-only** per-session column; no
   per-item columns, no per-sub-field aggregates, no cross-item comparison in v1
   (ADR-032 §4).
-- **Implicit classification** — *accepted risk*: adding an inner tag to a block
-  meant as a boolean gate reclassifies it as a group. Surfaced by the upload
-  dry-run + help dialog; not eliminated (ADR-032 §2).
+- **Explicit `(repeat)` marker** — *resolved*: groups are declared explicitly, so
+  adding an inner tag to a boolean gate no longer reclassifies it. Cost is
+  discoverability (authors must add `(repeat)`); the shipped narrative-in-section
+  pattern is preserved (ADR-032 §2).
 
 ## 6. Acceptance criteria (draft)
 
-- [ ] A `{{#group}} … {{/group}}` block with inner tags parses into a `group`
-      field with `itemFields`, and a plain `{{#section}}` still parses as a
-      boolean gate.
+- [ ] A `{{#group (repeat)}} … {{/group}}` block parses into a `group` field
+      with `itemFields`, and a plain `{{#section}}` (with or without inner tags)
+      still parses as a boolean gate with top-level inner fields.
 - [ ] The AI emits an array capped at `itemCap` (default 20, overridable via
-      `{{#name (max: N)}}`); the document renders one block per item with
+      `{{#name (repeat) (max: N)}}`); the document renders one block per item with
       template-controlled layout.
 - [ ] An empty array or an item missing a required sub-field surfaces a soft
       completeness note; coercion never fails the turn.

@@ -34,6 +34,7 @@ export * from "./chunk-version";
 export * from "./answer-feedback";
 export * from "./reindexable-document";
 export * from "./session-step-output";
+export * from "./group-fields";
 export * from "./analytics";
 export * from "./system-setting";
 export * from "./runtime-config";

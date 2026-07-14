@@ -65,21 +65,33 @@ export interface TemplateField {
 **same** `parseTemplateField` path. A group's sub-fields are always relative to
 the item, never top-level.
 
-### 2. Tag-classification rule: implicit — inner tags mean group
+### 2. Tag-classification rule: explicit `(repeat)` marker
 
-A `{{#name}} … {{/name}}` block is classified at parse time:
+> **Superseded during `/build`.** The originally-scoped *implicit* rule ("inner
+> tags mean group") was found to collide with the shipped v1.19.0
+> narrative-in-section pattern: `{{#Risk Section}} … {{ Risk Narrative
+> (narrative) }} … {{/Risk Section}}` (documented in the tags help dialog, and
+> asserted by `template-field.test.ts` — a `{{#…}}` block with an inner
+> `(text)`/`(narrative)` tag yields **a boolean gate plus a top-level field**).
+> An implicit rule would silently reclassify that shipped shape as a repeating
+> group and regress it. The rule below is the shipped decision.
 
-- **body contains inner `{{sub-tag}}`s → `group`**, whose `itemFields` are the
-  parsed inner tags.
-- **body contains no inner tags → `section`** (the v1.19.0 boolean gate,
-  unchanged).
+A `{{#name}} … {{/name}}` block is classified at parse time by an **explicit
+annotation** on its open tag:
 
-No new sigil, no required annotation — this matches the phase doc and keeps one
-tag vocabulary. The known trade-off is recorded as a risk: an author who places
-a tag inside a block that was meant as a boolean gate changes its meaning. The
-template-upload dry-run (already run on save) surfaces the resulting field shape,
-and the help dialog documents the rule, so the reclassification is visible before
-a template is used.
+- **open tag carries `(repeat)` → `group`**, whose `itemFields` are the parsed
+  inner tags between the open and close, e.g.
+  `{{#Recommendations (repeat)}} … {{/Recommendations}}`.
+- **open tag has no `(repeat)` → `section`** (the v1.19.0 boolean gate,
+  unchanged) — inner tags stay top-level fields exactly as they do today.
+
+`(repeat)` is only meaningful on a `#` open tag; it reuses the existing
+`(annotation)` grammar (open-tag annotations are new parsing — §5), so no new
+sigil is introduced. Because classification is explicit, adding a tag inside a
+boolean gate no longer changes its meaning — the narrative-in-section pattern is
+untouched, and the implicit-reclassification risk is eliminated rather than
+merely mitigated. The template-upload dry-run and the help dialog document the
+marker.
 
 > **Nesting is not supported in v1.** A `group` inside a `section` (or a
 > `section`/`group` inside a `group`) is a **validation error** with a clear
@@ -155,10 +167,10 @@ reportable.
 
 Every group has a hard item cap — the primary guard against unbounded or
 degenerate array extraction. Default **20**. A group may override it on its open
-tag:
+tag, alongside the required `(repeat)` marker:
 
 ```
-{{#suppliers (max: 50)}} … {{/suppliers}}
+{{#suppliers (repeat) (max: 50)}} … {{/suppliers}}
 ```
 
 `(max: N)` on a **group** open tag sets `itemCap` (array length). This reuses the
@@ -166,7 +178,8 @@ existing `(max: N)` annotation token but on the group tag, where it means *item
 count* — distinct from `(max: N)` on a **numeric scalar**, where it means *value
 ceiling*. The two never collide because they annotate different field types;
 parsing resolves the meaning from the tag it sits on. `{{#name}}` open-tag
-annotations are **new parsing** (section sigils carry no annotations today).
+annotations (`(repeat)`, `(max: N)`) are **new parsing** (section sigils carry no
+annotations today).
 
 ### 6. Render binding
 
@@ -200,9 +213,12 @@ emitting them as top-level fields — the one substantial new parsing task, sinc
 
 **Negative**
 
-- Implicit classification (§2) can silently reclassify a boolean gate as a group
-  if an author adds an inner tag. Mitigated by the upload dry-run and the help
-  dialog; not eliminated.
+- Authors must remember to add `(repeat)` to make a block iterate; a group tag
+  written without it renders as a boolean gate (its inner tags leaking as
+  top-level fields). This is a discoverability cost, but it is a *visible* wrong
+  shape in the upload dry-run rather than the silent reclassification the
+  implicit rule risked — and it keeps the shipped narrative-in-section pattern
+  working unchanged.
 - The docx-generator inner-tag scoping is real new parsing over the
   paragraph-flat `collectRawTags`, and must not regress the existing
   section/narrative rendering — covered by the existing docx tests plus new ones.

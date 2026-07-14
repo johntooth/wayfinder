@@ -435,4 +435,55 @@ describe("UpdateDocumentFields", () => {
 
     expect(result.error?.code).toBe("NOT_FOUND");
   });
+
+  it("preserves a group's items on a scalar-field edit instead of blanking it", async () => {
+    const groupFields = [
+      { key: "supplier_name", label: "Supplier Name", type: "text", optional: false, raw: "Supplier Name" },
+      {
+        key: "suppliers",
+        label: "Suppliers",
+        type: "group",
+        optional: true,
+        raw: "#Suppliers (repeat)",
+        itemFields: [{ key: "name", label: "Name", type: "text", optional: false, raw: "Name" }],
+      },
+    ] as const;
+    const suppliersItems = [{ name: "Acme" }, { name: "Globex" }];
+
+    const documentGenerator = makeDocumentGenerator();
+    (documentGenerator.extractFields as ReturnType<typeof vi.fn>).mockReturnValue(
+      ok({ fields: groupFields }),
+    );
+    const flowNodes = makeFlowNodes(makeNode({ documentTemplateFields: groupFields }));
+    const sessionStepOutputs = makeStepOutputs();
+    (sessionStepOutputs.findByMessageId as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok({
+        ...existingStepOutput(),
+        fields: [
+          { key: "supplier_name", label: "Supplier Name", type: "text", value: "Acme Ltd" },
+          { key: "suppliers", label: "Suppliers", type: "group", value: "", items: suppliersItems },
+        ],
+      }),
+    );
+
+    const { useCase, deps } = build({ documentGenerator, flowNodes, sessionStepOutputs });
+
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      editedByUserId: "user-1",
+      values: { supplier_name: "New Name", suppliers: "" },
+    });
+
+    expect(result.error).toBeUndefined();
+    // The regenerated document binds the preserved array, not a blank.
+    const generateCall = (deps.documentGenerator.generate as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(generateCall.data.suppliers).toEqual(suppliersItems);
+    // The persisted step output keeps the items and a blank scalar value.
+    expect(deps.sessionStepOutputs.updateFields).toHaveBeenCalledWith(
+      "step-1",
+      expect.arrayContaining([
+        expect.objectContaining({ key: "suppliers", value: "", items: suppliersItems }),
+      ]),
+    );
+  });
 });
