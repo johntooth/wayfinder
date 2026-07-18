@@ -1,7 +1,7 @@
 /**
  * enhance-repeating-group-editing.spec.ts
  *
- * End-to-end coverage for the repeating/structured-groups follow-up (v2.5.1):
+ * End-to-end coverage for the repeating/structured-groups follow-up (v2.8.0):
  * a repeating group's extracted items are now visible as a table in the
  * "Show data" modal, rather than collapsing to a single blank row.
  *

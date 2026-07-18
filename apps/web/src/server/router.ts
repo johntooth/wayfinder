@@ -1,5 +1,6 @@
 import { analyticsRouter } from "./routers/analytics";
 import { approvalRouter } from "./routers/approval";
+import { auditRouter } from "./routers/audit";
 import { documentRouter } from "./routers/document";
 import { errorRouter } from "./routers/error";
 import { feedbackRouter } from "./routers/feedback";
@@ -7,8 +8,10 @@ import { featureFlagRouter } from "./routers/feature-flag";
 import { flowRouter } from "./routers/flow";
 import { flowVersionRouter } from "./routers/flow-version";
 import { governanceRouter } from "./routers/governance";
+import { groupRouter } from "./routers/group";
 import { hrRouter } from "./routers/hr";
 import { knowledgeRouter } from "./routers/knowledge";
+import { legalHoldRouter } from "./routers/legal-hold";
 import { messageRouter } from "./routers/message";
 import { n8nRouter } from "./routers/n8n";
 import { peopleRouter } from "./routers/people";
@@ -29,6 +32,7 @@ export const appRouter = router({
   flow: flowRouter,
   flowVersion: flowVersionRouter,
   role: roleRouter,
+  group: groupRouter,
   session: sessionRouter,
   schedule: scheduleRouter,
   settings: settingsRouter,
@@ -41,6 +45,8 @@ export const appRouter = router({
   hr: hrRouter,
   knowledge: knowledgeRouter,
   feedback: feedbackRouter,
+  audit: auditRouter,
+  legalHold: legalHoldRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -1,6 +1,6 @@
 # ADR-032 — Repeating / Structured Groups in Templates
 
-- **Status**: Proposed (scoped by `narrative-repeating-groups.phase.md`, target v2.5.0)
+- **Status**: Accepted — implemented in v2.8.0 (scoped by `narrative-repeating-groups.phase.md`)
 - **Date**: 2026-07-14
 - **Builds on**: ADR-009 (document generation via docx-js / docxtemplater),
   v1.19.0 (narrative fields + optional sections — two new `TemplateFieldType`s

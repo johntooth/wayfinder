@@ -1,7 +1,7 @@
 # Phase — Repeating / Structured Groups (Narrative templates, Phase 3)
 
-- **Status**: Implemented in v2.5.0 (see `narrative-repeating-groups.summary.md`)
-- **Target version**: v2.5.0 (bump: **MINOR** — new field shape, boundary type
+- **Status**: Implemented in v2.8.0 (see `narrative-repeating-groups.summary.md`)
+- **Target version**: v2.8.0 (bump: **MINOR** — new field shape, boundary type
   change, additive step-output field)
 - **Depends on**: v1.19.0 (narrative field type + optional sections)
 - **ADR**: [`adr/032-repeating-structured-groups.adr.md`](../adr/032-repeating-structured-groups.adr.md)
@@ -140,6 +140,6 @@ That distinction forces changes Phase 1 and 2 specifically avoided:
       columns and never prose.
 - [ ] `StepOutputField` change is additive (`items?` added; `value` untouched);
       existing reports keep working with no data migration.
-- [ ] `./validate.sh` passes; `VERSION` and `package.json#version` match at v2.5.0.
+- [ ] `./validate.sh` passes; `VERSION` and `package.json#version` match at v2.8.0.
 - [ ] ADR-032 records the tag-classification rule, the extraction schema, the
       item cap, and the reporting/step-output decision. ✔ (written)

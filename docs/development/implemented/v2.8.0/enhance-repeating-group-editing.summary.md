@@ -1,17 +1,20 @@
-# Implementation Summary — Repeating-group Show Data table + item editor (v2.5.1)
+# Implementation Summary — Repeating-group Show Data table + item editor (v2.8.0)
 
-- **Version bump**: **PATCH** — 2.5.0 → 2.5.1. UI-focused follow-up to the
-  v2.5.0 repeating/structured-groups feature. No schema change, no migration —
-  `StepOutputField.items` already persists the data end-to-end.
-- **Type**: `/enhance` (lean build — extends already-reviewed, unreleased v2.5.0
-  work, so no new phase doc / `/doc-review` cycle).
-- **Builds on**: v2.5.0 (repeating/structured groups) — see
-  [`../v2.5.0/narrative-repeating-groups.summary.md`](../v2.5.0/narrative-repeating-groups.summary.md).
+- **Shipped in**: the **2.8.0** release, alongside the repeating/structured-groups
+  feature (this was originally scoped as a separate PATCH follow-up; it merged
+  together with the feature onto `main`, so both land in one MINOR release). No
+  schema change, no migration — `StepOutputField.items` already persists the
+  data end-to-end.
+- **Type**: `/enhance` (lean build — extends the repeating/structured-groups
+  work in the same release, so no new phase doc / `/doc-review` cycle).
+- **Builds on**: the repeating/structured-groups feature (same 2.8.0 release) —
+  see [`./narrative-repeating-groups.summary.md`](./narrative-repeating-groups.summary.md).
 - **Governed by**: [`adr/032-repeating-structured-groups.adr.md`](../../adr/032-repeating-structured-groups.adr.md).
 
 ## What was built
 
-v2.5.0 rendered a repeating group's items into the generated `.docx`, but the
+The repeating/structured-groups feature rendered a group's items into the
+generated `.docx`, but the
 data was **invisible in the "Show data" modal** (a group collapsed to a single
 `—` row) and **not manually editable** (the edit dialog showed one empty text
 box for a group). This closes both gaps.
@@ -42,7 +45,7 @@ server-side and persisted; the document re-renders from the edited list.
 2. **Submitted-vs-preserved items.** `updateDocumentFields` now accepts an
    optional `groupItems` map. A group present in the edit replaces its items
    wholesale (after validation); a group absent keeps the items extracted at
-   generation — preserving the v2.5.0 "scalar edit doesn't blank the group"
+   generation — preserving the feature's "scalar edit doesn't blank the group"
    guarantee.
 3. **Humanised headers, no new persistence.** Show Data headers derive from item
    keys rather than persisting item labels on `StepOutputField`, keeping this a
@@ -75,16 +78,18 @@ only reads and edits it.
 
 ## e2e tests added
 
-`tests/e2e/enhance-repeating-group-editing.spec.ts` — mocks the
-`session.stepData` tRPC query to return a step with a group output, then asserts
-the "Show data" modal renders the group as a table with humanised headers and
-per-item rows (exercising `buildGroupTable` + `GroupCell` in the browser).
+`tests/e2e/enhance-repeating-group-editing.spec.ts` — the seeded session's
+completed document step carries a `Recommendations` group (see
+`seedE2EFixtures`), so the live `session.stepData` query returns it with no
+mocking. The spec opens "Show data", expands the step, and asserts the group
+renders as a table with humanised headers and per-item rows (exercising
+`buildGroupTable` + `GroupCell` in the browser).
 
 The editor half (add/remove/edit/persist) is covered by `group-edit.test.ts`,
 `update-document-fields.test.ts`, and `document.test.ts`, since the edit dialog
 only mounts on an editable generated-document message.
 
-## Known limitations (unchanged from v2.5.0 scope)
+## Known limitations (unchanged from the feature's scope)
 
 - **Humanised headers** in Show Data — item labels aren't stored on the step
   output, so headers derive from keys.

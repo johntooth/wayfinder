@@ -1,6 +1,6 @@
-# Implementation Summary — Repeating / Structured Groups (v2.5.0)
+# Implementation Summary — Repeating / Structured Groups (v2.8.0)
 
-- **Version bump**: **MINOR** — 2.4.11 → 2.5.0. New `TemplateFieldType`, a widened
+- **Version bump**: **MINOR** — 2.7.0 → 2.8.0. New `TemplateFieldType`, a widened
   extraction schema and render boundary, and an additive `StepOutputField.items`.
   No breaking domain change; no data migration.
 - **Governed by**: [`adr/032-repeating-structured-groups.adr.md`](../../adr/032-repeating-structured-groups.adr.md)
@@ -111,9 +111,9 @@ integration test proves a group renders end-to-end.)
   a group is not offered as a numeric filter in the field report (display-only).
 - ~~**Groups are not manually editable** — items are preserved on edit but the
   manual field editor does not surface group items (as with section gates).~~
-  **Resolved in v2.5.1** — the "Show data" modal renders a group as a table and
-  the edit dialog offers a full add/remove/edit item editor. See
-  [`../v2.5.1/enhance-repeating-group-editing.summary.md`](../v2.5.1/enhance-repeating-group-editing.summary.md).
+  **Resolved in the same 2.8.0 release** — the "Show data" modal renders a group
+  as a table and the edit dialog offers a full add/remove/edit item editor. See
+  [`./enhance-repeating-group-editing.summary.md`](./enhance-repeating-group-editing.summary.md).
 - **External classification (n8n auto-node) and a conversational
   `structured_extraction` output** remain deferred; both consume this same
   `Array<Record<string,string>>` primitive as a small additive follow-on.

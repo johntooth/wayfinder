@@ -16,11 +16,13 @@ import {
   Menu,
   MessageSquare,
   PieChart,
+  ScrollText,
   Settings,
   ShieldOff,
   ShieldCheck,
   Stamp,
   Users,
+  UsersRound,
   X,
 } from "lucide-react";
 import { useSidebar } from "@/components/sidebar-context";
@@ -68,6 +70,7 @@ const adminNav: NavGroup[] = [
     items: [
       { href: "/admin/users", icon: Users, label: "Users" },
       { href: "/admin/roles", icon: ShieldCheck, label: "Roles" },
+      { href: "/admin/groups", icon: UsersRound, label: "Groups" },
     ],
   },
   {
@@ -78,6 +81,7 @@ const adminNav: NavGroup[] = [
       { href: "/admin/usage", icon: BarChart2, label: "Usage" },
       { href: "/admin/flags", icon: Flag, label: "Flags" },
       { href: "/admin/errors", icon: AlertCircle, label: "Errors" },
+      { href: "/admin/audit", icon: ScrollText, label: "Audit" },
       { href: "/admin/schedules", icon: Clock, label: "Schedules" },
     ],
   },
