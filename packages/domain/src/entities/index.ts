@@ -55,3 +55,5 @@ export * from "./approval";
 export * from "./person";
 export * from "./hr-dataset";
 export * from "./rate-limit";
+export * from "./skill";
+export * from "./mcp-server";
