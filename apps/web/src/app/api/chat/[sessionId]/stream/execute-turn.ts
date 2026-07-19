@@ -1,4 +1,5 @@
 import type { EvaluateStepReadinessOutput } from "@rbrasier/application";
+import { nodeFieldSet } from "@rbrasier/domain";
 import type {
   AiTurnPayload,
   ConversationalNodeConfig,
@@ -214,6 +215,7 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<void> {
     requireConfirmation,
     outputType: nodeConfig.outputType,
     hasTemplate: Boolean(nodeConfig.documentTemplatePath),
+    hasFields: nodeFieldSet(nodeConfig).length > 0,
     hasContextDocs: flow.contextDocs.length > 0,
     stepCompleteConfidence: aiPayload.stepCompleteConfidence,
     advanceThreshold: realThreshold,
