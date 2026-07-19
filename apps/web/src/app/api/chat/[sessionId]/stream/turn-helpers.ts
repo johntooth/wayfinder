@@ -573,6 +573,7 @@ export async function generateInitialMessage(input: GenerateInitialMessageInput)
       globalInstructions,
       expertRole: flow.expertRole,
       userProfile,
+      now: new Date(),
       resolvedSkills,
     });
     if (systemPromptResult.error) return;

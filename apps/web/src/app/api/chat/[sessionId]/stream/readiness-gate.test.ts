@@ -3,7 +3,6 @@ import { shouldEvaluateStepReadiness, type ReadinessGateInput } from "./readines
 
 const base: ReadinessGateInput = {
   isNeverDone: false,
-  requireConfirmation: false,
   outputType: "generate_document",
   hasTemplate: true,
   hasFields: false,
@@ -61,9 +60,8 @@ describe("shouldEvaluateStepReadiness", () => {
     ).toBe(false);
   });
 
-  it("skips never-done and confirmation-gated steps", () => {
+  it("skips never-done steps", () => {
     expect(shouldEvaluateStepReadiness({ ...base, isNeverDone: true })).toBe(false);
-    expect(shouldEvaluateStepReadiness({ ...base, requireConfirmation: true })).toBe(false);
   });
 
   it("still runs before the hold limit is reached", () => {

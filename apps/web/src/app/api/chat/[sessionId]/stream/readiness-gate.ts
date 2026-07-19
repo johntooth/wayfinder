@@ -1,6 +1,5 @@
 export interface ReadinessGateInput {
   isNeverDone: boolean;
-  requireConfirmation: boolean;
   outputType: string | undefined;
   hasTemplate: boolean;
   // Whether a `structured` step declares any fields to capture. Structured has
@@ -37,12 +36,14 @@ const hasEvaluableFieldSet = (input: ReadinessGateInput): boolean => {
 // carried over its threshold, and only when the flow has guidance documentation
 // to grade against — without context docs the cross-check has no reference
 // material, so the cheap model's threshold decides the advance on its own.
-// Never-done and confirmation-gated steps are skipped. The gate is also bounded:
-// once it has already held a node the maximum number of times it becomes
-// advisory and the step advances on its own threshold, rather than livelocking
-// on a grader that keeps dipping below threshold.
+// Never-done steps are skipped. A confirmation-gated step still runs the gate —
+// the cross-check must happen before the operator is asked to confirm, so gaps
+// are surfaced (holding the step) rather than confirmed blind. The gate is also
+// bounded: once it has already held a node the maximum number of times it
+// becomes advisory and the step advances on its own threshold, rather than
+// livelocking on a grader that keeps dipping below threshold.
 export const shouldEvaluateStepReadiness = (input: ReadinessGateInput): boolean => {
-  if (input.isNeverDone || input.requireConfirmation) return false;
+  if (input.isNeverDone) return false;
   if (!hasEvaluableFieldSet(input)) return false;
   if (!input.hasContextDocs) return false;
   if (input.priorGateHolds >= input.maxGateHolds) return false;
