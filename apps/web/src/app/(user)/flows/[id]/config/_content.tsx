@@ -78,6 +78,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const autoNodeEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "auto_node" }).data ?? false;
   const scheduledNodeEnabled =
     trpc.featureFlag.isEnabledForMe.useQuery({ key: "scheduled_node" }).data ?? false;
+  const mcpEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "mcp" }).data ?? false;
+  const skillsEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "skills" }).data ?? false;
   const [editingMetadata, setEditingMetadata] = useState(false);
 
   const [configOpen, setConfigOpen] = useState(false);
@@ -332,6 +334,16 @@ function CanvasInner({ flowId }: { flowId: string }) {
           notifyOnComplete: values.notifyOnComplete,
         };
       }
+      if (values.type === "mcp") {
+        return {
+          instruction: values.instruction,
+          serverId: values.mcpServerId,
+          toolName: values.mcpToolName,
+          requestFields: values.requestFields,
+          requestFieldValues: values.requestFieldValues,
+          responseFields: values.responseFields,
+        };
+      }
       const hasTemplate = values.outputType === "generate_document" && !!values.documentTemplatePath;
       return {
         aiInstruction: values.aiInstruction,
@@ -346,6 +358,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         documentTemplateStructuredContent: hasTemplate ? (existingNodeConfig.documentTemplateStructuredContent ?? null) : null,
         allowManualEdit: values.allowManualEdit,
         requireConfirmation: values.neverDone ? false : values.requireConfirmation,
+        skillRefs: values.skillRefs,
+        allowedMcpToolRefs: values.allowedMcpToolRefs,
         notifyOnComplete: values.notifyOnComplete,
       };
     };
@@ -536,7 +550,9 @@ function CanvasInner({ flowId }: { flowId: string }) {
               ? "scheduled"
               : editingNode?.type === "approvalNode"
                 ? "approval"
-                : "conversational",
+                : editingNode?.type === "mcpNode"
+                  ? "mcp"
+                  : "conversational",
         approverSource:
           (editingConfig.approverSource as
             | "first_level_supervisor"
@@ -555,10 +571,16 @@ function CanvasInner({ flowId }: { flowId: string }) {
         documentTemplateContent: (editingConfig.documentTemplateContent as string | null) ?? null,
         allowManualEdit: (editingConfig.allowManualEdit as boolean | undefined) ?? true,
         requireConfirmation: Boolean(editingConfig.requireConfirmation),
+        skillRefs: (editingConfig.skillRefs as string[] | undefined) ?? [],
+        allowedMcpToolRefs:
+          (editingConfig.allowedMcpToolRefs as NodeConfigValues["allowedMcpToolRefs"] | undefined) ??
+          [],
         instruction: (editingConfig.instruction as string | null) ?? "",
         executor: (editingConfig.executor as "n8n" | "mock" | undefined) ?? "n8n",
         workflowId: (editingConfig.workflowId as string | null) ?? null,
         webhookUrl: (editingConfig.webhookUrl as string | null) ?? "",
+        mcpServerId: (editingConfig.serverId as string | null) ?? "",
+        mcpToolName: (editingConfig.toolName as string | null) ?? "",
         requestFields: readFields(editingConfig.requestFields),
         requestFieldValues:
           (editingConfig.requestFieldValues as Record<string, FieldValueSource> | undefined) ?? {},
@@ -617,6 +639,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         open={typePickerOpen}
         autoNodeEnabled={autoNodeEnabled}
         scheduledNodeEnabled={scheduledNodeEnabled}
+        mcpNodeEnabled={mcpEnabled}
         onSelect={handleSelectNodeType}
         onClose={() => {
           setTypePickerOpen(false);
@@ -633,6 +656,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         onClose={handleConfigClose}
         isSaving={isSavingConfig}
         priorStepFields={priorStepFields}
+        skillsEnabled={skillsEnabled}
+        mcpEnabled={mcpEnabled}
         onUploadTemplate={editingNodeId ? handleUploadTemplate : undefined}
       />
 

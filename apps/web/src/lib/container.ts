@@ -33,7 +33,6 @@ import {
   DeleteFlowEdge,
   DeleteFlowNode,
   DeleteUser,
-  CaptureStructuredStepOutput,
   EvaluateStepReadiness,
   CreateBudget,
   UpdateBudget,
@@ -44,7 +43,6 @@ import {
   GetUsageLimitsEnabled,
   SetUsageLimitsEnabled,
   FailJob,
-  GenerateDocument,
   GetEffectivePermissions,
   GetFeatureFlag,
   GetFlowCanvas,
@@ -119,10 +117,7 @@ import {
   SetFeatureFlagRoles,
   StartSession,
   SuggestApprover,
-  SummariseTemplate,
   TrackUsage,
-  UpdateDocumentFields,
-  UpdateStructuredStepOutput,
   UpdateErrorStatus,
   UpdateFlow,
   UpdateFlowNode,
@@ -131,6 +126,7 @@ import {
   UpdateUser,
   UpsertFeatureFlag,
 } from "@rbrasier/application";
+import { buildDocumentUseCases } from "./container-document-use-cases";
 import {
   DocxGenerator,
   DocumentExtractorService,
@@ -215,6 +211,7 @@ import {
   type ResolvedSession,
 } from "@rbrasier/adapters";
 import type { FlowVersion, PermissionKey } from "@rbrasier/domain";
+import { buildSkillsAndMcp } from "./container-skills-mcp";
 import { createCachedPermissionResolver } from "./cached-permission-resolver";
 import {
   createCachedAdminSettings,
@@ -473,6 +470,14 @@ const build = () => {
 
   const approvals = new DrizzleApprovalRepository(db);
   const hrDatasets = new DrizzleHrDatasetRepository(db);
+  const skillsAndMcp = buildSkillsAndMcp({
+    db,
+    usageRepo,
+    quotaEnforcer,
+    sessions,
+    languageModel: llm,
+    sessionStepOutputs,
+  });
   const spreadsheetParser = new SpreadsheetParser();
   // Reuses the Email-Notifications M365 app registration (ADR-018), degrading to
   // HR/manual resolution when the added Graph scopes are not yet consented.
@@ -597,32 +602,21 @@ const build = () => {
     connectivityTester,
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
-    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter },
-    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds },
+    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter, ...skillsAndMcp.services },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds, ...skillsAndMcp.repos },
     useCases: {
-      generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
-      captureStructuredStepOutput: new CaptureStructuredStepOutput(llm, sessionStepOutputs),
-      evaluateStepReadiness: new EvaluateStepReadiness(llm, docxGenerator, objectStorage),
-      updateDocumentFields: new UpdateDocumentFields(
-        docxGenerator,
+      ...buildDocumentUseCases({
+        documentGenerator: docxGenerator,
         objectStorage,
-        llm,
+        languageModel: llm,
         sessionMessages,
         sessionStepOutputs,
         sessions,
         flowNodes,
         approvals,
         auditLogger,
-      ),
-      updateStructuredStepOutput: new UpdateStructuredStepOutput(
-        sessionMessages,
-        sessionStepOutputs,
-        sessions,
-        flowNodes,
-        approvals,
-        auditLogger,
-      ),
-      summariseTemplate: new SummariseTemplate(llm),
+      }),
+      evaluateStepReadiness: new EvaluateStepReadiness(llm, docxGenerator, objectStorage),
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
       deleteUser: new DeleteUser(users),
@@ -782,6 +776,7 @@ const build = () => {
         new AiColumnMappingDetector(llm),
       ),
       setColumnMapping: new SetColumnMapping(hrDatasets),
+      ...skillsAndMcp.useCases,
     },
   };
 };

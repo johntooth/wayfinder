@@ -34,7 +34,7 @@ test.describe("structured conversation — config editor", () => {
     await page.getByText(/record intake decision/i).click();
 
     // All three output-type labels are present.
-    await expect(page.getByText("Template", { exact: true })).toBeVisible();
+    await expect(page.getByText("Generate document (from template)")).toBeVisible();
     await expect(page.getByText("Structured conversation")).toBeVisible();
     await expect(page.getByText("Unstructured conversation")).toBeVisible();
 
