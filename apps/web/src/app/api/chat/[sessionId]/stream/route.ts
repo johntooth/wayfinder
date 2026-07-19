@@ -176,6 +176,7 @@ export async function POST(
     globalInstructions,
     expertRole: flow.expertRole,
     userProfile,
+    now: new Date(),
   });
   if (systemPromptResult.error) return new Response("Failed to build prompt", { status: 500 });
 

@@ -31,6 +31,7 @@ export * from "./session-schedule";
 export * from "./recurrence-rule";
 export * from "./schedule-run";
 export * from "./template-field";
+export * from "./parse-flexible-date";
 export * from "./flow-edge";
 export * from "./flow-graph";
 export * from "./session";

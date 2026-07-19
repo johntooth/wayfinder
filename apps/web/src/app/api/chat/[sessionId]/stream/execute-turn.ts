@@ -211,7 +211,6 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<void> {
   // model to grade against.
   const shouldEvaluateReadiness = shouldEvaluateStepReadiness({
     isNeverDone,
-    requireConfirmation,
     outputType: nodeConfig.outputType,
     hasTemplate: Boolean(nodeConfig.documentTemplatePath),
     hasContextDocs: flow.contextDocs.length > 0,
