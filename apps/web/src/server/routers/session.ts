@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { isFlowDiscoverableBy } from "@rbrasier/domain";
+import { groupIdsForMemberships, isFlowDiscoverableBy } from "@rbrasier/domain";
 import type { Session, SessionListSummary } from "@rbrasier/domain";
 import type { Container } from "@/lib/container";
 import { adminProcedure, authenticatedProcedure, router } from "../trpc";
@@ -10,6 +10,25 @@ import { buildCompletedStepData } from "@/lib/step-data";
 import { confirmStep } from "@/lib/chat/confirm-step";
 
 const COMPLETE_CONFIDENCE_THRESHOLD = 90;
+
+// Maps each of the given user ids to their organisation id (or omits them when
+// unaffiliated), in a single batch lookup. Backs the `organisation` visibility
+// owner-join (ADR-038) without a per-flow query or a denormalised column.
+const resolveOwnerOrganisations = async (
+  container: Container,
+  ownerUserIds: string[],
+  viewerUserId: string,
+): Promise<Map<string, string | null>> => {
+  const uniqueIds = [...new Set([...ownerUserIds, viewerUserId])];
+  const map = new Map<string, string | null>();
+  if (uniqueIds.length === 0) return map;
+  const usersResult = await container.repos.users.findByIds(uniqueIds);
+  if (usersResult.error) return map;
+  for (const user of usersResult.data) {
+    map.set(user.id, user.organisationId);
+  }
+  return map;
+};
 
 // Keyset page request for the paginated list endpoints. `limit` is clamped to a
 // sane range here; the adapter clamps again to a hard maximum. `cursor` is the
@@ -302,13 +321,36 @@ export const sessionRouter = router({
   listPublishedFlows: authenticatedProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listFlows.execute();
     if (result.error) throw toTrpcError(result.error);
-    return result.data.filter(
-      (f) =>
-        f.status === "published" &&
-        isFlowDiscoverableBy(f.visibility, {
-          ownerUserId: f.ownerUserId,
-          viewerUserId: ctx.userId,
-        }),
+    // Resolve the viewer's groups per request so a group-visible flow appears the
+    // moment they join and disappears the moment they are removed (ADR-036).
+    const groupContext = await ctx.container.useCases.resolveGroupAuthorization.execute(
+      ctx.userId,
+      ctx.isAdmin,
+    );
+    const viewerGroupIds = groupContext.error
+      ? []
+      : groupIdsForMemberships(groupContext.data.memberships);
+
+    const published = result.data.filter((f) => f.status === "published");
+    // Resolve the viewer's and each owner's organisation (the owner-join,
+    // ADR-038) so an organisation-visible flow is discoverable exactly to users
+    // who share its owner's organisation. Batched into one user lookup.
+    const ownerOrganisationById = await resolveOwnerOrganisations(
+      ctx.container,
+      published.map((f) => f.ownerUserId),
+      ctx.userId,
+    );
+    const viewerOrganisationId = ownerOrganisationById.get(ctx.userId) ?? null;
+
+    return published.filter((f) =>
+      isFlowDiscoverableBy(f.visibility, {
+        ownerUserId: f.ownerUserId,
+        viewerUserId: ctx.userId,
+        viewerGroupIds,
+        ownerOrganisationId: ownerOrganisationById.get(f.ownerUserId) ?? null,
+        viewerOrganisationId,
+        viewerIsAdmin: ctx.isAdmin,
+      }),
     );
   }),
 

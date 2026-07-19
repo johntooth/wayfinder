@@ -1,1 +1,0 @@
-ALTER TABLE "admin_mcp_servers" ADD COLUMN "communicates_externally" boolean DEFAULT false NOT NULL;

@@ -17,12 +17,15 @@ import {
   MessageSquare,
   PieChart,
   Plug,
+  ScrollText,
   Settings,
   ShieldOff,
   ShieldCheck,
   Sparkles,
   Stamp,
   Users,
+  UsersRound,
+  Building2,
   X,
 } from "lucide-react";
 import { useSidebar } from "@/components/sidebar-context";
@@ -91,6 +94,8 @@ const buildAdminNav = ({ skillsEnabled, mcpEnabled, canCurate }: AdminNavContext
       items: [
         { href: "/admin/users", icon: Users, label: "Users" },
         { href: "/admin/roles", icon: ShieldCheck, label: "Roles" },
+        { href: "/admin/groups", icon: UsersRound, label: "Groups" },
+        { href: "/admin/organisations", icon: Building2, label: "Organisations" },
       ],
     },
     {
@@ -101,6 +106,7 @@ const buildAdminNav = ({ skillsEnabled, mcpEnabled, canCurate }: AdminNavContext
         { href: "/admin/usage", icon: BarChart2, label: "Usage" },
         { href: "/admin/flags", icon: Flag, label: "Flags" },
         { href: "/admin/errors", icon: AlertCircle, label: "Errors" },
+        { href: "/admin/audit", icon: ScrollText, label: "Audit" },
         { href: "/admin/schedules", icon: Clock, label: "Schedules" },
       ],
     },

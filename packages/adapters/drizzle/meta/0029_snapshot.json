@@ -1,5 +1,5 @@
 {
-  "id": "197e14f8-1c66-455c-b75a-c61319b6a078",
+  "id": "a46ecfea-7e9b-475b-80aa-59554325dfff",
   "prevId": "953cc407-8b16-47c6-94c5-4793e562f1cc",
   "version": "7",
   "dialect": "postgresql",
@@ -153,6 +153,24 @@
           "primaryKey": false,
           "notNull": false
         },
+        "sequence": {
+          "name": "sequence",
+          "type": "bigserial",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prev_hash": {
+          "name": "prev_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hash": {
+          "name": "hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -180,6 +198,21 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "core_audit_log_sequence_idx": {
+          "name": "core_audit_log_sequence_idx",
+          "columns": [
+            {
+              "expression": "sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1498,8 +1531,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.app_skills": {
-      "name": "app_skills",
+    "public.app_legal_holds": {
+      "name": "app_legal_holds",
       "schema": "",
       "columns": {
         "id": {
@@ -1515,49 +1548,27 @@
           "primaryKey": false,
           "notNull": true
         },
-        "description": {
-          "name": "description",
+        "reason": {
+          "name": "reason",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "body": {
-          "name": "body",
-          "type": "text",
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scope": {
+          "name": "scope",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": true
         },
-        "allowed_tools": {
-          "name": "allowed_tools",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "frontmatter": {
-          "name": "frontmatter",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
-        },
-        "version": {
-          "name": "version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
-        },
-        "created_by_user_id": {
-          "name": "created_by_user_id",
-          "type": "uuid",
+        "released_at": {
+          "name": "released_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -1577,11 +1588,11 @@
         }
       },
       "indexes": {
-        "app_skills_status_idx": {
-          "name": "app_skills_status_idx",
+        "app_legal_holds_released_at_idx": {
+          "name": "app_legal_holds_released_at_idx",
           "columns": [
             {
-              "expression": "status",
+              "expression": "released_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1594,12 +1605,12 @@
         }
       },
       "foreignKeys": {
-        "app_skills_created_by_user_id_core_users_id_fk": {
-          "name": "app_skills_created_by_user_id_core_users_id_fk",
-          "tableFrom": "app_skills",
+        "app_legal_holds_created_by_core_users_id_fk": {
+          "name": "app_legal_holds_created_by_core_users_id_fk",
+          "tableFrom": "app_legal_holds",
           "tableTo": "core_users",
           "columnsFrom": [
-            "created_by_user_id"
+            "created_by"
           ],
           "columnsTo": [
             "id"

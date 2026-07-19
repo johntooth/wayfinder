@@ -30,6 +30,28 @@ export const app_error_log = pgTable(
   }),
 );
 
+// Legal hold (ADR-033). A named freeze that overrides retention. `scope` is a
+// coarse JSON discriminated union — `{ kind: "global" }` or
+// `{ kind: "by_session", sessionId }` — kept as jsonb so scope granularity can
+// grow without a migration. An active hold is one whose `released_at` is null.
+export const app_legal_holds = pgTable(
+  "app_legal_holds",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    name: text("name").notNull(),
+    reason: text("reason"),
+    created_by: uuid("created_by").references(() => core_users.id, { onDelete: "set null" }),
+    scope: jsonb("scope").$type<{ kind: "global" } | { kind: "by_session"; sessionId: string }>().notNull(),
+    released_at: timestamp("released_at", { withTimezone: true }),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    // The retention guard reads active holds on every sweep.
+    by_released: index("app_legal_holds_released_at_idx").on(t.released_at),
+  }),
+);
+
 // Uploaded SKILL.md library (ADR-031). `frontmatter` keeps the raw parsed
 // key/value pairs; `allowed_tools` is the normalised allowed-tools declaration
 // (used in Phase 2 for MCP). Editing bumps `version`.
