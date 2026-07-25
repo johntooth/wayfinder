@@ -1,37 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import { RunProgress } from "@/components/extraction/run-progress";
 import { RunResults } from "@/components/extraction/run-results";
 
+// RunResults owns the header bar as well as the body, because the header's
+// downloads and document generation are the run's own mutations.
 export function RunScreenContent({ flowId, runId }: { flowId: string; runId: string }) {
-  return (
-    <div className="h-full overflow-auto">
-      <div className="mx-auto max-w-[1100px] px-[20px] py-[28px]">
-        <div className="mb-[20px] flex items-start justify-between gap-4">
-          <div>
-            <Link
-              href={`/synthesise/${flowId}/edit`}
-              className="text-[12px] text-[#3a5fd9] hover:underline"
-            >
-              ← Back to edit the flow
-            </Link>
-            <h1 className="mt-[4px] text-[20px] font-bold text-[#1a1814]">Summary of outputs</h1>
-          </div>
-          <Link
-            href={`/synthesise/${flowId}/runs`}
-            className="mt-[2px] shrink-0 text-[12px] text-[#6d6a65] hover:underline"
-          >
-            All runs
-          </Link>
-        </div>
-
-        <div className="mb-[16px] rounded-[10px] border border-[#e5e1d8] bg-white px-[14px] py-[10px]">
-          <RunProgress runId={runId} />
-        </div>
-
-        <RunResults flowId={flowId} runId={runId} />
-      </div>
-    </div>
-  );
+  return <RunResults flowId={flowId} runId={runId} />;
 }

@@ -1,5 +1,5 @@
 import {
-  aggregateConfidence,
+  confidenceBand,
   ok,
   type ExtractionField,
   type ExtractionRecord,
@@ -10,6 +10,7 @@ import {
   type ISpreadsheetWriter,
   type Result,
   type SpreadsheetColumn,
+  type SpreadsheetSheet,
 } from "@rbrasier/domain";
 import { loadExtractionSchemaForVersion } from "./run-schema";
 
@@ -31,10 +32,12 @@ const exportKey = (runId: string, extension: string): string =>
 
 const percent = (confidence: number): string => String(Math.round(confidence * 100));
 
-// Writes the full records × fields set (with confidence) to XLSX and JSON in
-// object storage (phase §2.2). The XLSX is the on-screen download; the JSON is
-// the full-fidelity machine copy (rationale + source links). Both overwrite the
-// run's single export slot, so the latest export is always the download target.
+// Writes the full records × fields set to XLSX and JSON in object storage
+// (phase §2.2). The XLSX is the on-screen download and carries two tabs: the
+// extracted values on their own (the sheet an operator pastes into a report) and
+// the confidence/rationale metadata behind them. The JSON is the full-fidelity
+// machine copy (rationale + source links). Both overwrite the run's single
+// export slot, so the latest export is always the download target.
 export class ExportRunResults {
   constructor(
     private readonly runs: IExtractionRunRepository,
@@ -56,9 +59,7 @@ export class ExportRunResults {
     const records = recordsResult.data;
 
     const workbook = this.spreadsheetWriter.write({
-      sheetName: "Results",
-      columns: this.columns(schema.data.fields),
-      rows: records.map((record) => this.row(schema.data.fields, record)),
+      sheets: [this.dataSheet(schema.data.fields, records), this.confidenceSheet(schema.data.fields, records)],
     });
     if (workbook.error) return workbook;
 
@@ -85,30 +86,58 @@ export class ExportRunResults {
     return ok({ xlsxKey, jsonKey, recordCount: records.length });
   }
 
-  private columns(fields: ExtractionField[]): SpreadsheetColumn[] {
-    const columns: SpreadsheetColumn[] = [
-      { key: "record", label: "Record" },
-      { key: "confidence", label: "Confidence" },
-    ];
+  // Tab 1: the extracted values and nothing else, so the sheet can be pasted
+  // into a report without deleting interleaved metadata columns.
+  private dataSheet(fields: ExtractionField[], records: ExtractionRecord[]): SpreadsheetSheet {
+    const columns: SpreadsheetColumn[] = [{ key: "record", label: "Record" }];
     for (const field of fields) {
       columns.push({ key: field.field.key, label: field.field.label });
-      columns.push({ key: `${field.field.key}__confidence`, label: `${field.field.label} confidence` });
     }
-    return columns;
+
+    const rows = records.map((record) => {
+      const byKey = new Map(record.fields.map((field) => [field.key, field]));
+      const values: Record<string, string> = { record: record.label };
+      for (const field of fields) {
+        values[field.field.key] = byKey.get(field.field.key)?.value ?? "";
+      }
+      return values;
+    });
+
+    return { name: "Extracted data", columns, rows };
   }
 
-  private row(fields: ExtractionField[], record: ExtractionRecord): Record<string, string> {
-    const byKey = new Map(record.fields.map((field) => [field.key, field]));
-    const values: Record<string, string> = {
-      record: record.label,
-      confidence: percent(aggregateConfidence(record)),
-    };
-    for (const field of fields) {
-      const result = byKey.get(field.field.key);
-      values[field.field.key] = result?.value ?? "";
-      values[`${field.field.key}__confidence`] = result ? percent(result.confidence) : "";
+  // Tab 2: the confidence metadata, one row per record × field. Long form rather
+  // than mirroring tab 1's width because rationale is a sentence or two per cell.
+  // The band is written alongside the percentage so the sheet can be filtered
+  // without re-deriving the thresholds in Excel.
+  private confidenceSheet(fields: ExtractionField[], records: ExtractionRecord[]): SpreadsheetSheet {
+    const columns: SpreadsheetColumn[] = [
+      { key: "record", label: "Record" },
+      { key: "field", label: "Field" },
+      { key: "value", label: "Value" },
+      { key: "confidence", label: "Confidence %" },
+      { key: "band", label: "Band" },
+      { key: "rationale", label: "Rationale" },
+    ];
+
+    const rows: Array<Record<string, string>> = [];
+    for (const record of records) {
+      const byKey = new Map(record.fields.map((field) => [field.key, field]));
+      for (const field of fields) {
+        const result = byKey.get(field.field.key);
+        const confidence = result?.confidence ?? 0;
+        rows.push({
+          record: record.label,
+          field: field.field.label,
+          value: result?.value ?? "",
+          confidence: percent(confidence),
+          band: confidenceBand(confidence),
+          rationale: result?.rationale ?? "",
+        });
+      }
     }
-    return values;
+
+    return { name: "Confidence", columns, rows };
   }
 
   private jsonFields(fields: ExtractionField[]): Array<{ key: string; label: string }> {

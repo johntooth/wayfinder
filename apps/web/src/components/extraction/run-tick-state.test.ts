@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isProcessing, shouldDriveTick } from "./run-tick-state";
+import { isProcessing, shouldAnimateProgress, shouldDriveTick } from "./run-tick-state";
 
 const state = (overrides: Partial<Parameters<typeof shouldDriveTick>[0]> = {}) => ({
   status: "running",
@@ -41,5 +41,22 @@ describe("isProcessing", () => {
     expect(isProcessing("paused_preview")).toBe(false);
     expect(isProcessing("complete")).toBe(false);
     expect(isProcessing(undefined)).toBe(false);
+  });
+});
+
+describe("shouldAnimateProgress", () => {
+  it("animates while the run is processing", () => {
+    expect(shouldAnimateProgress("running")).toBe(true);
+  });
+
+  it("holds the bar still when the run is paused, so 'stopped' reads as stopped", () => {
+    expect(shouldAnimateProgress("paused_preview")).toBe(false);
+    expect(shouldAnimateProgress("paused_cap")).toBe(false);
+  });
+
+  it("holds the bar still once the run is terminal", () => {
+    for (const status of ["complete", "partial", "cancelled", undefined]) {
+      expect(shouldAnimateProgress(status)).toBe(false);
+    }
   });
 });

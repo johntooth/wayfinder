@@ -96,14 +96,18 @@ a second, parallel flow paradigm, not a feature bolted onto chat.
 4. As an **operator**, I can run an extraction with **preview on by default**
    when more than 5 files are uploaded, watch a **progress bar** (`x of y
    processed`) with a **preview-breakpoint marker**, and stop at the preview.
-5. As an **operator**, in the viewer I can see included **files on the left** and
-   **output rows on the right**; selecting a row highlights the **source files**
-   used; each row shows a **RAG confidence** circle with an info icon (modal =
-   rating + rationale) and a short message when amber/green.
+5. As an **operator**, in the viewer I see a **flat table with one row per output
+   record** and a column per field; each value carries a **RAG confidence** circle
+   that opens a modal (rating + rationale). Each row **expands** to reveal the
+   **source files** it drew on (downloadable) alongside a paired field/value
+   detail view, so provenance is attached to the record it explains rather than
+   sitting in a separate list.
 6. As an **operator**, I can **download the input/output documents** to compare,
-   **download the data** in the templated format (XLSX if structured output has
-   no template), and read the **summary rendered as markdown** above the rows
-   (click to download in the provided template).
+   **download the data as XLSX in one click** from the viewer header — with the
+   **JSON copy** and **document generation** in the header's overflow menu — and
+   read the **summary rendered as markdown** above the rows, collapsed to its
+   first few lines with a *show more* toggle (click to download in the provided
+   template).
 7. As an **operator**, I can **refine input**, **continue processing** (if
    stopped at preview), or **mark complete** from the viewer's top-right.
 8. As a **user**, I reach the feature via a **"Synthesise Information"** menu
@@ -184,12 +188,16 @@ developer-owned `PERMISSIONS` registry (ADR-021).
 - [ ] Running with >5 input files defaults to preview on; a progress bar shows
       `x of y processed` with a preview-breakpoint marker; the operator can stop
       at preview, continue processing, refine input, or mark complete.
-- [ ] The viewer shows included files (left ~¼) and output rows (right); selecting
-      a row highlights its source files; each row shows a RAG confidence circle
-      with an info modal (rating + rationale); the summary renders as markdown
-      above the rows.
+- [ ] The viewer shows a flat table, one row per output record, a column per
+      field; each value carries a RAG confidence circle opening an info modal
+      (rating + rationale); a row expands to reveal its source files (downloadable)
+      and a paired field/value detail view; the summary renders as markdown above
+      the rows, collapsed to its first few lines with a *show more* toggle.
 - [ ] Data downloads in the templated format (XLSX when structured output has no
-      template); input/output documents are downloadable to compare.
+      template) in one click from the viewer header, with the JSON copy and
+      document generation in the header's overflow menu; the XLSX separates
+      extracted values (first tab) from confidence and rationale (second tab);
+      input/output documents are downloadable to compare.
 - [ ] Confidence gating reads stored server-side values; every run-artifact REST
       endpoint enforces run-ownership/permission; runs/records/objects are covered
       by retention.

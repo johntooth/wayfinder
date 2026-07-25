@@ -71,10 +71,10 @@ const buildDeps = () => {
       } as unknown as FlowVersion),
     ),
   };
-  let lastSheet: WriteSpreadsheetInput | null = null;
+  let lastWorkbook: WriteSpreadsheetInput | null = null;
   const spreadsheetWriter = {
     write: vi.fn((input: WriteSpreadsheetInput) => {
-      lastSheet = input;
+      lastWorkbook = input;
       return ok({ bytes: Buffer.from("xlsx-bytes") });
     }),
   };
@@ -93,7 +93,7 @@ const buildDeps = () => {
     spreadsheetWriter,
     storage,
     auditLogger,
-    getSheet: () => lastSheet,
+    getWorkbook: () => lastWorkbook!,
     useCase: new ExportRunResults(
       runs as never,
       flowVersions as never,
@@ -121,25 +121,79 @@ describe("ExportRunResults", () => {
     ]);
   });
 
-  it("builds a column per field plus its confidence, in schema order", async () => {
+  it("writes two tabs — extracted data first, confidence second", async () => {
     const deps = buildDeps();
     await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
 
-    const sheet = deps.getSheet()!;
-    expect(sheet.columns.map((column) => column.key)).toEqual([
-      "record",
-      "confidence",
-      "supplier",
-      "supplier__confidence",
-      "price",
-      "price__confidence",
+    expect(deps.getWorkbook().sheets.map((sheet) => sheet.name)).toEqual([
+      "Extracted data",
+      "Confidence",
     ]);
-    expect(sheet.rows[0]).toMatchObject({
-      record: "Acme",
-      supplier: "Acme Ltd",
-      price: "£10",
-      price__confidence: "40",
-    });
+  });
+
+  it("gives the data tab a column per field in schema order, values only", async () => {
+    const deps = buildDeps();
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const dataTab = deps.getWorkbook().sheets[0]!;
+    expect(dataTab.columns.map((column) => column.key)).toEqual(["record", "supplier", "price"]);
+    expect(dataTab.rows).toEqual([{ record: "Acme", supplier: "Acme Ltd", price: "£10" }]);
+  });
+
+  it("keeps confidence and rationale out of the data tab", async () => {
+    const deps = buildDeps();
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const dataTab = deps.getWorkbook().sheets[0]!;
+    const keys = dataTab.columns.map((column) => column.key);
+    expect(keys.some((key) => key.includes("confidence"))).toBe(false);
+    expect(keys.some((key) => key.includes("rationale"))).toBe(false);
+  });
+
+  it("gives the confidence tab one row per record and field, with band and rationale", async () => {
+    const deps = buildDeps();
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const confidenceTab = deps.getWorkbook().sheets[1]!;
+    expect(confidenceTab.columns.map((column) => column.key)).toEqual([
+      "record",
+      "field",
+      "value",
+      "confidence",
+      "band",
+      "rationale",
+    ]);
+    expect(confidenceTab.rows).toEqual([
+      {
+        record: "Acme",
+        field: "Supplier",
+        value: "Acme Ltd",
+        confidence: "90",
+        band: "green",
+        rationale: "cover page",
+      },
+      {
+        record: "Acme",
+        field: "Price",
+        value: "£10",
+        confidence: "40",
+        band: "red",
+        rationale: "guessed",
+      },
+    ]);
+  });
+
+  it("writes a blank data cell and a zero-confidence row for a field the record is missing", async () => {
+    const deps = buildDeps();
+    deps.runs.listRecords.mockResolvedValueOnce(
+      ok([{ ...records[0]!, fields: [records[0]!.fields[0]!] }]),
+    );
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const workbook = deps.getWorkbook();
+    expect(workbook.sheets[0]!.rows[0]).toMatchObject({ price: "" });
+    expect(workbook.sheets[1]!.rows).toHaveLength(2);
+    expect(workbook.sheets[1]!.rows[1]).toMatchObject({ field: "Price", value: "", confidence: "0" });
   });
 
   it("writes the full records (with rationale + sources) into the JSON artifact", async () => {
