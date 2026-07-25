@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Download, Pencil } from "lucide-react";
 import { aggregateConfidence, confidenceBand, type ConfidenceBand } from "@rbrasier/domain";
 import {
@@ -96,12 +96,22 @@ function ValueCell({
   field: ResultFieldValue | null;
   onInfo: (field: ResultFieldValue) => void;
 }) {
-  if (!field) return <span className="text-[#b6b1a8]">—</span>;
+  if (!field) {
+    return (
+      <div className="flex min-w-0 items-start justify-between gap-[8px]">
+        <span className="min-w-0 text-[#b6b1a8]">—</span>
+      </div>
+    );
+  }
   return (
-    <span className="inline-flex items-center gap-[6px]">
-      <ConfidenceDot field={field} recordLabel={record.label} onInfo={() => onInfo(field)} />
-      <span className="min-w-0">{field.value || <span className="text-[#b6b1a8]">—</span>}</span>
-    </span>
+    <div className="flex min-w-0 items-start justify-between gap-[8px]">
+      <span className="line-clamp-3 min-w-0 break-words" title={field.value || undefined}>
+        {field.value || <span className="text-[#b6b1a8]">—</span>}
+      </span>
+      <span className="mt-[4px]">
+        <ConfidenceDot field={field} recordLabel={record.label} onInfo={() => onInfo(field)} />
+      </span>
+    </div>
   );
 }
 
@@ -147,6 +157,23 @@ export function ResultGrid({
   // Expand toggle + record label + one column per field.
   const columnCount = columnKeys.length + 2;
 
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [viewportWidth, setViewportWidth] = useState(0);
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    // The expanded detail panel pins to the visible viewport of this scroll
+    // container so the top-level row can scroll horizontally without dragging
+    // the detail off-screen with it.
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      setViewportWidth(entry.contentRect.width);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="flex flex-col gap-[12px]">
       {options.showFilters ? (
@@ -169,17 +196,31 @@ export function ResultGrid({
         </div>
       ) : null}
 
-      <div className="overflow-x-auto rounded-[10px] border border-[#e5e1d8] bg-white">
-        <table className="w-full border-collapse text-[13px]" data-testid="results-table">
+      <div
+        ref={scrollRef}
+        className="overflow-x-auto rounded-[10px] border border-[#e5e1d8] bg-white"
+      >
+        <table
+          className="w-full border-collapse text-[13px]"
+          data-testid="results-table"
+        >
           <thead>
             <tr className="border-b border-[#e5e1d8] text-left text-[11px] uppercase tracking-[0.05em] text-[#6d6a65]">
               <th scope="col" className="w-[36px] px-[8px] py-[8px]">
                 <span className="sr-only">Expand</span>
               </th>
-              <th scope="col" className="px-[12px] py-[8px]">Record</th>
+              <th scope="col" className="min-w-[220px] px-[12px] py-[8px]">
+                <span className="block truncate">Record</span>
+              </th>
               {columnKeys.map((key) => (
-                <th key={key} scope="col" className="px-[12px] py-[8px]">
-                  {key}
+                <th
+                  key={key}
+                  scope="col"
+                  className="min-w-[160px] max-w-[220px] px-[12px] py-[8px]"
+                >
+                  <span className="block truncate" title={key}>
+                    {key}
+                  </span>
                 </th>
               ))}
             </tr>
@@ -194,6 +235,7 @@ export function ResultGrid({
                   record={record}
                   columnKeys={columnKeys}
                   columnCount={columnCount}
+                  detailPanelWidth={viewportWidth}
                   isExpanded={isExpanded}
                   isException={isException}
                   documentsById={documentsById}
@@ -270,6 +312,7 @@ interface ResultRowProps {
   record: ResultRecord;
   columnKeys: string[];
   columnCount: number;
+  detailPanelWidth: number;
   isExpanded: boolean;
   isException: boolean;
   documentsById: Map<string, ResultDocument>;
@@ -284,6 +327,7 @@ function ResultRow({
   record,
   columnKeys,
   columnCount,
+  detailPanelWidth,
   isExpanded,
   isException,
   documentsById,
@@ -296,10 +340,10 @@ function ResultRow({
   return (
     <>
       <tr
-        className={`border-b border-[#f0ede7] ${isExpanded ? "bg-[#f7f9ff]" : "hover:bg-[#faf9f6]"}`}
+        className={`border-b border-[#e5e1d8] ${isExpanded ? "bg-[#f7f9ff]" : "hover:bg-[#faf9f6]"}`}
         data-testid="result-row"
       >
-        <td className="px-[8px] py-[8px] align-top">
+        <td className="px-[8px] py-[6px] align-middle">
           <button
             type="button"
             onClick={onToggle}
@@ -311,31 +355,40 @@ function ResultRow({
             {isExpanded ? <ChevronDown className="h-[13px] w-[13px]" /> : <ChevronRight className="h-[13px] w-[13px]" />}
           </button>
         </td>
-        <td className="px-[12px] py-[8px] align-top font-medium text-[#3a352e]">
-          {record.label}
-          {isException ? (
-            <span className="ml-[6px] inline-block rounded-[4px] bg-[#fdf3e3] px-[5px] py-[1px] text-[10px] font-semibold text-[#9b6215]">
-              Exception
+        <td className="px-[12px] py-[6px] align-top font-medium text-[#3a352e]">
+          <div className="flex min-w-0 items-start gap-[6px]">
+            <span className="line-clamp-3 min-w-0 break-words" title={record.label}>
+              {record.label}
             </span>
-          ) : null}
+            {isException ? (
+              <span className="mt-[2px] inline-block shrink-0 rounded-[4px] bg-[#fdf3e3] px-[5px] py-[1px] text-[10px] font-semibold text-[#9b6215]">
+                Exception
+              </span>
+            ) : null}
+          </div>
         </td>
         {columnKeys.map((key) => (
-          <td key={key} className="px-[12px] py-[8px] align-top text-[#3a352e]">
+          <td key={key} className="px-[12px] py-[6px] align-top text-[#3a352e]">
             <ValueCell record={record} field={fieldValue(record, key)} onInfo={onInfo} />
           </td>
         ))}
       </tr>
       {isExpanded ? (
-        <tr className="border-b border-[#f0ede7] bg-[#fbfaf7]" data-testid="result-row-detail">
-          <td colSpan={columnCount} className="px-[16px] py-[14px]">
-            <RecordDetail
-              record={record}
-              documentsById={documentsById}
-              exceptionFileIds={exceptionFileIds}
-              options={options}
-              onInfo={onInfo}
-              onEdit={onEdit}
-            />
+        <tr className="border-b border-[#e5e1d8] bg-[#fbfaf7]" data-testid="result-row-detail">
+          <td colSpan={columnCount} className="p-0">
+            <div
+              className="sticky left-0 w-full px-[16px] py-[14px]"
+              style={detailPanelWidth > 0 ? { maxWidth: `${detailPanelWidth}px` } : undefined}
+            >
+              <RecordDetail
+                record={record}
+                documentsById={documentsById}
+                exceptionFileIds={exceptionFileIds}
+                options={options}
+                onInfo={onInfo}
+                onEdit={onEdit}
+              />
+            </div>
           </td>
         </tr>
       ) : null}
@@ -480,8 +533,10 @@ function DetailField({
   return (
     <>
       <span className="text-[12px] text-[#8a857c]">{field.key}</span>
-      <span className="flex min-w-0 items-center gap-[6px] text-[12px] text-[#3a352e]">
-        <ConfidenceDot field={field} recordLabel={record.label} onInfo={() => onInfo(field)} />
+      <span className="flex min-w-0 items-start gap-[6px] text-[12px] text-[#3a352e]">
+        <span className="mt-[4px]">
+          <ConfidenceDot field={field} recordLabel={record.label} onInfo={() => onInfo(field)} />
+        </span>
         <span className="min-w-0 break-words">
           {field.value || <span className="text-[#b6b1a8]">—</span>}
         </span>
@@ -490,7 +545,7 @@ function DetailField({
             type="button"
             aria-label={`Edit ${field.key} on ${record.label}`}
             onClick={() => onEdit(record, field)}
-            className="shrink-0 text-[#8a857c] hover:text-[#3a352e]"
+            className="mt-[2px] shrink-0 text-[#8a857c] hover:text-[#3a352e]"
           >
             <Pencil className="h-[12px] w-[12px]" />
           </button>
