@@ -26,27 +26,15 @@ export async function register() {
   }
 
   // First-run setup link (ADR-041 §5). Emitted at app startup so it appears under
-  // every launch method (pnpm dev, pnpm start, node, containers). Ensures a
-  // setup token while no admin exists and logs a clickable link; once an admin
-  // exists the use-case returns null and nothing is logged.
+  // every launch method (pnpm dev, pnpm start, node, containers).
   //
-  // Fully detached — including the container import. Next.js awaits register()
-  // before binding the HTTP server, and in dev the container import triggers
-  // on-demand compilation of the whole backend graph. Doing it here (not on the
-  // awaited path) lets the dev server bind to its port immediately.
+  // Detached, and deliberately routed through a container-free module: Next.js
+  // awaits register() before the server takes requests, so anything heavy here
+  // delays the app's first response.
   void (async () => {
     try {
-      const { getContainer } = await import("@/lib/container");
-      const container = getContainer();
-      const result = await container.useCases.ensureSetupToken.execute();
-      if (result.error || !result.data) return;
-      const link = `${container.env.BETTER_AUTH_URL}/setup?token=${result.data}`;
-      console.log(
-        `\n────────────────────────────────────────────────────────────\n` +
-          `  Wayfinder first-run setup — create your admin account here:\n` +
-          `  ${link}\n` +
-          `────────────────────────────────────────────────────────────\n`,
-      );
+      const { emitSetupLink } = await import("@/lib/setup-link");
+      await emitSetupLink();
     } catch {
       // The DB may not be migrated yet on the very first boot; the link is
       // emitted on the next start. Never block or crash startup on it.

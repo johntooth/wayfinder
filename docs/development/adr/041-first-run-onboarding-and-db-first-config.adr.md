@@ -145,7 +145,18 @@ by `restart.sh`. `apps/web/src/instrumentation.ts` already runs once on boot for
 emitting the link there makes it appear regardless of how the app is launched.
 On boot, if no admin exists, the app ensures a `setup_token` (env override or the
 persisted DB row) and logs a clickable `${BETTER_AUTH_URL}/setup?token=<token>`
-line. Once an admin exists it logs nothing. `restart.sh` keeps only its existing
+line. Once an admin exists it logs nothing.
+
+Two constraints shape how this is wired. Next.js awaits `register()` before the
+server accepts requests, so the emitter is **detached** — `register()` returns
+immediately. And it must not touch the container: building the container
+constructs the entire application graph (AI providers, extraction engine,
+embeddings model), which on the boot path delays the first response long enough
+to fail a readiness probe. `apps/web/src/lib/setup-link.ts` therefore wires up
+only a one-connection database handle, the settings repository, and
+`DrizzleAdminLookup` — the "does an admin exist" query split out of
+`BetterAuthAdminAccountCreator` (port `IAdminLookup`) precisely so answering it
+never requires the auth provider. `restart.sh` keeps only its existing
 job — bring up infra, migrate, start the app — and inherits the link for free;
 its sole addition is auto-generating `BETTER_AUTH_SECRET` alongside
 `SETTINGS_ENCRYPTION_KEY` so **no secret has to be edited by hand**.

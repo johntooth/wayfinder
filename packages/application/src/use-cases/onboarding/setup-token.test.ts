@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   SETUP_TOKEN_SETTING_KEY,
   ok,
-  type CreateAdminAccountInput,
-  type IAdminAccountCreator,
+  type IAdminLookup,
   type ISystemSettingsRepository,
   type Result,
   type SystemSetting,
@@ -30,20 +29,17 @@ class FakeSettings implements ISystemSettingsRepository {
   }
 }
 
-class FakeAdminCreator implements IAdminAccountCreator {
+class FakeAdminLookup implements IAdminLookup {
   constructor(private readonly hasAdmin: boolean) {}
   async adminExists(): Promise<Result<boolean>> {
     return ok(this.hasAdmin);
-  }
-  async createFirstAdmin(_input: CreateAdminAccountInput): Promise<Result<{ userId: string }>> {
-    return ok({ userId: "u1" });
   }
 }
 
 describe("EnsureSetupToken", () => {
   it("returns null and persists nothing once an admin exists", async () => {
     const settings = new FakeSettings();
-    const useCase = new EnsureSetupToken(new FakeAdminCreator(true), settings, {
+    const useCase = new EnsureSetupToken(new FakeAdminLookup(true), settings, {
       envSetupToken: null,
       generateToken: () => "generated",
     });
@@ -56,7 +52,7 @@ describe("EnsureSetupToken", () => {
 
   it("prefers the env override and does not persist it", async () => {
     const settings = new FakeSettings();
-    const useCase = new EnsureSetupToken(new FakeAdminCreator(false), settings, {
+    const useCase = new EnsureSetupToken(new FakeAdminLookup(false), settings, {
       envSetupToken: "from-env",
       generateToken: () => "generated",
     });
@@ -69,7 +65,7 @@ describe("EnsureSetupToken", () => {
 
   it("generates and persists a token on first boot with no admin", async () => {
     const settings = new FakeSettings();
-    const useCase = new EnsureSetupToken(new FakeAdminCreator(false), settings, {
+    const useCase = new EnsureSetupToken(new FakeAdminLookup(false), settings, {
       envSetupToken: null,
       generateToken: () => "generated",
     });
@@ -82,7 +78,7 @@ describe("EnsureSetupToken", () => {
 
   it("reuses an existing persisted token across restarts", async () => {
     const settings = new FakeSettings({ [SETUP_TOKEN_SETTING_KEY]: "persisted" });
-    const useCase = new EnsureSetupToken(new FakeAdminCreator(false), settings, {
+    const useCase = new EnsureSetupToken(new FakeAdminLookup(false), settings, {
       envSetupToken: null,
       generateToken: () => "generated",
     });

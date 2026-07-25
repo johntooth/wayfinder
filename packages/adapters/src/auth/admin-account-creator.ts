@@ -9,6 +9,7 @@ import {
 } from "@rbrasier/domain";
 import type { Database } from "../db/client";
 import { core_users } from "../db/schema/core";
+import { DrizzleAdminLookup } from "./admin-lookup";
 import type { Auth } from "./better-auth";
 
 // A stable, arbitrary key for the bootstrap advisory lock (ADR-041 mnemonic).
@@ -35,19 +36,8 @@ export class BetterAuthAdminAccountCreator implements IAdminAccountCreator {
     private readonly getAuth: () => Promise<Auth>,
   ) {}
 
-  async adminExists(): Promise<Result<boolean>> {
-    try {
-      const [row] = await this.db
-        .select({ id: core_users.id })
-        .from(core_users)
-        .where(eq(core_users.is_admin, true))
-        .limit(1);
-      return ok(Boolean(row));
-    } catch (cause) {
-      return err(
-        domainError("INFRA_FAILURE", "Failed to check for an existing administrator.", cause),
-      );
-    }
+  adminExists(): Promise<Result<boolean>> {
+    return new DrizzleAdminLookup(this.db).adminExists();
   }
 
   async createFirstAdmin(

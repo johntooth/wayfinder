@@ -1,7 +1,7 @@
 import {
   SETUP_TOKEN_SETTING_KEY,
   ok,
-  type IAdminAccountCreator,
+  type IAdminLookup,
   type ISystemSettingsRepository,
   type Result,
 } from "@rbrasier/domain";
@@ -19,15 +19,18 @@ export interface EnsureSetupTokenConfig {
 // (ADR-041 §0/§5). Returns null once an admin exists so the startup emitter logs
 // no link. The token is persisted in a DB row (not .env) so it survives restarts
 // and is identical across launch methods.
+//
+// Depends on IAdminLookup rather than the full IAdminAccountCreator: this runs on
+// the boot path, and asking the question must not require the auth provider.
 export class EnsureSetupToken {
   constructor(
-    private readonly adminCreator: IAdminAccountCreator,
+    private readonly adminLookup: IAdminLookup,
     private readonly systemSettings: ISystemSettingsRepository,
     private readonly config: EnsureSetupTokenConfig,
   ) {}
 
   async execute(): Promise<Result<string | null>> {
-    const adminExists = await this.adminCreator.adminExists();
+    const adminExists = await this.adminLookup.adminExists();
     if (adminExists.error) return adminExists;
     if (adminExists.data) return ok(null);
 

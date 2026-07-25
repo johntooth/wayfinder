@@ -20,9 +20,11 @@ configuration writes to the database; env values remain optional overrides.
   DB row, printed to the startup log), a **transactional advisory-lock singleton
   guard**, **seed-email binding** (`ADMIN_SEED_EMAIL`), IP **rate-limiting**, and
   an **audit** entry. The screen self-disables once an admin exists.
-- **Startup setup link** — `instrumentation.ts` ensures the token and logs a
-  clickable `${BETTER_AUTH_URL}/setup?token=…` line on boot while no admin
-  exists (any launch method); silent once an admin exists.
+- **Startup setup link** — `instrumentation.ts` detaches a call to
+  `lib/setup-link.ts`, which ensures the token and logs a clickable
+  `${BETTER_AUTH_URL}/setup?token=…` line on boot while no admin exists (any
+  launch method); silent once an admin exists. It deliberately bypasses the
+  container — see "Known limitations" below.
 - **Three-step setup wizard** (`components/onboarding/setup-wizard.tsx`) mounted
   in the admin layout, gated on `onboarding_state.completed`, re-openable from
   admin Settings ("Re-run setup"). It **reuses the existing settings cards**
@@ -56,6 +58,8 @@ configuration writes to the database; env values remain optional overrides.
 - `apps/web/src/app/setup/page.tsx` — public first-run screen.
 - `apps/web/src/components/onboarding/setup-wizard.tsx` — the wizard.
 - `apps/web/src/lib/container-onboarding.ts` — onboarding + organisation use-case cluster (keeps `container.ts` under the size ceiling).
+- `apps/web/src/lib/setup-link.ts` — container-free startup setup-link emitter.
+- `packages/adapters/src/auth/admin-lookup.ts` — `DrizzleAdminLookup`, the admin-exists query split out of the account creator.
 - `apps/web/e2e/phase-admin-first-login-setup.spec.ts` — e2e.
 
 ## Files modified
@@ -115,6 +119,17 @@ Playwright e2e specs are excluded from the vitest unit run and are driven by the
   multi-org checkbox writes `deployment_config`. Sharing-scope organisation rows
   are managed from admin Settings → Organisations.
 - `POWER_USER_SCOPED_FLAGS` already scoped `mcp`/`skills` in code; left as-is.
+- **The startup emitter does not use the container.** Routing it through
+  `getContainer()` builds the whole application graph (AI providers, extraction
+  engine, embeddings model) on the boot path, which delayed the dev server's
+  first response past the E2E readiness probe's 120s budget. `lib/setup-link.ts`
+  wires only a one-connection database handle, the settings repository, and
+  `DrizzleAdminLookup` (port `IAdminLookup`, split out of
+  `BetterAuthAdminAccountCreator` so the check never needs the auth provider).
+  `EnsureSetupToken` now depends on `IAdminLookup` rather than the full
+  `IAdminAccountCreator`.
+- The E2E workflow tees the dev server's output to `/tmp/app.log` and dumps it if
+  the readiness wait fails — without it a boot hang leaves no diagnosable trace.
 
 ## Validation
 

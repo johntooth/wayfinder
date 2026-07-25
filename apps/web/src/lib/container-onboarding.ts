@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import {
   AdminExists,
   AssignUserOrganisation,
@@ -6,7 +5,6 @@ import {
   CreateFirstAdmin,
   CreateOrganisation,
   DeleteOrganisation,
-  EnsureSetupToken,
   GetDeploymentConfig,
   GetOnboardingState,
   GetOrganisationResolution,
@@ -40,17 +38,12 @@ export interface OnboardingDeps {
 
 // The first-run onboarding + organisation/deployment cluster (ADR-041, ADR-038),
 // factored out of the main container to keep container.ts under the source-size
-// ceiling. Returns the setup-token use-case (also used by instrumentation) and
-// the useCases map to spread in. Behaviour and wiring are unchanged.
+// ceiling. The startup setup-link emitter deliberately does not come through
+// here — see lib/setup-link.ts.
 export const buildOnboarding = (deps: OnboardingDeps) => {
   const adminAccountCreator = new BetterAuthAdminAccountCreator(deps.db, deps.getAuth);
-  const ensureSetupToken = new EnsureSetupToken(adminAccountCreator, deps.systemSettings, {
-    envSetupToken: deps.envSetupToken,
-    generateToken: () => randomBytes(24).toString("base64url"),
-  });
 
   return {
-    ensureSetupToken,
     useCases: {
       adminExists: new AdminExists(adminAccountCreator),
       createFirstAdmin: new CreateFirstAdmin(
@@ -59,7 +52,6 @@ export const buildOnboarding = (deps: OnboardingDeps) => {
         deps.auditLogger,
         { envSetupToken: deps.envSetupToken, seedEmail: deps.seedEmail },
       ),
-      ensureSetupToken,
       getOnboardingState: new GetOnboardingState(deps.systemSettings),
       completeOnboarding: new CompleteOnboarding(deps.systemSettings, deps.clock),
       getDeploymentConfig: new GetDeploymentConfig(deps.systemSettings),
