@@ -138,6 +138,12 @@ Playwright e2e specs are excluded from the vitest unit run and are driven by the
   the same mechanism that made `main`'s production-gated container import safe.
 - The E2E workflow tees the dev server's output to `/tmp/app.log` and dumps it if
   the readiness wait fails — without it a boot hang leaves no diagnosable trace.
+- **The E2E seed marks onboarding complete.** Its database is fresh every run, so
+  `onboarding_state.completed` is false and the wizard would open over every
+  admin screen, covering the UI the rest of the suite drives. `seedE2EFixtures`
+  calls `completeOnboarding` for the same reason it enables the skills/mcp flags:
+  the test environment opts out of first-run behaviour. The wizard's own spec is
+  unaffected — it re-opens the wizard explicitly via "Re-run setup".
 
 ## Validation
 

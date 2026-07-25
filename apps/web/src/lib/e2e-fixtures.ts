@@ -408,6 +408,15 @@ const seedApprovalRequest = async (
 export const seedE2EFixtures = async (container: Container): Promise<SeedResult> => {
   const ownerUserId = await resolveAdminUserId(container);
 
+  // The E2E database is fresh on every run, so onboarding_state.completed is
+  // false and the first-run setup wizard (ADR-041) would open over every admin
+  // screen, covering the UI the rest of the suite drives. Mark it complete —
+  // the wizard's own spec re-opens it explicitly via "Re-run setup".
+  unwrap(
+    await container.useCases.completeOnboarding.execute(),
+    "mark onboarding complete",
+  );
+
   // Skills and MCP default OFF for a fresh install (ADR-041 §4). The e2e suite
   // exercises both features, so enable their flags for the test environment;
   // production installs stay off until an admin opts in via the setup wizard.
