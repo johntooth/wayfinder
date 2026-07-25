@@ -59,6 +59,8 @@ configuration writes to the database; env values remain optional overrides.
 - `apps/web/src/components/onboarding/setup-wizard.tsx` — the wizard.
 - `apps/web/src/lib/container-onboarding.ts` — onboarding + organisation use-case cluster (keeps `container.ts` under the size ceiling).
 - `apps/web/src/lib/setup-link.ts` — container-free startup setup-link emitter.
+- `apps/web/src/components/onboarding/setup-wizard-mount.tsx` — light gate that lazy-loads the wizard only when it will open.
+- `packages/adapters/src/bootstrap.ts` — narrow adapters entry for boot-path work.
 - `packages/adapters/src/auth/admin-lookup.ts` — `DrizzleAdminLookup`, the admin-exists query split out of the account creator.
 - `apps/web/e2e/phase-admin-first-login-setup.spec.ts` — e2e.
 

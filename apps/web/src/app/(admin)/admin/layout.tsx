@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/sidebar";
 import { HelpMenu } from "@/components/help-menu";
-import { SetupWizard } from "@/components/onboarding/setup-wizard";
+import { SetupWizardMount } from "@/components/onboarding/setup-wizard-mount";
 import { SidebarProvider } from "@/components/sidebar-context";
 import { createServerHelpers } from "@/trpc/server";
 import { getContainer } from "@/lib/container";
@@ -45,7 +45,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             {children}
           </div>
           <HelpMenu />
-          <SetupWizard />
+          <SetupWizardMount />
         </div>
       </HydrateClient>
     </SidebarProvider>
