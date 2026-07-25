@@ -128,6 +128,14 @@ Playwright e2e specs are excluded from the vitest unit run and are driven by the
   `BetterAuthAdminAccountCreator` so the check never needs the auth provider).
   `EnsureSetupToken` now depends on `IAdminLookup` rather than the full
   `IAdminAccountCreator`.
+- **`register()` gates on `NEXT_RUNTIME` with an `if` block, not an early
+  `return`.** `instrumentation.ts` is compiled for the edge runtime as well as
+  node, and an early `return` does not stop webpack from following the dynamic
+  imports after it — the edge compilation then failed to resolve node builtins
+  (`@grpc/grpc-js` → `stream`, reached via the adapters barrel's OpenTelemetry
+  setup). `NEXT_RUNTIME` is inlined at build time, so an `if` block folds to
+  `if (false)` in the edge compilation and the imports are eliminated. This is
+  the same mechanism that made `main`'s production-gated container import safe.
 - The E2E workflow tees the dev server's output to `/tmp/app.log` and dumps it if
   the readiness wait fails — without it a boot hang leaves no diagnosable trace.
 
