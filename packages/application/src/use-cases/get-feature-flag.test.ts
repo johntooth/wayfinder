@@ -163,6 +163,12 @@ describe("automation flags default off (ADR-041 §4)", () => {
 
     expect((await useCase.execute("scheduled_node")).data).toBe(true);
   });
+
+  it("keeps extraction_flows enabled by default so Synthesise Information ships on", async () => {
+    const useCase = new IsFeatureEnabled(new FakeFeatureFlagRepository());
+
+    expect((await useCase.execute("extraction_flows")).data).toBe(true);
+  });
 });
 
 describe("ListFeatureFlags", () => {
@@ -175,6 +181,14 @@ describe("ListFeatureFlags", () => {
     const mcp = result.data?.find((flag) => flag.key === "mcp");
     expect(skills?.enabled).toBe(false);
     expect(mcp?.enabled).toBe(false);
+  });
+
+  it("surfaces extraction_flows as an enabled default so the setup wizard shows it on", async () => {
+    const useCase = new ListFeatureFlags(new FakeFeatureFlagRepository());
+
+    const result = await useCase.execute();
+
+    expect(result.data?.find((flag) => flag.key === "extraction_flows")?.enabled).toBe(true);
   });
 
   it("prefers a persisted row over the default when one exists", async () => {

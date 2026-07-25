@@ -11,11 +11,13 @@ import { ok } from "@rbrasier/domain";
 // Flags that are on for a fresh install with no persisted row. Automation flags
 // (auto_node, skills, mcp) are deliberately absent — they default off (ADR-041
 // §4) until an admin enables them, e.g. from the first-run setup wizard.
-const DEFAULT_ENABLED_FLAGS = new Set(["scheduled_node"]);
+const DEFAULT_ENABLED_FLAGS = new Set(["scheduled_node", "extraction_flows"]);
 
 // Flags surfaced in admin UI even before a row exists. skills and mcp are listed
 // (off) so their toggles appear on a fresh install without seeding a row
-// (ADR-041 §4); a persisted row always overrides these defaults.
+// (ADR-041 §4); extraction_flows is listed on, matching its migration seed, so
+// the setup wizard renders it checked even before migrations have run. A
+// persisted row always overrides these defaults.
 const DEFAULT_FEATURE_FLAGS: FeatureFlag[] = [
   {
     id: "default:scheduled_node",
@@ -41,6 +43,15 @@ const DEFAULT_FEATURE_FLAGS: FeatureFlag[] = [
     enabled: false,
     rolloutPct: 100,
     description: "Enables MCP servers/tools in flow builder and at runtime",
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  },
+  {
+    id: "default:extraction_flows",
+    key: "extraction_flows",
+    enabled: true,
+    rolloutPct: 100,
+    description: "Enables the Synthesise Information extraction-flows surface",
     createdAt: new Date(0),
     updatedAt: new Date(0),
   },

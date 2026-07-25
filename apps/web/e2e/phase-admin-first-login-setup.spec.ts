@@ -28,13 +28,20 @@ test.describe("admin first-login setup wizard", () => {
     await page.getByTestId("wizard-continue").click();
     await expect(title).toContainText("Step 2 of 3: Setup");
 
-    // Step 2 → 3: optional site options, including the Skills / MCP toggles.
+    // Step 2 → 3: optional site options and the feature toggles.
     await page.getByTestId("wizard-continue").click();
     await expect(title).toContainText("Step 3 of 3: Site options");
 
-    // The Skills and MCP toggles are present and default off.
+    // The Skills and MCP toggles are present.
     const skills = page.locator("#wizard-flag-skills");
     await expect(skills).toBeVisible();
+    await expect(page.locator("#wizard-flag-mcp")).toBeVisible();
+
+    // Synthesise Information ships enabled, so its toggle is checked and the
+    // extraction limits card it gates is rendered alongside it.
+    const synthesise = page.locator("#wizard-flag-extraction-flows");
+    await expect(synthesise).toBeChecked();
+    await expect(page.getByText(/per-run spend ceiling for extraction batch runs/i)).toBeVisible();
 
     // Finishing marks onboarding complete and closes the dialog.
     await page.getByTestId("wizard-finish").click();

@@ -16,6 +16,7 @@ import { StorageCard } from "@/components/settings/storage-card";
 import { AiProviderCard } from "@/components/settings/ai-provider-card";
 import { AuthMethodsCard } from "@/components/settings/auth-methods-card";
 import { EmailCard } from "@/components/settings/email-card";
+import { ExtractionConfigCard } from "@/components/settings/extraction-config-card";
 import { N8nIntegrationCard } from "@/components/settings/n8n-integration-card";
 import { trpc } from "@/trpc/client";
 
@@ -29,6 +30,15 @@ type Props = {
 type StepIndex = 0 | 1 | 2;
 
 const STEP_TITLES = ["Deployment", "Setup", "Site options"] as const;
+
+// The state each wizard-offered flag ships in. Only consulted while the flag
+// list query is in flight or if a key is missing entirely — ListFeatureFlags
+// merges these same defaults server-side.
+const FLAG_SHIPPED_ENABLED: Record<string, boolean> = {
+  skills: false,
+  mcp: false,
+  extraction_flows: true,
+};
 
 // A short explainer shown above each step's reused settings cards.
 function StepIntro({ children }: { children: React.ReactNode }) {
@@ -96,7 +106,7 @@ export function SetupWizard({ forceOpen = false, onClose }: Props) {
 
   const flagEnabled = useMemo(() => {
     const map = new Map(flagsQuery.data?.map((flag) => [flag.key, flag.enabled]));
-    return (key: string) => map.get(key) ?? false;
+    return (key: string) => map.get(key) ?? FLAG_SHIPPED_ENABLED[key] ?? false;
   }, [flagsQuery.data]);
 
   const close = (): void => {
@@ -169,6 +179,15 @@ export function SetupWizard({ forceOpen = false, onClose }: Props) {
               </StepIntro>
               <EmailCard connectivity={connectivity} />
               <N8nIntegrationCard connectivity={connectivity} />
+              <ToggleRow
+                id="wizard-flag-extraction-flows"
+                title="Synthesise Information"
+                explainer="Extract structured information from batches of documents and review the results. On by default; turn it off to hide the Synthesise Information surface."
+                enabled={flagEnabled("extraction_flows")}
+                onToggle={(next) => void toggleFlag("extraction_flows", next)}
+                disabled={upsertFlag.isPending}
+              />
+              {flagEnabled("extraction_flows") && <ExtractionConfigCard />}
               <ToggleRow
                 id="wizard-flag-skills"
                 title="Skills"

@@ -1,8 +1,8 @@
-# Implementation Summary — Admin First-Login Setup (v2.10.0)
+# Implementation Summary — Admin First-Login Setup (v2.17.0)
 
-- **Version**: 2.10.0 (bump: **MINOR** — new admin feature; all config is runtime
-  state in existing tables; no schema migration). Drafted as 2.9.0; bumped to
-  2.10.0 because 2.9.0 shipped structured-conversation first.
+- **Version**: 2.17.0 (bump: **MINOR** — new admin feature; all config is runtime
+  state in existing tables; no schema migration). Drafted as 2.9.0, then 2.10.0;
+  landed as 2.17.0 after rebasing onto a `main` that had reached 2.16.3.
 - **PRD**: `docs/development/prd/admin-first-login-setup.prd.md`
 - **ADR**: `docs/development/adr/041-first-run-onboarding-and-db-first-config.adr.md`
 - **Phase**: `admin-first-login-setup.phase.md` (this folder)
@@ -27,13 +27,19 @@ configuration writes to the database; env values remain optional overrides.
   in the admin layout, gated on `onboarding_state.completed`, re-openable from
   admin Settings ("Re-run setup"). It **reuses the existing settings cards**
   (`OrganisationNameCard`, `StorageCard`, `AiProviderCard`, `AuthMethodsCard`,
-  `EmailCard`, `N8nIntegrationCard`) driven by the shared `useConnectivity`
-  hook — no duplicated config/test UI. Step 2 warns (does not block); Finish and
-  Skip both call `completeOnboarding`.
+  `EmailCard`, `N8nIntegrationCard`, `ExtractionConfigCard`) driven by the shared
+  `useConnectivity` hook — no duplicated config/test UI. Step 2 warns (does not
+  block); Finish and Skip both call `completeOnboarding`.
 - **Automation flags default OFF** — `auto_node`, `skills`, `mcp` default off;
   `scheduled_node` stays on. `skills`/`mcp` are surfaced in admin UI via the code
   `DEFAULT_FEATURE_FLAGS` list and toggled on (via `featureFlag.upsert`) from the
   wizard's Step 3.
+- **Synthesise Information ON by default** — `extraction_flows` (ADR-033) is a
+  shipped feature, so it is in both `DEFAULT_ENABLED_FLAGS` and
+  `DEFAULT_FEATURE_FLAGS` (**enabled**), matching migration `0039`. Step 3 offers
+  its toggle — pre-checked, so an operator can switch it off during setup — and
+  renders the existing `ExtractionConfigCard` beneath it while it is on, so
+  ingestion caps and the per-run spend ceiling are tunable in the wizard.
 - **Zero-env start** — `restart.sh` seeds `.env` from `.env.example` and
   auto-generates both `SETTINGS_ENCRYPTION_KEY` and `BETTER_AUTH_SECRET`; the
   `.env.example` `DATABASE_URL` port is reconciled to the docker-compose host
@@ -60,7 +66,10 @@ configuration writes to the database; env values remain optional overrides.
 - `packages/domain/src/ports/system-settings-repository.ts` — added `delete(key)`
   (+ the two repository implementations and the settings-repo test fakes).
 - `packages/application/src/use-cases/get-feature-flag.ts` — `skills` + `mcp`
-  added to `DEFAULT_FEATURE_FLAGS` (off).
+  added to `DEFAULT_FEATURE_FLAGS` (off); `extraction_flows` added to
+  `DEFAULT_FEATURE_FLAGS` (on) and to `DEFAULT_ENABLED_FLAGS`.
+- `packages/adapters/src/auth/seed-roles.ts` — corrected the stale comment that
+  claimed `extraction_flows` ships disabled.
 - `apps/web/src/lib/{container.ts,env.ts,instrumentation.ts}` — wiring, `SETUP_TOKEN`
   env, startup link.
 - `apps/web/src/server/routers/{router,settings}.ts` — bootstrap router registration;
@@ -84,8 +93,11 @@ only): `0035_seed_mcp_skills_flags.sql` (`mcp`/`skills` → false) and
 - `apps/web/e2e/phase-admin-first-login-setup.spec.ts` — (1) re-run setup opens
   the three-step wizard and finishes; (2) `/setup` self-disables (redirects to
   `/login`) once an admin exists.
-- `apps/web/e2e/fix-seed-mcp-skills-flags.spec.ts` — updated to assert the new
-  default-off behaviour (Skills/MCP nav entries hidden until enabled).
+- `apps/web/e2e/fix-seed-mcp-skills-flags.spec.ts` — reframed: the flags now
+  default off and are enabled by the E2E seed, so the spec asserts the flag → nav
+  wiring rather than the old migration seed.
+- The wizard spec also asserts the Synthesise Information toggle is pre-checked
+  and that the extraction limits card renders beneath it.
 
 Playwright e2e specs are excluded from the vitest unit run and are driven by the
 `/e2e` (Playwright MCP) skill against a live signed-in stack.
@@ -106,4 +118,4 @@ Playwright e2e specs are excluded from the vitest unit run and are driven by the
 
 ## Validation
 
-`./validate.sh` — all 19 checks pass. `VERSION` and root `package.json` are `2.10.0`.
+`./validate.sh` — all checks pass. `VERSION` and root `package.json` are `2.17.0`.
