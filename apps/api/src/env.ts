@@ -86,6 +86,17 @@ const envSchema = z.object({
   RETENTION_TICK_MS: z.coerce.number().int().positive().default(24 * 60 * 60 * 1000),
   RETENTION_BATCH_SIZE: z.coerce.number().int().positive().default(500),
   RETENTION_MAX_BATCHES_PER_TARGET: z.coerce.number().int().positive().default(200),
+  // Extraction batch engine (ADR-033 §6). On by default: a run that outlives the
+  // browser session has no other engine, so opting in was how a default install
+  // ended up with runs that never progressed. Set it to "false" to opt out.
+  // Intake limits and the per-run cost ceiling are admin settings
+  // (ExtractionConfig), not env vars — only the worker's on/off and tick cadence
+  // live here.
+  EXTRACTION_WORKER_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value !== "false"),
+  EXTRACTION_TICK_MS: z.coerce.number().int().positive().default(5000),
   // Operational/telemetry tables get finite defaults. Audit and conversation
   // history default to 0 (keep forever) — deleting them is a deliberate,
   // compliance-sensitive choice the operator must make.
@@ -94,6 +105,9 @@ const envSchema = z.object({
   RETENTION_NOTIFICATION_LOG_DAYS: z.coerce.number().int().nonnegative().default(180),
   RETENTION_AUDIT_LOG_DAYS: z.coerce.number().int().nonnegative().default(0),
   RETENTION_SESSION_MESSAGES_DAYS: z.coerce.number().int().nonnegative().default(0),
+  // Extraction runs hold sensitive supplier responses; default keep-forever so
+  // deletion is a deliberate operator choice (ADR-033 §9).
+  RETENTION_EXTRACTION_RUNS_DAYS: z.coerce.number().int().nonnegative().default(0),
 });
 
 export type Env = z.infer<typeof envSchema>;

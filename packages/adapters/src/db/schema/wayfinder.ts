@@ -17,7 +17,7 @@ import {
   uuid,
   vector,
 } from "drizzle-orm/pg-core";
-import type { FlowPermission, FlowSnapshot, FlowVersionStatus, FlowVisibility } from "@rbrasier/domain";
+import type { ExtractionFieldResult, FlowPermission, FlowSnapshot, FlowVersionStatus, FlowVisibility } from "@rbrasier/domain";
 import type { AiTurnPayload, PendingExecutions, SessionDocument, StepOutputField } from "@rbrasier/domain";
 import { core_users } from "./core";
 
@@ -49,6 +49,11 @@ export const app_flows = pgTable(
     owner_user_id: uuid("owner_user_id")
       .notNull()
       .references(() => core_users.id, { onDelete: "restrict" }),
+    // Flow paradigm discriminator (ADR-033). Defaults to "guided" so every
+    // existing row and guided code path is untouched.
+    flow_type: text("flow_type", { enum: ["guided", "extraction"] })
+      .notNull()
+      .default("guided"),
     status: text("status", { enum: ["draft", "published"] }).notNull().default("draft"),
     visibility: jsonb("visibility")
       .$type<FlowVisibility>()
@@ -646,5 +651,123 @@ export const kb_answer_feedback = pgTable(
   (t) => ({
     by_status: index("kb_answer_feedback_status_idx").on(t.status, t.created_at),
     by_session: index("kb_answer_feedback_session_id_idx").on(t.session_id),
+  }),
+);
+
+// Extraction batch engine (ADR-033 §5, extraction-flows-2). Three tables isolate
+// the whole paradigm: a run aggregate, one row per input file (the unit of
+// work), and one row per output record (the unit of extraction). jsonb over join
+// tables (ADR-006).
+export const app_extraction_runs = pgTable(
+  "app_extraction_runs",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    flow_id: uuid("flow_id")
+      .notNull()
+      .references(() => app_flows.id, { onDelete: "cascade" }),
+    flow_version_id: uuid("flow_version_id")
+      .notNull()
+      .references(() => app_flow_versions.id, { onDelete: "restrict" }),
+    initiated_by_user_id: uuid("initiated_by_user_id").references(() => core_users.id, {
+      onDelete: "set null",
+    }),
+    mode: text("mode", { enum: ["sample", "full"] }).notNull().default("full"),
+    status: text("status", {
+      enum: ["running", "paused_preview", "paused_cap", "complete", "partial", "cancelled"],
+    })
+      .notNull()
+      .default("running"),
+    // Records to process before pausing at the preview breakpoint; 0 = no pause.
+    preview_boundary: smallint("preview_boundary").notNull().default(0),
+    total_count: integer("total_count").notNull().default(0),
+    done_count: integer("done_count").notNull().default(0),
+    failed_count: integer("failed_count").notNull().default(0),
+    unreadable_count: integer("unreadable_count").notNull().default(0),
+    cost_usd: real("cost_usd").notNull().default(0),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    by_flow: index("app_extraction_runs_flow_id_idx").on(t.flow_id),
+    // Backs listClaimableRunIds and the retention sweep's oldest-first scan.
+    by_status: index("app_extraction_runs_status_idx").on(t.status),
+    by_created: index("app_extraction_runs_created_at_idx").on(t.created_at),
+  }),
+);
+
+export const app_extraction_records = pgTable(
+  "app_extraction_records",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    run_id: uuid("run_id")
+      .notNull()
+      .references(() => app_extraction_runs.id, { onDelete: "cascade" }),
+    ordinal: integer("ordinal").notNull().default(0),
+    // The grouping pass's label for the record (e.g. the shared prefix/folder).
+    label: text("label").notNull().default(""),
+    fields: jsonb("fields").$type<ExtractionFieldResult[]>().notNull().default([]),
+    aggregate_confidence: real("aggregate_confidence").notNull().default(0),
+    status: text("status", { enum: ["pending", "complete"] }).notNull().default("pending"),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    by_run: index("app_extraction_records_run_id_idx").on(t.run_id),
+  }),
+);
+
+// Input documents saved against an extraction flow's draft before any run is
+// started (progressive upload). Kept separate from app_extraction_documents
+// (which belong to a run): these persist the author's staged intake so it
+// survives leaving the editor, and seed the run when a sample is started.
+export const app_extraction_draft_documents = pgTable(
+  "app_extraction_draft_documents",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    flow_id: uuid("flow_id")
+      .notNull()
+      .references(() => app_flows.id, { onDelete: "cascade" }),
+    filename: text("filename").notNull(),
+    tree_path: text("tree_path").notNull(),
+    storage_key: text("storage_key").notNull(),
+    mime_type: text("mime_type").notNull(),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    by_flow: index("app_extraction_draft_documents_flow_id_idx").on(t.flow_id),
+  }),
+);
+
+export const app_extraction_documents = pgTable(
+  "app_extraction_documents",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    run_id: uuid("run_id")
+      .notNull()
+      .references(() => app_extraction_runs.id, { onDelete: "cascade" }),
+    // Null until the grouping pass assigns the file to a record; a file matched
+    // by no record stays null and lands in the exceptions bucket (ADR-033 §4a).
+    record_id: uuid("record_id").references(() => app_extraction_records.id, {
+      onDelete: "set null",
+    }),
+    filename: text("filename").notNull(),
+    tree_path: text("tree_path").notNull(),
+    storage_key: text("storage_key").notNull(),
+    mime_type: text("mime_type").notNull(),
+    status: text("status", {
+      enum: ["pending", "extracting", "complete", "failed", "unreadable"],
+    })
+      .notNull()
+      .default("pending"),
+    attempts: smallint("attempts").notNull().default(0),
+    error: text("error"),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    // Backs the worker's FOR UPDATE SKIP LOCKED claim (pending rows per run).
+    by_run_status: index("app_extraction_documents_run_status_idx").on(t.run_id, t.status),
+    by_record: index("app_extraction_documents_record_id_idx").on(t.record_id),
   }),
 );

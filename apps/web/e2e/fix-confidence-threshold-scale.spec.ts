@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for bug #1: a node whose advanceConfidenceThreshold was authored as a
 // fraction (0.7) instead of a percentage (70) must NOT auto-advance on its own
@@ -16,6 +16,9 @@ import { expect, test } from "@playwright/test";
 const SESSION_PATH = process.env.E2E_SESSION_PATH ?? "/chats/e2e-seed-session";
 
 test.describe("fractional confidence threshold does not auto-advance", () => {
+  test.beforeEach(() => {
+    test.skip(!process.env.E2E_SESSION_PATH, "Needs a fractional-threshold session the CI seed does not create yet — runs via the /e2e skill with E2E_SESSION_PATH set; skipped in CI (tracked in the e2e seed backlog).");
+  });
   test("the opening message stays on its step instead of racing ahead", async ({ page }) => {
     await page.goto(SESSION_PATH);
 

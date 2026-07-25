@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E regression for the document-generation step-flow follow-ups (fix:
 // fix-document-generation-step-flow, v1.58.6).
@@ -25,6 +25,9 @@ const STEP_FLOW_SESSION_PATH =
   process.env.E2E_STEP_FLOW_SESSION_PATH ?? "/chats/e2e-seed-step-flow-session";
 
 test.describe("document generation — step flow", () => {
+  test.beforeEach(() => {
+    test.skip(!process.env.E2E_STEP_FLOW_SESSION_PATH, "Needs a doc-gen step-flow session the CI seed does not create yet — runs via the /e2e skill with E2E_STEP_FLOW_SESSION_PATH set; skipped in CI (tracked in the e2e seed backlog).");
+  });
   test("waits for the document before opening the next step, and renders the terminal document", async ({
     page,
   }) => {

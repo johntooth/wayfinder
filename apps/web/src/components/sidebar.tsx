@@ -10,6 +10,7 @@ import {
   BookOpen,
   ChevronDown,
   Clock,
+  FlaskConical,
   Flag,
   GitBranch,
   LogOut,
@@ -46,12 +47,17 @@ interface NavGroup {
   defaultCollapsed?: boolean;
 }
 
-const userNav: NavGroup[] = [
+// Synthesise Information sits directly under Approvals when the extraction_flows
+// flag resolves (ADR-033 §7) — inline in the main group, no separate rule.
+const buildUserNav = (extractionEnabled: boolean): NavGroup[] => [
   {
     items: [
       { href: "/chats", icon: MessageSquare, label: "My Chats" },
       { href: "/flows", icon: GitBranch, label: "Flows" },
       { href: "/approvals", icon: Stamp, label: "Approvals" },
+      ...(extractionEnabled
+        ? [{ href: "/synthesise", icon: FlaskConical, label: "Synthesise Information" }]
+        : []),
       { href: "/settings", icon: Settings, label: "Settings" },
     ],
   },
@@ -61,9 +67,17 @@ interface AdminNavContext {
   readonly skillsEnabled: boolean;
   readonly mcpEnabled: boolean;
   readonly canCurate: boolean;
+  readonly organisationsEnabled: boolean;
+  readonly extractionEnabled: boolean;
 }
 
-const buildAdminNav = ({ skillsEnabled, mcpEnabled, canCurate }: AdminNavContext): NavGroup[] => {
+const buildAdminNav = ({
+  skillsEnabled,
+  mcpEnabled,
+  canCurate,
+  organisationsEnabled,
+  extractionEnabled,
+}: AdminNavContext): NavGroup[] => {
   // Skills + MCP Servers are hidden when their feature flag is disabled — an
   // admin who turned the flag off should not see the surface it controls.
   // Admins can still re-enable via /admin/flags in the Advanced group.
@@ -81,22 +95,33 @@ const buildAdminNav = ({ skillsEnabled, mcpEnabled, canCurate }: AdminNavContext
         { href: "/admin/dashboards/insights", icon: PieChart, label: "Flow Insights" },
         { href: "/admin/dashboards/flows", icon: BarChart2, label: "Flow Usage" },
         { href: "/admin/sessions", icon: MessageSquare, label: "All Chats" },
-        { href: "/admin/flows", icon: GitBranch, label: "Flows" },
+        { href: "/admin/flows", icon: GitBranch, label: "All Flows" },
+        // Shown only when the extraction_flows flag resolves (ADR-033 §7).
+        ...(extractionEnabled
+          ? [{ href: "/admin/synthesise", icon: FlaskConical, label: "Synthesise Information" }]
+          : []),
         { href: "/admin/settings", icon: Settings, label: "Configuration" },
       ],
     },
     {
-      label: "Flow Settings",
-      items: flowSettingsItems,
-    },
-    {
-      label: "User Admin",
+      label: "Users and Roles",
+      collapsible: true,
+      defaultCollapsed: true,
       items: [
         { href: "/admin/users", icon: Users, label: "Users" },
         { href: "/admin/roles", icon: ShieldCheck, label: "Roles" },
         { href: "/admin/groups", icon: UsersRound, label: "Groups" },
-        { href: "/admin/organisations", icon: Building2, label: "Organisations" },
+        // Organisations are hidden while the feature is switched off (ADR-038).
+        ...(organisationsEnabled
+          ? [{ href: "/admin/organisations", icon: Building2, label: "Organisations" }]
+          : []),
       ],
+    },
+    {
+      label: "Advanced Flow Settings",
+      collapsible: true,
+      defaultCollapsed: true,
+      items: flowSettingsItems,
     },
     {
       label: "Advanced",
@@ -111,7 +136,9 @@ const buildAdminNav = ({ skillsEnabled, mcpEnabled, canCurate }: AdminNavContext
       ],
     },
   ];
-  return groups;
+  // Advanced Flow Settings can be empty when Skills/MCP/Knowledge are all
+  // unavailable — drop empty groups so no lonely collapsible header shows.
+  return groups.filter((group) => group.items.length > 0);
 };
 
 interface AppSidebarProps {
@@ -131,21 +158,21 @@ function NavGroups({
   // current page is never hidden behind a collapsed header.
   const groupHoldsActive = (group: NavGroup): boolean => group.items.some((item) => isActive(item.href));
 
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {};
-    for (const group of groups) {
-      if (group.collapsible && group.label) {
-        initial[group.label] = group.defaultCollapsed ?? false;
-      }
-    }
-    return initial;
-  });
+  // Tracks only groups the user has explicitly toggled. Groups appear
+  // asynchronously (Skills/MCP/Knowledge depend on feature-flag queries that
+  // resolve after mount), so we never seed this from the initial `groups` — an
+  // untouched group falls back to its `defaultCollapsed` at render time instead,
+  // which keeps "Advanced Flow Settings" collapsed even though it loads late.
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+
+  const isGroupCollapsed = (group: NavGroup): boolean =>
+    overrides[group.label as string] ?? group.defaultCollapsed ?? false;
 
   return (
     <>
       {groups.map((group, index) => {
         const isCollapsible = Boolean(group.collapsible && group.label);
-        const isCollapsed = isCollapsible && (collapsed[group.label as string] ?? false) && !groupHoldsActive(group);
+        const isCollapsed = isCollapsible && isGroupCollapsed(group) && !groupHoldsActive(group);
 
         return (
           <div key={group.label ?? `group-${index}`} className={index > 0 ? "mt-[6px]" : undefined}>
@@ -154,7 +181,7 @@ function NavGroups({
                 <button
                   type="button"
                   onClick={() =>
-                    setCollapsed((prev) => ({ ...prev, [group.label as string]: !prev[group.label as string] }))
+                    setOverrides((prev) => ({ ...prev, [group.label as string]: !isGroupCollapsed(group) }))
                   }
                   className="flex w-full items-center justify-between px-[10px] pb-[6px] pt-[8px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#6d6a65] transition-colors hover:text-[#5a5650]"
                 >
@@ -225,12 +252,22 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     { key: "mcp" },
     { enabled: isAdmin },
   );
+  const organisationsEnabledQuery = trpc.organisation.isEnabled.useQuery(undefined, {
+    enabled: isAdmin,
+  });
+  // Gates the "Synthesise Information" surface on both the user and admin menus.
+  const extractionFlagQuery = trpc.featureFlag.isEnabledForMe.useQuery({
+    key: "extraction_flows",
+  });
+  const extractionEnabled = extractionFlagQuery.data ?? false;
   const adminNav = buildAdminNav({
     skillsEnabled: skillsFlagQuery.data ?? false,
     mcpEnabled: mcpFlagQuery.data ?? false,
     canCurate,
+    organisationsEnabled: organisationsEnabledQuery.data ?? false,
+    extractionEnabled,
   });
-  const nav: NavGroup[] = isAdmin ? adminNav : userNav;
+  const nav: NavGroup[] = isAdmin ? adminNav : buildUserNav(extractionEnabled);
   const homeHref = isAdmin ? "/admin/flows" : "/chats";
 
   const recentChats = isAdmin

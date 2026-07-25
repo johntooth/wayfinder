@@ -45,6 +45,7 @@ export interface SeedResult {
   confirmationSessionId: string;
   approvalSessionId: string;
   structuredSessionId: string;
+  structuredFlowId: string;
 }
 
 // A fork flow whose two mutually-exclusive branches capture the same `amount`
@@ -614,7 +615,7 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
   const forkFlowId = await seedForkFlow(container, ownerUserId);
   const confirmationSessionId = await seedConfirmationSession(container, ownerUserId);
   const approvalSessionId = await seedApprovalRequest(container, ownerUserId);
-  const structuredSessionId = await seedStructuredSession(container, ownerUserId);
+  const structured = await seedStructuredSession(container, ownerUserId);
 
   return {
     flowId: flow.id,
@@ -622,7 +623,8 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     forkFlowId,
     confirmationSessionId,
     approvalSessionId,
-    structuredSessionId,
+    structuredSessionId: structured.sessionId,
+    structuredFlowId: structured.flowId,
   };
 };
 

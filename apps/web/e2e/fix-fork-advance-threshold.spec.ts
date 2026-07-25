@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for bug #2: a fork node whose advanceConfidenceThreshold is below 90 must
 // still resolve a branch and advance once the turn's confidence crosses that
@@ -18,6 +18,9 @@ import { expect, test } from "@playwright/test";
 const SESSION_PATH = process.env.E2E_FORK_SESSION_PATH ?? "/chats/e2e-seed-fork-threshold-session";
 
 test.describe("fork advances at a sub-90 configured threshold", () => {
+  test.beforeEach(() => {
+    test.skip(!process.env.E2E_FORK_SESSION_PATH, "Needs a fork-threshold session the CI seed does not create yet — runs via the /e2e skill with E2E_FORK_SESSION_PATH set; skipped in CI (tracked in the e2e seed backlog).");
+  });
   test("a mid-confidence turn on a low-threshold fork advances instead of stalling", async ({
     page,
   }) => {

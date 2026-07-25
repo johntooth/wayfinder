@@ -16,7 +16,6 @@ import { deriveFieldKey } from "@rbrasier/domain";
 import type { FieldValueSource, McpToolRef, PriorStepField, TemplateField } from "@rbrasier/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { trpc } from "@/trpc/client";
 import { TemplateTagsHelpDialog } from "./template-tags-help-dialog";
 import { parseFieldLines } from "./template-field-editor";
@@ -35,8 +34,8 @@ import { NodeConfigModalScheduled } from "./node-config-modal-scheduled";
 import { NodeConfigModalApproval } from "./node-config-modal-approval";
 import { NodeConfigModalMcp } from "./node-config-modal-mcp";
 import {
-  COLOURS,
   CopyButton,
+  StepColourPicker,
   buildCustomFields,
   isAdvancedField,
   type CustomRequestField,
@@ -62,6 +61,11 @@ export interface NodeConfigValues {
   documentTemplatePath?: string | null;
   documentTemplateFilename?: string | null;
   documentTemplateContent?: string | null;
+  // Uploaded template format and (xlsx only) detected authoring mode, surfaced so
+  // the picker can show "Tag mode"/"Header mode" (ADR-039). Persisted by the
+  // upload endpoint; the modal only displays them.
+  documentTemplateFormat?: "docx" | "xlsx" | null;
+  spreadsheetTemplateMode?: "tags" | "header" | null;
   allowManualEdit: boolean;
   requireConfirmation: boolean;
   // Ids of library skills (app_skills) attached to this conversational step.
@@ -106,7 +110,7 @@ interface NodeConfigModalProps {
   // organisation has not enabled.
   skillsEnabled?: boolean;
   mcpEnabled?: boolean;
-  onUploadTemplate?: (file: File, currentValues: NodeConfigValues) => Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string; code?: string }>;
+  onUploadTemplate?: (file: File, currentValues: NodeConfigValues) => Promise<{ path: string; filename: string; documentTemplateContent: string | null; documentTemplateFormat?: "docx" | "xlsx"; spreadsheetTemplateMode?: "tags" | "header" | null } | { error: string; code?: string }>;
 }
 
 const DEFAULT_VALUES: NodeConfigValues = {
@@ -121,6 +125,8 @@ const DEFAULT_VALUES: NodeConfigValues = {
   documentTemplatePath: null,
   documentTemplateFilename: null,
   documentTemplateContent: null,
+  documentTemplateFormat: null,
+  spreadsheetTemplateMode: null,
   allowManualEdit: true,
   requireConfirmation: false,
   skillRefs: [],
@@ -501,6 +507,8 @@ export function NodeConfigModal({
         set("documentTemplatePath", result.path);
         set("documentTemplateFilename", result.filename);
         set("documentTemplateContent", result.documentTemplateContent ?? null);
+        set("documentTemplateFormat", result.documentTemplateFormat ?? "docx");
+        set("spreadsheetTemplateMode", result.spreadsheetTemplateMode ?? null);
       }
     } finally {
       setIsUploading(false);
@@ -579,32 +587,16 @@ export function NodeConfigModal({
                 <DialogBody className="max-h-[70vh] overflow-y-auto">
                   <div className="space-y-1">
                     <Label htmlFor="node-name">Step name</Label>
-                    <Input
-                      id="node-name"
-                      required
-                      value={values.name}
-                      onChange={(e) => set("name", e.target.value)}
-                      placeholder="e.g. Gather requirements"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <FieldGroupLabel id="ncm-step-colour">Step colour</FieldGroupLabel>
-                    <div className="flex gap-2" role="group" aria-labelledby="ncm-step-colour">
-                      {COLOURS.map((colour) => (
-                        <button
-                          key={colour.hex}
-                          type="button"
-                          className={`h-6 w-6 rounded-full transition-transform ${
-                            values.colour === colour.hex
-                              ? "scale-110 ring-2 ring-[#1a1814] ring-offset-2"
-                              : "opacity-70 hover:opacity-100"
-                          }`}
-                          style={{ background: colour.hex }}
-                          onClick={() => set("colour", colour.hex)}
-                          title={colour.label}
-                        />
-                      ))}
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="node-name"
+                        required
+                        value={values.name}
+                        onChange={(e) => set("name", e.target.value)}
+                        placeholder="e.g. Gather requirements"
+                        className="flex-1"
+                      />
+                      <StepColourPicker value={values.colour} onChange={(hex) => set("colour", hex)} />
                     </div>
                   </div>
 

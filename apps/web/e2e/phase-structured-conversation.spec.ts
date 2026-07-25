@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
+import { loadSeedFixtures } from "./helpers/seed";
 
 // E2E for the Structured Conversation output type
 // (PRD: structured-conversation, ADR-038).
@@ -20,53 +21,89 @@ import { expect, test } from "@playwright/test";
 // E2E_STRUCTURED_SESSION_PATH to override the path; E2E_FLOW_CONFIG_PATH to
 // point at a flow's config canvas for the editor test.
 
-const SESSION_PATH =
-  process.env.E2E_STRUCTURED_SESSION_PATH ?? "/chats/e2e-seed-structured-session";
-const FLOW_CONFIG_PATH = process.env.E2E_FLOW_CONFIG_PATH ?? "/flows/e2e-seed-structured-flow/config";
+// Resolve the seeded structured session path, or null when nothing is seeded.
+function structuredSessionPath(): string | null {
+  if (process.env.E2E_STRUCTURED_SESSION_PATH) return process.env.E2E_STRUCTURED_SESSION_PATH;
+  const structuredSessionId = loadSeedFixtures()?.structuredSessionId;
+  return structuredSessionId ? `/chats/${structuredSessionId}` : null;
+}
+
+// Resolve the seeded structured flow's config-canvas path, or null when unseeded.
+function structuredFlowConfigPath(): string | null {
+  if (process.env.E2E_FLOW_CONFIG_PATH) return process.env.E2E_FLOW_CONFIG_PATH;
+  const structuredFlowId = loadSeedFixtures()?.structuredFlowId;
+  return structuredFlowId ? `/flows/${structuredFlowId}/config` : null;
+}
 
 test.describe("structured conversation — config editor", () => {
   test("offers three output types and reveals the field editor for structured", async ({
     page,
   }) => {
-    await page.goto(FLOW_CONFIG_PATH);
+    const flowConfigPath = structuredFlowConfigPath();
+    if (!flowConfigPath) {
+      test.skip(true, "No seeded structured flow — run the seed setup to enable this test");
+      return;
+    }
+    await page.goto(flowConfigPath);
 
-    // Open the structured node's config modal.
+    // Open the structured node's config modal. Scope assertions to the modal —
+    // the seeded node's output type ("Structured conversation") also renders on
+    // the canvas node behind it, so an unscoped match is ambiguous.
     await page.getByText(/record intake decision/i).click();
+    const modal = page.getByRole("dialog").first();
 
     // All three output-type labels are present.
-    await expect(page.getByText("Generate document (from template)")).toBeVisible();
-    await expect(page.getByText("Structured conversation")).toBeVisible();
-    await expect(page.getByText("Unstructured conversation")).toBeVisible();
+    await expect(modal.getByText("Generate document (from template)")).toBeVisible();
+    await expect(modal.getByText("Structured conversation").first()).toBeVisible();
+    await expect(modal.getByText("Unstructured conversation")).toBeVisible();
 
     // Structured reveals the inline field editor.
-    await page.getByText("Structured conversation").click();
-    await expect(page.getByText(/fields to capture/i)).toBeVisible();
+    await modal.getByText("Structured conversation").first().click();
+    await expect(modal.getByText(/fields to capture/i)).toBeVisible();
   });
 
-  test("rejects a section field in a structured set and blocks saving", async ({ page }) => {
-    await page.goto(FLOW_CONFIG_PATH);
+  test("captures a field via label + type + the per-field config cog", async ({ page }) => {
+    const flowConfigPath = structuredFlowConfigPath();
+    if (!flowConfigPath) {
+      test.skip(true, "No seeded structured flow — run the seed setup to enable this test");
+      return;
+    }
+    await page.goto(flowConfigPath);
     await page.getByText(/record intake decision/i).click();
-    await page.getByText("Structured conversation").click();
+    const modal = page.getByRole("dialog").first();
+    await modal.getByText("Structured conversation").first().click();
 
-    // A section tag is not allowed in a structured field set (ADR-038 §5).
-    const firstField = page.getByPlaceholder(/preferred vendor/i).first();
-    await firstField.fill("#Optional Clause");
-    await expect(page.getByText(/only available for document templates/i)).toBeVisible();
+    // A structured field is now one row: a label, a type dropdown, a config cog
+    // and a remove button — no free-text `(type)` tags (item 7).
+    const firstLabel = modal.getByPlaceholder(/preferred vendor/i).first();
+    await firstLabel.fill("Approved");
+    await modal.getByLabel(/field 1 type/i).selectOption("yesno");
 
-    // The invalid set disables Save.
-    await expect(page.getByRole("button", { name: /^save$/i })).toBeDisabled();
+    // The cog opens the per-field settings mini modal with the required toggle.
+    await modal.getByRole("button", { name: /configure field 1/i }).click();
+    await expect(page.getByText(/field settings/i)).toBeVisible();
+    await expect(page.getByLabel(/^required$/i)).toBeVisible();
   });
 });
 
 test.describe("structured conversation — record card", () => {
   test("renders the captured record with its field values and no document", async ({ page }) => {
-    await page.goto(SESSION_PATH);
+    const sessionPath = structuredSessionPath();
+    if (!sessionPath) {
+      test.skip(true, "No seeded structured session — run the seed setup to enable this test");
+      return;
+    }
+    await page.goto(sessionPath);
 
     // The completed structured step surfaces a record card of captured values.
-    await expect(page.getByText("Record", { exact: true })).toBeVisible();
-    await expect(page.getByText(/decision/i)).toBeVisible();
-    await expect(page.getByText("Approved")).toBeVisible();
-    await expect(page.getByText("alex@acme.com")).toBeVisible();
+    // Scope the value assertions to the card — the step name ("Record intake
+    // decision") is also rendered in the message feed, so an unscoped
+    // /decision/i would match two elements.
+    const recordCard = page.getByTestId("record-card");
+    await expect(recordCard).toBeVisible();
+    await expect(recordCard.getByText(/decision/i)).toBeVisible();
+    await expect(recordCard.getByText("Approved")).toBeVisible();
+    await expect(recordCard.getByText("alex@acme.com")).toBeVisible();
 
     // No document card / download affordance for a structured step.
     await expect(page.getByText(/\.docx/i)).toBeHidden();
@@ -74,7 +111,12 @@ test.describe("structured conversation — record card", () => {
   });
 
   test("edits a captured value through the reused manual-edit dialog", async ({ page }) => {
-    await page.goto(SESSION_PATH);
+    const sessionPath = structuredSessionPath();
+    if (!sessionPath) {
+      test.skip(true, "No seeded structured session — run the seed setup to enable this test");
+      return;
+    }
+    await page.goto(sessionPath);
 
     await page.getByRole("button", { name: /^edit$/i }).click();
     await expect(page.getByText(/edit record/i)).toBeVisible();

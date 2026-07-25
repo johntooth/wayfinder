@@ -4,13 +4,32 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";
 
 export function AdminOrganisationsContent() {
+  const enabledQuery = trpc.organisation.isEnabled.useQuery();
+
   return (
     <div className="h-full overflow-auto">
       <div className="container space-y-8 py-8">
+        {enabledQuery.data === false && (
+          <div className="rounded-[10px] border border-[#f5d0a9] bg-[#fdf3e3] px-4 py-3 text-[13px] text-[#9b6215]">
+            Organisations are turned off. Enable them under{" "}
+            <span className="font-medium">Configuration → Organisations</span> to surface these
+            settings to your users.
+          </div>
+        )}
         <OrganisationsManagementCard />
         <MembershipAssignmentCard />
         <ResolutionStrategyCard />
@@ -19,19 +38,17 @@ export function AdminOrganisationsContent() {
   );
 }
 
+interface OrganisationRecord {
+  id: string;
+  name: string;
+  emailDomain: string | null;
+}
+
 function OrganisationsManagementCard() {
   const utils = trpc.useUtils();
   const organisationsQuery = trpc.organisation.list.useQuery();
-  const [newName, setNewName] = useState("");
+  const [editing, setEditing] = useState<OrganisationRecord | "new" | null>(null);
 
-  const createOrganisation = trpc.organisation.create.useMutation({
-    onSuccess: async () => {
-      toast.success("Organisation created");
-      setNewName("");
-      await utils.organisation.list.invalidate();
-    },
-    onError: (error) => toast.error(error.message ?? "Failed to create organisation"),
-  });
   const deleteOrganisation = trpc.organisation.delete.useMutation({
     onSuccess: async () => {
       toast.success("Organisation deleted");
@@ -39,18 +56,6 @@ function OrganisationsManagementCard() {
     },
     onError: (error) => toast.error(error.message ?? "Failed to delete organisation"),
   });
-  const renameOrganisation = trpc.organisation.update.useMutation({
-    onSuccess: async () => {
-      toast.success("Organisation renamed");
-      await utils.organisation.list.invalidate();
-    },
-    onError: (error) => toast.error(error.message ?? "Failed to rename organisation"),
-  });
-
-  const handleCreate = () => {
-    if (!newName.trim()) return;
-    createOrganisation.mutate({ name: newName.trim() });
-  };
 
   const organisations = organisationsQuery.data ?? [];
 
@@ -58,19 +63,7 @@ function OrganisationsManagementCard() {
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle>Organisations</CardTitle>
-        <div className="flex gap-2">
-          <Input
-            aria-label="New organisation name"
-            placeholder="New organisation name"
-            value={newName}
-            onChange={(event) => setNewName(event.target.value)}
-            onKeyDown={(event) => event.key === "Enter" && handleCreate()}
-            className="max-w-[220px]"
-          />
-          <Button onClick={handleCreate} disabled={createOrganisation.isPending || !newName.trim()}>
-            Add organisation
-          </Button>
-        </div>
+        <Button onClick={() => setEditing("new")}>New organisation</Button>
       </CardHeader>
       <CardContent>
         <p className="mb-4 text-xs text-muted-foreground">
@@ -84,56 +77,135 @@ function OrganisationsManagementCard() {
         ) : (
           <ul className="divide-y divide-[#ece9e3]">
             {organisations.map((organisation) => (
-              <li key={organisation.id} className="flex items-center justify-between gap-3 py-2">
-                <RenameField
-                  name={organisation.name}
-                  disabled={renameOrganisation.isPending}
-                  onRename={(name) => renameOrganisation.mutate({ organisationId: organisation.id, name })}
-                />
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  disabled={deleteOrganisation.isPending}
-                  onClick={() => deleteOrganisation.mutate({ organisationId: organisation.id })}
-                >
-                  Delete
-                </Button>
+              <li key={organisation.id} className="flex items-center justify-between gap-3 py-3">
+                <div className="min-w-0">
+                  <span className="font-medium text-[#1a1814]">{organisation.name}</span>
+                  <p className="text-xs text-muted-foreground">
+                    {organisation.emailDomain
+                      ? `Email domain: ${organisation.emailDomain}`
+                      : "No email domain"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setEditing(organisation)}>
+                    Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={deleteOrganisation.isPending}
+                    onClick={() => deleteOrganisation.mutate({ organisationId: organisation.id })}
+                  >
+                    Delete
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>
         )}
       </CardContent>
+      <OrganisationModal
+        open={editing !== null}
+        organisation={editing === "new" ? null : editing}
+        onClose={() => setEditing(null)}
+      />
     </Card>
   );
 }
 
-function RenameField({
-  name,
-  disabled,
-  onRename,
+function OrganisationModal({
+  open,
+  organisation,
+  onClose,
 }: {
-  name: string;
-  disabled: boolean;
-  onRename: (name: string) => void;
+  open: boolean;
+  organisation: OrganisationRecord | null;
+  onClose: () => void;
 }) {
-  const [value, setValue] = useState(name);
-  useEffect(() => setValue(name), [name]);
-  const dirty = value.trim().length > 0 && value.trim() !== name;
+  const utils = trpc.useUtils();
+  const isEdit = organisation !== null;
+  const [name, setName] = useState("");
+  const [emailDomain, setEmailDomain] = useState("");
+
+  const createOrganisation = trpc.organisation.create.useMutation({
+    onSuccess: async () => {
+      toast.success("Organisation created");
+      await utils.organisation.list.invalidate();
+      onClose();
+    },
+    onError: (error) => toast.error(error.message ?? "Failed to create organisation"),
+  });
+  const updateOrganisation = trpc.organisation.update.useMutation({
+    onSuccess: async () => {
+      toast.success("Organisation updated");
+      await utils.organisation.list.invalidate();
+      onClose();
+    },
+    onError: (error) => toast.error(error.message ?? "Failed to update organisation"),
+  });
+
+  // Seed the form each time the modal opens so a cancelled entry never lingers.
+  useEffect(() => {
+    if (open) {
+      setName(organisation?.name ?? "");
+      setEmailDomain(organisation?.emailDomain ?? "");
+    }
+  }, [open, organisation]);
+
+  const isSaving = createOrganisation.isPending || updateOrganisation.isPending;
+
+  const handleSave = () => {
+    if (!name.trim()) return;
+    if (isEdit) {
+      updateOrganisation.mutate({
+        organisationId: organisation.id,
+        name: name.trim(),
+        emailDomain: emailDomain.trim() === "" ? null : emailDomain.trim(),
+      });
+      return;
+    }
+    createOrganisation.mutate({ name: name.trim(), emailDomain: emailDomain.trim() });
+  };
+
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-2">
-      <Input
-        aria-label={`Rename ${name}`}
-        value={value}
-        onChange={(event) => setValue(event.target.value)}
-        onKeyDown={(event) => event.key === "Enter" && dirty && onRename(value.trim())}
-        className="max-w-[280px]"
-      />
-      {dirty && (
-        <Button size="sm" variant="outline" disabled={disabled} onClick={() => onRename(value.trim())}>
-          Save
-        </Button>
-      )}
-    </div>
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Edit organisation" : "New organisation"}</DialogTitle>
+          <DialogCloseButton />
+        </DialogHeader>
+        <DialogBody>
+          <div className="space-y-1">
+            <Label htmlFor="org-name">Name</Label>
+            <Input
+              id="org-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              onKeyDown={(event) => event.key === "Enter" && handleSave()}
+              placeholder="e.g. Acme Legal"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="org-domain">Email domain (optional)</Label>
+            <Input
+              id="org-domain"
+              value={emailDomain}
+              onChange={(event) => setEmailDomain(event.target.value)}
+              onKeyDown={(event) => event.key === "Enter" && handleSave()}
+              placeholder="e.g. acme.com"
+            />
+          </div>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving || !name.trim()}>
+            {isEdit ? "Save changes" : "Create organisation"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

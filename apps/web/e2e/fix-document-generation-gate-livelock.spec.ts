@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E regression for the document-generation gate livelock + misleading
 // messages + lingering cross-check badge (fix:
@@ -29,6 +29,9 @@ const LIVELOCK_SESSION_PATH =
   "/chats/e2e-seed-pregen-livelock-session";
 
 test.describe("pre-generation gate — livelock, messaging & badge", () => {
+  test.beforeEach(() => {
+    test.skip(!process.env.E2E_PREGEN_LIVELOCK_SESSION_PATH, "Needs a doc-gen livelock session the CI seed does not create yet — runs via the /e2e skill with E2E_PREGEN_LIVELOCK_SESSION_PATH set; skipped in CI (tracked in the e2e seed backlog).");
+  });
   test("asks once, advances on the correction, generates the document, and never lingers the badge", async ({
     page,
   }) => {

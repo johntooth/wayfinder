@@ -4,6 +4,7 @@ import { auditRouter } from "./routers/audit";
 import { bootstrapRouter } from "./routers/bootstrap";
 import { documentRouter } from "./routers/document";
 import { errorRouter } from "./routers/error";
+import { extractionRouter } from "./routers/extraction";
 import { feedbackRouter } from "./routers/feedback";
 import { featureFlagRouter } from "./routers/feature-flag";
 import { flowRouter } from "./routers/flow";
@@ -36,6 +37,7 @@ export const appRouter = router({
   usage: usageRouter,
   flow: flowRouter,
   flowVersion: flowVersionRouter,
+  extraction: extractionRouter,
   role: roleRouter,
   group: groupRouter,
   organisation: organisationRouter,

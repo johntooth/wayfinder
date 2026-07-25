@@ -1,12 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
+
+interface GroupRecord {
+  id: string;
+  name: string;
+  description: string | null;
+  organisationId: string | null;
+}
 
 export function AdminGroupsContent() {
   return (
@@ -21,16 +39,16 @@ export function AdminGroupsContent() {
 function GroupsManagementCard() {
   const utils = trpc.useUtils();
   const groupsQuery = trpc.group.list.useQuery();
-  const [newGroupName, setNewGroupName] = useState("");
-
-  const createGroup = trpc.group.create.useMutation({
-    onSuccess: async () => {
-      toast.success("Group created");
-      setNewGroupName("");
-      await utils.group.list.invalidate();
-    },
-    onError: (error) => toast.error(error.message ?? "Failed to create group"),
+  const organisationsEnabledQuery = trpc.organisation.isEnabled.useQuery();
+  const organisationsQuery = trpc.organisation.list.useQuery(undefined, {
+    enabled: organisationsEnabledQuery.data === true,
   });
+  const [editing, setEditing] = useState<GroupRecord | "new" | null>(null);
+
+  const organisationsEnabled = organisationsEnabledQuery.data === true;
+  const organisations = organisationsQuery.data ?? [];
+  const organisationNameById = new Map(organisations.map((org) => [org.id, org.name]));
+
   const deleteGroup = trpc.group.delete.useMutation({
     onSuccess: async () => {
       toast.success("Group deleted");
@@ -39,11 +57,6 @@ function GroupsManagementCard() {
     onError: (error) => toast.error(error.message ?? "Failed to delete group"),
   });
 
-  const handleCreate = () => {
-    if (!newGroupName.trim()) return;
-    createGroup.mutate({ name: newGroupName.trim() });
-  };
-
   const groups = groupsQuery.data ?? [];
 
   return (
@@ -51,18 +64,7 @@ function GroupsManagementCard() {
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle>Groups</CardTitle>
-          <div className="flex gap-2">
-            <Input
-              placeholder="New group name"
-              value={newGroupName}
-              onChange={(event) => setNewGroupName(event.target.value)}
-              onKeyDown={(event) => event.key === "Enter" && handleCreate()}
-              className="max-w-[220px]"
-            />
-            <Button onClick={handleCreate} disabled={createGroup.isPending || !newGroupName.trim()}>
-              Add group
-            </Button>
-          </div>
+          <Button onClick={() => setEditing("new")}>New group</Button>
         </CardHeader>
         <CardContent>
           {groupsQuery.isLoading ? (
@@ -78,15 +80,27 @@ function GroupsManagementCard() {
                     {group.description && (
                       <p className="text-xs text-muted-foreground">{group.description}</p>
                     )}
+                    {organisationsEnabled && (
+                      <p className="text-xs text-muted-foreground">
+                        {group.organisationId
+                          ? `Organisation: ${organisationNameById.get(group.organisationId) ?? "Unknown"}`
+                          : "Global (all organisations)"}
+                      </p>
+                    )}
                   </div>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    disabled={deleteGroup.isPending}
-                    onClick={() => deleteGroup.mutate({ groupId: group.id })}
-                  >
-                    Delete
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setEditing(group)}>
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={deleteGroup.isPending}
+                      onClick={() => deleteGroup.mutate({ groupId: group.id })}
+                    >
+                      Delete
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -94,10 +108,145 @@ function GroupsManagementCard() {
         </CardContent>
       </Card>
 
+      <GroupModal
+        open={editing !== null}
+        group={editing === "new" ? null : editing}
+        onClose={() => setEditing(null)}
+        organisationsEnabled={organisationsEnabled}
+        organisations={organisations}
+      />
+
       {groups.map((group) => (
         <GroupMembershipPanel key={group.id} groupId={group.id} groupName={group.name} />
       ))}
     </>
+  );
+}
+
+function GroupModal({
+  open,
+  group,
+  onClose,
+  organisationsEnabled,
+  organisations,
+}: {
+  open: boolean;
+  group: GroupRecord | null;
+  onClose: () => void;
+  organisationsEnabled: boolean;
+  organisations: { id: string; name: string }[];
+}) {
+  const utils = trpc.useUtils();
+  const isEdit = group !== null;
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [organisationId, setOrganisationId] = useState("");
+
+  const createGroup = trpc.group.create.useMutation({
+    onSuccess: async () => {
+      toast.success("Group created");
+      await utils.group.list.invalidate();
+      onClose();
+    },
+    onError: (error) => toast.error(error.message ?? "Failed to create group"),
+  });
+  const updateGroup = trpc.group.update.useMutation({
+    onSuccess: async () => {
+      toast.success("Group updated");
+      await utils.group.list.invalidate();
+      onClose();
+    },
+    onError: (error) => toast.error(error.message ?? "Failed to update group"),
+  });
+
+  useEffect(() => {
+    if (open) {
+      setName(group?.name ?? "");
+      setDescription(group?.description ?? "");
+      setOrganisationId(group?.organisationId ?? "");
+    }
+  }, [open, group]);
+
+  const isSaving = createGroup.isPending || updateGroup.isPending;
+
+  const handleSave = () => {
+    if (!name.trim()) return;
+    const description_ = description.trim() === "" ? null : description.trim();
+    const organisationId_ =
+      organisationsEnabled && organisationId ? organisationId : null;
+    if (isEdit) {
+      updateGroup.mutate({
+        groupId: group.id,
+        name: name.trim(),
+        description: description_,
+        ...(organisationsEnabled ? { organisationId: organisationId_ } : {}),
+      });
+      return;
+    }
+    createGroup.mutate({
+      name: name.trim(),
+      ...(description_ ? { description: description_ } : {}),
+      ...(organisationId_ ? { organisationId: organisationId_ } : {}),
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Edit group" : "New group"}</DialogTitle>
+          <DialogCloseButton />
+        </DialogHeader>
+        <DialogBody>
+          <div className="space-y-1">
+            <Label htmlFor="group-name">Name</Label>
+            <Input
+              id="group-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              onKeyDown={(event) => event.key === "Enter" && handleSave()}
+              placeholder="e.g. Procurement"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="group-description">Description (optional)</Label>
+            <Textarea
+              id="group-description"
+              rows={2}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="What is this group for?"
+            />
+          </div>
+          {organisationsEnabled && (
+            <div className="space-y-1">
+              <Label htmlFor="group-org">Organisation</Label>
+              <select
+                id="group-org"
+                className="flex h-10 w-full rounded-md border border-[#d6d2ca] bg-white px-2 text-sm"
+                value={organisationId}
+                onChange={(event) => setOrganisationId(event.target.value)}
+              >
+                <option value="">Global (all organisations)</option>
+                {organisations.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving || !name.trim()}>
+            {isEdit ? "Save changes" : "Create group"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

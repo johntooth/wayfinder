@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for multi-organisation support — organisations as an internal
 // sharing/visibility scope (PRD: multi-organisation-support, ADR-038).
@@ -21,17 +21,37 @@ const ORGANISATIONS_PATH = process.env.E2E_ORGANISATIONS_PATH ?? "/admin/organis
 const uniqueName = () => `E2E Org ${Date.now()}`;
 
 test.describe("multi-organisation admin", () => {
+  // Creates an organisation through the modal (the create form is no longer an
+  // inline header field).
+  const createOrganisation = async (
+    page: import("@playwright/test").Page,
+    name: string,
+  ): Promise<void> => {
+    await page.getByRole("button", { name: /new organisation/i }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel(/^name$/i).fill(name);
+    await dialog.getByRole("button", { name: /create organisation/i }).click();
+  };
+
+  // Locates an organisation's row by its Edit button, so the Members card —
+  // whose user rows list every organisation inside a <select> — is never a
+  // false match (v2.11.1: rows are read-only text edited through a modal).
+  const organisationRow = (page: import("@playwright/test").Page, name: string) =>
+    page
+      .getByRole("listitem")
+      .filter({ has: page.getByRole("button", { name: /^edit$/i }) })
+      .filter({ hasText: name });
+
   test("an admin can create an organisation and see it listed", async ({ page }) => {
     await page.goto(ORGANISATIONS_PATH);
 
     await expect(page.getByRole("heading", { name: /organisations/i })).toBeVisible();
 
     const name = uniqueName();
-    await page.getByLabel(/new organisation name/i).fill(name);
-    await page.getByRole("button", { name: /add organisation/i }).click();
+    await createOrganisation(page, name);
 
-    // The created organisation surfaces as an editable row (its rename field).
-    await expect(page.getByLabel(new RegExp(`rename ${name}`, "i"))).toBeVisible();
+    // The created organisation surfaces as a read-only row with Edit/Delete.
+    await expect(organisationRow(page, name)).toBeVisible();
   });
 
   test("a member-holding organisation is protected from deletion", async ({ page }) => {
@@ -39,20 +59,18 @@ test.describe("multi-organisation admin", () => {
 
     // Create a fresh organisation to assign a member to.
     const name = uniqueName();
-    await page.getByLabel(/new organisation name/i).fill(name);
-    await page.getByRole("button", { name: /add organisation/i }).click();
-    const renameField = page.getByLabel(new RegExp(`rename ${name}`, "i"));
-    await expect(renameField).toBeVisible();
+    await createOrganisation(page, name);
+    const row = organisationRow(page, name);
+    await expect(row).toBeVisible();
 
     // Assign the first available user to it via the Members card.
     const memberSelect = page.locator("select[aria-label^='Organisation for']").first();
     await memberSelect.selectOption({ label: name });
 
     // Deleting it is rejected: the guard keeps the row present after the attempt.
-    await renameField.scrollIntoViewIfNeeded();
-    const row = page.locator("li", { has: renameField });
+    await row.scrollIntoViewIfNeeded();
     await row.getByRole("button", { name: /^delete$/i }).click();
-    await expect(page.getByLabel(new RegExp(`rename ${name}`, "i"))).toBeVisible();
+    await expect(organisationRow(page, name)).toBeVisible();
   });
 
   test("the resolution strategy can be switched and saved", async ({ page }) => {

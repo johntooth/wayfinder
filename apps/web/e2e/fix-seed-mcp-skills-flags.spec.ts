@@ -1,23 +1,26 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
-// The mcp and skills feature flags now default OFF on a fresh install
-// (ADR-041 §4): they are surfaced in admin UI as toggles but are not enabled
-// until an admin turns them on (e.g. from the first-run setup wizard). Their
-// gated nav entries (Skills, MCP Servers) therefore stay HIDDEN by default.
+// The mcp and skills feature flags default OFF on a fresh install (ADR-041 §4):
+// they are surfaced as toggles in the first-run setup wizard and in admin, but
+// nothing enables them automatically. The E2E fixtures turn both on during
+// seeding, so by the time this spec runs their gated nav entries must render —
+// which is what proves the flag -> nav wiring still works end to end.
 //
 // Driven by the /e2e (Playwright MCP) skill against a running signed-in stack
-// as an admin user, on an install where the flags have not been enabled.
+// as an admin user.
 
 const ADMIN_HOME_PATH = process.env.E2E_ADMIN_HOME_PATH ?? "/admin/sessions";
 
-test.describe("mcp + skills feature flags default off", () => {
-  test("Skills and MCP Servers nav entries are hidden until an admin enables the flags", async ({
+test.describe("mcp + skills feature flags", () => {
+  test("Skills and MCP Servers nav entries render once the flags are enabled", async ({
     page,
   }) => {
     await page.goto(ADMIN_HOME_PATH);
 
-    // With the flags off, neither gated nav entry should render.
-    await expect(page.getByRole("link", { name: "Skills", exact: true })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "MCP Servers", exact: true })).toHaveCount(0);
+    // Both nav entries live under the "Advanced Flow Settings" group, which is
+    // collapsed by default — expand it first.
+    await page.getByRole("button", { name: /Advanced Flow Settings/i }).click();
+    await expect(page.getByRole("link", { name: "Skills", exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "MCP Servers", exact: true }).first()).toBeVisible();
   });
 });
