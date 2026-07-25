@@ -38,6 +38,25 @@ const resolveAdminUserId = async (container: Container): Promise<string> => {
   return created.id;
 };
 
+const SEED_MEMBER_EMAIL = "e2e-seed-member@example.com";
+
+const seedMemberUser = async (container: Container): Promise<void> => {
+  const existing = unwrap(
+    await container.repos.users.findByEmail(SEED_MEMBER_EMAIL),
+    "find seed member user",
+  );
+  if (existing) return;
+
+  unwrap(
+    await container.repos.users.create({
+      email: SEED_MEMBER_EMAIL,
+      name: "E2E Seed Member",
+      isAdmin: false,
+    }),
+    "create seed member user",
+  );
+};
+
 export interface SeedResult {
   flowId: string;
   sessionId: string;
@@ -416,6 +435,12 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     await container.useCases.completeOnboarding.execute(),
     "mark onboarding complete",
   );
+
+  // The organisations Members card lists non-admin users only, and each shard
+  // runs against its own database — so without a seeded member the card is empty
+  // in any shard that happens not to contain a user-creating spec. Seed one so
+  // membership assignment is exercisable everywhere.
+  await seedMemberUser(container);
 
   // Skills and MCP default OFF for a fresh install (ADR-041 §4). The e2e suite
   // exercises both features, so enable their flags for the test environment;

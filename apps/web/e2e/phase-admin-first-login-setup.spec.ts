@@ -21,6 +21,9 @@ test.describe("admin first-login setup wizard", () => {
     // Re-run entry point (never clears the completion flag).
     await page.getByTestId("rerun-setup").click();
 
+    // The wizard reuses the same settings cards the page behind it renders, so
+    // every content assertion is scoped to the dialog to stay unambiguous.
+    const wizard = page.getByRole("dialog");
     const title = page.getByTestId("setup-wizard-title");
     await expect(title).toContainText("Step 1 of 3: Deployment");
 
@@ -41,7 +44,9 @@ test.describe("admin first-login setup wizard", () => {
     // extraction limits card it gates is rendered alongside it.
     const synthesise = page.locator("#wizard-flag-extraction-flows");
     await expect(synthesise).toBeChecked();
-    await expect(page.getByText(/per-run spend ceiling for extraction batch runs/i)).toBeVisible();
+    await expect(
+      wizard.getByText(/per-run spend ceiling for extraction batch runs/i),
+    ).toBeVisible();
 
     // Finishing marks onboarding complete and closes the dialog.
     await page.getByTestId("wizard-finish").click();

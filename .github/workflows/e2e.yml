@@ -153,6 +153,12 @@ jobs:
         run: npx playwright test --config=playwright.config.ts --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=blob
         working-directory: apps/web/e2e
 
+      # A test failing with a connection error means the dev server died or
+      # restarted mid-run; its own log is the only place that says why.
+      - name: Dump app log on test failure
+        if: failure()
+        run: tail -n 300 /tmp/app.log
+
       - name: Upload blob report
         if: always()
         uses: actions/upload-artifact@v4
