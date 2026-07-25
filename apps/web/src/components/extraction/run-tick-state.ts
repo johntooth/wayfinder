@@ -21,3 +21,8 @@ export const shouldDriveTick = ({ status, tickInFlight, tickBlocked }: RunTickSt
 
 // Whether the run is doing work right now, which is what the spinner reflects.
 export const isProcessing = (status: string | undefined): boolean => status === "running";
+
+// The progress bar animates only while work is actually happening. A perpetually
+// moving bar would read as decoration; a still bar on a paused or finished run is
+// an accurate signal that nothing is advancing.
+export const shouldAnimateProgress = (status: string | undefined): boolean => isProcessing(status);

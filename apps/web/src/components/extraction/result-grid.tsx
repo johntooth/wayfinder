@@ -1,13 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Download, Info, Pencil } from "lucide-react";
-import {
-  aggregateConfidence,
-  confidenceBand,
-  recordConfidenceBand,
-  type ConfidenceBand,
-} from "@rbrasier/domain";
+import { ChevronDown, ChevronRight, Download, Pencil } from "lucide-react";
+import { aggregateConfidence, confidenceBand, type ConfidenceBand } from "@rbrasier/domain";
 import {
   Dialog,
   DialogBody,
@@ -18,33 +13,22 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  exceptionRecordIds,
+  fieldColumnKeys,
+  fieldValue,
+  pairFields,
+  toggleExpanded,
+  visibleRecords,
+} from "./result-grid-model";
+import type {
+  ResultDocument,
+  ResultFieldValue,
+  ResultRecord,
+  SampleResult,
+} from "./result-grid-model";
 
-export interface ResultDocument {
-  id: string;
-  filename: string;
-  treePath: string;
-  readable: boolean;
-}
-
-export interface ResultFieldValue {
-  key: string;
-  value: string;
-  confidence: number;
-  rationale: string;
-}
-
-export interface ResultRecord {
-  id: string;
-  label: string;
-  fields: ResultFieldValue[];
-  sourceDocumentIds: string[];
-}
-
-export interface SampleResult {
-  documents: ResultDocument[];
-  records: ResultRecord[];
-  exceptionFileIds: string[];
-}
+export type { ResultDocument, ResultFieldValue, ResultRecord, SampleResult };
 
 // Optional run-viewer affordances (phase §4). Absent for the read-only authoring
 // sample; supplied by the run screen to enable source download, audited editing,
@@ -52,8 +36,8 @@ export interface SampleResult {
 export interface ResultGridOptions {
   // Turns a source file into a download link (compare input against output).
   documentHref?: (documentId: string) => string;
-  // Audited per-field correction. When supplied, each value cell gains an edit
-  // affordance; the callback performs the mutation and refresh.
+  // Audited per-field correction. When supplied, each value in the expanded
+  // detail gains an edit affordance; the callback performs the mutation and refresh.
   onEditField?: (recordId: string, fieldKey: string, newValue: string) => void;
   editing?: boolean;
   showFilters?: boolean;
@@ -65,28 +49,58 @@ const BAND_DOT: Record<ConfidenceBand, string> = {
   green: "bg-[#2f9e6b]",
 };
 
+const BAND_RING: Record<ConfidenceBand, string> = {
+  red: "ring-[#f0c4c0]",
+  amber: "ring-[#f0dcb4]",
+  green: "ring-[#bfe3d2]",
+};
+
 const BAND_LABEL: Record<ConfidenceBand, string> = {
   red: "Low confidence",
   amber: "Medium confidence",
   green: "High confidence",
 };
 
-function ConfidenceDot({ confidence, onInfo }: { confidence: number; onInfo: () => void }) {
-  const band = confidenceBand(confidence);
+// The RAG dot is the control, not decoration beside one — a single target that
+// both reports the band and opens the rationale behind it.
+function ConfidenceDot({
+  field,
+  recordLabel,
+  onInfo,
+}: {
+  field: ResultFieldValue;
+  recordLabel: string;
+  onInfo: () => void;
+}) {
+  const band = confidenceBand(field.confidence);
   return (
-    <span className="inline-flex items-center gap-[4px]">
-      <span
-        className={`inline-block h-[10px] w-[10px] rounded-full ${BAND_DOT[band]}`}
-        aria-label={BAND_LABEL[band]}
-      />
-      <button
-        type="button"
-        onClick={onInfo}
-        aria-label="Show confidence rationale"
-        className="text-[#8a857c] hover:text-[#3a352e]"
-      >
-        <Info className="h-[13px] w-[13px]" />
-      </button>
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onInfo();
+      }}
+      aria-label={`${field.key} — ${BAND_LABEL[band].toLowerCase()} on ${recordLabel}. Show rationale`}
+      title={`${BAND_LABEL[band]} (${Math.round(field.confidence * 100)}%)`}
+      className={`inline-block h-[9px] w-[9px] shrink-0 rounded-full ring-2 transition-transform hover:scale-125 ${BAND_DOT[band]} ${BAND_RING[band]}`}
+    />
+  );
+}
+
+function ValueCell({
+  record,
+  field,
+  onInfo,
+}: {
+  record: ResultRecord;
+  field: ResultFieldValue | null;
+  onInfo: (field: ResultFieldValue) => void;
+}) {
+  if (!field) return <span className="text-[#b6b1a8]">—</span>;
+  return (
+    <span className="inline-flex items-center gap-[6px]">
+      <ConfidenceDot field={field} recordLabel={record.label} onInfo={() => onInfo(field)} />
+      <span className="min-w-0">{field.value || <span className="text-[#b6b1a8]">—</span>}</span>
     </span>
   );
 }
@@ -98,32 +112,25 @@ export function ResultGrid({
   result: SampleResult;
   options?: ResultGridOptions;
 }) {
-  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(
-    result.records[0]?.id ?? null,
-  );
   const [rationale, setRationale] = useState<ResultFieldValue | null>(null);
   const [exceptionsOnly, setExceptionsOnly] = useState(false);
   const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editTarget, setEditTarget] = useState<{ record: ResultRecord; field: ResultFieldValue } | null>(
     null,
   );
   const [draftValue, setDraftValue] = useState("");
 
-  const selectedRecord = result.records.find((record) => record.id === selectedRecordId) ?? null;
-  const highlightedDocIds = new Set(selectedRecord?.sourceDocumentIds ?? []);
-  const exceptionRecordIds = useMemo(() => exceptionRecords(result), [result]);
-
-  const visibleRecords = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return result.records.filter((record) => {
-      if (exceptionsOnly && !exceptionRecordIds.has(record.id)) return false;
-      if (needle.length === 0) return true;
-      return (
-        record.label.toLowerCase().includes(needle) ||
-        record.fields.some((field) => field.value.toLowerCase().includes(needle))
-      );
-    });
-  }, [result.records, exceptionsOnly, exceptionRecordIds, query]);
+  const exceptions = useMemo(() => exceptionRecordIds(result), [result]);
+  const rows = useMemo(
+    () => visibleRecords(result, { query, exceptionsOnly }),
+    [result, query, exceptionsOnly],
+  );
+  const columnKeys = useMemo(() => fieldColumnKeys(result.records), [result.records]);
+  const documentsById = useMemo(
+    () => new Map(result.documents.map((document) => [document.id, document])),
+    [result.documents],
+  );
 
   const openEdit = (record: ResultRecord, field: ResultFieldValue) => {
     setEditTarget({ record, field });
@@ -136,6 +143,9 @@ export function ResultGrid({
     }
     setEditTarget(null);
   };
+
+  // Expand toggle + record label + one column per field.
+  const columnCount = columnKeys.length + 2;
 
   return (
     <div className="flex flex-col gap-[12px]">
@@ -159,124 +169,51 @@ export function ResultGrid({
         </div>
       ) : null}
 
-      <div className="grid grid-cols-[minmax(0,200px)_1fr] items-start gap-[16px]">
-        {/* Included files (left, narrow sidebar) */}
-        <div
-          className="sticky top-[16px] overflow-y-auto rounded-[10px] border border-[#e5e1d8] bg-white p-[12px]"
-          style={{ maxHeight: "calc(100vh - 120px)" }}
-        >
-          <h3 className="sticky top-0 mb-[8px] bg-white pb-[4px] text-[12px] font-semibold uppercase tracking-[0.05em] text-[#6d6a65]">
-            Included files
-          </h3>
-          <ul className="flex flex-col gap-[4px]">
-            {result.documents.map((document) => {
-              const highlighted = highlightedDocIds.has(document.id);
-              const isException = result.exceptionFileIds.includes(document.id);
+      <div className="overflow-x-auto rounded-[10px] border border-[#e5e1d8] bg-white">
+        <table className="w-full border-collapse text-[13px]" data-testid="results-table">
+          <thead>
+            <tr className="border-b border-[#e5e1d8] text-left text-[11px] uppercase tracking-[0.05em] text-[#6d6a65]">
+              <th scope="col" className="w-[36px] px-[8px] py-[8px]">
+                <span className="sr-only">Expand</span>
+              </th>
+              <th scope="col" className="px-[12px] py-[8px]">Record</th>
+              {columnKeys.map((key) => (
+                <th key={key} scope="col" className="px-[12px] py-[8px]">
+                  {key}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((record) => {
+              const isExpanded = expanded.has(record.id);
+              const isException = exceptions.has(record.id);
               return (
-                <li
-                  key={document.id}
-                  className={`rounded-[7px] px-[8px] py-[6px] text-[13px] ${
-                    highlighted ? "bg-[#eef1fc] text-[#3a5fd9]" : "text-[#5a5650]"
-                  }`}
-                >
-                  <span className="flex min-w-0 items-center gap-[4px]">
-                    <span className="min-w-0 truncate font-medium">{document.filename}</span>
-                    {options.documentHref ? (
-                      <a
-                        href={options.documentHref(document.id)}
-                        download
-                        aria-label={`Download ${document.filename}`}
-                        onClick={(event) => event.stopPropagation()}
-                        className="shrink-0 text-[#8a857c] hover:text-[#3a5fd9]"
-                      >
-                        <Download className="h-[11px] w-[11px]" />
-                      </a>
-                    ) : null}
-                  </span>
-                  <span className="block truncate text-[11px] text-[#8a857c]">{document.treePath}</span>
-                  {!document.readable && (
-                    <span className="mt-[2px] inline-block rounded-[4px] bg-[#fbecea] px-[5px] py-[1px] text-[10px] font-semibold text-[#b23b30]">
-                      Unreadable
-                    </span>
-                  )}
-                  {isException && (
-                    <span className="mt-[2px] inline-block rounded-[4px] bg-[#fdf3e3] px-[5px] py-[1px] text-[10px] font-semibold text-[#9b6215]">
-                      No record
-                    </span>
-                  )}
-                </li>
+                <ResultRow
+                  key={record.id}
+                  record={record}
+                  columnKeys={columnKeys}
+                  columnCount={columnCount}
+                  isExpanded={isExpanded}
+                  isException={isException}
+                  documentsById={documentsById}
+                  exceptionFileIds={result.exceptionFileIds}
+                  options={options}
+                  onToggle={() => setExpanded((current) => toggleExpanded(current, record.id))}
+                  onInfo={setRationale}
+                  onEdit={openEdit}
+                />
               );
             })}
-          </ul>
-        </div>
-
-        {/* Output records (right) */}
-        <div className="overflow-x-auto rounded-[10px] border border-[#e5e1d8] bg-white">
-          <table className="w-full border-collapse text-[13px]">
-            <thead>
-              <tr className="border-b border-[#e5e1d8] text-left text-[11px] uppercase tracking-[0.05em] text-[#6d6a65]">
-                <th scope="col" className="px-[12px] py-[8px]">Record</th>
-                <th scope="col" className="px-[12px] py-[8px]">Field</th>
-                <th scope="col" className="px-[12px] py-[8px]">Value</th>
-                <th scope="col" className="px-[12px] py-[8px]">Confidence</th>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={columnCount} className="px-[12px] py-[16px] text-[#8a857c]">
+                  No records match the current filter.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {visibleRecords.map((record) => {
-                const band = recordConfidenceBand(record);
-                return record.fields.map((field, fieldIndex) => (
-                  <tr
-                    key={`${record.id}-${field.key}`}
-                    onClick={() => setSelectedRecordId(record.id)}
-                    className={`cursor-pointer border-b border-[#f0ede7] ${
-                      selectedRecordId === record.id ? "bg-[#f7f9ff]" : "hover:bg-[#faf9f6]"
-                    }`}
-                  >
-                    {fieldIndex === 0 ? (
-                      <td
-                        rowSpan={record.fields.length}
-                        className="align-top px-[12px] py-[8px] font-medium text-[#3a352e]"
-                      >
-                        <span className="flex items-center gap-[6px]">
-                          <span
-                            className={`inline-block h-[10px] w-[10px] rounded-full ${BAND_DOT[band]}`}
-                            aria-label={`Record ${BAND_LABEL[band].toLowerCase()}`}
-                          />
-                          {record.label}
-                        </span>
-                        <span className="mt-[2px] block text-[11px] font-normal text-[#8a857c]">
-                          {Math.round(aggregateConfidence(record) * 100)}% overall
-                        </span>
-                      </td>
-                    ) : null}
-                    <td className="px-[12px] py-[8px] text-[#5a5650]">{field.key}</td>
-                    <td className="px-[12px] py-[8px] text-[#3a352e]">
-                      <span className="inline-flex items-center gap-[6px]">
-                        {field.value || <span className="text-[#b6b1a8]">—</span>}
-                        {options.editing ? (
-                          <button
-                            type="button"
-                            aria-label={`Edit ${field.key}`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              openEdit(record, field);
-                            }}
-                            className="text-[#8a857c] hover:text-[#3a352e]"
-                          >
-                            <Pencil className="h-[12px] w-[12px]" />
-                          </button>
-                        ) : null}
-                      </span>
-                    </td>
-                    <td className="px-[12px] py-[8px]">
-                      <ConfidenceDot confidence={field.confidence} onInfo={() => setRationale(field)} />
-                    </td>
-                  </tr>
-                ));
-              })}
-            </tbody>
-          </table>
-        </div>
+            ) : null}
+          </tbody>
+        </table>
       </div>
 
       <Dialog open={rationale !== null} onOpenChange={(open) => !open && setRationale(null)}>
@@ -329,15 +266,236 @@ export function ResultGrid({
   );
 }
 
-// A record is an exception when it drew on an exception file, or when every one
-// of its fields is empty (nothing was pulled) — the triage the operator filters to.
-const exceptionRecords = (result: SampleResult): Set<string> => {
-  const exceptionFiles = new Set(result.exceptionFileIds);
-  const ids = new Set<string>();
-  for (const record of result.records) {
-    const drewOnException = record.sourceDocumentIds.some((id) => exceptionFiles.has(id));
-    const allBlank = record.fields.every((field) => field.value.trim().length === 0);
-    if (drewOnException || allBlank) ids.add(record.id);
-  }
-  return ids;
-};
+interface ResultRowProps {
+  record: ResultRecord;
+  columnKeys: string[];
+  columnCount: number;
+  isExpanded: boolean;
+  isException: boolean;
+  documentsById: Map<string, ResultDocument>;
+  exceptionFileIds: string[];
+  options: ResultGridOptions;
+  onToggle: () => void;
+  onInfo: (field: ResultFieldValue) => void;
+  onEdit: (record: ResultRecord, field: ResultFieldValue) => void;
+}
+
+function ResultRow({
+  record,
+  columnKeys,
+  columnCount,
+  isExpanded,
+  isException,
+  documentsById,
+  exceptionFileIds,
+  options,
+  onToggle,
+  onInfo,
+  onEdit,
+}: ResultRowProps) {
+  return (
+    <>
+      <tr
+        className={`border-b border-[#f0ede7] ${isExpanded ? "bg-[#f7f9ff]" : "hover:bg-[#faf9f6]"}`}
+        data-testid="result-row"
+      >
+        <td className="px-[8px] py-[8px] align-top">
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={isExpanded}
+            aria-label={`${isExpanded ? "Collapse" : "Expand"} ${record.label}`}
+            data-testid="expand-record"
+            className="flex h-[20px] w-[20px] items-center justify-center rounded-[5px] border border-[#dedad2] text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+          >
+            {isExpanded ? <ChevronDown className="h-[13px] w-[13px]" /> : <ChevronRight className="h-[13px] w-[13px]" />}
+          </button>
+        </td>
+        <td className="px-[12px] py-[8px] align-top font-medium text-[#3a352e]">
+          {record.label}
+          {isException ? (
+            <span className="ml-[6px] inline-block rounded-[4px] bg-[#fdf3e3] px-[5px] py-[1px] text-[10px] font-semibold text-[#9b6215]">
+              Exception
+            </span>
+          ) : null}
+        </td>
+        {columnKeys.map((key) => (
+          <td key={key} className="px-[12px] py-[8px] align-top text-[#3a352e]">
+            <ValueCell record={record} field={fieldValue(record, key)} onInfo={onInfo} />
+          </td>
+        ))}
+      </tr>
+      {isExpanded ? (
+        <tr className="border-b border-[#f0ede7] bg-[#fbfaf7]" data-testid="result-row-detail">
+          <td colSpan={columnCount} className="px-[16px] py-[14px]">
+            <RecordDetail
+              record={record}
+              documentsById={documentsById}
+              exceptionFileIds={exceptionFileIds}
+              options={options}
+              onInfo={onInfo}
+              onEdit={onEdit}
+            />
+          </td>
+        </tr>
+      ) : null}
+    </>
+  );
+}
+
+function RecordDetail({
+  record,
+  documentsById,
+  exceptionFileIds,
+  options,
+  onInfo,
+  onEdit,
+}: {
+  record: ResultRecord;
+  documentsById: Map<string, ResultDocument>;
+  exceptionFileIds: string[];
+  options: ResultGridOptions;
+  onInfo: (field: ResultFieldValue) => void;
+  onEdit: (record: ResultRecord, field: ResultFieldValue) => void;
+}) {
+  const sources = record.sourceDocumentIds
+    .map((id) => documentsById.get(id))
+    .filter((document): document is ResultDocument => document !== undefined);
+
+  return (
+    <div className="flex flex-col gap-[14px]">
+      <div className="flex flex-wrap items-baseline gap-x-[10px] gap-y-[2px]">
+        <h4 className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#6d6a65]">
+          {record.label}
+        </h4>
+        <span className="text-[11px] text-[#8a857c]">
+          {Math.round(aggregateConfidence(record) * 100)}% overall confidence
+        </span>
+      </div>
+
+      <div>
+        <h5 className="mb-[6px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#8a857c]">
+          Source files
+        </h5>
+        {sources.length === 0 ? (
+          <p className="text-[12px] text-[#8a857c]">No source files recorded for this record.</p>
+        ) : (
+          <ul className="flex flex-col gap-[4px]">
+            {sources.map((document) => (
+              <li key={document.id} className="flex flex-wrap items-center gap-[6px] text-[12px]">
+                <span className="font-medium text-[#3a352e]">{document.filename}</span>
+                <span className="text-[#8a857c]">{document.treePath}</span>
+                {options.documentHref ? (
+                  <a
+                    href={options.documentHref(document.id)}
+                    download
+                    aria-label={`Download ${document.filename}`}
+                    className="text-[#8a857c] hover:text-[#3a5fd9]"
+                  >
+                    <Download className="h-[12px] w-[12px]" />
+                  </a>
+                ) : null}
+                {!document.readable ? (
+                  <span className="rounded-[4px] bg-[#fbecea] px-[5px] py-[1px] text-[10px] font-semibold text-[#b23b30]">
+                    Unreadable
+                  </span>
+                ) : null}
+                {exceptionFileIds.includes(document.id) ? (
+                  <span className="rounded-[4px] bg-[#fdf3e3] px-[5px] py-[1px] text-[10px] font-semibold text-[#9b6215]">
+                    No record
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div>
+        <h5 className="mb-[6px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#8a857c]">
+          Extracted fields
+        </h5>
+        <div className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-[12px] gap-y-[6px] sm:grid-cols-[max-content_minmax(0,1fr)_max-content_minmax(0,1fr)]">
+          {pairFields(record.fields).map(([left, right]) => (
+            <FieldPair
+              key={left.key}
+              record={record}
+              left={left}
+              right={right}
+              options={options}
+              onInfo={onInfo}
+              onEdit={onEdit}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FieldPair({
+  record,
+  left,
+  right,
+  options,
+  onInfo,
+  onEdit,
+}: {
+  record: ResultRecord;
+  left: ResultFieldValue;
+  right: ResultFieldValue | null;
+  options: ResultGridOptions;
+  onInfo: (field: ResultFieldValue) => void;
+  onEdit: (record: ResultRecord, field: ResultFieldValue) => void;
+}) {
+  return (
+    <>
+      <DetailField record={record} field={left} options={options} onInfo={onInfo} onEdit={onEdit} />
+      {right ? (
+        <DetailField record={record} field={right} options={options} onInfo={onInfo} onEdit={onEdit} />
+      ) : (
+        // Keeps the four-column grid rectangular on an odd field count.
+        <>
+          <span className="hidden sm:block" />
+          <span className="hidden sm:block" />
+        </>
+      )}
+    </>
+  );
+}
+
+function DetailField({
+  record,
+  field,
+  options,
+  onInfo,
+  onEdit,
+}: {
+  record: ResultRecord;
+  field: ResultFieldValue;
+  options: ResultGridOptions;
+  onInfo: (field: ResultFieldValue) => void;
+  onEdit: (record: ResultRecord, field: ResultFieldValue) => void;
+}) {
+  return (
+    <>
+      <span className="text-[12px] text-[#8a857c]">{field.key}</span>
+      <span className="flex min-w-0 items-center gap-[6px] text-[12px] text-[#3a352e]">
+        <ConfidenceDot field={field} recordLabel={record.label} onInfo={() => onInfo(field)} />
+        <span className="min-w-0 break-words">
+          {field.value || <span className="text-[#b6b1a8]">—</span>}
+        </span>
+        {options.editing ? (
+          <button
+            type="button"
+            aria-label={`Edit ${field.key} on ${record.label}`}
+            onClick={() => onEdit(record, field)}
+            className="shrink-0 text-[#8a857c] hover:text-[#3a352e]"
+          >
+            <Pencil className="h-[12px] w-[12px]" />
+          </button>
+        ) : null}
+      </span>
+    </>
+  );
+}

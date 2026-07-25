@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { trpc } from "@/trpc/client";
-import { isProcessing, shouldDriveTick } from "./run-tick-state";
+import { isProcessing, shouldAnimateProgress, shouldDriveTick } from "./run-tick-state";
 
 // The run screen (phase §8). Polls COUNT(*) GROUP BY status while the run is
 // live and renders `x of y` on a bar with a marker at the preview breakpoint,
@@ -98,6 +98,7 @@ export function RunProgress({ runId }: RunProgressProps) {
   const isPaused = run.status === "paused_preview" || run.status === "paused_cap";
   const isTerminal =
     run.status === "complete" || run.status === "partial" || run.status === "cancelled";
+  const animated = shouldAnimateProgress(run.status);
 
   return (
     <div className="flex flex-col gap-2">
@@ -112,9 +113,22 @@ export function RunProgress({ runId }: RunProgressProps) {
         <span className="ml-auto text-muted-foreground">${run.costUsd.toFixed(2)}</span>
       </div>
 
-      <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-muted">
+      <div
+        className="relative h-1.5 w-full overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-valuenow={processedPercent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Documents processed"
+        data-animated={animated ? "true" : "false"}
+      >
+        {/* A run at 0% has no filled portion to animate, so the track carries its
+            own travelling highlight — otherwise "starting up" looks like "stuck". */}
+        {animated ? <div className="run-progress-track absolute inset-0" /> : null}
         <div
-          className="h-full rounded-full bg-primary transition-all"
+          className={`relative h-full rounded-full bg-primary transition-all ${
+            animated ? "run-progress-fill" : ""
+          }`}
           style={{ width: `${processedPercent}%` }}
         />
         {previewPercent !== null ? (

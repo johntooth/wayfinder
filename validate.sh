@@ -191,21 +191,19 @@ else
 fi
 
 # ── 11. dependency security audit ────────────────────────────────────────────
+# The gate itself lives in scripts/audit-check.sh so this and CI cannot drift on
+# what counts as blocking. It handles the registry-outage skip and the advisory
+# allowlist (each entry justified at the call site).
 section "11. pnpm audit (high + critical vulnerabilities)"
-AUDIT_OUTPUT=$(pnpm audit --audit-level=high 2>&1)
+AUDIT_OUTPUT=$(./scripts/audit-check.sh 2>&1)
 AUDIT_STATUS=$?
 echo "$AUDIT_OUTPUT"
-if [ "$AUDIT_STATUS" -eq 0 ]; then
-  pass "no high/critical vulnerabilities"
-elif echo "$AUDIT_OUTPUT" | grep -qiE 'ERR_PNPM_AUDIT_BAD_RESPONSE|being retired|audit endpoint|410|ENOTFOUND|ETIMEDOUT|ECONNREFUSED|EAI_AGAIN'; then
-  # npm retired the legacy audit API that `pnpm audit` calls, so the endpoint
-  # now answers 410 for everyone. A registry-side outage is not a code failure,
-  # so skip rather than block the build (as the DB checks above do when the
-  # database is unreachable). A real advisory still prints its table and fails
-  # through the branch below.
+if [ "$AUDIT_STATUS" -ne 0 ]; then
+  fail "high or critical vulnerabilities found — run './scripts/audit-check.sh' for details"
+elif echo "$AUDIT_OUTPUT" | grep -q "^SKIP —"; then
   skip "pnpm audit endpoint unavailable (npm retired the legacy audit API) — dependency audit not run"
 else
-  fail "high or critical vulnerabilities found — run 'pnpm audit' for details"
+  pass "no blocking high/critical vulnerabilities"
 fi
 
 # ── 12. test files exist in domain and application ────────────────────────────

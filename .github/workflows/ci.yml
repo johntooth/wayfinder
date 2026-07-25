@@ -86,20 +86,17 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Dependency audit
-        # npm retired the legacy audit API that `pnpm audit` calls, so the
-        # endpoint answers 410 for everyone. Treat that registry-side outage as
-        # a non-blocking skip, but still fail on a genuine advisory.
+        # The gate lives in scripts/audit-check.sh, shared with validate.sh so
+        # the two cannot drift on what counts as blocking. It skips on a
+        # registry-side outage, exempts the advisories allowlisted (and
+        # justified) in that script, and fails on anything else high or critical.
         run: |
           set +e
-          output=$(pnpm audit --audit-level=high 2>&1)
+          output=$(./scripts/audit-check.sh 2>&1)
           status=$?
           echo "$output"
-          if [ "$status" -eq 0 ]; then
-            exit 0
-          fi
-          if echo "$output" | grep -qiE 'ERR_PNPM_AUDIT_BAD_RESPONSE|being retired|audit endpoint|410|ENOTFOUND|ETIMEDOUT|ECONNREFUSED|EAI_AGAIN'; then
+          if echo "$output" | grep -q "^SKIP —"; then
             echo "::warning title=Dependency audit skipped::pnpm audit endpoint unavailable (npm retired the legacy audit API); dependency audit not run."
-            exit 0
           fi
           exit "$status"
 
