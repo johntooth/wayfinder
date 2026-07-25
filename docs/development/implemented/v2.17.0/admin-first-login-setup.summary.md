@@ -136,8 +136,17 @@ Playwright e2e specs are excluded from the vitest unit run and are driven by the
   setup). `NEXT_RUNTIME` is inlined at build time, so an `if` block folds to
   `if (false)` in the edge compilation and the imports are eliminated. This is
   the same mechanism that made `main`'s production-gated container import safe.
+- **The emitter imports `@rbrasier/adapters/bootstrap`, not the barrel.** The
+  barrel re-exports OpenTelemetry, MinIO, the AI SDKs and LangGraph, so importing
+  it from `instrumentation.ts` loaded 3253 modules into the dev server at
+  startup — enough to push `next dev` past its heap threshold and trigger a
+  self-restart mid-suite, which drops in-flight requests (ERR_CONNECTION_RESET,
+  ChunkLoadError, and tRPC mutations failing with "Unexpected end of JSON input"
+  from a truncated body). The narrow entry point cuts that to 505 modules and
+  boot from 17.4s to 4.7s. The E2E workflow also raises the dev server's heap.
 - The E2E workflow tees the dev server's output to `/tmp/app.log` and dumps it if
-  the readiness wait fails — without it a boot hang leaves no diagnosable trace.
+  the readiness wait *or the test run* fails — without it a mid-run server
+  restart leaves no diagnosable trace.
 - **The E2E seed marks onboarding complete.** Its database is fresh every run, so
   `onboarding_state.completed` is false and the wizard would open over every
   admin screen, covering the UI the rest of the suite drives. `seedE2EFixtures`

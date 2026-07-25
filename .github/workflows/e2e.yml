@@ -136,7 +136,16 @@ jobs:
       # Tee to a file as well as the log: the "Start app" step finishes as soon as
       # the process is backgrounded, so anything the server prints afterwards is
       # otherwise lost — including whatever it was doing when a boot hang starts.
+      #
+      # The heap bump is load-bearing. `next dev` restarts itself when it nears
+      # the heap limit ("Server is approaching the used memory threshold"), and a
+      # restart mid-suite drops in-flight requests — surfacing as
+      # ERR_CONNECTION_RESET, ChunkLoadError, or a tRPC mutation failing with
+      # "Unexpected end of JSON input" because its body was truncated. Compiling
+      # this app on demand needs more than the default heap; the runner has 16 GB.
       - name: Start app
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: pnpm --filter @wayfinder/web dev > /tmp/app.log 2>&1 &
 
       - name: Wait for app to be ready
