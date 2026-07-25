@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/base";
 
 // E2E for the admin first-login setup phase (ADR-041).
 //
