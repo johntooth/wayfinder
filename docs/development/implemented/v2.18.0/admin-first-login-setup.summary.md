@@ -1,8 +1,8 @@
-# Implementation Summary — Admin First-Login Setup (v2.17.0)
+# Implementation Summary — Admin First-Login Setup (v2.18.0)
 
-- **Version**: 2.17.0 (bump: **MINOR** — new admin feature; all config is runtime
+- **Version**: 2.18.0 (bump: **MINOR** — new admin feature; all config is runtime
   state in existing tables; no schema migration). Drafted as 2.9.0, then 2.10.0;
-  landed as 2.17.0 after rebasing onto a `main` that had reached 2.16.3.
+  landed as 2.18.0 after rebasing onto a `main` that reached 2.17.0 first.
 - **PRD**: `docs/development/prd/admin-first-login-setup.prd.md`
 - **ADR**: `docs/development/adr/041-first-run-onboarding-and-db-first-config.adr.md`
 - **Phase**: `admin-first-login-setup.phase.md` (this folder)
@@ -158,4 +158,4 @@ Playwright e2e specs are excluded from the vitest unit run and are driven by the
 
 ## Validation
 
-`./validate.sh` — all checks pass. `VERSION` and root `package.json` are `2.17.0`.
+`./validate.sh` — all checks pass. `VERSION` and root `package.json` are `2.18.0`.
