@@ -277,7 +277,7 @@ while IFS= read -r source_file; do
   line_count=$(wc -l < "$source_file")
   [ "$line_count" -lt "$SIZE_WARN_LINES" ] && continue
   is_legacy=false
-  for legacy_file in "${SIZE_LEGACY_ALLOWLIST[@]}"; do
+  for legacy_file in ${SIZE_LEGACY_ALLOWLIST[@]+"${SIZE_LEGACY_ALLOWLIST[@]}"}; do
     if [ "$source_file" = "$legacy_file" ]; then is_legacy=true; break; fi
   done
   if [ "$line_count" -ge "$SIZE_FAIL_LINES" ] && [ "$is_legacy" = false ]; then
@@ -343,6 +343,36 @@ else
   echo "$FOCUSED_TESTS"
 fi
 
+# ── 20. shell arrays are safe to expand on bash 3.2 ──────────────────────────
+# macOS ships bash 3.2, where expanding an empty array as "${arr[@]}" while
+# `set -u` is active aborts the script — bash 4.4+ expands it to nothing
+# instead. Every script here runs under `set -u`, so an array that can be empty
+# at its expansion point must use ${arr[@]+"${arr[@]}"}. CI runs bash 5 and
+# would never catch this, which is why it is a static check rather than a test.
+section "20. arrays declared empty use the bash 3.2 safe expansion"
+UNSAFE_ARRAYS=""
+while IFS= read -r script_file; do
+  [ -n "$script_file" ] || continue
+  while IFS= read -r array_name; do
+    [ -n "$array_name" ] || continue
+    # The safe form ${NAME[@]+"${NAME[@]}"} contains the unsafe form as a
+    # substring, so a line only counts as unguarded when the "[@]+" token is absent.
+    unguarded=$(grep -n "\"\${${array_name}\[@\]}\"" "$script_file" 2>/dev/null \
+      | grep -v "\${${array_name}\[@\]+" || true)
+    [ -n "$unguarded" ] || continue
+    while IFS= read -r hit; do
+      UNSAFE_ARRAYS="$UNSAFE_ARRAYS  $script_file:$hit\n"
+    done <<< "$unguarded"
+  done < <(grep -oE '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=\(\)[[:space:]]*$' "$script_file" 2>/dev/null \
+    | sed -E 's/^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=\(\).*/\1/')
+done < <(find . -name "*.sh" -not -path "*/node_modules/*" 2>/dev/null)
+if [ -z "$UNSAFE_ARRAYS" ]; then
+  pass "no empty-array expansions that would abort on bash 3.2"
+else
+  fail "arrays declared empty but expanded unguarded — use \${NAME[@]+\"\${NAME[@]}\"}:"
+  printf '%b' "$UNSAFE_ARRAYS"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo
 echo "──────────────────────────────────────────"
@@ -355,7 +385,7 @@ fi
 
 echo
 echo -e "${RED}Failed checks:${NC}"
-for check in "${FAILED_CHECKS[@]}"; do
+for check in ${FAILED_CHECKS[@]+"${FAILED_CHECKS[@]}"}; do
   echo "  - $check"
 done
 
@@ -372,7 +402,7 @@ extract_failing_tests() {
 
 TESTS_FAILED=false
 COVERAGE_FAILED=false
-for check in "${FAILED_CHECKS[@]}"; do
+for check in ${FAILED_CHECKS[@]+"${FAILED_CHECKS[@]}"}; do
   case "$check" in
     tests) TESTS_FAILED=true ;;
     "coverage below thresholds"*) COVERAGE_FAILED=true ;;
