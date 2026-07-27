@@ -6,9 +6,6 @@ document explains how to report a vulnerability and summarises the security
 posture of the codebase. It is a living document — corrections and additions are
 welcome.
 
-> **Maintainer note:** replace the placeholder contact below with your real
-> security contact before publishing this repository to customers.
-
 ## Reporting a vulnerability
 
 **Please do not open a public GitHub issue for security vulnerabilities.**
