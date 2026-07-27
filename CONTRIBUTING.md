@@ -23,7 +23,7 @@ one that matches what you're doing — routing rules are in [`CLAUDE.md`](CLAUDE
 | Implement a reviewed phase | `/build` |
 | Change or extend existing behaviour | `/enhance` |
 | Fix something broken | `/bugfix` |
-| Cut or tag an alpha release (maintainers) | `/release` |
+| Cut or tag a release line (maintainers) | `/release` |
 
 Each skill follows the same shape: **write the spec, write the test, write
 the code, validate, document, version, ship.** A few things to know going in:
@@ -35,7 +35,7 @@ the code, validate, document, version, ship.** A few things to know going in:
   implementation, in-memory fakes for ports (never mock what you own), and
   run `./validate.sh` after every sub-component — not just at the end.
 - Every code-writing skill finishes by moving its phase doc into
-  `docs/development/implemented/alpha-<major>/v[version]/`, writing an
+  `docs/development/implemented/<release line>/v[version]/`, writing an
   implementation summary, and bumping `VERSION` / root `package.json` (they
   must match).
 - If you're not using a skill — a tiny fix, a doc typo — that's fine, but
@@ -52,41 +52,45 @@ two-branch model:
 
 | Branch | What it is | What lands there |
 |---|---|---|
-| `release/alpha-1` | The **current** alpha (the `1.x.x` version line) | Bug fixes and enhancements only |
-| `main` | The **next** alpha (alpha-2, the `2.x.x` line), in active development | New features — plus fixes for things that only exist on `main` |
+| `release/alpha-2` | The **current** release line | Bug fixes and enhancements only |
+| `main` | The **next** release line (alpha-3), in active development | New features — plus fixes for things that only exist on `main` |
 
 The branching strategy in one picture:
 
 ```
-release/alpha-1  ──o───o───o──▶   bug fixes + enhancements (1.x.x)
+release/alpha-2  ──o───o───o──▶   bug fixes + enhancements
                   /     \
                  /       \  (maintainers merge forward periodically)
-main  ──────────o─────────o───o──▶   new features (2.x.x = alpha-2)
+main  ──────────o─────────o───o──▶   new features (next line = alpha-3)
 ```
+
+Versions are `0.MINOR.PATCH` — the project stays on `0.x` until its first
+stable release, and the alpha/beta number lives in the branch name rather than
+the version digits.
 
 Rules:
 
 1. **Fixing a bug or enhancing existing behaviour?** Branch from
-   `release/alpha-1` (name it `fix/<slug>` or `enhance/<slug>`) and open your
-   PR against `release/alpha-1`.
+   `release/alpha-2` (name it `fix/<slug>` or `enhance/<slug>`) and open your
+   PR against `release/alpha-2`.
 2. **Building a new feature?** Branch from `main` (name it `feature/<slug>`)
    and open your PR against `main`. New features never target a release
    branch.
 3. **Not sure which one you have?** Open an issue first and ask.
 
 You never need to land the same change twice. Maintainers periodically merge
-the release branch forward into `main`, so a fix on the alpha automatically
-reaches the next release. The reverse is forbidden — merging `main` into a
-release branch would pull unfinished features into the stable alpha.
+the release branch forward into `main`, so a fix on the current line
+automatically reaches the next one. The reverse is forbidden — merging `main`
+into a release branch would pull unfinished features into a stabilising line.
 
 The `/bugfix` and `/enhance` skills ask which release your change targets and
-handle the branching for you. The current alpha branch is recorded in one
+handle the branching for you. The current release branch is recorded in one
 place — the **Release Branching** section of [`CLAUDE.md`](CLAUDE.md) — so
 check there if you suspect this table is stale.
 
-For the full picture — why the model is shaped this way, how versions map to
-alphas, how fixes flow forward, CI behaviour, and the maintainer runbook for
-cutting and publishing alphas — see
+For the full picture — why the model is shaped this way, how versions work,
+how fixes flow forward, CI behaviour, and the maintainer runbook for cutting
+and publishing releases — see
 [`docs/guides/managing-releases.md`](docs/guides/managing-releases.md).
 
 ## 3. Respect the architecture
@@ -151,5 +155,5 @@ All checks must pass before a PR can merge.
 ```
 feat: add MinIO storage adapter
 fix: handle null branchChoice after three retries
-chore: bump version to 1.5.0
+chore: bump version to 0.20.0
 ```

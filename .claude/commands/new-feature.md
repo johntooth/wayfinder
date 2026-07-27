@@ -6,7 +6,7 @@ template.
 
 **Important:** This skill produces documentation only. Do NOT write code.
 
-New features always target `main` — the next alpha — never a `release/alpha-N`
+New features always target `main` — the next release line — never a `release/*`
 branch (see **Release Branching** in `CLAUDE.md`). Plan version bumps against
 `main`'s version line.
 
@@ -19,7 +19,7 @@ Ask all of these via `AskUserQuestion` before proceeding:
 1. What problem does this solve? Who uses it?
 2. What are the key entities involved?
 3. Does it require DB changes? If yes, which group prefix (`core_`, `ai_`, `kb_`, `admin_`, `app_`, `job_`)?
-4. What version bump does it warrant? (MAJOR / MINOR / PATCH)
+4. What version bump does it warrant? (MINOR / PATCH — MAJOR is reserved for the first stable release)
 5. If this is a brand-new project bootstrapped from the template:
    - What is the project name? (used for `@<name>/*` scope, README, docker-compose)
    - Are there existing files to integrate with rather than overwrite?

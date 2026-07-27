@@ -11,15 +11,31 @@ Two places, must always match:
 
 ## Bump rules
 
-Each alpha release owns a MAJOR line: **alpha-N = the `N.x.x` line**
-(alpha-1 = `1.x.x`, alpha-2 = `2.x.x`). See
-[`managing-releases.md`](./managing-releases.md) for the release branch model.
+Wayfinder is pre-release software, so it follows semver's pre-1.0 rule:
+**MAJOR stays `0` until the first stable release**. Every version is
+`0.MINOR.PATCH`.
 
 | Bump  | When…                                                   |
 | ----- | ------------------------------------------------------- |
-| MAJOR | New alpha line — bumped on `main` immediately after a `release/alpha-N` branch is cut. Breaking API or domain changes go to `main` (the next alpha), never to a release branch |
+| MAJOR | Reserved. `0` → `1.0.0` happens exactly once, at the first stable release. After that it carries its normal semver meaning (breaking changes) |
 | MINOR | DB schema change, new phase implementation, new feature |
 | PATCH | Bug fixes, UI tweaks, config changes (no schema impact) |
+
+### The stage is not in the version number
+
+Which pre-release line a build belongs to — alpha-2, alpha-3, beta-1 — is
+recorded in the **branch name** (`release/alpha-2`) and the **docs folder**
+(`implemented/alpha-2/`), never in the version digits. Cutting a new line
+creates a branch; it does not bump anything on its own.
+
+This keeps MINOR and PATCH free to mean what they say. MINOR counts up
+continuously across lines, so versions never restart, never go backwards, and
+sort correctly forever. A version alone tells you *what changed*; the branch or
+docs folder tells you *which line shipped it*.
+
+The first stable release is `1.0.0`, cut from the last beta line. See
+[`managing-releases.md`](./managing-releases.md) for the branch model and the
+maintainer runbook.
 
 ## Doc lifecycle
 
@@ -29,20 +45,51 @@ docs/development/
 ├── adr/                  Permanent home for ADRs (one per architectural decision)
 ├── to-be-implemented/    Phase docs awaiting implementation (planning/review)
 └── implemented/
-    ├── alpha-1/          One folder per release line (alpha-N = the N.x.x line)
+    ├── alpha-1/          One folder per release line
     │   ├── v0.1/         Each version has its own folder inside its release line
     │   │   └── *.md      Phase doc + implementation summary
     │   ├── v1.0.0/
     │   └── ...
-    └── alpha-2/
-        ├── v2.1.0/
+    ├── alpha-2/
+    │   ├── v2.1.0/
+    │   └── ...
+    └── alpha-3/
         └── ...
 ```
 
-Every implemented phase doc lives under its release line: `implemented/alpha-<major>/v<version>/`.
-The `alpha-<major>` folder matches the MAJOR of the version (`alpha-1` for `1.x.x`,
-`alpha-2` for `2.x.x`). Historical `1.x` and pre-`1.0` docs were bucketed under
-`alpha-1/` when the alpha-2 line opened.
+Every implemented phase doc lives under its release line:
+`implemented/<release line>/v<version>/`. Nothing is ever written into
+`implemented/` directly.
+
+**The release line comes from the branch you are working on, not from the
+version number.** Skills read both from the **Release Branching** section of
+[`CLAUDE.md`](../../CLAUDE.md):
+
+| Base branch | Release line folder |
+|---|---|
+| `main` | the `Next release line` value — currently `alpha-3` |
+| the current release branch | its own name — currently `alpha-2` |
+
+### Version history
+
+Version numbers were restructured when the alpha-3 line opened. Before that,
+each alpha owned a MAJOR line (alpha-1 = `1.x.x`, alpha-2 = `2.x.x`), which put
+the project on `2.x` while it was still alpha — the opposite of what semver's
+MAJOR digit means.
+
+Historical folders keep the version they actually shipped under; they are a
+record, not a naming convention to extend:
+
+| Release line | Versions as shipped | Notes |
+|---|---|---|
+| alpha-1 | `v0.1` → `v1.59.2` | Started pre-`1.0`, then moved to the `1.x` line mid-flight. Retired |
+| alpha-2 | `v2.0.2` → `v2.19.1` | The `2.x` line. Renumbered to `0.19.1` at the cutover; later fixes on this branch are `0.19.x` |
+| alpha-3 onwards | `v0.20.0` → | Continuous `0.MINOR.PATCH`; MINOR continues alpha-2's count |
+
+Nothing was ever tagged or published under the old numbers, so no external
+reference breaks. Cross-references inside historical docs may point at paths
+that predate the release-line folders — read them as version identifiers, not
+as live links.
 
 ### Phase doc lifecycle (per feature)
 
@@ -51,7 +98,7 @@ The `alpha-<major>` folder matches the MAJOR of the version (`alpha-1` for `1.x.
 2. **Review**: Documentation Review skill checks consistency. Output is
    PASS / WARN / FAIL — code does not start until PASS.
 3. **Build**: Build skill implements the spec, moves the phase doc to
-   `implemented/alpha-<major>/v<version>/`, writes a same-folder implementation
+   `implemented/<release line>/v<version>/`, writes a same-folder implementation
    summary, updates `VERSION` and `package.json`.
 4. **Validate**: `./validate.sh` runs. The doc lifecycle check fails if any
    file in `to-be-implemented/` is referenced by an implementation summary
@@ -62,7 +109,7 @@ The `alpha-<major>` folder matches the MAJOR of the version (`alpha-1` for `1.x.
 ```markdown
 # Implementation Summary — <feature name>
 
-**Version**: 0.x.0  (bump: MINOR/PATCH/MAJOR)
+**Version**: 0.x.0  (bump: MINOR/PATCH)
 **Phase doc**: <link to moved phase doc>
 **PRD**:       <link>
 **ADR(s)**:    <links>
