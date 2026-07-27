@@ -9,6 +9,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./bootstrap": {
+      "types": "./src/bootstrap.ts",
+      "default": "./src/bootstrap.ts"
     }
   },
   "scripts": {

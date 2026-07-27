@@ -18,15 +18,6 @@ import {
   SetGroupMemberRole,
   RemoveGroupMember,
   ResolveGroupAuthorization,
-  ListOrganisations,
-  CreateOrganisation,
-  UpdateOrganisation,
-  DeleteOrganisation,
-  AssignUserOrganisation,
-  GetOrganisationResolution,
-  SetOrganisationResolution,
-  SubmitOrganisationNomination,
-  ResolveOrganisationOnSignIn,
   CreateUser,
   DecideApproval,
   DeleteFlow,
@@ -127,6 +118,7 @@ import {
   UpsertFeatureFlag,
 } from "@rbrasier/application";
 import { buildDocumentUseCases } from "./container-document-use-cases";
+import { buildOnboarding } from "./container-onboarding";
 import {
   DocxGenerator,
   XlsxGenerator,
@@ -327,6 +319,8 @@ const build = () => {
       accessKey: env.MINIO_ACCESS_KEY,
       secretKey: env.MINIO_SECRET_KEY,
       bucket: env.MINIO_BUCKET,
+      region: env.MINIO_REGION,
+      pathStyle: env.MINIO_PATH_STYLE,
     },
     embeddingsProvider: env.EMBEDDINGS_PROVIDER,
     entra:
@@ -591,6 +585,21 @@ const build = () => {
     permissionCache,
   );
 
+  // First-run bootstrap (ADR-041), factored out to keep this file under the
+  // source-size ceiling. The admin creator delegates password hashing to Better
+  // Auth and guards the singleton invariant transactionally.
+  const onboarding = buildOnboarding({
+    db,
+    getAuth,
+    systemSettings,
+    auditLogger,
+    clock,
+    users,
+    organisations,
+    envSetupToken: env.SETUP_TOKEN ?? null,
+    seedEmail: env.ADMIN_SEED_EMAIL ?? null,
+  });
+
   return {
     env,
     db,
@@ -653,15 +662,7 @@ const build = () => {
       setGroupMemberRole: new SetGroupMemberRole(groups),
       removeGroupMember: new RemoveGroupMember(groups),
       resolveGroupAuthorization: new ResolveGroupAuthorization(groups),
-      listOrganisations: new ListOrganisations(organisations),
-      createOrganisation: new CreateOrganisation(organisations),
-      updateOrganisation: new UpdateOrganisation(organisations),
-      deleteOrganisation: new DeleteOrganisation(organisations),
-      assignUserOrganisation: new AssignUserOrganisation(users, organisations),
-      getOrganisationResolution: new GetOrganisationResolution(systemSettings),
-      setOrganisationResolution: new SetOrganisationResolution(systemSettings),
-      submitOrganisationNomination: new SubmitOrganisationNomination(users, organisations, systemSettings),
-      resolveOrganisationOnSignIn: new ResolveOrganisationOnSignIn(users, organisations, systemSettings),
+      ...onboarding.useCases,
       trackUsage: new TrackUsage(usageRepo),
       getUsageSummary: new GetUsageSummary(usageRepo),
       registerJob: new RegisterJob(jobRepo),

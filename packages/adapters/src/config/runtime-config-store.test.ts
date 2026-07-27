@@ -5,6 +5,7 @@ import {
   createDefaultSiteBannerConfig,
   type AiConfig,
   type ISystemSettingsRepository,
+  type ProviderName,
   type StorageConfig,
 } from "@rbrasier/domain";
 import {
@@ -50,13 +51,13 @@ const makeRepo = (stored: string | null): ISystemSettingsRepository =>
   }) as unknown as ISystemSettingsRepository;
 
 describe("RuntimeConfigStore — anthropic defaults", () => {
-  it("uses a valid Claude Sonnet 4.5 snapshot for document generation", async () => {
+  it("uses Opus 5 for document generation", async () => {
     const store = new RuntimeConfigStore(makeRepo(null), makeEnv({ provider: "anthropic" }));
 
     const config = await store.getAiConfig();
 
     expect(config.provider).toBe("anthropic");
-    expect(config.models.documentGeneration).toBe("claude-sonnet-4-5-20250929");
+    expect(config.models.documentGeneration).toBe("claude-opus-5");
   });
 });
 
@@ -71,9 +72,7 @@ describe("RuntimeConfigStore — bedrock defaults", () => {
 
     expect(config.provider).toBe("bedrock");
     expect(config.models).toEqual(DEFAULT_MODELS_FOR.bedrock);
-    expect(config.models.documentGeneration).toBe(
-      "anthropic.claude-sonnet-4-5-20250929-v1:0",
-    );
+    expect(config.models.documentGeneration).toBe("anthropic.claude-opus-5");
   });
 
   it("falls back to env bedrock credentials when no stored value", async () => {
@@ -527,12 +526,44 @@ describe("RuntimeConfigStore — document generation config", () => {
   });
 });
 
+describe("DEFAULT_MODELS_FOR", () => {
+  it("defaults Anthropic to Sonnet 5 for chat and branching and Opus 5 for document generation", () => {
+    expect(DEFAULT_MODELS_FOR.anthropic).toEqual({
+      chat: "claude-sonnet-5",
+      documentGeneration: "claude-opus-5",
+      branching: "claude-sonnet-5",
+    });
+  });
+
+  it("defaults Bedrock to the same models under their provider-prefixed ids", () => {
+    expect(DEFAULT_MODELS_FOR.bedrock).toEqual({
+      chat: "anthropic.claude-sonnet-5",
+      documentGeneration: "anthropic.claude-opus-5",
+      branching: "anthropic.claude-sonnet-5",
+    });
+  });
+
+  it("maps a known context window for every default model so budgets are never estimated", () => {
+    for (const [provider, models] of Object.entries(DEFAULT_MODELS_FOR)) {
+      for (const model of Object.values(models)) {
+        const resolution = resolveContextWindow(provider as ProviderName, model);
+        expect(resolution.estimated, `${provider}/${model}`).toBe(false);
+      }
+    }
+  });
+});
+
 describe("resolveContextWindow", () => {
   it("returns the known window for a mapped model", () => {
     const resolution = resolveContextWindow("anthropic", "claude-sonnet-4-5-20250929");
 
     expect(resolution.tokens).toBe(200_000);
     expect(resolution.estimated).toBe(false);
+  });
+
+  it("reports the 1M window for the Claude 5 models", () => {
+    expect(resolveContextWindow("anthropic", "claude-opus-5").tokens).toBe(1_000_000);
+    expect(resolveContextWindow("bedrock", "anthropic.claude-sonnet-5").tokens).toBe(1_000_000);
   });
 
   it("falls back to the default window for an unknown model and flags it estimated", () => {
@@ -556,7 +587,7 @@ describe("RuntimeConfigStore — resolveDocumentGenerationBudget", () => {
   });
 
   it("derives the budget from the model window in model_percent mode", async () => {
-    // Anthropic doc-gen model has a 200k window; 25% → 50k tokens → 200k chars.
+    // Anthropic doc-gen model has a 1M window; 25% → 250k tokens → 1M chars.
     const repo = makeKeyedRepo({
       [DOCUMENT_GENERATION_CONFIG_SETTING_KEY]: JSON.stringify({
         contextBudgetMode: "model_percent",
@@ -567,6 +598,6 @@ describe("RuntimeConfigStore — resolveDocumentGenerationBudget", () => {
 
     const budget = await store.resolveDocumentGenerationBudget();
 
-    expect(budget.contextBudgetChars).toBe(200_000);
+    expect(budget.contextBudgetChars).toBe(1_000_000);
   });
 });

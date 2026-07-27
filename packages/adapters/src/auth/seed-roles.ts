@@ -56,8 +56,8 @@ const SYSTEM_ROLE_SEEDS: SystemRoleSeed[] = [
 ];
 
 // Flags scoped to Power Users on first migrate (ADR-022); admins still pass via
-// wildcard. extraction_flows stays disabled until an admin enables it — scoping
-// only narrows who sees it once on (ADR-033 §7 dark-launch).
+// wildcard. Scoping only narrows who sees a flag once it is on, so it is safe to
+// list flags that ship enabled (extraction_flows) alongside ones that do not.
 const POWER_USER_SCOPED_FLAGS = [
   "auto_node",
   "scheduled_node",

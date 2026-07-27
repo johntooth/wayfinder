@@ -122,6 +122,8 @@ export function createAdapters(db: Database, config: AdaptersConfig): Adapters {
       accessKey: "minioadmin",
       secretKey: "minioadmin",
       bucket: "wayfinder-documents",
+      region: "",
+      pathStyle: true,
     },
     embeddingsProvider: EMBEDDINGS_DEFAULT_PROVIDER,
   });

@@ -60,9 +60,9 @@ const ALL_PROVIDERS: ProviderName[] = ["anthropic", "openai", "mistral", "bedroc
 
 export const DEFAULT_MODELS_FOR: Record<ProviderName, Record<AiPurpose, string>> = {
   anthropic: {
-    chat: "claude-haiku-4-5-20251001",
-    documentGeneration: "claude-sonnet-4-5-20250929",
-    branching: "claude-haiku-4-5-20251001",
+    chat: "claude-sonnet-5",
+    documentGeneration: "claude-opus-5",
+    branching: "claude-sonnet-5",
   },
   openai: {
     chat: "gpt-4o-mini",
@@ -75,9 +75,9 @@ export const DEFAULT_MODELS_FOR: Record<ProviderName, Record<AiPurpose, string>>
     branching: "mistral-small-latest",
   },
   bedrock: {
-    chat: "anthropic.claude-haiku-4-5-20251001-v1:0",
-    documentGeneration: "anthropic.claude-sonnet-4-5-20250929-v1:0",
-    branching: "anthropic.claude-haiku-4-5-20251001-v1:0",
+    chat: "anthropic.claude-sonnet-5",
+    documentGeneration: "anthropic.claude-opus-5",
+    branching: "anthropic.claude-sonnet-5",
   },
 };
 
@@ -163,6 +163,10 @@ const parseStorageConfig = (raw: string, fallback: StorageConfig): StorageConfig
       accessKey: typeof parsed.accessKey === "string" && parsed.accessKey.length > 0 ? parsed.accessKey : fallback.accessKey,
       secretKey: typeof parsed.secretKey === "string" && parsed.secretKey.length > 0 ? parsed.secretKey : fallback.secretKey,
       bucket: typeof parsed.bucket === "string" && parsed.bucket.length > 0 ? parsed.bucket : fallback.bucket,
+      // Region is legitimately empty for MinIO, so an empty string is a value to
+      // honour rather than a gap to fill from the fallback.
+      region: typeof parsed.region === "string" ? parsed.region : fallback.region,
+      pathStyle: typeof parsed.pathStyle === "boolean" ? parsed.pathStyle : fallback.pathStyle,
     };
   } catch {
     return fallback;
@@ -252,6 +256,8 @@ export const MODEL_CONTEXT_WINDOWS: Record<ProviderName, Record<string, number>>
   anthropic: {
     "claude-haiku-4-5-20251001": 200_000,
     "claude-sonnet-4-5-20250929": 200_000,
+    "claude-sonnet-5": 1_000_000,
+    "claude-opus-5": 1_000_000,
   },
   openai: {
     "gpt-4o": 128_000,
@@ -264,6 +270,8 @@ export const MODEL_CONTEXT_WINDOWS: Record<ProviderName, Record<string, number>>
   bedrock: {
     "anthropic.claude-haiku-4-5-20251001-v1:0": 200_000,
     "anthropic.claude-sonnet-4-5-20250929-v1:0": 200_000,
+    "anthropic.claude-sonnet-5": 1_000_000,
+    "anthropic.claude-opus-5": 1_000_000,
   },
 };
 

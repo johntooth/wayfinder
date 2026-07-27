@@ -18,8 +18,12 @@ import {
   SITE_BANNER_MIN_TEXT_SIZE_PT,
   STORAGE_CONFIG_SETTING_KEY,
   type SiemConfig,
+  isAiConfigured,
   isAtLeastOneMethodEnabled,
+  isEmailConfigured,
   isEntraConfigured,
+  isN8nConfigured,
+  isStorageConfigured,
   normaliseSiteBannerLinkUrl,
   type AiConfig,
   type AiPurpose,
@@ -68,14 +72,22 @@ const aiConfigInputSchema = z.object({
   }),
 });
 
-const storageConfigInputSchema = z.object({
-  endpoint: z.string().min(1),
-  port: z.number().int().min(1).max(65535),
-  useSSL: z.boolean(),
-  accessKey: z.string().min(1),
-  secretKey: z.string().min(1),
-  bucket: z.string().min(1),
-});
+const storageConfigInputSchema = z
+  .object({
+    endpoint: z.string().min(1),
+    port: z.number().int().min(1).max(65535),
+    useSSL: z.boolean(),
+    accessKey: z.string().min(1),
+    secretKey: z.string().min(1),
+    bucket: z.string().min(1),
+    // Legitimately blank for MinIO, which ignores it.
+    region: z.string(),
+    pathStyle: z.boolean(),
+  })
+  .refine((config) => config.pathStyle || config.region.length > 0, {
+    message: "A region is required for virtual-hosted addressing (Amazon S3).",
+    path: ["region"],
+  });
 
 const n8nConfigInputSchema = z.object({
   baseUrl: z.string().url(),
@@ -658,4 +670,60 @@ export const settingsRouter = router({
       ctx.container.runtimeConfig.invalidateSiem();
       return { ok: true };
     }),
+
+  // ── First-run onboarding (ADR-041) ──────────────────────────────────────────
+
+  getOnboardingState: adminProcedure.query(async ({ ctx }) => {
+    const result = await ctx.container.useCases.getOnboardingState.execute();
+    if (result.error) throw toTrpcError(result.error);
+    return result.data;
+  }),
+
+  completeOnboarding: adminProcedure.mutation(async ({ ctx }) => {
+    const result = await ctx.container.useCases.completeOnboarding.execute();
+    if (result.error) throw toTrpcError(result.error);
+    return result.data;
+  }),
+
+  getDeploymentConfig: adminProcedure.query(async ({ ctx }) => {
+    const result = await ctx.container.useCases.getDeploymentConfig.execute();
+    if (result.error) throw toTrpcError(result.error);
+    return result.data;
+  }),
+
+  setDeploymentConfig: adminProcedure
+    .input(z.object({ multiOrganisation: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.setDeploymentConfig.execute({
+        multiOrganisation: input.multiOrganisation,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  // Per-step configured state for the wizard (ADR-041 §2). "configured" means a
+  // value is present from env or DB; the wizard treats a step as complete only
+  // once its live Test also passes, so this read never claims "tested".
+  getSetupStatus: adminProcedure.query(async ({ ctx }) => {
+    const [storage, ai, auth, email, n8n, organisations] = await Promise.all([
+      ctx.container.runtimeConfig.getStorageConfig(),
+      ctx.container.runtimeConfig.getAiConfig(),
+      ctx.container.runtimeConfig.getAuthConfig(),
+      loadEmailConfig(ctx.container.repos.systemSettings),
+      ctx.container.runtimeConfig.getN8nConfig(),
+      ctx.container.useCases.listOrganisations.execute(),
+    ]);
+
+    return {
+      encryptionKeyReady: ctx.container.env.SETTINGS_ENCRYPTION_KEY.length > 0,
+      deployment: {
+        organisationConfigured: !organisations.error && organisations.data.length > 0,
+      },
+      storage: { configured: isStorageConfigured(storage) },
+      ai: { configured: isAiConfigured(ai) },
+      auth: { configured: isAtLeastOneMethodEnabled(auth) },
+      email: { configured: isEmailConfigured(email) },
+      n8n: { configured: isN8nConfigured(n8n) },
+    };
+  }),
 });

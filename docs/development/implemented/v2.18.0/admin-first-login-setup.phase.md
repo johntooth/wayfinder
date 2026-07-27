@@ -1,8 +1,10 @@
 # Phase — Admin First-Login Setup
 
-- **Status**: Draft (run `/doc-review` before building)
-- **Target version**: 2.9.0 — **MINOR** (new admin feature; all config is runtime
-  state in existing tables; no schema migration).
+- **Status**: Implemented (v2.18.0)
+- **Target version**: 2.18.0 — **MINOR** (new admin feature; all config is runtime
+  state in existing tables; no schema migration). Originally drafted as 2.9.0,
+  then 2.10.0; landed as 2.18.0 after rebasing onto a `main` that reached
+  2.17.0 first.
 - **PRD**: `docs/development/prd/admin-first-login-setup.prd.md`
 - **ADR**: `docs/development/adr/041-first-run-onboarding-and-db-first-config.adr.md`
 - **Depends on**: ADR-025 (runtime auth config), ADR-038 (organisations as sharing
@@ -76,8 +78,10 @@ and `mcp` feature flags default off.
 9. Wizard Step 2 (storage / AI / auth) with save + Test (existing probes),
    pre-fill/complete from `getSetupStatus`, warn-not-block, and the
    `SETTINGS_ENCRYPTION_KEY` pre-flight guard.
-10. Wizard Step 3 (mail config+test; n8n toggle→modal→save+test; Skills toggle;
-   MCP toggle) + **Skip** action; both Finish and Skip call `completeOnboarding`.
+10. Wizard Step 3 (mail config+test; n8n toggle→modal→save+test; Synthesise
+   Information toggle — **on by default** — with the existing `ExtractionConfigCard`
+   beneath it; Skills toggle; MCP toggle) + **Skip** action; both Finish and Skip
+   call `completeOnboarding`.
 11. Layout gating + admin Settings "Re-run setup" entry point.
 12. Documentation refocus: `README.md` quick-start, `.env.example`, getting-started
     guide(s) → zero-env path first, env demoted to "advanced / optional".

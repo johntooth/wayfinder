@@ -133,18 +133,47 @@ jobs:
           done
           echo "MinIO did not become ready" >&2; docker logs minio || true; exit 1
 
+      # Tee to a file as well as the log: the "Start app" step finishes as soon as
+      # the process is backgrounded, so anything the server prints afterwards is
+      # otherwise lost — including whatever it was doing when a boot hang starts.
+      #
+      # The heap size is load-bearing. `next dev` restarts itself once
+      # used_heap_size exceeds 80% of heap_size_limit ("Server is approaching the
+      # used memory threshold"), and a restart mid-suite drops in-flight requests
+      # — surfacing as ERR_CONNECTION_RESET, ChunkLoadError, or a tRPC mutation
+      # failing with "Unexpected end of JSON input" from a truncated body.
+      #
+      # next-dev.js defaults max-old-space-size to 50% of total RAM (~8 GB here)
+      # unless NODE_OPTIONS already sets it, in which case it defers to that. So
+      # any value below ~8 GB *lowers* the threshold; this raises it instead.
+      # It is a ceiling, not a reservation — V8 still only grows as needed.
       - name: Start app
-        run: pnpm --filter @wayfinder/web dev &
+        env:
+          NODE_OPTIONS: --max-old-space-size=10240
+        run: pnpm --filter @wayfinder/web dev > /tmp/app.log 2>&1 &
 
       - name: Wait for app to be ready
         run: ./node_modules/.bin/wait-on http://localhost:3000 --timeout 120000
         working-directory: apps/web/e2e
+
+      # `|| true`: this also fires when the failure was infrastructural (a
+      # service container that never started), and a missing log must not add a
+      # second, misleading error on top of the real one.
+      - name: Dump app log on boot failure
+        if: failure()
+        run: tail -n 300 /tmp/app.log || true
 
       # Each shard emits a machine-readable "blob" report; the report job below
       # merges every shard's blob into one HTML report and one results.json.
       - name: Run Playwright tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
         run: npx playwright test --config=playwright.config.ts --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=blob
         working-directory: apps/web/e2e
+
+      # A test failing with a connection error means the dev server died or
+      # restarted mid-run; its own log is the only place that says why.
+      - name: Dump app log on test failure
+        if: failure()
+        run: tail -n 300 /tmp/app.log || true
 
       - name: Upload blob report
         if: always()

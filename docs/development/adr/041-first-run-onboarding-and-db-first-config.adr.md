@@ -120,14 +120,22 @@ multi-org resolution strategy (`email_domain` / `self_nomination`, per ADR-038)
 either in-wizard or from admin Settings. This reuses the existing
 `organisation_resolution` machinery rather than inventing a parallel concept.
 
-### 4. Automation feature flags default off
+### 4. Automation feature flags default off; shipped features default on
 
-`auto_node`, `skills`, and `mcp` default **off**; `scheduled_node` stays **on**.
-`skills` and `mcp` are new keys added to the code default list (feature-flag
-rows are created only on first toggle, per ADR-022). This phase adds the flags
-and their toggle UI only — the underlying Skills/MCP execution features, and any
-config/test for them, are out of scope. n8n keeps its existing config + probe and
-defaults off in the wizard.
+`auto_node`, `skills`, and `mcp` default **off**; `scheduled_node` and
+`extraction_flows` stay **on**. `skills` and `mcp` are new keys added to the code
+default list (feature-flag rows are created only on first toggle, per ADR-022).
+This phase adds those two flags and their toggle UI only — the underlying
+Skills/MCP execution features, and any config/test for them, are out of scope.
+
+The wizard's Site Options step also exposes **Synthesise Information**
+(`extraction_flows`, ADR-033), which is a shipped feature rather than a
+placeholder: it is listed in the code default set as **on**, matching migration
+`0039`, so a fresh install surfaces it without the operator doing anything. Its
+toggle is offered so an operator can switch it off during setup, and while it is
+on the existing `ExtractionConfigCard` renders beneath it so ingestion caps and
+the per-run spend ceiling can be tuned in place. n8n keeps its existing config +
+probe and defaults off in the wizard.
 
 ### 5. Setup link is emitted by the app at startup, and the simplest start needs no env
 
@@ -137,7 +145,18 @@ by `restart.sh`. `apps/web/src/instrumentation.ts` already runs once on boot for
 emitting the link there makes it appear regardless of how the app is launched.
 On boot, if no admin exists, the app ensures a `setup_token` (env override or the
 persisted DB row) and logs a clickable `${BETTER_AUTH_URL}/setup?token=<token>`
-line. Once an admin exists it logs nothing. `restart.sh` keeps only its existing
+line. Once an admin exists it logs nothing.
+
+Two constraints shape how this is wired. Next.js awaits `register()` before the
+server accepts requests, so the emitter is **detached** — `register()` returns
+immediately. And it must not touch the container: building the container
+constructs the entire application graph (AI providers, extraction engine,
+embeddings model), which on the boot path delays the first response long enough
+to fail a readiness probe. `apps/web/src/lib/setup-link.ts` therefore wires up
+only a one-connection database handle, the settings repository, and
+`DrizzleAdminLookup` — the "does an admin exist" query split out of
+`BetterAuthAdminAccountCreator` (port `IAdminLookup`) precisely so answering it
+never requires the auth provider. `restart.sh` keeps only its existing
 job — bring up infra, migrate, start the app — and inherits the link for free;
 its sole addition is auto-generating `BETTER_AUTH_SECRET` alongside
 `SETTINGS_ENCRYPTION_KEY` so **no secret has to be edited by hand**.

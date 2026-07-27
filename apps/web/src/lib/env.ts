@@ -80,6 +80,10 @@ const serverEnvSchema = z.object({
   SETTINGS_ENCRYPTION_KEY: settingsEncryptionKeySchema,
   BETTER_AUTH_URL: z.string().url().default("http://localhost:3000"),
   ADMIN_SEED_EMAIL: z.string().email().optional(),
+  // Optional override for the one-time first-run setup token (ADR-041 §0). When
+  // set it is the expected token for `bootstrap.createAdmin`; when blank the app
+  // generates and persists one in the DB on first boot with no admin.
+  SETUP_TOKEN: z.string().optional(),
   N8N_WEBHOOK_SECRET: z.string().optional(),
   // Shared secret the API scheduler heartbeat presents to the internal tick
   // endpoint. The endpoint refuses to fire unless this is set and matches.
@@ -119,6 +123,13 @@ const serverEnvSchema = z.object({
     .string()
     .transform((v) => v === "true")
     .default("false"),
+  // Ignored by MinIO; required by Amazon S3, which signs with the bucket region.
+  MINIO_REGION: z.string().default(""),
+  // MinIO serves path-style addressing; Amazon S3 wants virtual-hosted style.
+  MINIO_PATH_STYLE: z
+    .string()
+    .transform((v) => v !== "false")
+    .default("true"),
   // Email notifications (ADR-023). When SMTP_TRANSPORT_MODE is set the env
   // transport takes precedence over the admin-settings SMTP config.
   NOTIFICATIONS_ENABLED: z
