@@ -15,9 +15,8 @@ coverage
 *.lcov
 
 # Env
-.env
-.env.local
-.env.*.local
+.env*
+!.env.example
 
 # Logs
 *.log
