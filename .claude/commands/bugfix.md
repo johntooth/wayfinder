@@ -12,7 +12,7 @@ Ask all of these via `AskUserQuestion` before proceeding:
 2. How do you reproduce it?
 3. Which page or feature is affected?
 4. Severity: blocker / major / minor?
-5. Which release does this affect? Default is the current alpha branch (see
+5. Which release does this affect? Default is the current release branch (see
    **Release Branching** in `CLAUDE.md`); choose `main` only if the bug exists
    solely in unreleased work.
 
@@ -59,8 +59,10 @@ Write at least one Playwright e2e test that exercises the fixed behaviour throug
 
 ### Step 6 — On completion
 
-- Move bug-fix doc: `to-be-implemented/<name>.md` → `implemented/alpha-<major>/v[version]/<name>.md`
-  (`alpha-<major>` is the current release line — `alpha-2` for `2.x.x`; see `docs/guides/versioning.md`)
+- Move bug-fix doc: `to-be-implemented/<name>.md` → `implemented/<release line>/v[version]/<name>.md`
+  The release line comes from the **Release Branching** section of `CLAUDE.md`, not from the
+  version number: use the `Next release line` value when your base branch is `main`, and the
+  current release branch's own name otherwise (see `docs/guides/versioning.md`)
 - Write an implementation summary: root cause, fix applied, regression test added, e2e test added
 - Apply a PATCH version bump
 - Update `VERSION` and root `package.json` `version`

@@ -6,8 +6,8 @@ or when the user explicitly asks to implement a specific phase or feature.
 **Pre-flight:** Confirm the phase doc in `docs/development/to-be-implemented/`
 exists and has passed `/doc-review`. Read the PRD, ADR(s), and phase doc in
 full before writing a single line of code. Create the working branch
-(`feature/<slug>`) from `main` — new features land on the next alpha, never
-on a `release/alpha-N` branch (see **Release Branching** in `CLAUDE.md`).
+(`feature/<slug>`) from `main` — new features land on the next release line,
+never on a `release/*` branch (see **Release Branching** in `CLAUDE.md`).
 
 ---
 
@@ -47,11 +47,13 @@ Once all sub-components pass validation, write at least one Playwright e2e test 
 
 ### Step 4 — On completion
 
-- Move phase doc: `to-be-implemented/<name>.md` → `implemented/alpha-<major>/v[version]/<name>.md`
-  where `alpha-<major>` is the current release line — `alpha-2` for `2.x.x`, `alpha-1` for `1.x.x` (see `docs/guides/versioning.md`)
-- Write an implementation summary in `implemented/alpha-<major>/v[version]/` covering:
+- Move phase doc: `to-be-implemented/<name>.md` → `implemented/<release line>/v[version]/<name>.md`
+  The release line comes from the **Release Branching** section of `CLAUDE.md`, not from the
+  version number: use the `Next release line` value when your base branch is `main`, and the
+  current release branch's own name otherwise (see `docs/guides/versioning.md`)
+- Write an implementation summary in the same `implemented/<release line>/v[version]/` folder covering:
   what was built, files created/modified, migrations run, known limitations, e2e tests added
 - Update `VERSION` file and root `package.json` `version` (they must match)
 - Run `./validate.sh` one final time — fix all failures before declaring done
-- State the version bump applied (MAJOR / MINOR / PATCH)
-- Commit all changes, push the branch, then open a pull request via `mcp__github__create_pull_request` against `main` so CI runs automatically — new features never target a `release/alpha-N` branch (see **Release Branching** in `CLAUDE.md`). Include in the PR body: phase summary, files changed, version bump, and which e2e tests cover the new functionality.
+- State the version bump applied (MINOR / PATCH — MAJOR is reserved for the first stable release)
+- Commit all changes, push the branch, then open a pull request via `mcp__github__create_pull_request` against `main` so CI runs automatically — new features never target a `release/*` branch (see **Release Branching** in `CLAUDE.md`). Include in the PR body: phase summary, files changed, version bump, and which e2e tests cover the new functionality.

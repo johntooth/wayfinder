@@ -5,7 +5,7 @@
   after Insights Export & Summarisation at 2.5.0)
 - **PRD**: `docs/development/prd/insights-ai-normalisation.prd.md`
 - **ADR**: `docs/development/adr/032-normalisation-overlay-and-ai-propose-confirm.adr.md`
-- **Base branch**: `main` (new features never target a `release/alpha-N` branch)
+- **Base branch**: `main` (new features never target a `release/*` branch)
 - **Depends on**: `ILanguageModel` (ADR-002), the `AiColumnMappingDetector`
   precedent (`packages/adapters/src/ai/`), `GetFlowDeepDive` /
   `computeFieldReport`, `app_session_step_outputs` (source of truth, untouched),
