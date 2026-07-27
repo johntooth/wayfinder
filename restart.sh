@@ -66,7 +66,9 @@ fi
 # ensure_secret VAR — generate a 32-byte hex value for VAR if it is missing or
 # blank in .env. Secret-bearing system settings are encrypted at rest with
 # SETTINGS_ENCRYPTION_KEY, and Better Auth signs sessions with BETTER_AUTH_SECRET;
-# both apps require these at startup.
+# both apps require these at startup. SCHEDULER_TICK_SECRET is what the API's
+# heartbeat presents to the web tick endpoint — without it the scheduler never
+# starts and scheduled sessions never fire.
 ensure_secret() {
   var="$1"
   if [ ! -f .env ]; then return; fi
@@ -85,6 +87,7 @@ ensure_secret() {
 
 ensure_secret SETTINGS_ENCRYPTION_KEY
 ensure_secret BETTER_AUTH_SECRET
+ensure_secret SCHEDULER_TICK_SECRET
 
 # ── start infrastructure ──────────────────────────────────────────────────────
 # Read the DB setup mode written by create-ai-app-template, or fall back to

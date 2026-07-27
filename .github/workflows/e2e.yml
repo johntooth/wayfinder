@@ -74,6 +74,14 @@ jobs:
       AI_DEFAULT_PROVIDER: anthropic
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ADMIN_SEED_EMAIL: admin@example.com
+      # Blank-but-present optionals, exactly as `set -a; source .env` exports a
+      # left-empty line in .env.example. serverEnv() used to read "" as a
+      # provided value and fail .url()/.email(), 500ing every request; booting
+      # the suite this way keeps that path covered on every run
+      # (fix-zero-env-first-run.spec.ts).
+      LANGFUSE_HOST: ""
+      SETUP_TOKEN: ""
+      N8N_WEBHOOK_SECRET: ""
       # Lets the authenticated scheduler-tick spec reach the durable-claim path
       # (otherwise the endpoint short-circuits with 503 before claimDue runs).
       SCHEDULER_TICK_SECRET: e2e-scheduler-tick-secret

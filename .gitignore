@@ -17,7 +17,8 @@ coverage
 # Env
 .env*
 !.env.example
-!.env.min.example
+!.env.min.example.dev
+!.env.min.example.prod
 
 # Logs
 *.log

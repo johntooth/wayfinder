@@ -25,14 +25,20 @@ In your Railway project, add:
 
 ## 3. Environment variable mapping
 
-Set the following variables on both the `web` and `api` services:
+`.env.min.example.prod` in the repo root is the smallest working set for a
+deployment, with each value explained. Set the following on both the `web` and
+`api` services:
 
 | Wayfinder variable | Source |
 |---|---|
+| `NODE_ENV` | `production` |
 | `DATABASE_URL` | Injected by Railway Postgres plugin |
 | `REDIS_URL` | Injected by Railway Redis plugin |
 | `BETTER_AUTH_SECRET` | Generate: `openssl rand -hex 32` |
+| `SETTINGS_ENCRYPTION_KEY` | Generate: `openssl rand -hex 32`. Required at startup — encrypts the integration credentials the setup wizard stores, so back it up; losing it makes those rows unreadable |
 | `BETTER_AUTH_URL` | Your Railway-assigned URL, e.g. `https://wayfinder-web.up.railway.app` |
+| `WEB_BASE_URL` | The same URL — `api` uses it for the scheduler tick endpoint and for links in notification emails |
+| `SCHEDULER_TICK_SECRET` | Generate: `openssl rand -hex 32`. The same value on both services; without it scheduled sessions never fire |
 | `ADMIN_SEED_EMAIL` | Your admin email |
 | `AI_DEFAULT_PROVIDER` | `anthropic` |
 | `ANTHROPIC_API_KEY` | Your key |

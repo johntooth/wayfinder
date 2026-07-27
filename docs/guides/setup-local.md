@@ -23,16 +23,29 @@ pnpm install
 ## 2. Configure environment
 
 **The default path needs no `.env` editing.** `./restart.sh` seeds `.env` from
-`.env.example`, auto-generates the two required secrets
-(`SETTINGS_ENCRYPTION_KEY`, `BETTER_AUTH_SECRET`), and starts the app. On first
-boot with no admin it prints a `http://localhost:3000/setup?token=…` link — open
-it, create the administrator, and configure object storage, the AI provider, and
-a sign-in method **in the setup wizard**. Nothing below is a prerequisite.
+`.env.example`, auto-generates the three secrets it needs
+(`SETTINGS_ENCRYPTION_KEY`, `BETTER_AUTH_SECRET`, `SCHEDULER_TICK_SECRET`), and
+starts the app. On first boot with no admin it prints a
+`http://localhost:3000/setup?token=…` link — open it, create the administrator,
+and configure object storage, the AI provider, and a sign-in method **in the
+setup wizard**. Nothing below is a prerequisite.
+
+### Writing the file yourself
+
+To keep `.env` short, start from the minimal development sample rather than the
+full example — it is four values, three of which are `openssl rand -hex 32`:
+
+```bash
+cp .env.min.example.dev .env
+```
+
+Everything it omits has a working default. `.env.min.example.prod` is the
+deployment counterpart.
 
 ### Advanced / optional overrides
 
-If you want to preset values in the environment instead of using the wizard, copy
-the example file and edit it:
+If you want to preset integrations in the environment instead of using the
+wizard, start from the fully annotated example and edit it:
 
 ```bash
 cp .env.example .env

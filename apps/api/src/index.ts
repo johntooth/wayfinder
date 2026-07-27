@@ -32,7 +32,7 @@ if (env.SCHEDULER_ENABLED && container.schedulerWorkers.length > 0) {
   console.log(`[api] scheduler heartbeat started (${container.schedulerWorkers.length} worker(s))`);
 } else if (env.SCHEDULER_ENABLED) {
   container.logger.warn(
-    "Scheduler enabled but not started: set SCHEDULER_TICK_URL and SCHEDULER_TICK_SECRET.",
+    "Scheduler enabled but not started: set SCHEDULER_TICK_SECRET (the same value on the web app) so scheduled sessions can fire.",
   );
 }
 

@@ -81,4 +81,67 @@ describe("loadEnv", () => {
       expect(() => loadEnv()).not.toThrow();
     });
   });
+
+  // The tick URL is derivable from the web app's base URL; the shared secret is
+  // not. Only the secret should stand between a default install and a running
+  // scheduler.
+  it("derives SCHEDULER_TICK_URL from WEB_BASE_URL when it is not set", () => {
+    withEnv({ ...REQUIRED, SCHEDULER_TICK_URL: undefined, WEB_BASE_URL: undefined }, () => {
+      expect(loadEnv().SCHEDULER_TICK_URL).toBe("http://localhost:3000/api/internal/scheduler/tick");
+    });
+  });
+
+  it("derives the tick URL from a custom WEB_BASE_URL without doubling the slash", () => {
+    withEnv({ ...REQUIRED, SCHEDULER_TICK_URL: undefined, WEB_BASE_URL: "https://app.example.com/" }, () => {
+      expect(loadEnv().SCHEDULER_TICK_URL).toBe(
+        "https://app.example.com/api/internal/scheduler/tick",
+      );
+    });
+  });
+
+  it("keeps an explicit SCHEDULER_TICK_URL for split deployments", () => {
+    withEnv({ ...REQUIRED, SCHEDULER_TICK_URL: "http://web.internal:3000/tick" }, () => {
+      expect(loadEnv().SCHEDULER_TICK_URL).toBe("http://web.internal:3000/tick");
+    });
+  });
+
+  // The extraction worker resolves documents through these; hardcoding them left
+  // an env-only deployment pointed at a MinIO that is not there.
+  it("reads the object storage fallback from MINIO_* like the web app does", () => {
+    withEnv(
+      {
+        ...REQUIRED,
+        MINIO_ENDPOINT: "s3.eu-west-2.amazonaws.com",
+        MINIO_USE_SSL: "true",
+        MINIO_REGION: "eu-west-2",
+        MINIO_PATH_STYLE: "false",
+      },
+      () => {
+        const env = loadEnv();
+        expect(env.MINIO_ENDPOINT).toBe("s3.eu-west-2.amazonaws.com");
+        expect(env.MINIO_USE_SSL).toBe(true);
+        expect(env.MINIO_REGION).toBe("eu-west-2");
+        expect(env.MINIO_PATH_STYLE).toBe(false);
+      },
+    );
+  });
+
+  it("falls back to the local MinIO defaults when no MINIO_* vars are set", () => {
+    withEnv(
+      {
+        ...REQUIRED,
+        MINIO_ENDPOINT: undefined,
+        MINIO_PORT: undefined,
+        MINIO_USE_SSL: undefined,
+        MINIO_PATH_STYLE: undefined,
+      },
+      () => {
+        const env = loadEnv();
+        expect(env.MINIO_ENDPOINT).toBe("localhost");
+        expect(env.MINIO_PORT).toBe(9000);
+        expect(env.MINIO_USE_SSL).toBe(false);
+        expect(env.MINIO_PATH_STYLE).toBe(true);
+      },
+    );
+  });
 });
