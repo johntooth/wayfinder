@@ -34,6 +34,26 @@ const envSchema = z.object({
   AWS_BEDROCK_REGION: z.string().optional(),
   AWS_BEDROCK_ACCESS_KEY_ID: z.string().optional(),
   AWS_BEDROCK_SECRET_ACCESS_KEY: z.string().optional(),
+  // Object storage fallback for the extraction worker, mirroring the web app's
+  // schema. A stored storage_config row still wins; these matter for an
+  // env-only deployment, which otherwise reached for a local MinIO that a
+  // hosted install does not have.
+  MINIO_ENDPOINT: z.string().default("localhost"),
+  MINIO_PORT: z.coerce.number().int().default(9000),
+  MINIO_ACCESS_KEY: z.string().default("minioadmin"),
+  MINIO_SECRET_KEY: z.string().default("minioadmin"),
+  MINIO_BUCKET: z.string().default("wayfinder-documents"),
+  MINIO_USE_SSL: z
+    .string()
+    .optional()
+    .transform((value) => value === "true"),
+  // Ignored by MinIO; required by Amazon S3, which signs with the bucket region.
+  MINIO_REGION: z.string().default(""),
+  // MinIO serves path-style addressing; Amazon S3 wants virtual-hosted style.
+  MINIO_PATH_STYLE: z
+    .string()
+    .optional()
+    .transform((value) => value !== "false"),
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
   LANGFUSE_HOST: z.string().url().optional(),
@@ -50,9 +70,13 @@ const envSchema = z.object({
   // batch via FOR UPDATE SKIP LOCKED (ADR-019), so N workers drain a backlog N×
   // faster with no schema change. Keep at 1 unless a backlog is observed.
   SCHEDULER_WORKER_COUNT: z.coerce.number().int().positive().default(1),
-  // Full URL of the web app's internal scheduler tick endpoint and the shared
-  // secret it requires. The heartbeat only starts when both are set.
+  // Full URL of the web app's internal scheduler tick endpoint. Defaults to the
+  // web app's own endpoint (see loadEnv), so a normal install only has to set
+  // the shared secret below — which is the one thing that cannot be derived.
   SCHEDULER_TICK_URL: z.string().url().optional(),
+  // Shared secret the heartbeat presents to that endpoint; the endpoint refuses
+  // to fire without it. The heartbeat does not start until this is set, and the
+  // web app must see the same value. restart.sh generates one into .env.
   SCHEDULER_TICK_SECRET: z.string().optional(),
   // Email notifications (ADR-023) — the n8n callback webhook can complete a
   // session, so this app sends the session-complete email too. Links in email
@@ -110,7 +134,13 @@ const envSchema = z.object({
   RETENTION_EXTRACTION_RUNS_DAYS: z.coerce.number().int().nonnegative().default(0),
 });
 
-export type Env = z.infer<typeof envSchema>;
+export type Env = Omit<z.infer<typeof envSchema>, "SCHEDULER_TICK_URL"> & {
+  SCHEDULER_TICK_URL: string;
+};
+
+// Path of the web app's internal tick endpoint (apps/web/src/app/api/internal/
+// scheduler/tick/route.ts), which the heartbeat POSTs each interval.
+const SCHEDULER_TICK_PATH = "/api/internal/scheduler/tick";
 
 export const loadEnv = (): Env => {
   // Shell `source .env` exports empty-value lines (e.g. OTEL_EXPORTER_OTLP_ENDPOINT=)
@@ -119,5 +149,10 @@ export const loadEnv = (): Env => {
   const env = Object.fromEntries(
     Object.entries(process.env).map(([k, v]) => [k, v === "" ? undefined : v]),
   );
-  return envSchema.parse(env);
+  const parsed = envSchema.parse(env);
+  return {
+    ...parsed,
+    SCHEDULER_TICK_URL:
+      parsed.SCHEDULER_TICK_URL ?? `${parsed.WEB_BASE_URL.replace(/\/+$/, "")}${SCHEDULER_TICK_PATH}`,
+  };
 };

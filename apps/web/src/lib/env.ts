@@ -113,7 +113,6 @@ const serverEnvSchema = z.object({
     .default("email-password"),
   PKI_TRUSTED_PROXY_IPS: z.string().optional(),
   PKI_SESSION_TTL_HOURS: z.coerce.number().int().positive().default(8),
-  DOCUMENT_STORAGE_PATH: z.string().default("./data"),
   MINIO_ENDPOINT: z.string().default("localhost"),
   MINIO_PORT: z.coerce.number().int().default(9000),
   MINIO_ACCESS_KEY: z.string().default("minioadmin"),
@@ -131,22 +130,15 @@ const serverEnvSchema = z.object({
     .transform((v) => v !== "false")
     .default("true"),
   // Email notifications (ADR-023). When SMTP_TRANSPORT_MODE is set the env
-  // transport takes precedence over the admin-settings SMTP config.
+  // transport takes precedence over the admin-settings SMTP config, so leaving
+  // it blank is what lets the setup wizard's email config take effect.
   NOTIFICATIONS_ENABLED: z
     .string()
     .transform((v) => v === "true")
     .default("false"),
-  // Empty strings come through when .env exports blank-value lines; treat them
-  // as unset so the enum/number validations behave.
-  SMTP_TRANSPORT_MODE: z.preprocess(
-    (value) => (value === "" ? undefined : value),
-    z.enum(["oauth2", "smtp", "stream"]).optional(),
-  ),
+  SMTP_TRANSPORT_MODE: z.enum(["oauth2", "smtp", "stream"]).optional(),
   SMTP_HOST: z.string().optional(),
-  SMTP_PORT: z.preprocess(
-    (value) => (value === "" ? undefined : value),
-    z.coerce.number().int().optional(),
-  ),
+  SMTP_PORT: z.coerce.number().int().optional(),
   SMTP_SECURE: z
     .string()
     .transform((v) => v === "true")
@@ -169,6 +161,13 @@ export type ServerEnv = z.infer<typeof serverEnvSchema>;
 let cached: ServerEnv | null = null;
 export const serverEnv = (): ServerEnv => {
   if (cached) return cached;
-  cached = serverEnvSchema.parse(process.env);
+  // `set -a; source .env` exports a blank line (ADMIN_SEED_EMAIL=) as an empty
+  // string, and Zod counts "" as a value that fails .email()/.url() rather than
+  // as an absent one — which made the documented `cp .env.example .env` start
+  // throw on every request. Strip blanks so an unfilled optional reads as unset.
+  const provided = Object.fromEntries(
+    Object.entries(process.env).map(([key, value]) => [key, value === "" ? undefined : value]),
+  );
+  cached = serverEnvSchema.parse(provided);
   return cached;
 };

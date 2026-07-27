@@ -207,7 +207,6 @@ if [ -f docker-compose.yml ]; then
   sed_inplace "s|^  template:|  ${PROJECT_NAME}:|g"                    docker-compose.yml
 fi
 if [ -f .env.example ]; then
-  sed_inplace "s|APP_NAME=template|APP_NAME=${PROJECT_NAME}|g"                         .env.example
   sed_inplace "s|/template|/${PROJECT_NAME}|g"                                          .env.example
   sed_inplace "s|AI_DEFAULT_PROVIDER=anthropic|AI_DEFAULT_PROVIDER=${AI_PROVIDER}|g"   .env.example
   sed_inplace "s|AUTH_METHOD=magic-link|AUTH_METHOD=${AUTH_METHOD}|g"                  .env.example
