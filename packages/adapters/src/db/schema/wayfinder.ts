@@ -4,6 +4,7 @@ import {
   boolean,
   check,
   customType,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -232,9 +233,12 @@ export const app_session_schedule_runs = pgTable(
   "app_session_schedule_runs",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-    schedule_id: uuid("schedule_id")
-      .notNull()
-      .references(() => app_session_schedules.id, { onDelete: "cascade" }),
+    // The foreign key is declared below with an explicit name: the one drizzle
+    // derives from the column (…_schedule_id_app_session_schedules_id_fk) is 65
+    // characters, and Postgres truncates identifiers at 63 — so the name in the
+    // database never matches the snapshot and drizzle-kit push re-creates the
+    // constraint on every run.
+    schedule_id: uuid("schedule_id").notNull(),
     session_id: uuid("session_id")
       .notNull()
       .references(() => app_sessions.id, { onDelete: "cascade" }),
@@ -255,6 +259,11 @@ export const app_session_schedule_runs = pgTable(
   (t) => ({
     by_created: index("app_session_schedule_runs_created_at_idx").on(t.created_at),
     by_schedule: index("app_session_schedule_runs_schedule_id_idx").on(t.schedule_id),
+    schedule_fk: foreignKey({
+      columns: [t.schedule_id],
+      foreignColumns: [app_session_schedules.id],
+      name: "app_session_schedule_runs_schedule_id_fk",
+    }).onDelete("cascade"),
   }),
 );
 
@@ -406,10 +415,9 @@ export const app_session_approvals = pgTable(
     approver_source: text("approver_source", {
       enum: ["first_level_supervisor", "second_level_supervisor", "dynamic"],
     }).notNull(),
-    suggested_approver_user_id: uuid("suggested_approver_user_id").references(
-      () => core_users.id,
-      { onDelete: "set null" },
-    ),
+    // The foreign key is declared below with an explicit name, for the same
+    // 63-character reason as app_session_schedule_runs.schedule_id.
+    suggested_approver_user_id: uuid("suggested_approver_user_id"),
     approver_user_id: uuid("approver_user_id").references(() => core_users.id, {
       onDelete: "set null",
     }),
@@ -435,6 +443,11 @@ export const app_session_approvals = pgTable(
       t.status,
     ),
     by_session: index("app_session_approvals_session_id_idx").on(t.session_id),
+    suggested_approver_fk: foreignKey({
+      columns: [t.suggested_approver_user_id],
+      foreignColumns: [core_users.id],
+      name: "app_session_approvals_suggested_approver_user_id_fk",
+    }).onDelete("set null"),
   }),
 );
 
