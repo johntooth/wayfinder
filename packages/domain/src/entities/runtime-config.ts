@@ -26,6 +26,15 @@ export interface StorageConfig {
   accessKey: string;
   secretKey: string;
   bucket: string;
+  // Empty for MinIO and most S3-compatible servers, which ignore it. Amazon S3
+  // signs with the bucket's region: leaving it blank makes the client spend a
+  // GetBucketLocation round trip per bucket to discover it, which fails outright
+  // when the credentials are not granted s3:GetBucketLocation.
+  region: string;
+  // Path-style addressing (`host/bucket/key`) is what MinIO serves. Amazon S3
+  // deprecated it in favour of virtual-hosted style (`bucket.host/key`), which
+  // newer buckets require, so real S3 deployments need this off.
+  pathStyle: boolean;
 }
 
 // Whether object storage has enough to attempt a connection. Drives the setup
@@ -35,7 +44,10 @@ export const isStorageConfigured = (config: StorageConfig): boolean =>
   config.endpoint.length > 0 &&
   config.accessKey.length > 0 &&
   config.secretKey.length > 0 &&
-  config.bucket.length > 0;
+  config.bucket.length > 0 &&
+  // Virtual-hosted addressing means Amazon S3, which cannot sign a request
+  // without knowing the bucket's region.
+  (config.pathStyle || config.region.length > 0);
 
 // Whether the selected AI provider has the credential it needs.
 export const isAiConfigured = (config: AiConfig): boolean => {

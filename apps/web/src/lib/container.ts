@@ -319,6 +319,8 @@ const build = () => {
       accessKey: env.MINIO_ACCESS_KEY,
       secretKey: env.MINIO_SECRET_KEY,
       bucket: env.MINIO_BUCKET,
+      region: env.MINIO_REGION,
+      pathStyle: env.MINIO_PATH_STYLE,
     },
     embeddingsProvider: env.EMBEDDINGS_PROVIDER,
     entra:

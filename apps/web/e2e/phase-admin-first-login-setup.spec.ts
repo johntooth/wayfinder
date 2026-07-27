@@ -6,30 +6,37 @@ import { expect, test } from "./helpers/base";
 // excluded from the vitest unit run. The standard e2e stack already has an
 // admin, which lets us exercise the user-visible contracts:
 //
-//   1. Happy path — the wizard is re-openable from admin Settings, forks on the
-//      one/multiple-organisation choice, gates its required step on storage and
-//      AI being configured, and finishes on a completion message.
-//   2. Skip path — skipping the required step warns before exiting.
-//   3. Error/self-disabling path — once an admin exists the public /setup
-//      bootstrap screen is no longer reachable and redirects to sign-in.
+//   1. Step 1 forks on the one/multiple-organisation choice and Continue
+//      commits it without a separate Save.
+//   2. Step 2 blocks until each requirement passes its live connectivity test —
+//      being "configured" is not enough, because the storage settings carry env
+//      defaults that read as configured on a machine with no storage at all.
+//   3. Skipping that step warns before exiting.
+//   4. Once an admin exists the public /setup bootstrap screen self-disables.
+//
+// Step 3's completion screen has no e2e path: reaching it needs a passing AI
+// connectivity probe, which runs server-side against the real provider API and
+// so cannot pass with CI's placeholder key. Its gate logic is covered by
+// `src/components/onboarding/wizard-requirements.test.ts`.
 
 const SETTINGS_PATH = process.env.E2E_SETTINGS_PATH ?? "/admin/settings";
 
+// Opens the wizard from admin Settings and returns its dialog container. The
+// wizard reuses settings cards the page behind it also renders, so every element
+// lookup has to be scoped to the dialog to stay unambiguous.
+const openWizard = async (page: import("@playwright/test").Page) => {
+  await page.goto(SETTINGS_PATH);
+  await page.getByTestId("rerun-setup").click();
+  return page.getByTestId("setup-wizard");
+};
+
 test.describe("admin first-login setup wizard", () => {
-  test("re-run setup walks the three steps and finishes", async ({ page }) => {
-    await page.goto(SETTINGS_PATH);
-
-    // Re-run entry point (never clears the completion flag).
-    await page.getByTestId("rerun-setup").click();
-
-    // The wizard reuses settings cards the page behind it also renders, so every
-    // element lookup is scoped to the dialog to stay unambiguous.
-    const wizard = page.getByTestId("setup-wizard");
+  test("step 1 forks on the deployment choice and Continue commits it", async ({ page }) => {
+    const wizard = await openWizard(page);
     const title = page.getByTestId("setup-wizard-title");
     await expect(title).toContainText("Step 1 of 3: Deployment");
 
-    // Step 1 is a fork, not a toggle: Continue stays disabled until the admin
-    // picks a deployment shape.
+    // A fork, not a toggle: Continue stays disabled until a shape is picked.
     const continueButton = page.getByTestId("wizard-continue");
     await expect(continueButton).toBeDisabled();
 
@@ -41,38 +48,11 @@ test.describe("admin first-login setup wizard", () => {
 
     await continueButton.click();
     await expect(title).toContainText("Step 2 of 3: Required setup");
-
-    // Both requirements are satisfied in the e2e stack, so each shows the
-    // configured indicator and Continue is available.
-    await expect(page.getByTestId("wizard-requirement-storage")).toHaveAttribute(
-      "data-satisfied",
-      "true",
-    );
-    await expect(page.getByTestId("wizard-requirement-ai")).toHaveAttribute(
-      "data-satisfied",
-      "true",
-    );
-
-    await continueButton.click();
-    await expect(title).toContainText("Step 3 of 3: Done");
-
-    // The final step is a completion message only — no feature toggles, and no
-    // skip. Synthesise Information ships on by default with nothing to opt into.
-    await expect(page.getByTestId("wizard-complete")).toContainText("Setup complete");
-    await expect(page.getByTestId("wizard-complete")).toContainText("Configuration pages");
-    await expect(wizard.locator("#wizard-flag-skills")).toHaveCount(0);
-    await expect(wizard.locator("#wizard-flag-mcp")).toHaveCount(0);
-    await expect(wizard.getByTestId("wizard-skip")).toHaveCount(0);
-
-    await page.getByTestId("wizard-finish").click();
-    await expect(title).toHaveCount(0);
   });
 
   test("choosing multiple organisations asks which one the admin belongs to", async ({ page }) => {
-    await page.goto(SETTINGS_PATH);
-    await page.getByTestId("rerun-setup").click();
+    const wizard = await openWizard(page);
 
-    const wizard = page.getByTestId("setup-wizard");
     await page.getByTestId("wizard-deployment-multi").click();
 
     const nameField = wizard.locator("#wizard-multi-org-name");
@@ -84,9 +64,28 @@ test.describe("admin first-login setup wizard", () => {
     await expect(wizard.locator("#org-name")).toHaveCount(0);
   });
 
+  test("the required step blocks until each requirement passes its live test", async ({ page }) => {
+    const wizard = await openWizard(page);
+    await page.getByTestId("wizard-deployment-single").click();
+    await page.getByTestId("wizard-continue").click();
+    await expect(page.getByTestId("setup-wizard-title")).toContainText("Step 2 of 3");
+
+    // Storage reads as configured from its env defaults, but nothing has been
+    // tested yet, so neither requirement is satisfied and Continue is blocked.
+    const storage = page.getByTestId("wizard-requirement-storage");
+    const ai = page.getByTestId("wizard-requirement-ai");
+    await expect(storage).toHaveAttribute("data-state", "untested");
+    await expect(ai).toHaveAttribute("data-satisfied", "false");
+    await expect(page.getByTestId("wizard-continue")).toBeDisabled();
+
+    // Testing storage against the stack's MinIO satisfies that half only.
+    await wizard.getByTestId("test-connectivity-storage").click();
+    await expect(storage).toHaveAttribute("data-satisfied", "true", { timeout: 15000 });
+    await expect(page.getByTestId("wizard-continue")).toBeDisabled();
+  });
+
   test("skipping the required step warns before leaving setup", async ({ page }) => {
-    await page.goto(SETTINGS_PATH);
-    await page.getByTestId("rerun-setup").click();
+    await openWizard(page);
 
     await page.getByTestId("wizard-deployment-single").click();
     await page.getByTestId("wizard-continue").click();

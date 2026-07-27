@@ -4,6 +4,7 @@ import { domainError, err, ok, type StorageConfig } from "@rbrasier/domain";
 import type { IObjectStorage } from "@rbrasier/domain";
 import type { Result } from "@rbrasier/domain";
 import { RuntimeConfigStore } from "../config/runtime-config-store";
+import { minioClientOptions } from "./minio-client-options";
 
 export class MinioStorageAdapter implements IObjectStorage {
   private cachedClient: { client: Client; bucket: string; version: number } | null = null;
@@ -81,15 +82,7 @@ export class MinioStorageAdapter implements IObjectStorage {
   }
 }
 
-const buildClient = (config: StorageConfig): Client =>
-  new Client({
-    endPoint: config.endpoint,
-    port: config.port,
-    useSSL: config.useSSL,
-    accessKey: config.accessKey,
-    secretKey: config.secretKey,
-    pathStyle: true,
-  });
+const buildClient = (config: StorageConfig): Client => new Client(minioClientOptions(config));
 
 function streamToBuffer(stream: Readable): Promise<Buffer> {
   return new Promise((resolve, reject) => {

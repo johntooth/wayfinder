@@ -159,6 +159,8 @@ export const buildContainer = (env: Env) => {
       accessKey: "minioadmin",
       secretKey: "minioadmin",
       bucket: "wayfinder-documents",
+      region: "",
+      pathStyle: true,
     },
     embeddingsProvider: EMBEDDINGS_DEFAULT_PROVIDER,
   });

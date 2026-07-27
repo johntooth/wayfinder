@@ -17,6 +17,8 @@ const storage = (overrides: Partial<StorageConfig> = {}): StorageConfig => ({
   accessKey: "key",
   secretKey: "secret",
   bucket: "wayfinder",
+  region: "",
+  pathStyle: true,
   ...overrides,
 });
 
@@ -35,6 +37,15 @@ describe("isStorageConfigured", () => {
   it("is false when a credential is blank", () => {
     expect(isStorageConfigured(storage({ accessKey: "" }))).toBe(false);
     expect(isStorageConfigured(storage({ bucket: "" }))).toBe(false);
+  });
+
+  it("does not require a region for a path-style (MinIO) endpoint", () => {
+    expect(isStorageConfigured(storage({ region: "" }))).toBe(true);
+  });
+
+  it("requires a region once path-style is off, since Amazon S3 signs with it", () => {
+    expect(isStorageConfigured(storage({ pathStyle: false, region: "" }))).toBe(false);
+    expect(isStorageConfigured(storage({ pathStyle: false, region: "eu-west-2" }))).toBe(true);
   });
 });
 

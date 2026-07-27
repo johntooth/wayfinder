@@ -47,6 +47,8 @@ const makeAdapter = () => {
       accessKey: "minioadmin",
       secretKey: "minioadmin",
       bucket: "wayfinder-documents",
+      region: "",
+      pathStyle: true,
     },
   });
   return new MinioStorageAdapter(store);

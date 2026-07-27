@@ -1,4 +1,4 @@
-import { AI_CONFIG_SETTING_KEY, isAiConfigured, type Result } from "@rbrasier/domain";
+import type { Result } from "@rbrasier/domain";
 import { schema } from "@rbrasier/adapters";
 import { eq, inArray } from "drizzle-orm";
 import type { Container } from "./container";
@@ -435,26 +435,6 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     await container.useCases.completeOnboarding.execute(),
     "mark onboarding complete",
   );
-
-  // The setup wizard's required-setup step keeps Continue disabled until an AI
-  // provider is configured. ANTHROPIC_API_KEY comes from an optional CI secret,
-  // so on runs without it no key is stored and that gate never opens. Seed a
-  // placeholder only when nothing is configured — real-AI runs keep their key.
-  const aiConfig = await container.runtimeConfig.getAiConfig();
-  if (!isAiConfigured(aiConfig)) {
-    unwrap(
-      await container.repos.systemSettings.set(
-        AI_CONFIG_SETTING_KEY,
-        JSON.stringify({
-          ...aiConfig,
-          provider: "anthropic",
-          apiKeys: { ...aiConfig.apiKeys, anthropic: "e2e-placeholder-key" },
-        }),
-      ),
-      "seed ai config",
-    );
-    container.runtimeConfig.invalidateAi();
-  }
 
   // Skills and MCP default OFF for a fresh install (ADR-041 §4). The e2e suite
   // exercises both features, so enable their flags for the test environment;

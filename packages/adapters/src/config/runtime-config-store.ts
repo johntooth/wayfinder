@@ -163,6 +163,10 @@ const parseStorageConfig = (raw: string, fallback: StorageConfig): StorageConfig
       accessKey: typeof parsed.accessKey === "string" && parsed.accessKey.length > 0 ? parsed.accessKey : fallback.accessKey,
       secretKey: typeof parsed.secretKey === "string" && parsed.secretKey.length > 0 ? parsed.secretKey : fallback.secretKey,
       bucket: typeof parsed.bucket === "string" && parsed.bucket.length > 0 ? parsed.bucket : fallback.bucket,
+      // Region is legitimately empty for MinIO, so an empty string is a value to
+      // honour rather than a gap to fill from the fallback.
+      region: typeof parsed.region === "string" ? parsed.region : fallback.region,
+      pathStyle: typeof parsed.pathStyle === "boolean" ? parsed.pathStyle : fallback.pathStyle,
     };
   } catch {
     return fallback;

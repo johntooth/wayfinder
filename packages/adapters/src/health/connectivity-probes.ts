@@ -1,4 +1,5 @@
 import { Client as MinioClient } from "minio";
+import { minioClientOptions } from "../storage/minio-client-options";
 import type {
   AiConfig,
   ConnectivityResult,
@@ -140,14 +141,7 @@ interface BucketProbeClient {
 export type MinioClientFactory = (config: StorageConfig) => BucketProbeClient;
 
 export const defaultMinioClientFactory: MinioClientFactory = (config) =>
-  new MinioClient({
-    endPoint: config.endpoint,
-    port: config.port,
-    useSSL: config.useSSL,
-    accessKey: config.accessKey,
-    secretKey: config.secretKey,
-    pathStyle: true,
-  });
+  new MinioClient(minioClientOptions(config));
 
 export interface StorageProbeDeps {
   clientFactory?: MinioClientFactory;

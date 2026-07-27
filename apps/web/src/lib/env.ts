@@ -123,6 +123,13 @@ const serverEnvSchema = z.object({
     .string()
     .transform((v) => v === "true")
     .default("false"),
+  // Ignored by MinIO; required by Amazon S3, which signs with the bucket region.
+  MINIO_REGION: z.string().default(""),
+  // MinIO serves path-style addressing; Amazon S3 wants virtual-hosted style.
+  MINIO_PATH_STYLE: z
+    .string()
+    .transform((v) => v !== "false")
+    .default("true"),
   // Email notifications (ADR-023). When SMTP_TRANSPORT_MODE is set the env
   // transport takes precedence over the admin-settings SMTP config.
   NOTIFICATIONS_ENABLED: z

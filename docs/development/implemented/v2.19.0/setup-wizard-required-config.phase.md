@@ -41,7 +41,13 @@ configuration modal to the fields that apply to the selected provider.
 | web (UI) | `components/settings/ai-provider-card.tsx` | Modal shows only the selected provider's credentials; card summary likewise. |
 | web (UI) | `components/settings/organisation-name-card.tsx` | Optional `onValueChange` so the wizard can auto-save on Continue; placeholder is now `e.g. Acme Corporation`. |
 | web (UI) | `components/settings/storage-card.tsx`, `ai-provider-card.tsx` | Saving also invalidates `getSetupStatus`, so the step-2 gate reopens as soon as a requirement is met. |
-| web (test) | `lib/e2e-fixtures.ts` | Seeds a placeholder AI key when nothing is configured, so the step-2 gate is deterministic on CI runs without the `ANTHROPIC_API_KEY` secret. |
+| web (UI) | `components/onboarding/wizard-requirements.ts` | New. Pure resolution of a requirement's state from configured + probe status, and whether that state may pass the gate. Unit tested. |
+| domain | `entities/runtime-config.ts` | `StorageConfig` gains `region` and `pathStyle`. `isStorageConfigured` additionally requires a region once `pathStyle` is off. Tests first. |
+| adapters | `storage/minio-client-options.ts` | New. Shared client options builder used by both the storage adapter and the connectivity probe, which each previously hardcoded `pathStyle: true`. Tests first. |
+| adapters | `config/runtime-config-store.ts` | `parseStorageConfig` reads the two new fields; an empty region is honoured rather than replaced from the fallback. |
+| web | `lib/env.ts`, `lib/container.ts` | `MINIO_REGION` (default empty) and `MINIO_PATH_STYLE` (default true), threaded into the env defaults. |
+| web (tRPC) | `server/routers/settings.ts` | Storage input schema gains both fields and refuses a blank region when `pathStyle` is off. |
+| web (UI) | `components/settings/storage-card.tsx` | Storage-type selector (MinIO / S3-compatible vs Amazon S3) driving `pathStyle`, plus a region field. |
 
 ## 3. Deployment fork (step 1)
 
@@ -53,12 +59,29 @@ zero organisations in the database is not a coherent state to leave setup in.
 
 ## 4. Required configuration (step 2)
 
-`settings.getSetupStatus` already reported per-requirement configured state and
-was unused by the wizard; it now drives both the indicators and the Continue
-gate. "Configured" means a value is present from env or the database — the same
-meaning it had before; the wizard does not require a passing connectivity test.
+Gating on "configured" alone is not a gate at all: every storage field carries an
+env default (`localhost`, `minioadmin`, `wayfinder-documents`), so a fresh
+install with no object storage anywhere reads as fully configured. ADR-041 §2
+always said the wizard should require the live Test — this implements that.
 
-## 5. Out of scope
+A requirement passes when it is configured **and** its probe returned `ok`, or
+when the probe reports itself unsupported. The second case is load-bearing:
+`probeAiConnectivity` deliberately skips Bedrock, because a real check needs
+SigV4-signed control-plane calls, so gating strictly on `ok` would lock every
+Bedrock install out of setup permanently.
+
+## 5. Amazon S3 addressing
+
+`StorageConfig` previously described only what MinIO needs, and both client
+construction sites hardcoded `pathStyle: true`. That is correct for MinIO and
+wrong for Amazon S3, which deprecated path-style addressing. Two fields close the
+gap — `region`, which S3 signs with, and `pathStyle` — surfaced in the UI as a
+single storage-type choice rather than as two settings an admin has to reason
+about. The region is omitted from the client options entirely when blank, since
+the client signs with whatever it is given and an empty region would break
+requests that its own per-bucket discovery would otherwise handle.
+
+## 6. Out of scope
 
 - No schema migration. Every value written here is existing runtime settings state.
 - Feature-flag defaults are unchanged: `extraction_flows` on, `skills`/`mcp` off.

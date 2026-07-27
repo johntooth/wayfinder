@@ -72,14 +72,22 @@ const aiConfigInputSchema = z.object({
   }),
 });
 
-const storageConfigInputSchema = z.object({
-  endpoint: z.string().min(1),
-  port: z.number().int().min(1).max(65535),
-  useSSL: z.boolean(),
-  accessKey: z.string().min(1),
-  secretKey: z.string().min(1),
-  bucket: z.string().min(1),
-});
+const storageConfigInputSchema = z
+  .object({
+    endpoint: z.string().min(1),
+    port: z.number().int().min(1).max(65535),
+    useSSL: z.boolean(),
+    accessKey: z.string().min(1),
+    secretKey: z.string().min(1),
+    bucket: z.string().min(1),
+    // Legitimately blank for MinIO, which ignores it.
+    region: z.string(),
+    pathStyle: z.boolean(),
+  })
+  .refine((config) => config.pathStyle || config.region.length > 0, {
+    message: "A region is required for virtual-hosted addressing (Amazon S3).",
+    path: ["region"],
+  });
 
 const n8nConfigInputSchema = z.object({
   baseUrl: z.string().url(),

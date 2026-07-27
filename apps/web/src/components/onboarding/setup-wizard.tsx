@@ -18,6 +18,7 @@ import { AuthMethodsCard } from "@/components/settings/auth-methods-card";
 import { trpc } from "@/trpc/client";
 import { WizardDeploymentStep, type DeploymentMode } from "./wizard-deployment-step";
 import { WizardRequirement } from "./wizard-requirement";
+import { isRequirementSatisfied, resolveRequirement } from "./wizard-requirements";
 import { WizardSkipDialog } from "./wizard-skip-dialog";
 
 type Props = {
@@ -65,9 +66,18 @@ export function SetupWizard({ forceOpen = false, onClose }: Props) {
   const shouldOpen = forceOpen || (!onboardingQuery.data?.completed && !onboardingQuery.isLoading);
   const open = shouldOpen && !manuallyClosed;
 
-  const storageReady = setupStatusQuery.data?.storage.configured ?? false;
-  const aiReady = setupStatusQuery.data?.ai.configured ?? false;
-  const requiredReady = storageReady && aiReady;
+  // "Configured" alone cannot gate this step: every storage field has an env
+  // default, so a fresh install reads as configured with nothing set up. The
+  // live Test is the only signal those defaults cannot fake (ADR-041 §2).
+  const storageState = resolveRequirement(
+    setupStatusQuery.data?.storage.configured ?? false,
+    connectivity.states.storage?.status,
+  );
+  const aiState = resolveRequirement(
+    setupStatusQuery.data?.ai.configured ?? false,
+    connectivity.states.ai?.status,
+  );
+  const requiredReady = isRequirementSatisfied(storageState) && isRequirementSatisfied(aiState);
 
   const close = (): void => {
     setManuallyClosed(true);
@@ -159,13 +169,15 @@ export function SetupWizard({ forceOpen = false, onClose }: Props) {
             {step === 1 && (
               <div className="space-y-4">
                 <StepIntro>
-                  Wayfinder needs object storage and an AI provider before it can run anything. Save
-                  both to continue, or skip and configure them later.
+                  Wayfinder needs object storage and an AI provider before it can run anything.
+                  Configure each below and use its Test connectivity button to confirm it works —
+                  the settings carry defaults that may not match your environment. Or skip and
+                  configure them later.
                 </StepIntro>
                 <div className="space-y-2">
                   <WizardRequirement
                     label="Object storage"
-                    satisfied={storageReady}
+                    state={storageState}
                     testId="wizard-requirement-storage"
                   />
                   <StorageCard connectivity={connectivity} />
@@ -173,7 +185,7 @@ export function SetupWizard({ forceOpen = false, onClose }: Props) {
                 <div className="space-y-2">
                   <WizardRequirement
                     label="AI provider"
-                    satisfied={aiReady}
+                    state={aiState}
                     testId="wizard-requirement-ai"
                   />
                   <AiProviderCard connectivity={connectivity} />
