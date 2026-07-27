@@ -135,7 +135,9 @@ export function SetupWizard({ forceOpen = false, onClose }: Props) {
   return (
     <>
       <Dialog open={open} onOpenChange={(next) => (!next ? close() : undefined)}>
-        <DialogContent className="max-w-2xl">
+        {/* The wizard reuses settings cards that the page behind it also
+            renders, so specs need a stable container to scope queries to. */}
+        <DialogContent className="max-w-2xl" data-testid="setup-wizard">
           <DialogHeader>
             <DialogTitle data-testid="setup-wizard-title">
               Set up Wayfinder — Step {step + 1} of 3: {STEP_TITLES[step]}

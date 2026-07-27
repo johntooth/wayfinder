@@ -22,6 +22,9 @@ test.describe("admin first-login setup wizard", () => {
     // Re-run entry point (never clears the completion flag).
     await page.getByTestId("rerun-setup").click();
 
+    // The wizard reuses settings cards the page behind it also renders, so every
+    // element lookup is scoped to the dialog to stay unambiguous.
+    const wizard = page.getByTestId("setup-wizard");
     const title = page.getByTestId("setup-wizard-title");
     await expect(title).toContainText("Step 1 of 3: Deployment");
 
@@ -33,7 +36,7 @@ test.describe("admin first-login setup wizard", () => {
     // Choosing "one organisation" reveals the reused organisation name card;
     // Continue saves it without a separate Save press.
     await page.getByTestId("wizard-deployment-single").click();
-    await expect(page.locator("#org-name")).toBeVisible();
+    await expect(wizard.locator("#org-name")).toBeVisible();
     await expect(continueButton).toBeEnabled();
 
     await continueButton.click();
@@ -57,9 +60,9 @@ test.describe("admin first-login setup wizard", () => {
     // skip. Synthesise Information ships on by default with nothing to opt into.
     await expect(page.getByTestId("wizard-complete")).toContainText("Setup complete");
     await expect(page.getByTestId("wizard-complete")).toContainText("Configuration pages");
-    await expect(page.locator("#wizard-flag-skills")).toHaveCount(0);
-    await expect(page.locator("#wizard-flag-mcp")).toHaveCount(0);
-    await expect(page.getByTestId("wizard-skip")).toHaveCount(0);
+    await expect(wizard.locator("#wizard-flag-skills")).toHaveCount(0);
+    await expect(wizard.locator("#wizard-flag-mcp")).toHaveCount(0);
+    await expect(wizard.getByTestId("wizard-skip")).toHaveCount(0);
 
     await page.getByTestId("wizard-finish").click();
     await expect(title).toHaveCount(0);
@@ -69,14 +72,16 @@ test.describe("admin first-login setup wizard", () => {
     await page.goto(SETTINGS_PATH);
     await page.getByTestId("rerun-setup").click();
 
+    const wizard = page.getByTestId("setup-wizard");
     await page.getByTestId("wizard-deployment-multi").click();
 
-    const nameField = page.locator("#wizard-multi-org-name");
+    const nameField = wizard.locator("#wizard-multi-org-name");
     await expect(nameField).toBeVisible();
     await expect(nameField).toHaveAttribute("placeholder", "e.g. Acme Corporation");
 
-    // The single-organisation name card belongs to the other branch only.
-    await expect(page.locator("#org-name")).toHaveCount(0);
+    // The single-organisation name card belongs to the other branch only — the
+    // Settings page behind the wizard renders its own copy, so this is scoped.
+    await expect(wizard.locator("#org-name")).toHaveCount(0);
   });
 
   test("skipping the required step warns before leaving setup", async ({ page }) => {
