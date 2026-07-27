@@ -8,7 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";
 
-export function OrganisationNameCard() {
+// `onValueChange` lets the first-run wizard save the field when the admin clicks
+// Continue without having pressed Save — the settings page passes nothing and
+// keeps the Save-only behaviour.
+export function OrganisationNameCard({
+  onValueChange,
+}: {
+  onValueChange?: (value: string) => void;
+}) {
   const orgNameQuery = trpc.settings.get.useQuery({ key: "organisation_name" });
   const setMutation = trpc.settings.set.useMutation({
     onSuccess: () => toast.success("Organisation name saved"),
@@ -20,8 +27,14 @@ export function OrganisationNameCard() {
   useEffect(() => {
     if (orgNameQuery.data?.value !== undefined) {
       setValue(orgNameQuery.data.value);
+      onValueChange?.(orgNameQuery.data.value);
     }
-  }, [orgNameQuery.data?.value]);
+  }, [orgNameQuery.data?.value, onValueChange]);
+
+  const handleChange = (next: string) => {
+    setValue(next);
+    onValueChange?.(next);
+  };
 
   const handleSave = () => {
     setMutation.mutate({ key: "organisation_name", value: value.trim() });
@@ -41,8 +54,8 @@ export function OrganisationNameCard() {
           <Input
             id="org-name"
             value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder="e.g. Acme Legal"
+            onChange={(e) => handleChange(e.target.value)}
+            placeholder="e.g. Acme Corporation"
             disabled={orgNameQuery.isLoading}
             // Password managers / autofill inject attributes (e.g. caret-color,
             // fdprocessedid) onto inputs after SSR, producing a benign dev-mode
@@ -50,10 +63,7 @@ export function OrganisationNameCard() {
             suppressHydrationWarning
           />
         </div>
-        <Button
-          onClick={handleSave}
-          disabled={setMutation.isPending || orgNameQuery.isLoading}
-        >
+        <Button onClick={handleSave} disabled={setMutation.isPending || orgNameQuery.isLoading}>
           {setMutation.isPending ? "Saving…" : "Save"}
         </Button>
       </CardContent>

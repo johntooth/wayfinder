@@ -42,7 +42,7 @@ interface ProviderEntry {
  */
 const PROVIDERS = {
   anthropic: {
-    defaultModel: "claude-haiku-4-5-20251001",
+    defaultModel: "claude-sonnet-5",
     resolve: (model: string, credentials: ProviderCredentials) => {
       const apiKey = requireStringOrNull(credentials, "anthropic");
       return createAnthropic(apiKey ? { apiKey } : {})(model);
@@ -63,7 +63,7 @@ const PROVIDERS = {
     },
   },
   bedrock: {
-    defaultModel: "anthropic.claude-sonnet-4-5-20250929-v1:0",
+    defaultModel: "anthropic.claude-sonnet-5",
     resolve: (model: string, credentials: ProviderCredentials) => {
       const creds = requireBedrockOrNull(credentials);
       return createAmazonBedrock(creds ?? {})(model);

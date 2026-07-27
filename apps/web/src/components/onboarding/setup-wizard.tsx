@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,14 +12,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useConnectivity } from "@/components/settings/connectivity";
-import { OrganisationNameCard } from "@/components/settings/organisation-name-card";
 import { StorageCard } from "@/components/settings/storage-card";
 import { AiProviderCard } from "@/components/settings/ai-provider-card";
 import { AuthMethodsCard } from "@/components/settings/auth-methods-card";
-import { EmailCard } from "@/components/settings/email-card";
-import { ExtractionConfigCard } from "@/components/settings/extraction-config-card";
-import { N8nIntegrationCard } from "@/components/settings/n8n-integration-card";
 import { trpc } from "@/trpc/client";
+import { WizardDeploymentStep, type DeploymentMode } from "./wizard-deployment-step";
+import { WizardRequirement } from "./wizard-requirement";
+import { WizardSkipDialog } from "./wizard-skip-dialog";
 
 type Props = {
   // When true, the wizard opens from the admin Settings "Re-run setup" control
@@ -29,55 +29,11 @@ type Props = {
 
 type StepIndex = 0 | 1 | 2;
 
-const STEP_TITLES = ["Deployment", "Setup", "Site options"] as const;
-
-// The state each wizard-offered flag ships in. Only consulted while the flag
-// list query is in flight or if a key is missing entirely — ListFeatureFlags
-// merges these same defaults server-side.
-const FLAG_SHIPPED_ENABLED: Record<string, boolean> = {
-  skills: false,
-  mcp: false,
-  extraction_flows: true,
-};
+const STEP_TITLES = ["Deployment", "Required setup", "Done"] as const;
 
 // A short explainer shown above each step's reused settings cards.
 function StepIntro({ children }: { children: React.ReactNode }) {
   return <p className="text-sm text-muted-foreground">{children}</p>;
-}
-
-function ToggleRow({
-  id,
-  title,
-  explainer,
-  enabled,
-  onToggle,
-  disabled,
-}: {
-  id: string;
-  title: string;
-  explainer: string;
-  enabled: boolean;
-  onToggle: (next: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3 rounded-md border border-border p-3">
-      <div>
-        <label htmlFor={id} className="font-medium">
-          {title}
-        </label>
-        <span className="mt-1 block text-xs text-muted-foreground">{explainer}</span>
-      </div>
-      <input
-        id={id}
-        type="checkbox"
-        className="mt-1 h-4 w-4"
-        checked={enabled}
-        disabled={disabled}
-        onChange={(event) => onToggle(event.target.checked)}
-      />
-    </div>
-  );
 }
 
 export function SetupWizard({ forceOpen = false, onClose }: Props) {
@@ -85,11 +41,12 @@ export function SetupWizard({ forceOpen = false, onClose }: Props) {
   const onboardingQuery = trpc.settings.getOnboardingState.useQuery(undefined, {
     enabled: !forceOpen,
   });
-  const flagsQuery = trpc.featureFlag.list.useQuery();
-  const deploymentQuery = trpc.settings.getDeploymentConfig.useQuery();
+  const setupStatusQuery = trpc.settings.getSetupStatus.useQuery();
 
   const setDeployment = trpc.settings.setDeploymentConfig.useMutation();
-  const upsertFlag = trpc.featureFlag.upsert.useMutation();
+  const setOrganisationsEnabled = trpc.organisation.setEnabled.useMutation();
+  const setSetting = trpc.settings.set.useMutation();
+  const createOrganisation = trpc.organisation.createForSelf.useMutation();
   const completeOnboarding = trpc.settings.completeOnboarding.useMutation();
 
   // One shared connectivity controller so every reused card's Test button
@@ -98,16 +55,19 @@ export function SetupWizard({ forceOpen = false, onClose }: Props) {
 
   const [step, setStep] = useState<StepIndex>(0);
   const [manuallyClosed, setManuallyClosed] = useState(false);
-
-  const multiOrg = deploymentQuery.data?.multiOrganisation ?? false;
+  const [mode, setMode] = useState<DeploymentMode | null>(null);
+  const [singleOrganisationName, setSingleOrganisationName] = useState("");
+  const [multiOrganisationName, setMultiOrganisationName] = useState("");
+  const [organisationCreated, setOrganisationCreated] = useState(false);
+  const [skipWarningOpen, setSkipWarningOpen] = useState(false);
+  const [committing, setCommitting] = useState(false);
 
   const shouldOpen = forceOpen || (!onboardingQuery.data?.completed && !onboardingQuery.isLoading);
   const open = shouldOpen && !manuallyClosed;
 
-  const flagEnabled = useMemo(() => {
-    const map = new Map(flagsQuery.data?.map((flag) => [flag.key, flag.enabled]));
-    return (key: string) => map.get(key) ?? FLAG_SHIPPED_ENABLED[key] ?? false;
-  }, [flagsQuery.data]);
+  const storageReady = setupStatusQuery.data?.storage.configured ?? false;
+  const aiReady = setupStatusQuery.data?.ai.configured ?? false;
+  const requiredReady = storageReady && aiReady;
 
   const close = (): void => {
     setManuallyClosed(true);
@@ -120,139 +80,171 @@ export function SetupWizard({ forceOpen = false, onClose }: Props) {
     close();
   };
 
-  const toggleMultiOrg = async (next: boolean): Promise<void> => {
-    await setDeployment.mutateAsync({ multiOrganisation: next });
-    await utils.settings.getDeploymentConfig.invalidate();
+  // Step 1's Continue persists the deployment choice, so the admin never has to
+  // press Save separately. Returns false when the choice is incomplete.
+  const commitDeployment = async (): Promise<boolean> => {
+    if (mode === null) return false;
+
+    const multiOrganisation = mode === "multi";
+    await setDeployment.mutateAsync({ multiOrganisation });
+    await setOrganisationsEnabled.mutateAsync({ enabled: multiOrganisation });
+
+    if (mode === "single") {
+      const name = singleOrganisationName.trim();
+      if (name.length > 0) {
+        await setSetting.mutateAsync({ key: "organisation_name", value: name });
+      }
+    }
+
+    if (mode === "multi" && !organisationCreated) {
+      const name = multiOrganisationName.trim();
+      if (name.length === 0) {
+        toast.error("Enter the organisation you belong to");
+        return false;
+      }
+      await createOrganisation.mutateAsync({ name });
+      setOrganisationCreated(true);
+    }
+
+    await Promise.all([
+      utils.settings.getDeploymentConfig.invalidate(),
+      utils.organisation.isEnabled.invalidate(),
+      utils.settings.getSetupStatus.invalidate(),
+    ]);
+    return true;
   };
 
-  const toggleFlag = async (key: string, enabled: boolean): Promise<void> => {
-    await upsertFlag.mutateAsync({ key, enabled, rolloutPct: 100 });
-    await utils.featureFlag.list.invalidate();
+  const advance = async (): Promise<void> => {
+    if (step === 0) {
+      setCommitting(true);
+      try {
+        if (!(await commitDeployment())) return;
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not save your choice");
+        return;
+      } finally {
+        setCommitting(false);
+      }
+    }
+    setStep((current) => (current + 1) as StepIndex);
   };
+
+  const continueDisabled =
+    committing || (step === 0 ? mode === null : step === 1 ? !requiredReady : false);
 
   return (
-    <Dialog open={open} onOpenChange={(next) => (!next ? close() : undefined)}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle data-testid="setup-wizard-title">
-            Set up Wayfinder — Step {step + 1} of 3: {STEP_TITLES[step]}
-          </DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={(next) => (!next ? close() : undefined)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle data-testid="setup-wizard-title">
+              Set up Wayfinder — Step {step + 1} of 3: {STEP_TITLES[step]}
+            </DialogTitle>
+          </DialogHeader>
 
-        <DialogBody className="max-h-[70vh] space-y-4 overflow-y-auto">
-          {step === 0 && (
-            <div className="space-y-4">
-              <StepIntro>
-                Name the organisation using this installation, and indicate whether
-                more than one organisation will share it.
-              </StepIntro>
-              <OrganisationNameCard />
-              <ToggleRow
-                id="wizard-multi-org"
-                title="Multiple organisations"
-                explainer="Enable if several organisations share this installation. Configure how users are assigned from admin Settings → Organisations."
-                enabled={multiOrg}
-                onToggle={(next) => void toggleMultiOrg(next)}
-                disabled={setDeployment.isPending}
+          <DialogBody className="max-h-[70vh] space-y-4 overflow-y-auto">
+            {step === 0 && (
+              <WizardDeploymentStep
+                mode={mode}
+                onModeChange={setMode}
+                onSingleNameChange={setSingleOrganisationName}
+                multiOrganisationName={multiOrganisationName}
+                onMultiOrganisationNameChange={setMultiOrganisationName}
+                organisationCreated={organisationCreated}
               />
-            </div>
-          )}
-
-          {step === 1 && (
-            <div className="space-y-4">
-              <StepIntro>
-                Wayfinder needs object storage, an AI provider and a sign-in method.
-                Configure each below and use its Test button to confirm it connects. A
-                failed test warns but does not block you.
-              </StepIntro>
-              <StorageCard connectivity={connectivity} />
-              <AiProviderCard connectivity={connectivity} />
-              <AuthMethodsCard />
-            </div>
-          )}
-
-          {step === 2 && (
-            <div className="space-y-4">
-              <StepIntro>
-                These are optional — you can skip and configure them later from admin
-                Settings.
-              </StepIntro>
-              <EmailCard connectivity={connectivity} />
-              <N8nIntegrationCard connectivity={connectivity} />
-              <ToggleRow
-                id="wizard-flag-extraction-flows"
-                title="Synthesise Information"
-                explainer="Extract structured information from batches of documents and review the results. On by default; turn it off to hide the Synthesise Information surface."
-                enabled={flagEnabled("extraction_flows")}
-                onToggle={(next) => void toggleFlag("extraction_flows", next)}
-                disabled={upsertFlag.isPending}
-              />
-              {flagEnabled("extraction_flows") && <ExtractionConfigCard />}
-              <ToggleRow
-                id="wizard-flag-skills"
-                title="Skills"
-                explainer="Enable the Skills library and per-step skill selection. Off by default; configuring skills happens later."
-                enabled={flagEnabled("skills")}
-                onToggle={(next) => void toggleFlag("skills", next)}
-                disabled={upsertFlag.isPending}
-              />
-              <ToggleRow
-                id="wizard-flag-mcp"
-                title="MCP"
-                explainer="Enable MCP servers and tools in the flow builder. Off by default; connecting servers happens later."
-                enabled={flagEnabled("mcp")}
-                onToggle={(next) => void toggleFlag("mcp", next)}
-                disabled={upsertFlag.isPending}
-              />
-            </div>
-          )}
-        </DialogBody>
-
-        <DialogFooter className="flex items-center justify-between gap-2">
-          <div>
-            {step > 0 && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setStep((current) => (current - 1) as StepIndex)}
-              >
-                Back
-              </Button>
             )}
-          </div>
-          <div className="flex items-center gap-2">
+
+            {step === 1 && (
+              <div className="space-y-4">
+                <StepIntro>
+                  Wayfinder needs object storage and an AI provider before it can run anything. Save
+                  both to continue, or skip and configure them later.
+                </StepIntro>
+                <div className="space-y-2">
+                  <WizardRequirement
+                    label="Object storage"
+                    satisfied={storageReady}
+                    testId="wizard-requirement-storage"
+                  />
+                  <StorageCard connectivity={connectivity} />
+                </div>
+                <div className="space-y-2">
+                  <WizardRequirement
+                    label="AI provider"
+                    satisfied={aiReady}
+                    testId="wizard-requirement-ai"
+                  />
+                  <AiProviderCard connectivity={connectivity} />
+                </div>
+                <AuthMethodsCard />
+              </div>
+            )}
+
             {step === 2 && (
-              <Button
-                type="button"
-                variant="outline"
-                data-testid="wizard-skip"
-                onClick={() => void finish()}
-              >
-                Skip
-              </Button>
+              <div className="space-y-3" data-testid="wizard-complete">
+                <p className="text-sm font-medium">Setup complete.</p>
+                <StepIntro>
+                  Wayfinder is ready to use. Advanced options — including Skills, MCP, n8n and email
+                  integration — can be configured at any time from the Configuration pages.
+                </StepIntro>
+              </div>
             )}
-            {step < 2 && (
-              <Button
-                type="button"
-                data-testid="wizard-continue"
-                onClick={() => setStep((current) => (current + 1) as StepIndex)}
-              >
-                Continue
-              </Button>
-            )}
-            {step === 2 && (
-              <Button
-                type="button"
-                data-testid="wizard-finish"
-                onClick={() => void finish()}
-                disabled={completeOnboarding.isPending}
-              >
-                Finish
-              </Button>
-            )}
-          </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          </DialogBody>
+
+          <DialogFooter className="flex items-center justify-between gap-2">
+            <div>
+              {step > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setStep((current) => (current - 1) as StepIndex)}
+                >
+                  Back
+                </Button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {step === 1 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  data-testid="wizard-skip"
+                  onClick={() => setSkipWarningOpen(true)}
+                >
+                  Skip
+                </Button>
+              )}
+              {step < 2 && (
+                <Button
+                  type="button"
+                  data-testid="wizard-continue"
+                  onClick={() => void advance()}
+                  disabled={continueDisabled}
+                >
+                  Continue
+                </Button>
+              )}
+              {step === 2 && (
+                <Button
+                  type="button"
+                  data-testid="wizard-finish"
+                  onClick={() => void finish()}
+                  disabled={completeOnboarding.isPending}
+                >
+                  Finish
+                </Button>
+              )}
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <WizardSkipDialog
+        open={skipWarningOpen}
+        onOpenChange={setSkipWarningOpen}
+        onConfirm={() => void finish()}
+        confirming={completeOnboarding.isPending}
+      />
+    </>
   );
 }

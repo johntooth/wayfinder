@@ -4,7 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogBody, DialogCloseButton, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";
@@ -16,7 +24,12 @@ export function StorageCard({ connectivity }: { connectivity: ConnectivityContro
   const saveMutation = trpc.settings.setStorageConfig.useMutation({
     onSuccess: async () => {
       toast.success("Storage configuration saved");
-      await utils.settings.getStorageConfig.invalidate();
+      // getSetupStatus gates the first-run wizard's Continue on this being
+      // configured, so it has to refresh alongside the config itself.
+      await Promise.all([
+        utils.settings.getStorageConfig.invalidate(),
+        utils.settings.getSetupStatus.invalidate(),
+      ]);
       setOpen(false);
     },
     onError: (error) => toast.error(error.message ?? "Failed to save storage configuration"),
@@ -95,9 +108,10 @@ export function StorageCard({ connectivity }: { connectivity: ConnectivityContro
             </div>
           </>
         )}
-        {config && Boolean(config.endpoint && config.accessKey && config.secretKey && config.bucket) && (
-          <ConnectivityTest target="storage" controller={connectivity} />
-        )}
+        {config &&
+          Boolean(config.endpoint && config.accessKey && config.secretKey && config.bucket) && (
+            <ConnectivityTest target="storage" controller={connectivity} />
+          )}
       </CardContent>
 
       <Dialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
@@ -144,11 +158,19 @@ export function StorageCard({ connectivity }: { connectivity: ConnectivityContro
             </div>
             <div className="space-y-1">
               <Label htmlFor="storage-bucket">Bucket</Label>
-              <Input id="storage-bucket" value={bucket} onChange={(e) => setBucket(e.target.value)} />
+              <Input
+                id="storage-bucket"
+                value={bucket}
+                onChange={(e) => setBucket(e.target.value)}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="storage-access">Access key</Label>
-              <Input id="storage-access" value={accessKey} onChange={(e) => setAccessKey(e.target.value)} />
+              <Input
+                id="storage-access"
+                value={accessKey}
+                onChange={(e) => setAccessKey(e.target.value)}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="storage-secret">Secret key</Label>
@@ -162,7 +184,11 @@ export function StorageCard({ connectivity }: { connectivity: ConnectivityContro
             </div>
           </DialogBody>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setOpen(false)} disabled={saveMutation.isPending}>
+            <Button
+              variant="ghost"
+              onClick={() => setOpen(false)}
+              disabled={saveMutation.isPending}
+            >
               Cancel
             </Button>
             <Button onClick={handleSave} disabled={saveMutation.isPending}>

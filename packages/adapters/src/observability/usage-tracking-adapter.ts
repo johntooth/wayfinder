@@ -21,6 +21,8 @@ interface ModelRates {
 // Prices in USD per token. Update when providers change rates.
 const MODEL_RATES: Record<string, ModelRates> = {
   // Anthropic — https://anthropic.com/pricing
+  "claude-opus-5":              { prompt: 0.000005,    completion: 0.000025,   cacheRead: 0.0000005,    cacheWrite: 0.00000625 },
+  "claude-sonnet-5":            { prompt: 0.000003,    completion: 0.000015,   cacheRead: 0.0000003,    cacheWrite: 0.000003750 },
   "claude-opus-4-7":            { prompt: 0.000015,    completion: 0.000075,   cacheRead: 0.0000015,    cacheWrite: 0.00001875 },
   "claude-sonnet-4-6":          { prompt: 0.000003,    completion: 0.000015,   cacheRead: 0.0000003,    cacheWrite: 0.000003750 },
   "claude-sonnet-4-20250514":   { prompt: 0.000003,    completion: 0.000015,   cacheRead: 0.0000003,    cacheWrite: 0.000003750 },
@@ -34,6 +36,8 @@ const MODEL_RATES: Record<string, ModelRates> = {
   "mistral-small-latest":       { prompt: 0.0000001,   completion: 0.0000003,  cacheRead: 0.0000001,    cacheWrite: 0.0000001 },
   // Bedrock — Anthropic models served through AWS; priced as their Anthropic twins
   "anthropic.claude-sonnet-4-5-20250929-v1:0": { prompt: 0.000003, completion: 0.000015, cacheRead: 0.0000003, cacheWrite: 0.000003750 },
+  "anthropic.claude-opus-5":   { prompt: 0.000005,    completion: 0.000025,   cacheRead: 0.0000005,    cacheWrite: 0.00000625 },
+  "anthropic.claude-sonnet-5": { prompt: 0.000003,    completion: 0.000015,   cacheRead: 0.0000003,    cacheWrite: 0.000003750 },
 };
 
 // Providers whose reported promptTokens already *includes* cached tokens, so

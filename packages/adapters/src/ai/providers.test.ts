@@ -72,8 +72,8 @@ describe("resolveModel — openai", () => {
 });
 
 describe("defaultModelFor — bedrock", () => {
-  it("returns the configured Sonnet 4.5 Bedrock model id", () => {
-    expect(defaultModelFor("bedrock")).toBe("anthropic.claude-sonnet-4-5-20250929-v1:0");
+  it("returns the configured Sonnet 5 Bedrock model id", () => {
+    expect(defaultModelFor("bedrock")).toBe("anthropic.claude-sonnet-5");
   });
 });
 
@@ -97,14 +97,14 @@ describe("resolveModel — bedrock", () => {
     expect(bedrockFactory).toHaveBeenCalledWith("anthropic.claude-haiku-4-5-20251001-v1:0");
   });
 
-  it("falls back to the default Sonnet 4.5 model id when no model is given", () => {
+  it("falls back to the default Sonnet 5 model id when no model is given", () => {
     resolveModel("bedrock", undefined, {
       region: "eu-west-1",
       accessKeyId: "AKIA-eu",
       secretAccessKey: "secret-eu",
     });
 
-    expect(bedrockFactory).toHaveBeenCalledWith("anthropic.claude-sonnet-4-5-20250929-v1:0");
+    expect(bedrockFactory).toHaveBeenCalledWith("anthropic.claude-sonnet-5");
   });
 
   it("passes an empty options object when credentials are null", () => {

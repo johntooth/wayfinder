@@ -104,6 +104,26 @@ describe("estimateCost via recordTokenUsage", () => {
     expect(call.costUsd).toBeGreaterThan(0);
   });
 
+  it("prices Opus 5 above Sonnet 5 rather than falling back to a shared estimate", async () => {
+    const costFor = async (model: string, provider: "anthropic" | "bedrock"): Promise<number> => {
+      const createFn = vi.fn().mockResolvedValue(ok({ id: "usage-1" }));
+      recordTokenUsage(
+        createMockRepo(createFn),
+        { purpose: "chat", model, provider },
+        { promptTokens: 1000, completionTokens: 200, systemTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      );
+      await vi.waitFor(() => {
+        expect(createFn).toHaveBeenCalled();
+      });
+      return createFn.mock.calls[0]![0].costUsd as number;
+    };
+
+    const sonnet = await costFor("claude-sonnet-5", "anthropic");
+    const opus = await costFor("claude-opus-5", "anthropic");
+    expect(opus).toBeGreaterThan(sonnet);
+    expect(await costFor("anthropic.claude-opus-5", "bedrock")).toBe(opus);
+  });
+
   it("never records a negative cost for a cache-heavy Anthropic call", async () => {
     const createFn = vi.fn().mockResolvedValue(ok({ id: "usage-1" }));
     const repo = createMockRepo(createFn);

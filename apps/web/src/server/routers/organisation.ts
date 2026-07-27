@@ -3,6 +3,7 @@ import {
   parseOrganisationsEnabled,
   type OrganisationResolution,
 } from "@rbrasier/domain";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { adminProcedure, authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
@@ -82,6 +83,36 @@ export const organisationRouter = router({
       });
       if (result.error) throw toTrpcError(result.error);
       return result.data;
+    }),
+
+  // Creates an organisation and puts the calling admin in it. The first-run
+  // wizard needs both halves together: choosing a multi-organisation deployment
+  // is meaningless until at least one organisation exists and the admin belongs
+  // to it (ADR-041 §3). Taking the user from ctx keeps the client from having to
+  // know its own id.
+  createForSelf: adminProcedure
+    .input(z.object({ name: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      // adminProcedure proves the caller is an admin but does not narrow userId,
+      // which this mutation needs to assign membership.
+      const userId = ctx.userId;
+      if (!userId) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Authentication required." });
+      }
+
+      const created = await ctx.container.useCases.createOrganisation.execute({
+        name: input.name,
+        emailDomain: null,
+      });
+      if (created.error) throw toTrpcError(created.error);
+
+      const assigned = await ctx.container.useCases.assignUserOrganisation.execute({
+        userId,
+        organisationId: created.data.id,
+      });
+      if (assigned.error) throw toTrpcError(assigned.error);
+
+      return created.data;
     }),
 
   update: adminProcedure

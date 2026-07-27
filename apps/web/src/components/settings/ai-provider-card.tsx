@@ -4,7 +4,15 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogBody, DialogCloseButton, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";
@@ -18,13 +26,27 @@ const PROVIDER_LABEL: Record<Provider, string> = {
   mistral: "Mistral",
   bedrock: "Amazon Bedrock",
 };
+
+// Only one provider is ever active, so both the card summary and the edit modal
+// show that provider's credentials alone. Showing all four at once made it
+// ambiguous which fields the running configuration actually depends on.
+const KEY_PROVIDERS = ["anthropic", "openai", "mistral"] as const;
+type KeyProvider = (typeof KEY_PROVIDERS)[number];
+
+const isKeyProvider = (provider: Provider): provider is KeyProvider =>
+  (KEY_PROVIDERS as readonly Provider[]).includes(provider);
 export function AiProviderCard({ connectivity }: { connectivity: ConnectivityController }) {
   const utils = trpc.useUtils();
   const aiQuery = trpc.settings.getAiConfig.useQuery();
   const saveMutation = trpc.settings.setAiConfig.useMutation({
     onSuccess: async () => {
       toast.success("AI configuration saved");
-      await utils.settings.getAiConfig.invalidate();
+      // getSetupStatus gates the first-run wizard's Continue on this being
+      // configured, so it has to refresh alongside the config itself.
+      await Promise.all([
+        utils.settings.getAiConfig.invalidate(),
+        utils.settings.getSetupStatus.invalidate(),
+      ]);
       setOpen(false);
     },
     onError: (error) => toast.error(error.message ?? "Failed to save AI configuration"),
@@ -127,22 +149,23 @@ export function AiProviderCard({ connectivity }: { connectivity: ConnectivityCon
               <span className="text-muted-foreground">Branching model</span>
               <span className="font-mono text-xs">{config.models.branching}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">API keys</span>
-              <span className="font-mono text-xs">
-                Anthropic: {config.apiKeys.anthropic === "set" ? "✓" : "—"} · OpenAI:{" "}
-                {config.apiKeys.openai === "set" ? "✓" : "—"} · Mistral:{" "}
-                {config.apiKeys.mistral === "set" ? "✓" : "—"}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Bedrock</span>
-              <span className="font-mono text-xs">
-                Region: {config.apiKeys.bedrock.region ?? "—"} · Access key:{" "}
-                {config.apiKeys.bedrock.accessKeyId === "set" ? "✓" : "—"} · Secret:{" "}
-                {config.apiKeys.bedrock.secretAccessKey === "set" ? "✓" : "—"}
-              </span>
-            </div>
+            {isKeyProvider(config.provider as Provider) ? (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">API key</span>
+                <span className="font-mono text-xs">
+                  {config.apiKeys[config.provider as KeyProvider] === "set" ? "✓ Set" : "— Not set"}
+                </span>
+              </div>
+            ) : (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Bedrock credentials</span>
+                <span className="font-mono text-xs">
+                  Region: {config.apiKeys.bedrock.region ?? "—"} · Access key:{" "}
+                  {config.apiKeys.bedrock.accessKeyId === "set" ? "✓" : "—"} · Secret:{" "}
+                  {config.apiKeys.bedrock.secretAccessKey === "set" ? "✓" : "—"}
+                </span>
+              </div>
+            )}
           </>
         )}
         {aiConfigured && <ConnectivityTest target="ai" controller={connectivity} />}
@@ -172,100 +195,124 @@ export function AiProviderCard({ connectivity }: { connectivity: ConnectivityCon
 
             <div className="space-y-1">
               <Label htmlFor="ai-chat-model">Chat model</Label>
-              <Input id="ai-chat-model" value={chatModel} onChange={(e) => setChatModel(e.target.value)} />
+              <Input
+                id="ai-chat-model"
+                value={chatModel}
+                onChange={(e) => setChatModel(e.target.value)}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="ai-doc-model">Document generation model</Label>
-              <Input id="ai-doc-model" value={docModel} onChange={(e) => setDocModel(e.target.value)} />
+              <Input
+                id="ai-doc-model"
+                value={docModel}
+                onChange={(e) => setDocModel(e.target.value)}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="ai-branch-model">Branching model</Label>
-              <Input id="ai-branch-model" value={branchModel} onChange={(e) => setBranchModel(e.target.value)} />
-            </div>
-
-            <hr className="border-[#dedad2]" />
-
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">
-                Leave a key blank to keep the currently-stored value. Saved keys override <code>.env</code>.
-              </p>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="ai-anthropic-key">Anthropic API key</Label>
               <Input
-                id="ai-anthropic-key"
-                type="password"
-                value={anthropicKey}
-                onChange={(e) => setAnthropicKey(e.target.value)}
-                placeholder={config?.apiKeys.anthropic === "set" ? "•••••• (stored)" : "Not set"}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="ai-openai-key">OpenAI API key</Label>
-              <Input
-                id="ai-openai-key"
-                type="password"
-                value={openaiKey}
-                onChange={(e) => setOpenaiKey(e.target.value)}
-                placeholder={config?.apiKeys.openai === "set" ? "•••••• (stored)" : "Not set"}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="ai-mistral-key">Mistral API key</Label>
-              <Input
-                id="ai-mistral-key"
-                type="password"
-                value={mistralKey}
-                onChange={(e) => setMistralKey(e.target.value)}
-                placeholder={config?.apiKeys.mistral === "set" ? "•••••• (stored)" : "Not set"}
+                id="ai-branch-model"
+                value={branchModel}
+                onChange={(e) => setBranchModel(e.target.value)}
               />
             </div>
 
             <hr className="border-[#dedad2]" />
 
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-foreground">Amazon Bedrock credentials</p>
-              <p className="text-xs text-muted-foreground">
-                Leave any field blank to keep its stored value. All three fields together are required
-                for Bedrock calls to succeed.
-              </p>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="ai-bedrock-region">AWS region</Label>
-              <Input
-                id="ai-bedrock-region"
-                value={bedrockRegion}
-                onChange={(e) => setBedrockRegion(e.target.value)}
-                placeholder="e.g. us-east-1"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="ai-bedrock-access-key">AWS access key ID</Label>
-              <Input
-                id="ai-bedrock-access-key"
-                type="password"
-                value={bedrockAccessKeyId}
-                onChange={(e) => setBedrockAccessKeyId(e.target.value)}
-                placeholder={
-                  config?.apiKeys.bedrock.accessKeyId === "set" ? "•••••• (stored)" : "Not set"
-                }
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="ai-bedrock-secret">AWS secret access key</Label>
-              <Input
-                id="ai-bedrock-secret"
-                type="password"
-                value={bedrockSecretAccessKey}
-                onChange={(e) => setBedrockSecretAccessKey(e.target.value)}
-                placeholder={
-                  config?.apiKeys.bedrock.secretAccessKey === "set" ? "•••••• (stored)" : "Not set"
-                }
-              />
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Credentials for {PROVIDER_LABEL[provider]}. Leave a field blank to keep its stored
+              value. Saved credentials override <code>.env</code>.
+            </p>
+
+            {provider === "anthropic" && (
+              <div className="space-y-1">
+                <Label htmlFor="ai-anthropic-key">Anthropic API key</Label>
+                <Input
+                  id="ai-anthropic-key"
+                  type="password"
+                  value={anthropicKey}
+                  onChange={(e) => setAnthropicKey(e.target.value)}
+                  placeholder={config?.apiKeys.anthropic === "set" ? "•••••• (stored)" : "Not set"}
+                />
+              </div>
+            )}
+
+            {provider === "openai" && (
+              <div className="space-y-1">
+                <Label htmlFor="ai-openai-key">OpenAI API key</Label>
+                <Input
+                  id="ai-openai-key"
+                  type="password"
+                  value={openaiKey}
+                  onChange={(e) => setOpenaiKey(e.target.value)}
+                  placeholder={config?.apiKeys.openai === "set" ? "•••••• (stored)" : "Not set"}
+                />
+              </div>
+            )}
+
+            {provider === "mistral" && (
+              <div className="space-y-1">
+                <Label htmlFor="ai-mistral-key">Mistral API key</Label>
+                <Input
+                  id="ai-mistral-key"
+                  type="password"
+                  value={mistralKey}
+                  onChange={(e) => setMistralKey(e.target.value)}
+                  placeholder={config?.apiKeys.mistral === "set" ? "•••••• (stored)" : "Not set"}
+                />
+              </div>
+            )}
+
+            {provider === "bedrock" && (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  All three fields together are required for Bedrock calls to succeed.
+                </p>
+                <div className="space-y-1">
+                  <Label htmlFor="ai-bedrock-region">AWS region</Label>
+                  <Input
+                    id="ai-bedrock-region"
+                    value={bedrockRegion}
+                    onChange={(e) => setBedrockRegion(e.target.value)}
+                    placeholder="e.g. us-east-1"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="ai-bedrock-access-key">AWS access key ID</Label>
+                  <Input
+                    id="ai-bedrock-access-key"
+                    type="password"
+                    value={bedrockAccessKeyId}
+                    onChange={(e) => setBedrockAccessKeyId(e.target.value)}
+                    placeholder={
+                      config?.apiKeys.bedrock.accessKeyId === "set" ? "•••••• (stored)" : "Not set"
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="ai-bedrock-secret">AWS secret access key</Label>
+                  <Input
+                    id="ai-bedrock-secret"
+                    type="password"
+                    value={bedrockSecretAccessKey}
+                    onChange={(e) => setBedrockSecretAccessKey(e.target.value)}
+                    placeholder={
+                      config?.apiKeys.bedrock.secretAccessKey === "set"
+                        ? "•••••• (stored)"
+                        : "Not set"
+                    }
+                  />
+                </div>
+              </>
+            )}
           </DialogBody>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setOpen(false)} disabled={saveMutation.isPending}>
+            <Button
+              variant="ghost"
+              onClick={() => setOpen(false)}
+              disabled={saveMutation.isPending}
+            >
               Cancel
             </Button>
             <Button onClick={handleSave} disabled={saveMutation.isPending}>
