@@ -60,10 +60,25 @@ docker compose up -d      # Postgres + MinIO (skip if you bring your own)
 # → set the admin email + password, then complete the setup wizard
 ```
 
-`restart.sh` seeds `.env` from `.env.example` and auto-generates the two required
-secrets (`SETTINGS_ENCRYPTION_KEY`, `BETTER_AUTH_SECRET`); `DATABASE_URL` ships a
-working default. On first boot with no admin, the app prints a clickable
-`/setup?token=…` link to the server log.
+`restart.sh` seeds `.env` from `.env.example` and auto-generates the three
+secrets it needs (`SETTINGS_ENCRYPTION_KEY`, `BETTER_AUTH_SECRET`, and
+`SCHEDULER_TICK_SECRET`, without which scheduled sessions never fire);
+`DATABASE_URL` ships a working default. On first boot with no admin, the app
+prints a clickable `/setup?token=…` link to the server log.
+
+Prefer to write the file yourself? Copy the minimal development sample instead —
+it is four values, three of which are `openssl rand -hex 32`:
+
+```bash
+cp .env.min.example.dev .env
+# fill in the three secrets, then:
+./restart.sh
+```
+
+Everything omitted from that file has a working default. For a deployment, use
+[`.env.min.example.prod`](.env.min.example.prod), which adds the vars whose
+defaults point at localhost. [`.env.example`](.env.example) is the full,
+annotated set of overrides.
 
 - Web UI → http://localhost:3000
 - MinIO console → http://localhost:9001 (user: `minioadmin`, pass: `minioadmin`)
@@ -71,8 +86,8 @@ working default. On first boot with no admin, the app prints a clickable
 On first run, open the printed setup link, create the administrator account, and
 the **setup wizard** walks you through object storage, an AI provider, a sign-in
 method, and optional integrations — each configured in-app and testable in place.
-No integration needs to be set in `.env`. Env-based configuration is an
-optional override; see [`.env.example`](.env.example) for the advanced path.
+No integration needs to be set in `.env`; env-based configuration is an optional
+override.
 
 ---
 
