@@ -12,7 +12,7 @@ Ask all of these via `AskUserQuestion` before proceeding:
 2. Which entities or use cases are affected?
 3. Are DB changes needed?
 4. Is this a MINOR or PATCH bump?
-5. Which release does this target? Default is the current alpha branch (see
+5. Which release does this target? Default is the current release branch (see
    **Release Branching** in `CLAUDE.md`); choose `main` only if it extends
    unreleased work. If the change is really a new feature, stop and route to
    `/new-feature` instead — release branches take no new features.
@@ -37,7 +37,10 @@ Ask all of these via `AskUserQuestion` before proceeding:
    - Cover the primary user-facing behaviour introduced or modified by this enhancement
    - The test must pass against the updated code before moving on
 5. On completion:
-   - Move phase doc to `implemented/alpha-<major>/v[version]/` (current release line — `alpha-2` for `2.x.x`; see `docs/guides/versioning.md`)
+   - Move phase doc to `implemented/<release line>/v[version]/`. The release line comes from
+     the **Release Branching** section of `CLAUDE.md`, not from the version number: the
+     `Next release line` value when the base branch is `main`, the current release branch's own
+     name otherwise (see `docs/guides/versioning.md`)
    - Write implementation summary (include which e2e test covers the change)
    - Apply the version bump
    - Run `./validate.sh`

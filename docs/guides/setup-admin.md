@@ -138,12 +138,12 @@ git push origin feature/my-feature
 
 ### Cutting a release
 
-Alpha releases follow the two-branch model described in
+Releases follow the two-branch model described in
 [`docs/guides/managing-releases.md`](./managing-releases.md): bug fixes and
-enhancements stabilise the current `release/alpha-N` branch while new
-features build the next alpha on `main`.
+enhancements stabilise the current `release/*` branch while new features
+build the next line on `main`.
 
-Maintainers run the `/release` skill to cut the next alpha, tag an alpha
+Maintainers run the `/release` skill to cut the next line, tag a
 build, or forward-merge fixes into `main` — it derives the next alpha number
 from `main`'s `VERSION` and updates every current-alpha reference.
 

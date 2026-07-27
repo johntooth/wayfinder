@@ -40,7 +40,7 @@ and the DB connection budget must be managed by a pooler rather than raw
 Postgres. Until then, single-instance deployments need nothing here.
 
 Each item below is implemented as its own sub-phase; when an item lands, its
-implementation summary goes to `implemented/alpha-<major>/v<version>/` and this doc stays
+implementation summary goes to `implemented/<release line>/v<version>/` and this doc stays
 here until the last code slice lands (the former roadmap's convention).
 
 ---

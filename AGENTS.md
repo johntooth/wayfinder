@@ -24,7 +24,7 @@ code, run `./validate.sh` and fix all failures before declaring done.
 | Implement a phase, build a spec, write code                | `/build`       |
 | Change or extend existing functionality                    | `/enhance`     |
 | Fix something broken or not working                        | `/bugfix`      |
-| Cut the next alpha, tag a build, forward-merge fixes       | `/release`     |
+| Cut the next release line, tag a build, forward-merge fixes | `/release`    |
 | Anything else                                              | Answer directly |
 
 ---
@@ -74,18 +74,25 @@ Two long-lived branch types. Full contributor-facing rules live in
 maintainer runbook live in
 [`docs/guides/managing-releases.md`](docs/guides/managing-releases.md).
 
-- `main` — the **next** alpha, in active development. New features land here.
-- `release/alpha-N` — the **current** alpha, stabilisation only. Bug fixes and
-  enhancements land here; never new features, never a merge from `main`.
+- `main` — the **next** release line, in active development. New features land here.
+- `release/<line>` — the **current** release line, stabilisation only. Bug fixes
+  and enhancements land here; never new features, never a merge from `main`.
 
-**Current alpha branch: `release/alpha-1`** ← skills read the base branch from
-this line; update it when a new alpha is cut.
+**Current release branch: `release/alpha-2`** ← skills read the base branch from
+this line; update it when a new line is cut.
+**Next release line (on `main`): `alpha-3`** ← skills read the docs folder name
+from this line.
 
 | Skill | Base branch (branch from it, open the PR against it) |
 |---|---|
 | `/new-feature`, `/build` | `main` |
-| `/bugfix`, `/enhance` | Current alpha branch — unless the change only affects unreleased work, then `main` |
+| `/bugfix`, `/enhance` | Current release branch — unless the change only affects unreleased work, then `main` |
 | `/release` | Operates on `main` and release branches directly (maintainers only) |
+
+Implemented phase docs go to `docs/development/implemented/<release line>/v<version>/`,
+where the release line is read from the two lines above — `alpha-2` when your base
+branch is `release/alpha-2`, `alpha-3` when your base branch is `main`. Never derive
+it from the version number, and never write into `implemented/` directly.
 
 ---
 
@@ -93,11 +100,16 @@ this line; update it when a new alpha is cut.
 
 `VERSION` and root `package.json` `version` must always match. `validate.sh` enforces this.
 
-Each alpha owns a MAJOR line: **alpha-N = the N.x.x line** (alpha-1 = 1.x.x,
-alpha-2 = 2.x.x).
+Wayfinder is pre-release, so it follows semver's pre-1.0 rule: **MAJOR stays `0`
+until the first stable release**. Every version is `0.MINOR.PATCH`.
 
-- **MAJOR** (x.0.0): New alpha line — bumped on `main` immediately after a `release/alpha-N` branch is cut. Breaking API or domain changes go to `main` (the next alpha), never to a release branch.
-- **MINOR** (0.x.0): DB schema change, new phase, new feature
-- **PATCH** (0.0.x): Bug fixes, UI tweaks, no schema impact
+- **MAJOR** (`x.0.0`): Reserved. Goes to `1.0.0` only at the first stable release, and means breaking changes after that.
+- **MINOR** (`0.x.0`): DB schema change, new phase, new feature
+- **PATCH** (`0.0.x`): Bug fixes, UI tweaks, no schema impact
+
+The alpha/beta number is **not** in the version — it lives in the branch name
+(`release/alpha-2`) and the docs folder (`implemented/alpha-2/`). Cutting a new
+pre-release line creates a branch; it does not bump anything by itself. MINOR
+keeps counting up across lines, so versions never restart or go backwards.
 
 Every code-writing skill must state the version bump.
