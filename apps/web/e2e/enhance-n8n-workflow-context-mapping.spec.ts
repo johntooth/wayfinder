@@ -20,6 +20,7 @@
 
 import type { Page } from '@playwright/test';
 import { test, expect } from './helpers/base';
+import { openSettingsSection } from './helpers/settings';
 
 const FLAG_KEY = 'auto_node';
 
@@ -73,6 +74,7 @@ test.describe('n8n workflow directory + step-context field values', () => {
   test('admin settings exposes an n8n Integration card', async ({ page, consoleLogs }) => {
     await page.goto('/admin/settings');
     await page.waitForLoadState('networkidle');
+    await openSettingsSection(page, 'Integrations');
 
     const card = page.getByText(/n8n Integration/i).first();
     test.skip(!(await card.isVisible().catch(() => false)), 'Admin settings surface not available');

@@ -1,4 +1,5 @@
 import { test, expect } from "./helpers/base";
+import { openAllSettingsSections, openSettingsSection } from "./helpers/settings";
 
 // E2E for on-demand connectivity testing on /admin/settings
 // (phase: settings-connectivity-test).
@@ -24,6 +25,7 @@ test.describe("settings connectivity testing", () => {
     page,
   }) => {
     await page.goto(SETTINGS_PATH);
+    await openSettingsSection(page, "Integrations");
 
     await page.getByTestId("test-connectivity-embeddings").click();
 
@@ -34,6 +36,9 @@ test.describe("settings connectivity testing", () => {
 
   test("Test all resolves every applicable card badge in parallel", async ({ page }) => {
     await page.goto(SETTINGS_PATH);
+    // Both probed cards live in collapsed sections; the badges only exist once
+    // their section is open.
+    await openAllSettingsSections(page);
 
     await page.getByTestId("test-all-connectivity").click();
 

@@ -1,3 +1,4 @@
+import { OrganisationMembershipCard } from "@/components/settings/organisation-membership-card";
 import { ProfileSettingsForm } from "@/components/settings/profile-settings-form";
 
 export default function SettingsPage() {
@@ -11,6 +12,8 @@ export default function SettingsPage() {
 
       <div className="space-y-4">
         <ProfileSettingsForm />
+
+        <OrganisationMembershipCard />
 
         {/* <Card>
           <CardHeader>

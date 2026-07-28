@@ -1,4 +1,5 @@
 import { test, expect } from "./helpers/base";
+import { openSettingsSection } from "./helpers/settings";
 
 // E2E for the admin Document Generation settings card
 // (phase: document-generation-settings).
@@ -18,6 +19,7 @@ const SETTINGS_PATH = process.env.E2E_SETTINGS_PATH ?? "/admin/settings";
 test.describe("document generation settings", () => {
   test("an admin can change the field batch size and the card reflects it", async ({ page }) => {
     await page.goto(SETTINGS_PATH);
+    await openSettingsSection(page, "AI");
 
     await page.getByTestId("document-generation-edit").click();
 
@@ -32,6 +34,7 @@ test.describe("document generation settings", () => {
 
   test("rejects an out-of-range field batch size and does not save", async ({ page }) => {
     await page.goto(SETTINGS_PATH);
+    await openSettingsSection(page, "AI");
 
     const before = await page.getByTestId("document-generation-batch").textContent();
 

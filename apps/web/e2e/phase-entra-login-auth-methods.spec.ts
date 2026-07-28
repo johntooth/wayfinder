@@ -20,10 +20,12 @@
  */
 
 import { test, expect } from './helpers/base';
+import { openSettingsSection } from './helpers/settings';
 
 const openAuthCard = async (page: import('@playwright/test').Page) => {
   await page.goto('/admin/settings');
   await page.waitForLoadState('networkidle');
+  await openSettingsSection(page, 'General');
 
   const editButtons = page.getByRole('button', { name: /^edit$/i });
   const editCount = await editButtons.count();

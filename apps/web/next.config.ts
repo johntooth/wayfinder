@@ -1,8 +1,24 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { NextConfig } from "next";
+
+// The product version lives in the repo-root VERSION file, not in this package's
+// package.json (which carries its own). The About modal shows it, so it is
+// inlined at build time rather than fetched.
+const readAppVersion = (): string => {
+  try {
+    return readFileSync(join(process.cwd(), "..", "..", "VERSION"), "utf8").trim();
+  } catch {
+    return "unknown";
+  }
+};
 
 const config: NextConfig = {
   reactStrictMode: true,
   typedRoutes: true,
+  env: {
+    NEXT_PUBLIC_APP_VERSION: readAppVersion(),
+  },
   transpilePackages: [
     "@rbrasier/domain",
     "@rbrasier/application",

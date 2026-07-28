@@ -14,10 +14,12 @@
  */
 
 import { test, expect } from './helpers/base';
+import { openSettingsSection } from './helpers/settings';
 
 test.describe('Admin: RAG Embeddings settings', () => {
   test('card shows the local provider and 384 dimensions by default', async ({ page, consoleLogs }) => {
     await page.goto('/admin/settings');
+    await openSettingsSection(page, 'Integrations');
     await page.waitForLoadState('networkidle');
 
     const card = page.locator('div', { has: page.getByText('RAG Embeddings', { exact: true }) }).first();
@@ -39,6 +41,7 @@ test.describe('Admin: RAG Embeddings settings', () => {
 
   test('the provider can be changed and persists', async ({ page }) => {
     await page.goto('/admin/settings');
+    await openSettingsSection(page, 'Integrations');
     await page.waitForLoadState('networkidle');
 
     const cardHeading = page.getByText('RAG Embeddings', { exact: true });
