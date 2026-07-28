@@ -47,6 +47,14 @@ three are substantive:
   calls cannot be replayed transparently — the result object reaches the
   usage-tracking and tracing decorators as soon as it is created — so there the
   refusal is recorded as it goes past and the next call omits the parameter.
+- **Genuine AI call failures logged to `admin_errors`.** `LanguageModelAdapter`
+  takes an optional `IErrorLogger`. It fires exactly when `generateObject`,
+  `generateText`, `streamText` or `streamObject` return `err(...)` — including a
+  temperature refusal that survives the retry — with the provider, model and
+  cause in the row. A call that recovers, or a mid-stream break after the
+  `Result` already resolved `ok()`, is not logged: the primary chat route logs
+  a broken stream itself, so logging it again in the adapter would duplicate
+  the row.
 
 ### Flows and canvas
 

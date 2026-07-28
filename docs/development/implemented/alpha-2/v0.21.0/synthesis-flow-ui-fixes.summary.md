@@ -49,6 +49,16 @@ created, so replaying it transparently would risk the primary chat path. There
 the refusal is recorded as it passes and the next call omits the parameter — the
 proactive list already covers every model known to refuse today.
 
+**Follow-up: log genuine AI call failures to `admin_errors`.** `LanguageModelAdapter`
+takes an optional `IErrorLogger` (wired in `apps/web`, `apps/api` and the
+adapters factory). It logs exactly when a call's `Result` is `err(...)` —
+including a temperature refusal that survives the retry above — not when a call
+recovers or succeeds. Streaming's mid-stream `onError`/broken-stream path is
+deliberately left unlogged there: the `Result` already resolved `ok()`, so it
+is not the port reporting a failure, and the primary chat route
+(`api/chat/[sessionId]/stream/route.ts`) already logs that same break itself;
+logging it again in the adapter would duplicate the row.
+
 **About links (#15/#16)** validate URLs at both boundaries (zod on write,
 `parseAboutLinksConfig` on read), accepting only http(s), `mailto:` and
 site-relative paths. Icon names are a closed set resolved to components
