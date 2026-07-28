@@ -1,4 +1,5 @@
 import { test, expect } from "./helpers/base";
+import { openSettingsSection } from "./helpers/settings";
 
 // E2E for the admin / organisations / groups UI cleanup (v2.10.0).
 //
@@ -42,7 +43,8 @@ test.describe("configuration page", () => {
       await expect(page.getByRole("button", { name: new RegExp(section, "i") })).toBeVisible();
     }
 
-    // The organisations master toggle lives in General and is off by default.
+    // The organisations master toggle lives in General, which starts collapsed.
+    await openSettingsSection(page, "General");
     const toggle = page.getByRole("switch", { name: /enable organisations/i });
     await expect(toggle).toBeVisible();
     await expect(toggle).toHaveAttribute("aria-checked", "false");

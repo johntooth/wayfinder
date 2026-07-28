@@ -27,12 +27,9 @@ async function createFlowReturningId(page: Page, name: string): Promise<string |
   await page.locator('#flow-name').fill(name);
   await page.locator('#flow-expert-role').fill('E2E RAG Config Expert');
   await page.getByRole('button', { name: /create flow/i }).click();
-  await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10_000 });
 
-  const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
-  if (!(await editLink.isVisible().catch(() => false))) return null;
-  await editLink.click();
-  await page.waitForURL(/\/flows\/[^/]+/, { timeout: 10_000 }).catch(() => undefined);
+  // Creating a flow lands on the canvas editor directly (v0.21.0).
+  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 }).catch(() => undefined);
 
   const match = /\/flows\/([0-9a-f-]{36})/.exec(page.url());
   return match?.[1] ?? null;
@@ -83,6 +80,10 @@ test.describe('RAG node config & chat UI improvements', () => {
     await expect(page.locator('#node-name')).toBeVisible({ timeout: 5_000 });
     await page.locator('#node-name').fill('Gather details');
     await page.locator('#ai-instruction').fill('Ask the user for their details.');
+    // The default output type is "generate document" (v0.21.0); this spec drives
+    // a real chat with no template, so it needs a plain conversation.
+    await page.locator('label', { hasText: 'Unstructured conversation' }).click();
+    await page.locator('#done-when-mode').selectOption('condition');
     await page.locator('#done-when').fill('The user has provided their details.');
     await page.getByRole('button', { name: /^Save$/i }).click();
     await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10_000 });

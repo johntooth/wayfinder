@@ -64,12 +64,8 @@ async function createFlowAndOpenCanvas(page: Page, name: string): Promise<void> 
   await page.locator('#flow-name').fill(name);
   await page.locator('#flow-expert-role').fill('E2E Fix Expert');
   await page.getByRole('button', { name: /create flow/i }).click();
-  await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10_000 });
-
-  const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
-  await expect(editLink).toBeVisible({ timeout: 5_000 });
-  await editLink.click();
-  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 });
+  // Creating a flow lands on the canvas editor directly (v0.21.0).
+  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 }).catch(() => undefined);
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(1_200);
 }

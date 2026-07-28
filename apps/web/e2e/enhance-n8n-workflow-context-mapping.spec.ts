@@ -59,12 +59,8 @@ async function createFlowReturningId(page: Page, name: string): Promise<string |
   await page.locator('#flow-name').fill(name);
   await page.locator('#flow-expert-role').fill('E2E n8n Expert');
   await page.getByRole('button', { name: /create flow/i }).click();
-  await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10_000 });
-
-  const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
-  if (!(await editLink.isVisible().catch(() => false))) return null;
-  await editLink.click();
-  await page.waitForURL(/\/flows\/[^/]+/, { timeout: 10_000 }).catch(() => undefined);
+  // Creating a flow lands on the canvas editor directly (v0.21.0).
+  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 }).catch(() => undefined);
 
   const match = /\/flows\/([0-9a-f-]{36})/.exec(page.url());
   return match?.[1] ?? null;

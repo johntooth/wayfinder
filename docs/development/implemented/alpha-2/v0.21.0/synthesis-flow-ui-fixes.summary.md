@@ -66,8 +66,15 @@ is presentation, not the security boundary.
   About accessor pushed the file past the repo's 800-line limit; the split
   follows a real seam and re-exports the public names.
 - `apps/web/e2e/helpers/settings.ts` was added. Collapsing the admin settings
-  sections (#14) hides cards that ten existing specs interact with, so those
+  sections (#14) hides cards that twelve existing specs interact with, so those
   specs now open the relevant section first.
+- Twelve flow specs stopped clicking "Configure Flow" after creating a flow.
+  Creating one now lands on the canvas (#5), so the round trip through the list
+  was a race — it passed or failed depending on whether the redirect beat the
+  click. They wait for the canvas URL instead.
+- Two specs that type a completion condition now select "Specific condition"
+  first, and set the output type explicitly rather than relying on the default,
+  which #6 changed. `#done-when` only renders in condition mode.
 - `apps/web/next.config.ts` inlines the repo-root `VERSION` as
   `NEXT_PUBLIC_APP_VERSION` for the About modal.
 
