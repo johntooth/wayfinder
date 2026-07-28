@@ -81,6 +81,37 @@ export const exceptionRecordIds = (result: SampleResult): Set<string> => {
   return ids;
 };
 
+export interface ExceptionContext {
+  exceptionFileIds: readonly string[];
+  documents: readonly ResultDocument[];
+}
+
+// The "Exception" badge says a row needs triage but not what went wrong, so the
+// expanded record spells the reasons out. Ordered widest-first: the record-level
+// problem, then the file-level ones in source order.
+export const recordExceptionReasons = (
+  record: ResultRecord,
+  context: ExceptionContext,
+): string[] => {
+  const reasons: string[] = [];
+  const allBlank = record.fields.every((field) => field.value.trim().length === 0);
+  if (allBlank) reasons.push("No values were extracted for this record.");
+
+  const documentsById = new Map(context.documents.map((document) => [document.id, document]));
+  const exceptionFiles = new Set(context.exceptionFileIds);
+
+  for (const id of record.sourceDocumentIds) {
+    const document = documentsById.get(id);
+    // A source that vanished from the run still deserves a line — naming the id
+    // beats silently dropping the only clue the operator has.
+    const label = document?.filename ?? id;
+    if (document && !document.readable) reasons.push(`${label} could not be read.`);
+    if (exceptionFiles.has(id)) reasons.push(`${label} produced no record.`);
+  }
+
+  return reasons;
+};
+
 export interface RecordFilter {
   query: string;
   exceptionsOnly: boolean;

@@ -118,9 +118,12 @@ const DEFAULT_VALUES: NodeConfigValues = {
   colour: "#3a5fd9",
   type: "conversational",
   aiInstruction: "",
-  doneWhen: "",
+  // Producing a document is what most steps are for, so the modal opens on it
+  // with the matching "all fields captured" completion condition already set —
+  // the same pair selecting it by hand would produce.
+  doneWhen: TEMPLATE_COMPLETE_SENTINEL,
   neverDone: false,
-  outputType: "unstructured",
+  outputType: "generate_document",
   structuredFields: [],
   documentTemplatePath: null,
   documentTemplateFilename: null,

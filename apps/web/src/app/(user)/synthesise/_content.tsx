@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -80,15 +81,17 @@ export function SynthesiseContent() {
           <DialogHeader>
             <DialogTitle>New synthesis</DialogTitle>
           </DialogHeader>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="synthesis-name">Name</Label>
-            <Input
-              id="synthesis-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="e.g. Tender responses — RFP 24"
-            />
-          </div>
+          <DialogBody>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="synthesis-name">Name</Label>
+              <Input
+                id="synthesis-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="e.g. Tender responses — RFP 24"
+              />
+            </div>
+          </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setCreating(false)}>
               Cancel
