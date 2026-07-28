@@ -35,6 +35,26 @@ const makeFireDue = (result: Result<unknown>): DueScheduleFirer => ({
 });
 
 describe("SchedulerWorker", () => {
+  it("waits for the first interval before ticking after start", async () => {
+    vi.useFakeTimers();
+    try {
+      const jobs = makeJobs();
+      const fireDue = makeFireDue(ok({ firedCount: 0 }));
+      const worker = new SchedulerWorker(fireDue, jobs, noopLogger, { tickIntervalMs: 1000 });
+
+      await worker.start();
+
+      expect(jobs.register).toHaveBeenCalledWith(SCHEDULER_JOB_NAME);
+      expect(fireDue.execute).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(fireDue.execute).toHaveBeenCalledTimes(1);
+      worker.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("registers the job and pings health on a successful tick", async () => {
     const jobs = makeJobs();
     const fireDue = makeFireDue(

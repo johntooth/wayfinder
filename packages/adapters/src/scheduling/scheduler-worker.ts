@@ -38,7 +38,6 @@ export class SchedulerWorker {
     this.stopped = false;
     await this.jobs.register(SCHEDULER_JOB_NAME);
     this.timer = setInterval(() => void this.tick(), this.intervalMs);
-    await this.tick();
   }
 
   stop(): void {
