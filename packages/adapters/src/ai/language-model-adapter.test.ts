@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AiConfig } from "@rbrasier/domain";
 import { LanguageModelAdapter } from "./language-model-adapter";
+import { noteTemperatureUnsupported, resetTemperatureSupportCache } from "./sampling-params";
 import type { RuntimeConfigStore } from "../config/runtime-config-store";
 
 vi.mock("ai", () => ({
@@ -332,7 +333,9 @@ describe("LanguageModelAdapter (openai) — streamObject", () => {
     });
   });
 
-  it("passes onError to the SDK", async () => {
+  // The adapter wraps onError so it can notice a model refusing `temperature`,
+  // so assert the caller's handler still fires rather than comparing identity.
+  it("forwards SDK errors to the caller's onError", async () => {
     async function* partials() { yield {}; }
     vi.mocked(streamObject).mockReturnValue({
       partialObjectStream: partials(),
@@ -344,8 +347,13 @@ describe("LanguageModelAdapter (openai) — streamObject", () => {
 
     await adapter.streamObject({ purpose: "chat", schema, onError });
 
-    const call = vi.mocked(streamObject).mock.calls[0]![0] as { onError?: unknown };
-    expect(call.onError).toBe(onError);
+    const call = vi.mocked(streamObject).mock.calls[0]![0] as {
+      onError?: (event: { error: unknown }) => void;
+    };
+    const failure = new Error("boom");
+    call.onError?.({ error: failure });
+
+    expect(onError).toHaveBeenCalledWith({ error: failure });
   });
 });
 
@@ -462,5 +470,115 @@ describe("LanguageModelAdapter (bedrock) — credential plumbing", () => {
       "anthropic.claude-haiku-4-5-20251001-v1:0",
       null,
     );
+  });
+});
+
+// Regression: Claude 5 rejects `temperature` outright ("`temperature` is
+// deprecated for this model"), which used to fail the whole call.
+describe("LanguageModelAdapter — temperature handling across model families", () => {
+  const anthropicConfig: AiConfig = {
+    provider: "anthropic",
+    apiKeys: { anthropic: "sk-ant-test", openai: null, mistral: null, bedrock: null },
+    models: { chat: "claude-sonnet-5", documentGeneration: "claude-sonnet-5", branching: "claude-sonnet-5" },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetTemperatureSupportCache();
+  });
+
+  it("withholds temperature from a model family known to reject it", async () => {
+    vi.mocked(generateText).mockResolvedValue({
+      text: "hi",
+      usage: { promptTokens: 1, completionTokens: 1 },
+      experimental_providerMetadata: undefined,
+    } as never);
+    const adapter = new LanguageModelAdapter("anthropic", makeConfigStore(anthropicConfig));
+
+    await adapter.generateText({ purpose: "chat", prompt: "hello", temperature: 0.4 });
+
+    const call = vi.mocked(generateText).mock.calls[0]![0] as { temperature?: number };
+    expect(call.temperature).toBeUndefined();
+  });
+
+  it("still sends temperature to a model that accepts it", async () => {
+    vi.mocked(generateText).mockResolvedValue({
+      text: "hi",
+      usage: { promptTokens: 1, completionTokens: 1 },
+      experimental_providerMetadata: undefined,
+    } as never);
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+
+    await adapter.generateText({ purpose: "chat", prompt: "hello", temperature: 0.4 });
+
+    const call = vi.mocked(generateText).mock.calls[0]![0] as { temperature?: number };
+    expect(call.temperature).toBe(0.4);
+  });
+
+  it("replays without temperature when an unknown model refuses it", async () => {
+    vi.mocked(generateText)
+      .mockRejectedValueOnce(new Error("`temperature` is deprecated for this model."))
+      .mockResolvedValueOnce({
+        text: "recovered",
+        usage: { promptTokens: 1, completionTokens: 1 },
+        experimental_providerMetadata: undefined,
+      } as never);
+    const futureConfig: AiConfig = {
+      ...openaiConfig,
+      models: { chat: "gpt-6-turbo", documentGeneration: "gpt-6-turbo", branching: "gpt-6-turbo" },
+    };
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(futureConfig));
+
+    const result = await adapter.generateText({ purpose: "chat", prompt: "x", temperature: 0.4 });
+
+    expect(result.data?.text).toBe("recovered");
+    expect(vi.mocked(generateText).mock.calls).toHaveLength(2);
+    expect((vi.mocked(generateText).mock.calls[1]![0] as { temperature?: number }).temperature)
+      .toBeUndefined();
+  });
+
+  it("remembers the refusal so the next call skips temperature outright", async () => {
+    noteTemperatureUnsupported("openai", "gpt-6-turbo");
+    vi.mocked(generateText).mockResolvedValue({
+      text: "hi",
+      usage: { promptTokens: 1, completionTokens: 1 },
+      experimental_providerMetadata: undefined,
+    } as never);
+    const futureConfig: AiConfig = {
+      ...openaiConfig,
+      models: { chat: "gpt-6-turbo", documentGeneration: "gpt-6-turbo", branching: "gpt-6-turbo" },
+    };
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(futureConfig));
+
+    await adapter.generateText({ purpose: "chat", prompt: "x", temperature: 0.4 });
+
+    expect(vi.mocked(generateText).mock.calls).toHaveLength(1);
+    expect((vi.mocked(generateText).mock.calls[0]![0] as { temperature?: number }).temperature)
+      .toBeUndefined();
+  });
+
+  it("does not replay an unrelated provider failure", async () => {
+    vi.mocked(generateText).mockRejectedValue(new Error("overloaded_error"));
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+
+    const result = await adapter.generateText({ purpose: "chat", prompt: "x", temperature: 0.4 });
+
+    expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
+    expect(vi.mocked(generateText).mock.calls).toHaveLength(1);
+  });
+
+  it("withholds temperature from a streamed chat on a refusing model", async () => {
+    vi.mocked(streamObject).mockReturnValue({
+      partialObjectStream: (async function* () { yield {}; })(),
+      object: Promise.resolve({}),
+      usage: Promise.resolve({ promptTokens: 0, completionTokens: 0 }),
+      providerMetadata: Promise.resolve(undefined),
+    } as never);
+    const adapter = new LanguageModelAdapter("anthropic", makeConfigStore(anthropicConfig));
+
+    await adapter.streamObject({ purpose: "chat", schema, temperature: 0.3 });
+
+    const call = vi.mocked(streamObject).mock.calls[0]![0] as { temperature?: number };
+    expect(call.temperature).toBeUndefined();
   });
 });

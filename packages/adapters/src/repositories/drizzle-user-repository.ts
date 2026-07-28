@@ -19,10 +19,15 @@ export const buildFindByIdsStatement = (ids: readonly string[]): SQL => sql`
   WHERE ${inArray(core_users.id, [...ids])}
 `;
 
+// Better Auth writes `name` directly through its own Drizzle adapter, so a
+// sign-up that left the field empty lands here as "" rather than null. Collapse
+// blank to null on the way out so callers only ever see a real name or nothing.
+export const normaliseName = (name: string | null): string | null => name?.trim() || null;
+
 const toEntity = (row: typeof core_users.$inferSelect): User => ({
   id: row.id,
   email: row.email,
-  name: row.name,
+  name: normaliseName(row.name),
   role: row.role,
   team: row.team,
   organisationId: row.organisation_id,

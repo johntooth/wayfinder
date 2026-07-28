@@ -38,6 +38,9 @@ interface NavItem {
   href: string;
   icon: React.ElementType;
   label: string;
+  // Count of items awaiting the user on that surface. Rendered as a pill on the
+  // right of the link; omitted or zero renders nothing.
+  badgeCount?: number;
 }
 
 interface NavGroup {
@@ -49,16 +52,15 @@ interface NavGroup {
 
 // Synthesise Information sits directly under Approvals when the extraction_flows
 // flag resolves (ADR-033 §7) — inline in the main group, no separate rule.
-const buildUserNav = (extractionEnabled: boolean): NavGroup[] => [
+const buildUserNav = (extractionEnabled: boolean, pendingApprovals: number): NavGroup[] => [
   {
     items: [
       { href: "/chats", icon: MessageSquare, label: "My Chats" },
       { href: "/flows", icon: GitBranch, label: "Flows" },
-      { href: "/approvals", icon: Stamp, label: "Approvals" },
+      { href: "/approvals", icon: Stamp, label: "Approvals", badgeCount: pendingApprovals },
       ...(extractionEnabled
         ? [{ href: "/synthesise", icon: FlaskConical, label: "Synthesise Information" }]
         : []),
-      { href: "/settings", icon: Settings, label: "Settings" },
     ],
   },
 ];
@@ -197,7 +199,7 @@ function NavGroups({
               ))}
 
             {!isCollapsed &&
-              group.items.map(({ href, icon: Icon, label }) => (
+              group.items.map(({ href, icon: Icon, label, badgeCount }) => (
                 <Link
                   key={href}
                   href={href}
@@ -211,7 +213,15 @@ function NavGroups({
                   <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
                     <Icon className="h-[15px] w-[15px]" />
                   </span>
-                  {label}
+                  <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{label}</span>
+                  {badgeCount !== undefined && badgeCount > 0 && (
+                    <span
+                      aria-label={`${badgeCount} awaiting your action`}
+                      className="shrink-0 rounded-full bg-[#eef1fc] px-[7px] py-[1px] text-[9.5px] font-semibold text-[#3a5fd9]"
+                    >
+                      {badgeCount > 99 ? "99+" : badgeCount}
+                    </span>
+                  )}
                 </Link>
               ))}
           </div>
@@ -231,6 +241,11 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     enabled: !isAdmin,
   });
   const publishedFlowsQuery = trpc.session.listPublishedFlows.useQuery(undefined, {
+    enabled: !isAdmin,
+  });
+  // Drives the Approvals badge. Shares its cache entry with /approvals, so
+  // deciding an approval there refreshes the count here without another fetch.
+  const pendingApprovalsQuery = trpc.approval.listPending.useQuery(undefined, {
     enabled: !isAdmin,
   });
 
@@ -267,7 +282,9 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     organisationsEnabled: organisationsEnabledQuery.data ?? false,
     extractionEnabled,
   });
-  const nav: NavGroup[] = isAdmin ? adminNav : buildUserNav(extractionEnabled);
+  const nav: NavGroup[] = isAdmin
+    ? adminNav
+    : buildUserNav(extractionEnabled, pendingApprovalsQuery.data?.length ?? 0);
   const homeHref = isAdmin ? "/admin/flows" : "/chats";
 
   const recentChats = isAdmin
@@ -357,7 +374,14 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       )}
       <UsageMeter />
       {user && (
-        <div className="flex items-center gap-[8px] rounded-[8px] px-[10px] py-[8px] hover:bg-[#efede8]">
+        <Link
+          href="/settings"
+          onClick={closeMobile}
+          aria-label="Settings"
+          className={`flex items-center gap-[8px] rounded-[8px] px-[10px] py-[8px] text-left transition-colors ${
+            isActive("/settings") ? "bg-[#eef1fc]" : "hover:bg-[#efede8]"
+          }`}
+        >
           <div className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full bg-[#3a5fd9] text-[11px] font-bold text-white">
             {initials}
           </div>
@@ -365,7 +389,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
             <div className="truncate text-[13px] font-medium text-[#1a1814]">{displayName}</div>
             {user.email && <div className="truncate text-[11px] text-[#6d6a65]">{user.email}</div>}
           </div>
-        </div>
+        </Link>
       )}
       {user && (
         <button

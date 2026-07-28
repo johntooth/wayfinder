@@ -6,6 +6,7 @@ export interface SessionCardStepInfo {
   totalSteps: number;
   completedSteps: number;
   currentConfidence: number;
+  currentStepNeverDone?: boolean;
 }
 
 interface SessionCardProps {
@@ -62,6 +63,9 @@ export function SessionCard({ session, flow, userBadge, stepInfo, lastMessage }:
   const title = session.title ?? flow?.name ?? "Untitled session";
   const badgeClass = STATUS_BADGE[session.status] ?? "bg-[#efede8] text-[#6d6a65] border border-[#dedad2]";
   const statusLabel = STATUS_LABEL[session.status] ?? session.status;
+  // A never-done step has no completion to measure, so the bar and percentage
+  // would be meaningless — the step counter and status badge stay.
+  const showsProgress = !stepInfo?.currentStepNeverDone;
   const progress = computeProgress(session, stepInfo);
 
   return (
@@ -106,22 +110,28 @@ export function SessionCard({ session, flow, userBadge, stepInfo, lastMessage }:
               </span>
             </div>
 
-            <div className="h-[4px] overflow-hidden rounded-full bg-[#e6e3dc]">
-              {progress !== null && (
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{
-                    width: `${progress}%`,
-                    backgroundColor: progress === 100 ? "#2e9e6a" : progress >= 60 ? "#3a5fd9" : "#d97706",
-                  }}
-                />
-              )}
-            </div>
+            {showsProgress && (
+              <div className="h-[4px] overflow-hidden rounded-full bg-[#e6e3dc]">
+                {progress !== null && (
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${progress}%`,
+                      backgroundColor: progress === 100 ? "#2e9e6a" : progress >= 60 ? "#3a5fd9" : "#d97706",
+                    }}
+                  />
+                )}
+              </div>
+            )}
 
             {stepInfo && stepInfo.totalSteps > 0 && (
-              <div className="flex justify-between font-mono text-[11px] text-[#6d6a65]">
+              <div
+                className={`flex font-mono text-[11px] text-[#6d6a65] ${
+                  showsProgress ? "justify-between" : "justify-center"
+                }`}
+              >
                 <span>Step {Math.max(1, stepInfo.currentIndex)}/{stepInfo.totalSteps}</span>
-                <span>{progress ?? 0}%</span>
+                {showsProgress && <span>{progress ?? 0}%</span>}
               </div>
             )}
           </div>
