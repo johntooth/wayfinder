@@ -203,6 +203,7 @@ import type { FlowVersion, PermissionKey } from "@rbrasier/domain";
 import { buildSkillsAndMcp } from "./container-skills-mcp";
 import { buildExtractionModule } from "./container-extraction";
 import { buildPeopleDirectory } from "./container-people-directory";
+import { buildSmtpEnvConfig } from "./container-smtp";
 import { createCachedPermissionResolver } from "./cached-permission-resolver";
 import {
   createCachedAdminSettings,
@@ -360,7 +361,12 @@ const build = () => {
     maxConcurrent: env.LLM_MAX_CONCURRENCY,
     maxAttempts: env.LLM_MAX_ATTEMPTS,
   });
-  const baseLlm = new LanguageModelAdapter(env.AI_DEFAULT_PROVIDER, runtimeConfig, llmGovernor);
+  const baseLlm = new LanguageModelAdapter(
+    env.AI_DEFAULT_PROVIDER,
+    runtimeConfig,
+    llmGovernor,
+    errorLogger,
+  );
   // Decorator order (ADR-026 §3): quota enforcement is outermost so it blocks
   // before the inner usage-tracking + provider call runs. The same enforcer is
   // shared with the chat stream route, which calls the SDK outside the port.
@@ -384,20 +390,7 @@ const build = () => {
   const documentExtractor = new DocumentExtractorService(docxGenerator);
   const nodeExecutors = createNodeExecutors(llm, env.N8N_WEBHOOK_SECRET);
   const n8nWorkflowDirectory = new N8nHttpWorkflowDirectory(() => runtimeConfig.getN8nConfig());
-  const smtpEnvConfig = env.SMTP_TRANSPORT_MODE
-    ? {
-        mode: env.SMTP_TRANSPORT_MODE,
-        host: env.SMTP_HOST ?? null,
-        port: env.SMTP_PORT ?? null,
-        secure: env.SMTP_SECURE,
-        user: env.SMTP_USER ?? null,
-        pass: env.SMTP_PASS ?? null,
-        from: env.SMTP_FROM ?? null,
-        m365TenantId: env.M365_TENANT_ID ?? null,
-        m365ClientId: env.M365_CLIENT_ID ?? null,
-        m365ClientSecret: env.M365_CLIENT_SECRET ?? null,
-      }
-    : null;
+  const smtpEnvConfig = buildSmtpEnvConfig(env);
   const emailSender = new NodemailerEmailSender(systemSettings, smtpEnvConfig);
   const notificationLog = new DrizzleNotificationLogRepository(db);
   // Admins toggle per-trigger notifications at runtime (no restart): read the

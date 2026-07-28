@@ -165,7 +165,12 @@ export const buildContainer = (env: Env) => {
     embeddingsProvider: EMBEDDINGS_DEFAULT_PROVIDER,
   });
 
-  const baseLlm = new LanguageModelAdapter(env.AI_DEFAULT_PROVIDER, runtimeConfig);
+  const baseLlm = new LanguageModelAdapter(
+    env.AI_DEFAULT_PROVIDER,
+    runtimeConfig,
+    undefined,
+    errorLogger,
+  );
   const llm = withOptionalLangfuse(withUsageTracking(baseLlm, usageRepo), env);
 
   const dbChecker = new DbHealthChecker(db);

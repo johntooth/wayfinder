@@ -6,6 +6,7 @@ import type { FlowNode, SessionMessage } from "@rbrasier/domain";
 import { ConfidenceBar } from "./confidence-bar";
 import { resolveCrossCheckingState } from "./cross-checking-state";
 import { resolveGeneratingDocumentState } from "./generating-document-state";
+import { MarkdownText } from "./markdown-text";
 import { messageTextSegments } from "./message-segments";
 import { DocumentCard } from "./document-card";
 import { RecordCard } from "./record-card";
@@ -176,6 +177,9 @@ export function MessageFeed({
             isSessionComplete: Boolean(isComplete),
           });
 
+          const showsConfidenceBar = msg.role === "assistant" && !isNeverDone;
+          const showsInfoButton = msg.role === "assistant" && Boolean(msg.aiPayload);
+
           return (
             <div key={msg.id}>
               {isNewStep && node && (
@@ -196,27 +200,25 @@ export function MessageFeed({
                       : "rounded-bl-[4px] border border-[#dedad2] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
                   }`}
                 >
-                  {senderName && (
-                    <p className="mb-1 text-[10px] font-semibold text-white/70">{senderName}</p>
+                  {msg.role === "user" ? (
+                    <p className="whitespace-pre-wrap text-[13px] leading-[1.55] text-white/90">
+                      {displayContent}
+                    </p>
+                  ) : (
+                    <MarkdownText
+                      content={displayContent}
+                      className="text-[13px] leading-[1.55] text-[#1a1814]"
+                    />
                   )}
                   <p
-                    className={`whitespace-pre-wrap text-[13px] leading-[1.55] ${
-                      msg.role === "user" ? "text-white/90" : "text-[#1a1814]"
-                    }`}
-                  >
-                    {displayContent}
-                  </p>
-                  <p
                     className={`mt-1 text-right font-mono text-[10px] ${
-                      msg.role === "user" ? "text-white/50" : "text-[#6d6a65]"
-                    }`}
+                      showsInfoButton && !showsConfidenceBar ? "pr-6" : ""
+                    } ${msg.role === "user" ? "text-white/50" : "text-[#6d6a65]"}`}
                   >
                     {formatRelativeTime(msg.createdAt)}
                   </p>
-                  {msg.role === "assistant" && !isNeverDone && (
-                    <ConfidenceBar score={msg.confidence} />
-                  )}
-                  {msg.role === "assistant" && msg.aiPayload && (
+                  {showsConfidenceBar && <ConfidenceBar score={msg.confidence} />}
+                  {showsInfoButton && (
                     <MessageInfoModal
                       message={msg}
                       allMessages={dbMessages}
@@ -311,13 +313,16 @@ export function MessageFeed({
                         : "rounded-bl-[4px] border border-[#dedad2] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
                     }`}
                   >
-                    <p
-                      className={`whitespace-pre-wrap text-[13px] leading-[1.55] ${
-                        msg.role === "user" ? "text-white/90" : "text-[#1a1814]"
-                      }`}
-                    >
-                      {segment}
-                    </p>
+                    {msg.role === "user" ? (
+                      <p className="whitespace-pre-wrap text-[13px] leading-[1.55] text-white/90">
+                        {segment}
+                      </p>
+                    ) : (
+                      <MarkdownText
+                        content={segment}
+                        className="text-[13px] leading-[1.55] text-[#1a1814]"
+                      />
+                    )}
                     {msg.role === "assistant" && segmentIndex === 0 && !streamingIsNeverDone && (
                       <ConfidenceBar
                         score={confidenceAnnotation?.score ?? null}

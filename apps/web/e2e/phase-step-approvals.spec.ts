@@ -15,6 +15,7 @@
 import { test, expect } from './helpers/base';
 import { loadSeedFixtures } from './helpers/seed';
 import type { Page } from '@playwright/test';
+import { openSettingsSection } from './helpers/settings';
 
 async function trpcMutate(
   page: Page,
@@ -40,6 +41,7 @@ test.describe('Step approvals: UI', () => {
   test('admin settings expose the HR directory and Entra cards', async ({ page }) => {
     await page.goto('/admin/settings');
     await page.waitForLoadState('networkidle');
+    await openSettingsSection(page, 'Directory & security');
     await expect(page.getByText('HR Directory Data')).toBeVisible();
     await expect(page.getByText(/Approver Directory/i)).toBeVisible();
   });

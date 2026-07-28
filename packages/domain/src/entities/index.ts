@@ -55,6 +55,7 @@ export * from "./field-report-pivot";
 export * from "./system-setting";
 export * from "./runtime-config";
 export * from "./site-banner";
+export * from "./about-links";
 export * from "./notification-log";
 export * from "./retention-policy";
 export * from "./approval";

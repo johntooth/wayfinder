@@ -16,6 +16,7 @@
  */
 
 import { test, expect } from './helpers/base';
+import { openAllSettingsSections } from './helpers/settings';
 
 // One title per extracted card file — each an <h3> rendered unconditionally.
 const CARD_TITLES = [
@@ -39,6 +40,7 @@ test.describe('Code quality Group D: settings page decomposition', () => {
   test('every extracted settings section still renders', async ({ page, consoleLogs }) => {
     await page.goto('/admin/settings');
     await page.waitForLoadState('networkidle');
+    await openAllSettingsSections(page);
 
     // AI section anchor (rendered by the page shell between the extracted cards).
     await expect(page.getByTestId('settings-section-ai')).toBeVisible();

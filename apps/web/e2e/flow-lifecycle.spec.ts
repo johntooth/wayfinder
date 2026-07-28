@@ -135,19 +135,9 @@ test.describe('Admin: Create Flow', () => {
 
     await page.getByRole('button', { name: /create flow/i }).click();
 
-    // Dialog closes when the mutation succeeds
-    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10_000 });
-
-    await page.screenshot({ path: 'screenshots/flow-lifecycle-created.png', fullPage: true });
-
-    // The new flow row should be in the list; open it
-    const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
-    await expect(editLink).toBeVisible({ timeout: 5_000 });
-    await editLink.click();
-
-    // Wait for navigation rather than asserting the URL after a fixed delay.
-    // "Configure Flow" links to the single canonical editor at /flows/[id]/config.
-    await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 10_000 });
+    // Creating a flow lands on the canvas editor directly (v0.21.0) — wait for
+    // the navigation rather than asserting the URL after a fixed delay.
+    await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 });
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1200); // allow ReactFlow canvas to mount
 

@@ -14,6 +14,8 @@ import {
   EXTRACTION_CONFIG_SETTING_KEY,
   SIEM_CONFIG_SETTING_KEY,
   SITE_BANNER_CONFIG_SETTING_KEY,
+  ABOUT_LINKS_SETTING_KEY,
+  ABOUT_LINK_ICONS,
   SITE_BANNER_MAX_TEXT_SIZE_PT,
   SITE_BANNER_MIN_TEXT_SIZE_PT,
   STORAGE_CONFIG_SETTING_KEY,
@@ -25,6 +27,7 @@ import {
   isN8nConfigured,
   isStorageConfigured,
   normaliseSiteBannerLinkUrl,
+  normaliseAboutLinkUrl,
   type AiConfig,
   type AiPurpose,
   type AuthConfig,
@@ -120,6 +123,28 @@ export const siteBannerConfigInputSchema = z.object({
   backgroundColour: hexColourSchema,
   linkUrl: siteBannerLinkUrlSchema,
   linkLabel: z.string().max(60),
+});
+
+// One row per configured About entry. The URL is validated the same way the
+// read path normalises it, so an admin sees a rejection rather than a link that
+// silently disappears from the modal.
+export const aboutLinksInputSchema = z.object({
+  links: z
+    .array(
+      z.object({
+        label: z.string().trim().min(1, "Give the link some text").max(60),
+        url: z
+          .string()
+          .trim()
+          .refine(
+            (value) => normaliseAboutLinkUrl(value) === value.trim() && value.trim().length > 0,
+            "Enter a full https:// or http:// URL, a mailto: address, or a path starting with /",
+          ),
+        icon: z.enum(ABOUT_LINK_ICONS),
+        showInHelpMenu: z.boolean(),
+      }),
+    )
+    .max(12),
 });
 
 export const extractionConfigInputSchema = z.object({
@@ -497,6 +522,24 @@ export const settingsRouter = router({
       );
       if (result.error) throw toTrpcError(result.error);
       ctx.container.runtimeConfig.invalidateSiteBanner();
+      return { ok: true };
+    }),
+
+  // Authenticated rather than admin: every signed-in user sees these on the
+  // About modal and in the help menu, and they carry no secret material.
+  getAboutLinks: publicProcedure.query(async ({ ctx }) => {
+    return ctx.container.runtimeConfig.getAboutLinksConfig();
+  }),
+
+  setAboutLinks: adminProcedure
+    .input(aboutLinksInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.repos.systemSettings.set(
+        ABOUT_LINKS_SETTING_KEY,
+        JSON.stringify(input),
+      );
+      if (result.error) throw toTrpcError(result.error);
+      ctx.container.runtimeConfig.invalidateAboutLinks();
       return { ok: true };
     }),
 

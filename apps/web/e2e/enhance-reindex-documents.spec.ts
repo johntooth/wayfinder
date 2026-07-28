@@ -15,10 +15,12 @@
  */
 
 import { test, expect } from './helpers/base';
+import { openSettingsSection } from './helpers/settings';
 
 test.describe('Admin: Re-index all documents', () => {
   test('re-indexing can be started and reports completion', async ({ page, consoleLogs }) => {
     await page.goto('/admin/settings');
+    await openSettingsSection(page, 'Integrations');
     await page.waitForLoadState('networkidle');
 
     const cardHeading = page.getByText('RAG Embeddings', { exact: true });

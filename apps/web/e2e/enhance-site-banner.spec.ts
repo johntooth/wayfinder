@@ -15,6 +15,7 @@
 
 import type { Page } from '@playwright/test';
 import { test, expect } from './helpers/base';
+import { openSettingsSection } from './helpers/settings';
 
 const BANNER = {
   banner: '[data-testid="site-banner"]',
@@ -30,6 +31,7 @@ const LINK_LABEL = 'View status';
 
 async function openSettings(page: Page): Promise<void> {
   await page.goto('/admin/settings');
+  await openSettingsSection(page, 'Notifications');
   await page.waitForLoadState('networkidle');
   await expect(page.getByText('Site Banner')).toBeVisible();
 }

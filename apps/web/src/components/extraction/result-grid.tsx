@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Download, Pencil } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Download, Pencil } from "lucide-react";
 import { aggregateConfidence, confidenceBand, type ConfidenceBand } from "@rbrasier/domain";
 import {
   Dialog,
@@ -18,6 +18,7 @@ import {
   fieldColumnKeys,
   fieldValue,
   pairFields,
+  recordExceptionReasons,
   toggleExpanded,
   visibleRecords,
 } from "./result-grid-model";
@@ -415,6 +416,11 @@ function RecordDetail({
     .map((id) => documentsById.get(id))
     .filter((document): document is ResultDocument => document !== undefined);
 
+  const exceptionReasons = recordExceptionReasons(record, {
+    exceptionFileIds,
+    documents: [...documentsById.values()],
+  });
+
   return (
     <div className="flex flex-col gap-[14px]">
       <div className="flex flex-wrap items-baseline gap-x-[10px] gap-y-[2px]">
@@ -425,6 +431,23 @@ function RecordDetail({
           {Math.round(aggregateConfidence(record) * 100)}% overall confidence
         </span>
       </div>
+
+      {exceptionReasons.length > 0 ? (
+        <div
+          data-testid="record-exception-detail"
+          className="rounded-[8px] border border-[#f0d9ae] bg-[#fdf8ee] px-[12px] py-[10px]"
+        >
+          <h5 className="flex items-center gap-[6px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#9b6215]">
+            <AlertTriangle className="h-[12px] w-[12px] shrink-0" />
+            Why this is an exception
+          </h5>
+          <ul className="mt-[6px] flex list-disc flex-col gap-[3px] pl-[16px] text-[12px] text-[#7a5312]">
+            {exceptionReasons.map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div>
         <h5 className="mb-[6px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#8a857c]">

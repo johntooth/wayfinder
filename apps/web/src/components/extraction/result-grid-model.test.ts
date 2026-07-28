@@ -4,10 +4,16 @@ import {
   fieldColumnKeys,
   fieldValue,
   pairFields,
+  recordExceptionReasons,
   toggleExpanded,
   visibleRecords,
 } from "./result-grid-model";
-import type { ResultFieldValue, ResultRecord, SampleResult } from "./result-grid-model";
+import type {
+  ResultDocument,
+  ResultFieldValue,
+  ResultRecord,
+  SampleResult,
+} from "./result-grid-model";
 
 const field = (key: string, value: string, confidence = 0.9): ResultFieldValue => ({
   key,
@@ -145,5 +151,77 @@ describe("visibleRecords", () => {
 
   it("applies the query and the exceptions filter together", () => {
     expect(visibleRecords(source, { query: "globex", exceptionsOnly: true })).toEqual([]);
+  });
+});
+
+// An "Exception" badge on its own does not tell the operator what to fix, so the
+// expanded record spells out why the row was flagged.
+describe("recordExceptionReasons", () => {
+  const document = (id: string, filename: string, readable = true): ResultDocument => ({
+    id,
+    filename,
+    treePath: `/${filename}`,
+    readable,
+  });
+
+  it("returns no reasons for a healthy record", () => {
+    const subject = record("r1", "Acme", [field("supplier", "Acme")], ["d1"]);
+
+    expect(
+      recordExceptionReasons(subject, { exceptionFileIds: [], documents: [document("d1", "a.pdf")] }),
+    ).toEqual([]);
+  });
+
+  it("explains a record with nothing extracted", () => {
+    const subject = record("r1", "Acme", [field("supplier", ""), field("price", "  ")]);
+
+    expect(recordExceptionReasons(subject, { exceptionFileIds: [], documents: [] })).toEqual([
+      "No values were extracted for this record.",
+    ]);
+  });
+
+  it("names a source file that produced no record", () => {
+    const subject = record("r1", "Acme", [field("supplier", "Acme")], ["d1"]);
+
+    expect(
+      recordExceptionReasons(subject, {
+        exceptionFileIds: ["d1"],
+        documents: [document("d1", "tender.pdf")],
+      }),
+    ).toEqual(["tender.pdf produced no record."]);
+  });
+
+  it("names a source file that could not be read", () => {
+    const subject = record("r1", "Acme", [field("supplier", "Acme")], ["d1"]);
+
+    expect(
+      recordExceptionReasons(subject, {
+        exceptionFileIds: [],
+        documents: [document("d1", "scan.pdf", false)],
+      }),
+    ).toEqual(["scan.pdf could not be read."]);
+  });
+
+  it("reports every reason that applies", () => {
+    const subject = record("r1", "Acme", [field("supplier", "")], ["d1", "d2"]);
+
+    expect(
+      recordExceptionReasons(subject, {
+        exceptionFileIds: ["d2"],
+        documents: [document("d1", "scan.pdf", false), document("d2", "tender.pdf")],
+      }),
+    ).toEqual([
+      "No values were extracted for this record.",
+      "scan.pdf could not be read.",
+      "tender.pdf produced no record.",
+    ]);
+  });
+
+  it("falls back to the id when the source document is unknown", () => {
+    const subject = record("r1", "Acme", [field("supplier", "Acme")], ["missing"]);
+
+    expect(
+      recordExceptionReasons(subject, { exceptionFileIds: ["missing"], documents: [] }),
+    ).toEqual(["missing produced no record."]);
   });
 });
