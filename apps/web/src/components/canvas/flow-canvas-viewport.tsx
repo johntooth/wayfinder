@@ -83,7 +83,12 @@ export function FlowCanvasViewport({
           // "the flow continues this way" rather than drifting over the canvas.
           <ViewportPortal>
             <div
-              className="absolute flex items-center"
+              // React Flow turns pointer events off across the whole viewport
+              // and lets nodes back in one by one (.react-flow__node), so
+              // anything portalled in has to opt back in or it is visible but
+              // unclickable. Only the button opts in — the padding either side
+              // of it stays transparent so the canvas underneath still drags.
+              className="pointer-events-none absolute flex items-center"
               style={{
                 height: nextStepAnchor.nodeHeight,
                 transform: `translate(${nextStepAnchor.position.x}px, ${nextStepAnchor.position.y}px)`,
@@ -92,7 +97,7 @@ export function FlowCanvasViewport({
               <Button
                 variant="outline"
                 onClick={() => onAddNextStep(nextStepAnchor)}
-                className="border-dashed opacity-70 shadow-sm transition-opacity hover:opacity-100 focus-visible:opacity-100"
+                className="pointer-events-auto border-dashed opacity-70 shadow-sm transition-opacity hover:opacity-100 focus-visible:opacity-100"
               >
                 + Create the next step in your workflow
               </Button>

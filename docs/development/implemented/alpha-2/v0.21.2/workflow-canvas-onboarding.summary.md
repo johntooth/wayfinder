@@ -66,6 +66,16 @@ band the new step will occupy rather than clipped to the top of a taller card.
 Hidden when the right-most step is saved `neverDone`: such a step loops until the
 operator ends it, so nothing can follow it.
 
+**Pointer events are opt-in inside the viewport.** React Flow sets
+`pointer-events: none` on `.react-flow__viewport` and lets elements back in one
+at a time (`.react-flow__node { pointer-events: all }`). Anything rendered
+through `ViewportPortal` inherits that and is *visible but unclickable* unless it
+opts back in — it fails no render assertion, only actionability, so it looks
+correct in a screenshot. The button carries `pointer-events-auto`; its wrapper
+stays `pointer-events-none` so the padding either side of the button does not
+steal drags from the canvas underneath. This was caught by the e2e spec below
+(`locator.click` timing out with the hit test landing on `.react-flow__pane`).
+
 **Auto-connect is conditional.** When exactly one step has no outgoing edge, that
 step is the unambiguous continuation point and the new step is joined to it. With
 zero or several open branches there is no single correct parent, so the step is
