@@ -149,3 +149,92 @@
     background: none;
   }
 }
+
+/* Canvas onboarding — the drag-to-join gesture demonstrated in the
+   disconnected-steps warning. The three animations share one duration and one
+   set of stops so the pointer, the connector it drags out, and the target dot it
+   lands on stay in step with each other. The connector spans 140 user units
+   (x=112 → x=252), which is the dash length the draw is expressed in. */
+@keyframes wf-connect-draw {
+  0%,
+  12% {
+    stroke-dashoffset: 140;
+  }
+  58%,
+  90% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 140;
+  }
+}
+
+@keyframes wf-connect-pointer {
+  0%,
+  12% {
+    transform: translateX(0);
+  }
+  58%,
+  90% {
+    transform: translateX(140px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+/* The target dot is dim until the connector reaches it, then snaps — the
+   feedback that tells the author the join has taken. */
+@keyframes wf-connect-target {
+  0%,
+  52% {
+    transform: scale(0.75);
+    opacity: 0.35;
+  }
+  64% {
+    transform: scale(1.35);
+    opacity: 1;
+  }
+  72%,
+  90% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.75);
+    opacity: 0.35;
+  }
+}
+
+.wf-connect-demo .wf-connect-line {
+  stroke-dasharray: 140;
+  animation: wf-connect-draw 3.6s ease-in-out infinite;
+}
+
+.wf-connect-demo .wf-connect-pointer {
+  animation: wf-connect-pointer 3.6s ease-in-out infinite;
+}
+
+.wf-connect-demo .wf-connect-target {
+  /* Scale about the dot itself rather than the SVG's origin. */
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: wf-connect-target 3.6s ease-in-out infinite;
+}
+
+/* Reduced motion keeps the lesson but drops the loop: the finished join, held. */
+@media (prefers-reduced-motion: reduce) {
+  .wf-connect-demo .wf-connect-line {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .wf-connect-demo .wf-connect-pointer {
+    animation: none;
+    transform: translateX(140px);
+  }
+  .wf-connect-demo .wf-connect-target {
+    animation: none;
+    transform: scale(1);
+    opacity: 1;
+  }
+}

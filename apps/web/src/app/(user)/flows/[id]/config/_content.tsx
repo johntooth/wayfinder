@@ -47,6 +47,7 @@ import type { ConversationalNodeData } from "@/components/canvas/conversational-
 import { normaliseOutputType } from "@rbrasier/domain";
 import type { FieldValueSource, FlowContextDoc, PermissionKey, PriorStepField, TemplateField } from "@rbrasier/domain";
 import { compareStepLabels, computeStepNumbers } from "@/lib/flow-utils";
+import type { NextStepAnchor } from "@/lib/canvas/canvas-guidance";
 import {
   CANVAS_DEBOUNCE_MS as DEBOUNCE_MS,
   readFields,
@@ -91,10 +92,13 @@ function CanvasInner({ flowId }: { flowId: string }) {
   // document uploads work without an explicit first save).
   const [createdNodeId, setCreatedNodeId] = useState<string | null>(null);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
-  // A connector dragged into blank space: the new node's source and drop point.
-  // The type picker resolves the type first, mirroring the Add step button.
+  // A step waiting on a type: where it goes, and what it hangs off. A connector
+  // dragged into blank space always names its source; the canvas's next-step
+  // prompt leaves it null when the graph has more than one open branch and no
+  // single parent is correct. The type picker resolves the type first, mirroring
+  // the Add step button.
   const [pendingConnect, setPendingConnect] = useState<{
-    fromNodeId: string;
+    fromNodeId: string | null;
     position: { x: number; y: number };
   } | null>(null);
   const [flowMenuOpen, setFlowMenuOpen] = useState(false);
@@ -398,12 +402,20 @@ function CanvasInner({ flowId }: { flowId: string }) {
     setTypePickerOpen(true);
   }, []);
 
+  // The canvas's next-step prompt. It already knows where the step belongs and
+  // whether there is an unambiguous parent to join it to, so it hands both
+  // straight to the drag-out path rather than adding a second way to create one.
+  const handleAddNextStep = useCallback((anchor: NextStepAnchor) => {
+    setPendingConnect({ fromNodeId: anchor.connectFromNodeId, position: anchor.position });
+    setTypePickerOpen(true);
+  }, []);
+
   const handleSelectNodeType = useCallback((type: NodeConfigType) => {
     setTypePickerOpen(false);
     if (pendingConnect) {
       const { fromNodeId, position } = pendingConnect;
       setPendingConnect(null);
-      void createAndEditNode(type, position, fromNodeId);
+      void createAndEditNode(type, position, fromNodeId ?? undefined);
       return;
     }
     const xOffset = rfNodes.length > 0 ? (rfNodes[rfNodes.length - 1]?.position.x ?? 0) + 280 : 200;
@@ -642,6 +654,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         onNodeClick={onNodeClick}
         onNodeDragStop={onNodeDragStop}
         onAddStep={handleAddStep}
+        onAddNextStep={handleAddNextStep}
         staleReferences={staleReferences}
       />
 
