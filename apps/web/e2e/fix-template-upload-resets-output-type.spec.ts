@@ -42,14 +42,18 @@ test.describe('fix: template upload preserves output type and pre-filled fields'
     const flowName = `Fix Output Type ${Date.now()}`;
     await createFlowAndOpenCanvas(page, flowName);
 
-    // 1. Empty canvas shows the large "+ Add step" overlay button (the toolbar
-    //    button plus the overlay make two — the overlay is the last one).
-    const addStepButtons = page.getByRole('button', { name: '+ Add step' });
-    await expect(addStepButtons).toHaveCount(2, { timeout: 10_000 });
+    // 1. Empty canvas shows the large first-step overlay button alongside the
+    //    toolbar's "+ Add step" (v0.21.2 renamed the overlay to name the goal
+    //    rather than the mechanic).
+    const firstStepButton = page.getByRole('button', {
+      name: '+ Create your first step in your workflow',
+    });
+    await expect(firstStepButton).toHaveCount(1, { timeout: 10_000 });
+    await expect(page.getByRole('button', { name: '+ Add step' })).toHaveCount(1);
     await page.screenshot({ path: 'screenshots/fix-output-type-empty-canvas.png', fullPage: true });
 
     // Adding the first step via the overlay opens the node-type picker.
-    await addStepButtons.last().click();
+    await firstStepButton.click();
     await page.getByRole('button', { name: 'Conversational' }).click();
     await expect(page.locator('#node-name')).toBeVisible({ timeout: 5_000 });
 
@@ -108,8 +112,11 @@ test.describe('fix: template upload preserves output type and pre-filled fields'
     await page.getByRole('button', { name: /^Save$/i }).click();
     await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10_000 });
 
-    // After the first step exists, the empty-canvas overlay is gone — only the
-    // toolbar "+ Add step" button remains.
-    await expect(page.getByRole('button', { name: '+ Add step' })).toHaveCount(1, { timeout: 5_000 });
+    // After the first step exists, the empty-canvas overlay is gone; the toolbar
+    // "+ Add step" button remains and the canvas now offers the next step.
+    await expect(
+      page.getByRole('button', { name: '+ Create your first step in your workflow' }),
+    ).toHaveCount(0, { timeout: 5_000 });
+    await expect(page.getByRole('button', { name: '+ Add step' })).toHaveCount(1);
   });
 });
