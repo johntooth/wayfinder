@@ -2,12 +2,16 @@
 
 import { confidenceBand, type ConfidenceBand } from "@rbrasier/domain";
 import { trpc } from "@/trpc/client";
+import { RUN_POLL_INTERVAL_MS } from "./run-progress";
 
 // The per-run field report (phase §5): per-record rows × extraction-field columns
 // — the extraction analogue of the Insights field report. Read-only; the editable
 // triage lives in the results grid above it.
 export interface RunReportProps {
   runId: string;
+  // Set while the run can still gain records, so the report follows the grid
+  // above it instead of holding the shape it had when the screen opened.
+  live?: boolean;
 }
 
 const BAND_DOT: Record<ConfidenceBand, string> = {
@@ -16,8 +20,11 @@ const BAND_DOT: Record<ConfidenceBand, string> = {
   green: "bg-[#2f9e6b]",
 };
 
-export function RunReport({ runId }: RunReportProps) {
-  const reportQuery = trpc.extraction.runReport.useQuery({ runId });
+export function RunReport({ runId, live = false }: RunReportProps) {
+  const reportQuery = trpc.extraction.runReport.useQuery(
+    { runId },
+    { refetchInterval: live ? RUN_POLL_INTERVAL_MS : false },
+  );
 
   if (reportQuery.isLoading || reportQuery.error) return null;
   const report = reportQuery.data?.report;

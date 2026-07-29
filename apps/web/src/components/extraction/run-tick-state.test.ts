@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isProcessing, shouldAnimateProgress, shouldDriveTick } from "./run-tick-state";
+import { isLiveRun, isProcessing, shouldAnimateProgress, shouldDriveTick } from "./run-tick-state";
 
 const state = (overrides: Partial<Parameters<typeof shouldDriveTick>[0]> = {}) => ({
   status: "running",
@@ -41,6 +41,20 @@ describe("isProcessing", () => {
     expect(isProcessing("paused_preview")).toBe(false);
     expect(isProcessing("complete")).toBe(false);
     expect(isProcessing(undefined)).toBe(false);
+  });
+});
+
+describe("isLiveRun", () => {
+  it("is true while the run can still gain results", () => {
+    expect(isLiveRun("running")).toBe(true);
+    expect(isLiveRun("paused_preview")).toBe(true);
+    expect(isLiveRun("paused_cap")).toBe(true);
+  });
+
+  it("is false once the run is terminal, so the screen stops polling", () => {
+    for (const status of ["complete", "partial", "cancelled", undefined]) {
+      expect(isLiveRun(status)).toBe(false);
+    }
   });
 });
 

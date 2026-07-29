@@ -4,6 +4,7 @@ import {
   fieldColumnKeys,
   fieldValue,
   pairFields,
+  pendingDocuments,
   recordExceptionReasons,
   toggleExpanded,
   visibleRecords,
@@ -154,6 +155,63 @@ describe("visibleRecords", () => {
   });
 });
 
+// A run in progress has documents that have produced no record yet. Without a
+// row of their own the grid looks like a finished run with records missing.
+describe("pendingDocuments", () => {
+  const document = (
+    id: string,
+    filename: string,
+    status: ResultDocument["status"],
+  ): ResultDocument => ({ id, filename, treePath: `/inbox/${filename}`, readable: true, status });
+
+  const run = (documents: ResultDocument[]): SampleResult => ({
+    documents,
+    records: [],
+    exceptionFileIds: [],
+  });
+
+  it("returns the documents still queued or in the model's hands", () => {
+    const source = run([
+      document("d1", "a.pdf", "complete"),
+      document("d2", "b.pdf", "pending"),
+      document("d3", "c.pdf", "extracting"),
+    ]);
+
+    expect(
+      pendingDocuments(source, { query: "", exceptionsOnly: false }).map((entry) => entry.id),
+    ).toEqual(["d2", "d3"]);
+  });
+
+  it("leaves out documents that have settled, however they settled", () => {
+    const source = run([
+      document("d1", "a.pdf", "complete"),
+      document("d2", "b.pdf", "failed"),
+      document("d3", "c.pdf", "unreadable"),
+    ]);
+
+    expect(pendingDocuments(source, { query: "", exceptionsOnly: false })).toEqual([]);
+  });
+
+  it("matches the query against the filename and the tree path", () => {
+    const source = run([document("d1", "tender.pdf", "pending"), document("d2", "quote.pdf", "pending")]);
+
+    expect(
+      pendingDocuments(source, { query: "tend", exceptionsOnly: false }).map((entry) => entry.id),
+    ).toEqual(["d1"]);
+    expect(
+      pendingDocuments(source, { query: "inbox", exceptionsOnly: false }).map((entry) => entry.id),
+    ).toEqual(["d1", "d2"]);
+  });
+
+  // An unprocessed document has not failed at anything yet, so it is not part of
+  // the exceptions triage.
+  it("returns nothing under the exceptions filter", () => {
+    const source = run([document("d1", "a.pdf", "pending")]);
+
+    expect(pendingDocuments(source, { query: "", exceptionsOnly: true })).toEqual([]);
+  });
+});
+
 // An "Exception" badge on its own does not tell the operator what to fix, so the
 // expanded record spells out why the row was flagged.
 describe("recordExceptionReasons", () => {
@@ -162,6 +220,7 @@ describe("recordExceptionReasons", () => {
     filename,
     treePath: `/${filename}`,
     readable,
+    status: readable ? "complete" : "unreadable",
   });
 
   it("returns no reasons for a healthy record", () => {
