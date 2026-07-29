@@ -65,6 +65,33 @@ test.describe('fix: template upload preserves output type and pre-filled fields'
     await page.locator('label', { hasText: 'Generate document' }).click();
     await expect(page.locator('#done-when-mode')).toHaveValue('template');
 
+    // Since v0.21.3 an upload opens the guided annotation modal before anything
+    // is persisted, so the detection step is mocked alongside the save.
+    await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template\/analyse$/, async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          filename: 'mock-template.docx',
+          format: 'docx',
+          classification: 'annotated',
+          documentText: 'Hello {{Client Name}}.',
+          rows: [
+            {
+              key: 'client_name',
+              kind: 'tag',
+              line: 'Client Name',
+              occurrences: [{ sourceText: '{{Client Name}}', occurrence: 0 }],
+              context: 'Hello {{Client Name}}.',
+              originalValue: null,
+              confidence: null,
+              locked: false,
+            },
+          ],
+        }),
+      });
+    });
+
     // Intercept the template upload endpoint and return mock fields.
     await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template$/, async (route: Route) => {
       if (route.request().method() !== 'POST') {
@@ -96,7 +123,14 @@ test.describe('fix: template upload preserves output type and pre-filled fields'
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       buffer: fakeDocx,
     });
-    await expect(page.locator('text=mock-template.docx').first()).toBeVisible({ timeout: 8_000 });
+
+    // Walk the guided modal: the mocked document already carries a placeholder,
+    // so it offers to continue with what it found, then saves.
+    await expect(page.getByText('Placeholders found')).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: 'Continue with these' }).click();
+    await page.getByRole('button', { name: 'Save template' }).click();
+
+    await expect(page.locator('text=mock-template.docx').first()).toBeVisible({ timeout: 10_000 });
 
     // 3. The core regression: output type stays "Generate document" and the
     //    pre-filled fields are preserved after the upload.

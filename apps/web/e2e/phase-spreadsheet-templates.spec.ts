@@ -53,6 +53,23 @@ test.describe('phase: spreadsheet (xlsx) templates', () => {
     // The file input accepts spreadsheets alongside Word documents.
     await expect(page.locator('input[type="file"][accept=".docx,.xlsx"]')).toBeAttached();
 
+    // A workbook already usable in header mode skips the guided annotation flow
+    // (ADR-039: annotating it would convert it to tag mode and change how it is
+    // filled), so it is stored exactly as it was uploaded.
+    await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template\/analyse$/, async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          filename: 'asset-register.xlsx',
+          format: 'xlsx',
+          classification: 'header',
+          documentText: 'Asset Name  Serial  Owner',
+          rows: [],
+        }),
+      });
+    });
+
     await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template$/, async (route: Route) => {
       if (route.request().method() !== 'POST') {
         await route.continue();
@@ -98,11 +115,7 @@ test.describe('phase: spreadsheet (xlsx) templates', () => {
     await createFlowAndOpenCanvas(page, `Xlsx Reject ${Date.now()}`);
     await addGenerateDocumentStep(page);
 
-    await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template$/, async (route: Route) => {
-      if (route.request().method() !== 'POST') {
-        await route.continue();
-        return;
-      }
+    await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template\/analyse$/, async (route: Route) => {
       await route.fulfill({
         status: 422,
         contentType: 'application/json',
@@ -120,7 +133,7 @@ test.describe('phase: spreadsheet (xlsx) templates', () => {
       buffer: fakeXlsx,
     });
 
-    await expect(page.getByText(/no header row/i)).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByText(/no header row/i)).toBeVisible({ timeout: 10_000 });
     // The rejected file never becomes the step's template.
     await expect(page.locator('text=empty.xlsx')).toHaveCount(0);
   });

@@ -1,144 +1,73 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { DocxGenerator, XlsxGenerator } from "@rbrasier/adapters";
-import type { TemplateField } from "@rbrasier/domain";
+import type { TemplateAnnotationEdit } from "@rbrasier/domain";
 import { TEMPLATE_STRUCTURED_CONTENT_MAX_CHARS } from "@rbrasier/shared";
-import { getContainer } from "@/lib/container";
-import { getSessionTokenFromRequest } from "@/lib/session-token";
+import type { Container } from "@/lib/container";
+import { buildAnnotationEdits, type AnnotationRow } from "@/lib/template-annotation";
+import {
+  authoriseTemplateNode,
+  extractTemplate,
+  generatorFor,
+  readUploadedTemplate,
+  TEMPLATE_MIME,
+  type TemplateFormat,
+} from "@/lib/template-route-helpers";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
-
-type TemplateFormat = "docx" | "xlsx";
-
-const TEMPLATE_MIME: Record<TemplateFormat, string> = {
-  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+const parseAnnotationRows = (raw: FormDataEntryValue | null): AnnotationRow[] | null => {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as AnnotationRow[]) : null;
+  } catch {
+    return null;
+  }
 };
 
-const docxGenerator = new DocxGenerator();
-const xlsxGenerator = new XlsxGenerator();
-
-interface TemplateExtraction {
-  tags: string[];
-  fields: TemplateField[];
-  documentTemplateContent: string;
-  spreadsheetTemplateMode: "tags" | "header" | null;
-}
-
-interface ExtractionFailure {
-  status: number;
-  body: { error: string; code?: string };
-}
-
-// Reduces an uploaded template to the fields a conversation must gather, the
-// prose to summarise/index, and (for xlsx) the detected authoring mode. Mirrors
-// the .docx validation for .xlsx via the XlsxGenerator (ADR-039): any {{ tag }}
-// ⇒ tag mode, otherwise the header row's headings; a file with neither is
-// rejected here rather than mid-session.
-const extractTemplate = (
+// Writes the reviewed placeholders into the uploaded bytes. The upload itself is
+// never mutated — annotate() returns a new document, and only that derived
+// version is stored.
+const applyAnnotations = (
   format: TemplateFormat,
   buffer: Buffer,
-): { data: TemplateExtraction; error?: undefined } | { data?: undefined; error: ExtractionFailure } => {
-  const generator = format === "xlsx" ? xlsxGenerator : docxGenerator;
+  edits: TemplateAnnotationEdit[],
+): { data: Buffer; error?: undefined } | { data?: undefined; error: NextResponse } => {
+  if (edits.length === 0) return { data: buffer };
 
-  const tagsResult = generator.extractTags({ templateBytes: buffer });
-  if (tagsResult.error) {
-    return { error: { status: 422, body: { error: `Invalid template: ${tagsResult.error.message}` } } };
+  const annotated = generatorFor(format).annotate({ templateBytes: buffer, edits });
+  if (annotated.error) {
+    return { error: NextResponse.json({ error: annotated.error.message }, { status: 422 }) };
   }
 
-  // A .docx with no tags cannot capture anything; a .xlsx with no tags is valid
-  // (header mode), so only .docx is rejected here.
-  if (format === "docx" && tagsResult.data.tags.length === 0) {
+  if (annotated.data.unmatched.length > 0) {
     return {
-      error: {
-        status: 422,
-        body: {
-          error:
-            "This template has no {{ tag }} placeholders. Add at least one tag (e.g. {{ client_name }}) where you want the AI to fill in information, then re-upload.",
-          code: "NO_TEMPLATE_TAGS",
+      error: NextResponse.json(
+        {
+          error: `${annotated.data.unmatched.length} field${annotated.data.unmatched.length === 1 ? "" : "s"} could not be placed in the document. The document may have changed since it was analysed — re-upload it and try again.`,
+          code: "ANNOTATION_UNMATCHED",
+          unmatched: annotated.data.unmatched.map((edit) => edit.find),
         },
-      },
+        { status: 422 },
+      ),
     };
   }
 
-  const fieldsResult = generator.extractFields({ templateBytes: buffer });
-  if (fieldsResult.error) {
-    return { error: { status: 422, body: { error: fieldsResult.error.message, code: "INVALID_TEMPLATE_FIELDS" } } };
-  }
-
-  const textResult = generator.extractFullText({ templateBytes: buffer });
-  const documentTemplateContent = textResult.data?.text ?? null;
-  if (!documentTemplateContent) {
-    return { error: { status: 422, body: { error: "Could not extract text from template" } } };
-  }
-
-  const spreadsheetTemplateMode =
-    format === "xlsx" ? (tagsResult.data.tags.length > 0 ? "tags" : "header") : null;
-
-  return {
-    data: {
-      tags: tagsResult.data.tags,
-      fields: fieldsResult.data.fields,
-      documentTemplateContent,
-      spreadsheetTemplateMode,
-    },
-  };
+  return { data: annotated.data.bytes };
 };
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string; nodeId: string }> },
-): Promise<NextResponse> {
-  const { id: flowId, nodeId } = await params;
-  const container = getContainer();
+interface StoreTemplateInput {
+  container: Container;
+  flowId: string;
+  nodeId: string;
+  nodeConfig: Record<string, unknown>;
+  buffer: Buffer;
+  format: TemplateFormat;
+  safeFilename: string;
+}
 
-  const token = getSessionTokenFromRequest(req);
-  if (!token) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const session = await container.resolveSession(token);
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const canvasResult = await container.useCases.getFlowCanvas.execute(flowId);
-  if (canvasResult.error || !canvasResult.data) {
-    return NextResponse.json({ error: "Flow not found" }, { status: 404 });
-  }
-
-  const { flow } = canvasResult.data;
-  const canEdit =
-    session.isAdmin ||
-    flow.ownerUserId === session.userId ||
-    flow.permissions.some((p) => p.userId === session.userId && p.role === "owner");
-
-  if (!canEdit) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const node = canvasResult.data.nodes.find((n) => n.id === nodeId);
-  if (!node) {
-    return NextResponse.json({ error: "Node not found" }, { status: 404 });
-  }
-
-  const formData = await req.formData();
-  const file = formData.get("file");
-
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: "No file provided" }, { status: 400 });
-  }
-
-  if (file.size > MAX_FILE_SIZE) {
-    return NextResponse.json({ error: "File exceeds 10 MB limit" }, { status: 400 });
-  }
-
-  const lowerName = file.name.toLowerCase();
-  if (!lowerName.endsWith(".docx") && !lowerName.endsWith(".xlsx")) {
-    return NextResponse.json({ error: "Only .docx and .xlsx files are accepted" }, { status: 400 });
-  }
-  const format: TemplateFormat = lowerName.endsWith(".xlsx") ? "xlsx" : "docx";
-
-  const buffer = Buffer.from(await file.arrayBuffer());
+// The shared persistence pipeline: store the bytes, summarise and index the
+// prose, and point the node config at the new template. Used by both the upload
+// path and the re-annotation path so the two cannot diverge.
+const storeTemplate = async (input: StoreTemplateInput): Promise<NextResponse> => {
+  const { container, flowId, nodeId, nodeConfig, buffer, format, safeFilename } = input;
 
   const extraction = extractTemplate(format, buffer);
   if (extraction.error) {
@@ -146,7 +75,6 @@ export async function POST(
   }
   const { tags, fields, documentTemplateContent, spreadsheetTemplateMode } = extraction.data;
 
-  const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const storageKey = `templates/${nodeId}/${timestamp}-${safeFilename}`;
 
@@ -174,10 +102,9 @@ export async function POST(
     );
   }
 
-  const existingConfig = node.config as Record<string, unknown>;
-  const previousTemplatePath = existingConfig.documentTemplatePath as string | null;
+  const previousTemplatePath = nodeConfig.documentTemplatePath as string | null;
   const updatedConfig = {
-    ...existingConfig,
+    ...nodeConfig,
     documentTemplatePath: storageKey,
     documentTemplateFilename: safeFilename,
     documentTemplateContent,
@@ -195,7 +122,9 @@ export async function POST(
   }
 
   // A re-upload gets a fresh storage key, so the previous template's chunks would
-  // otherwise linger and keep being retrieved — drop them.
+  // otherwise linger and keep being retrieved — drop them. The file itself stays:
+  // published flow versions snapshot the node config, so an older version still
+  // points at that key and must remain restorable.
   if (previousTemplatePath && previousTemplatePath !== storageKey) {
     await container.repos.documentChunks.deleteByStoragePath(previousTemplatePath);
   }
@@ -235,6 +164,117 @@ export async function POST(
     },
     { status: 200 },
   );
+};
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string; nodeId: string }> },
+): Promise<NextResponse> {
+  const { id: flowId, nodeId } = await params;
+
+  const access = await authoriseTemplateNode(req, flowId, nodeId);
+  if (access.error) return access.error;
+  const { container, node } = access.data;
+
+  const formData = await req.formData();
+  const upload = await readUploadedTemplate(formData);
+  if (upload.error) return upload.error;
+
+  const rows = parseAnnotationRows(formData.get("annotations"));
+  const annotated = applyAnnotations(
+    upload.data.format,
+    upload.data.buffer,
+    rows ? buildAnnotationEdits(rows) : [],
+  );
+  if (annotated.error) return annotated.error;
+
+  return storeTemplate({
+    container,
+    flowId,
+    nodeId,
+    nodeConfig: node.config,
+    buffer: annotated.data,
+    format: upload.data.format,
+    safeFilename: upload.data.safeFilename,
+  });
+}
+
+// Re-annotates the template already attached to this node, with no re-upload.
+// Field configuration changes far more often than templates are replaced, so
+// this path must not require a round-trip through the file picker.
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string; nodeId: string }> },
+): Promise<NextResponse> {
+  const { id: flowId, nodeId } = await params;
+
+  const access = await authoriseTemplateNode(req, flowId, nodeId);
+  if (access.error) return access.error;
+  const { container, node } = access.data;
+
+  const storagePath = node.config.documentTemplatePath as string | null;
+  const filename = node.config.documentTemplateFilename as string | null;
+  if (!storagePath || !filename) {
+    return NextResponse.json({ error: "This step has no template to edit" }, { status: 404 });
+  }
+
+  const body = (await req.json()) as { annotations?: unknown };
+  const rows = Array.isArray(body.annotations) ? (body.annotations as AnnotationRow[]) : null;
+  if (!rows) {
+    return NextResponse.json({ error: "No field changes provided" }, { status: 400 });
+  }
+
+  const stored = await container.objectStorage.get(storagePath);
+  if (stored.error) {
+    return NextResponse.json({ error: "Failed to read the stored template" }, { status: 500 });
+  }
+
+  const format: TemplateFormat = filename.toLowerCase().endsWith(".xlsx") ? "xlsx" : "docx";
+  const annotated = applyAnnotations(format, stored.data, buildAnnotationEdits(rows));
+  if (annotated.error) return annotated.error;
+
+  return storeTemplate({
+    container,
+    flowId,
+    nodeId,
+    nodeConfig: node.config,
+    buffer: annotated.data,
+    format,
+    safeFilename: filename,
+  });
+}
+
+// Streams the annotated template back so the author can keep their master copy
+// in sync with the fields configured in the app.
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string; nodeId: string }> },
+): Promise<NextResponse> {
+  const { id: flowId, nodeId } = await params;
+
+  const access = await authoriseTemplateNode(req, flowId, nodeId);
+  if (access.error) return access.error;
+  const { container, node } = access.data;
+
+  const storagePath = node.config.documentTemplatePath as string | null;
+  const filename = node.config.documentTemplateFilename as string | null;
+  if (!storagePath || !filename) {
+    return NextResponse.json({ error: "This step has no template" }, { status: 404 });
+  }
+
+  const stored = await container.objectStorage.get(storagePath);
+  if (stored.error) {
+    return NextResponse.json({ error: "Failed to read the stored template" }, { status: 500 });
+  }
+
+  const format: TemplateFormat = filename.toLowerCase().endsWith(".xlsx") ? "xlsx" : "docx";
+  return new NextResponse(new Uint8Array(stored.data), {
+    status: 200,
+    headers: {
+      "Content-Type": TEMPLATE_MIME[format],
+      "Content-Disposition": `attachment; filename="${filename}"`,
+    },
+  });
 }
 
 export async function DELETE(
@@ -242,32 +282,12 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; nodeId: string }> },
 ): Promise<NextResponse> {
   const { id: flowId, nodeId } = await params;
-  const container = getContainer();
 
-  const token = getSessionTokenFromRequest(req);
-  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const access = await authoriseTemplateNode(req, flowId, nodeId);
+  if (access.error) return access.error;
+  const { container, node } = access.data;
 
-  const session = await container.resolveSession(token);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const canvasResult = await container.useCases.getFlowCanvas.execute(flowId);
-  if (canvasResult.error || !canvasResult.data) {
-    return NextResponse.json({ error: "Flow not found" }, { status: 404 });
-  }
-
-  const { flow } = canvasResult.data;
-  const canEdit =
-    session.isAdmin ||
-    flow.ownerUserId === session.userId ||
-    flow.permissions.some((p) => p.userId === session.userId && p.role === "owner");
-
-  if (!canEdit) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
-  const node = canvasResult.data.nodes.find((n) => n.id === nodeId);
-  if (!node) return NextResponse.json({ error: "Node not found" }, { status: 404 });
-
-  const existingConfig = node.config as Record<string, unknown>;
-  const templateKey = existingConfig.documentTemplatePath as string | null;
+  const templateKey = node.config.documentTemplatePath as string | null;
 
   if (templateKey) {
     await container.repos.documentChunks.deleteByStoragePath(templateKey);
@@ -275,7 +295,7 @@ export async function DELETE(
   }
 
   const updatedConfig = {
-    ...existingConfig,
+    ...node.config,
     documentTemplatePath: null,
     documentTemplateFilename: null,
     documentTemplateContent: null,

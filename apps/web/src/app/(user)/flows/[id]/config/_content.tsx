@@ -56,6 +56,17 @@ import {
 } from "@/lib/canvas/rf-adapters";
 import { FlowConfigHeader } from "./_flow-config-header";
 
+// What the template endpoints return on success. Shared by the direct upload and
+// the guided annotation modal so both apply the result identically.
+interface TemplateUploadResult {
+  path?: string;
+  filename?: string;
+  documentTemplateContent?: string | null;
+  documentTemplateFields?: TemplateField[];
+  documentTemplateFormat?: "docx" | "xlsx";
+  spreadsheetTemplateMode?: "tags" | "header" | null;
+}
+
 function CanvasInner({ flowId }: { flowId: string }) {
   const router = useRouter();
   const { fitView } = useReactFlow();
@@ -265,24 +276,13 @@ function CanvasInner({ flowId }: { flowId: string }) {
     positionTimers.current.set(node.id, timer);
   }, [updatePositionMutation, flowId, markEdited]);
 
-  const handleUploadTemplate = useCallback(async (file: File, _currentValues: NodeConfigValues): Promise<{ path: string; filename: string; documentTemplateContent: string | null; documentTemplateFormat?: "docx" | "xlsx"; spreadsheetTemplateMode?: "tags" | "header" | null } | { error: string; code?: string }> => {
-    if (!editingNodeId) {
-      return { error: "Save the step first before uploading a template." };
-    }
-    const formData = new FormData();
-    formData.append("file", file);
-    const res = await fetch(`/api/flows/${flowId}/nodes/${editingNodeId}/template`, {
-      method: "POST",
-      body: formData,
-    });
-    const data = await res.json() as { path?: string; filename?: string; documentTemplateContent?: string | null; documentTemplateFields?: TemplateField[]; documentTemplateFormat?: "docx" | "xlsx"; spreadsheetTemplateMode?: "tags" | "header" | null; error?: string; code?: string };
-    if (!res.ok || data.error) {
-      return { error: data.error ?? "Upload failed", code: data.code };
-    }
-    // Reflect the whole upload result in rfNodes immediately: the fields so
-    // priorStepFields picks them up, and the filename/path/content so the modal's
-    // initialValues re-sync (keyed on rfNodes) doesn't wipe the just-set filename
-    // pill before the next save.
+  // Reflect a template result in rfNodes immediately: the fields so
+  // priorStepFields picks them up, and the filename/path/content so the modal's
+  // initialValues re-sync (keyed on rfNodes) doesn't wipe the just-set filename
+  // pill before the next save. Shared by the direct upload path and the guided
+  // annotation modal, which reach the same endpoint by different routes.
+  const applyTemplateResult = useCallback((data: TemplateUploadResult) => {
+    if (!editingNodeId) return;
     setRfNodes((nds) =>
       nds.map((n) => {
         if (n.id !== editingNodeId) return n;
@@ -304,6 +304,23 @@ function CanvasInner({ flowId }: { flowId: string }) {
         };
       }),
     );
+  }, [editingNodeId, setRfNodes]);
+
+  const handleUploadTemplate = useCallback(async (file: File, _currentValues: NodeConfigValues): Promise<{ path: string; filename: string; documentTemplateContent: string | null; documentTemplateFormat?: "docx" | "xlsx"; spreadsheetTemplateMode?: "tags" | "header" | null } | { error: string; code?: string }> => {
+    if (!editingNodeId) {
+      return { error: "Save the step first before uploading a template." };
+    }
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`/api/flows/${flowId}/nodes/${editingNodeId}/template`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json() as TemplateUploadResult & { error?: string; code?: string };
+    if (!res.ok || data.error) {
+      return { error: data.error ?? "Upload failed", code: data.code };
+    }
+    applyTemplateResult(data);
     return {
       path: data.path!,
       filename: data.filename!,
@@ -311,7 +328,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
       documentTemplateFormat: data.documentTemplateFormat ?? "docx",
       spreadsheetTemplateMode: data.spreadsheetTemplateMode ?? null,
     };
-  }, [editingNodeId, flowId]);
+  }, [editingNodeId, flowId, applyTemplateResult]);
 
   const handleConfigSave = useCallback(async (values: NodeConfigValues) => {
     if (!editingNodeId) return;
@@ -675,6 +692,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
       <NodeConfigModal
         open={configOpen}
         flowId={flowId}
+        nodeId={editingNodeId}
+        onTemplateApplied={applyTemplateResult}
         initialValues={initialConfigValues}
         onSave={handleConfigSave}
         onDelete={editingNodeId ? handleNodeDelete : undefined}

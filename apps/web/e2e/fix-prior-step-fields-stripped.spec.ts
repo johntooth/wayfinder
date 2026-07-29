@@ -99,6 +99,43 @@ async function addConversationalDocStep(page: Page, name: string): Promise<void>
  * a file input upload.
  */
 async function uploadMockTemplate(page: Page, stepName: string): Promise<void> {
+  // Since v0.21.3 an upload opens the guided annotation modal, whose detection
+  // step runs before anything is persisted.
+  await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template\/analyse$/, async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        filename: 'mock-template.docx',
+        format: 'docx',
+        classification: 'annotated',
+        documentText: 'Hello {{Client Name}} your project scope is {{Project Scope}}.',
+        rows: [
+          {
+            key: 'client_name',
+            kind: 'tag',
+            line: 'Client Name',
+            occurrences: [{ sourceText: '{{Client Name}}', occurrence: 0 }],
+            context: 'Hello {{Client Name}}…',
+            originalValue: null,
+            confidence: null,
+            locked: false,
+          },
+          {
+            key: 'project_scope',
+            kind: 'tag',
+            line: 'Project Scope',
+            occurrences: [{ sourceText: '{{Project Scope}}', occurrence: 0 }],
+            context: '…your project scope is {{Project Scope}}.',
+            originalValue: null,
+            confidence: null,
+            locked: false,
+          },
+        ],
+      }),
+    });
+  });
+
   // Intercept the template upload endpoint for this one upload
   await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template$/, async (route: Route) => {
     if (route.request().method() !== 'POST') {
@@ -142,11 +179,18 @@ async function uploadMockTemplate(page: Page, stepName: string): Promise<void> {
     buffer: fakeDocx,
   });
 
+  // Walk the guided modal: the mocked document already carries placeholders, so
+  // it offers to continue with what it found, then saves.
+  await expect(page.getByText('Placeholders found')).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: 'Continue with these' }).click();
+  await page.getByRole('button', { name: 'Save template' }).click();
+
   // Wait for the filename confirmation to appear
-  await expect(page.locator('text=mock-template.docx').first()).toBeVisible({ timeout: 8_000 });
+  await expect(page.locator('text=mock-template.docx').first()).toBeVisible({ timeout: 10_000 });
 
   // Unroute so subsequent saves don't accidentally intercept
   await page.unroute(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template$/);
+  await page.unroute(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template\/analyse$/);
 }
 
 /** Add an auto-step with the Mock executor and one request field. */

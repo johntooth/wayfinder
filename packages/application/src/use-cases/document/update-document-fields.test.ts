@@ -101,6 +101,7 @@ const makeDocumentGenerator = (): IDocumentGenerator => ({
   extractFields: vi.fn().mockReturnValue(ok({ fields: FIELDS })),
   extractFullText: vi.fn().mockReturnValue(ok({ text: "" })),
   generate: vi.fn().mockReturnValue(ok({ bytes: Buffer.from("edited-docx") })),
+  annotate: vi.fn().mockReturnValue(ok({ bytes: Buffer.from("annotated"), appliedCount: 0, unmatched: [] })),
 });
 
 const makeObjectStorage = (): IObjectStorage => ({

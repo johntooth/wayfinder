@@ -70,6 +70,7 @@ const makeDocumentGenerator = (): IDocumentGenerator => ({
   ),
   extractFullText: vi.fn().mockReturnValue(ok({ text: "template text" })),
   generate: vi.fn().mockReturnValue(ok({ bytes: Buffer.from("fake-docx") })),
+  annotate: vi.fn().mockReturnValue(ok({ bytes: Buffer.from("annotated"), appliedCount: 0, unmatched: [] })),
 });
 
 const makeStepOutputs = (): ISessionStepOutputRepository => ({

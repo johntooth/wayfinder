@@ -35,6 +35,8 @@ export * from "./session-schedule";
 export * from "./recurrence-rule";
 export * from "./schedule-run";
 export * from "./template-field";
+export * from "./template-classification";
+export * from "./template-annotation-validation";
 export * from "./parse-flexible-date";
 export * from "./flow-edge";
 export * from "./flow-graph";
