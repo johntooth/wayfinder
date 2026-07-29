@@ -42,16 +42,17 @@ canvas.
   `#e7c200` border, `#886b00` text) so the canvas has one warning language.
 - Centred horizontally at the top of the pane, and deliberately **wide and
   short** — it overlays the canvas, so it spends horizontal space rather than
-  vertical and keeps the working area visible. Concretely: copy laid out on one
-  line up to `760px` wide, diagram strip `40px` tall, banner height under `110px`
-  so it covers a small fraction of a standard desktop pane.
+  vertical and keeps the working area visible. Concretely: copy and diagram sit
+  **side by side** — copy left-aligned in the remaining space, `364px × 40px`
+  diagram strip on the right — inside a banner up to `900px` wide and under
+  `90px` tall, so it covers a small fraction of a standard desktop pane.
 - Copy:
 
   > Some steps aren't joined up yet. Every step needs to be joined to the others
   > to be part of the workflow — drag from the dot on the right of one step to
   > the dot on the left of the next to link them in order.
 
-- Beneath the copy, a **mini animated diagram** demonstrating the gesture: two
+- To the right of the copy, a **mini animated diagram** demonstrating the gesture: two
   step cards side by side, a pointer travelling from the source dot on the right
   of the first card to the target dot on the left of the second, drawing the
   connector as it goes, then a snap pulse on the target before the loop resets.

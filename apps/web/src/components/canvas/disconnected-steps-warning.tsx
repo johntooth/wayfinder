@@ -8,11 +8,13 @@ export function DisconnectedStepsWarning({ count }: { count: number }) {
     // warning always arrives in response to an edit the author just made.
     <div
       role="status"
-      className="pointer-events-none absolute left-1/2 top-3 z-10 w-[calc(100%-2rem)] max-w-[760px] -translate-x-1/2"
+      className="pointer-events-none absolute left-1/2 top-3 z-10 w-[calc(100%-2rem)] max-w-[900px] -translate-x-1/2"
     >
       {count > 0 && (
-        <div className="flex flex-col items-center gap-1.5 rounded-[9px] border border-[#e7c200] bg-[#fff8e1] px-4 py-2.5 text-center shadow-md">
-          <p className="text-[12px] leading-[1.5] text-[#886b00]">
+        // Copy and demonstration sit side by side rather than stacked: the
+        // banner overlays the canvas, so height is the expensive axis.
+        <div className="flex items-center gap-4 rounded-[9px] border border-[#e7c200] bg-[#fff8e1] px-4 py-2.5 shadow-md">
+          <p className="flex-1 text-left text-[12px] leading-[1.5] text-[#886b00]">
             ⚠ Some steps aren&apos;t joined up yet. Every step needs to be joined to the others to
             be part of the workflow — drag from the dot on the right of one step to the dot on the
             left of the next to link them in order.
@@ -32,7 +34,7 @@ function ConnectGestureDemo() {
   return (
     <svg
       viewBox="0 0 364 40"
-      className="wf-connect-demo h-10 w-[364px] max-w-full"
+      className="wf-connect-demo h-10 w-[364px] shrink-0 max-w-full"
       aria-hidden="true"
       focusable="false"
     >

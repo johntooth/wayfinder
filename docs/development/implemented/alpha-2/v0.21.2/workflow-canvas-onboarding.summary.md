@@ -22,9 +22,11 @@ already a redirect to that route, so both entry points inherit the change.
 Shown when the canvas holds more than one step and at least one has no edge in
 either direction. Yellow, reusing the stale-reference banner's `#fff8e1` /
 `#e7c200` / `#886b00` so the pane has one warning language. Centred at the top,
-laid out wide and short — copy on one line up to `760px`, a `40px` diagram strip
-beneath — measured at **104px tall**, inside the `110px` budget the phase doc
-set.
+laid out wide and short: copy and demonstration sit **side by side** — copy
+left-aligned in the remaining space, the `364px` diagram on the right — in a
+banner up to `900px` wide, measured at **76px tall**. Stacking them read at
+104px; side by side buys back 28px of canvas, and height is the expensive axis
+for something overlaying the working area.
 
 Copy:
 
@@ -32,9 +34,9 @@ Copy:
 > to be part of the workflow — drag from the dot on the right of one step to the
 > dot on the left of the next to link them in order.
 
-The mini diagram is inline SVG: two step cards, a pointer dragging from the
-source dot to the target dot while the connector draws behind it, then a snap
-pulse on the target, on a 3.6s loop. The three animations share one duration and
+The mini diagram, to the right of the copy, is inline SVG: two step cards, a
+pointer dragging from the source dot to the target dot while the connector draws
+behind it, then a snap pulse on the target, on a 3.6s loop. The three animations share one duration and
 one set of stops so pointer, connector and target stay in step.
 
 Keyframes (`wf-connect-draw`, `wf-connect-pointer`, `wf-connect-target`) live in
