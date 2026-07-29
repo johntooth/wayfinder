@@ -5,6 +5,7 @@ import {
   emptyExtractionField,
   extractionFieldToAnnotation,
   extractionFieldToDraft,
+  schemaSeedKey,
   schemaToFieldModels,
   templateFieldToModel,
   type ExtractionFieldModel,
@@ -106,5 +107,36 @@ describe("schemaToFieldModels", () => {
   it("seeds a single blank row for an empty schema", () => {
     expect(schemaToFieldModels(null, false)).toHaveLength(1);
     expect(schemaToFieldModels(null, false)[0]?.label).toBe("");
+  });
+});
+
+// The editor reads the schema once, when it mounts. Seeding it from a query that
+// has not settled leaves it on the empty defaults and the next Save writes those
+// defaults over the stored schema, so a pending query must never share a key
+// with a settled one.
+describe("schemaSeedKey", () => {
+  it("distinguishes a pending query from a settled empty one", () => {
+    expect(schemaSeedKey(null, true)).not.toBe(schemaSeedKey(null, false));
+  });
+
+  it("distinguishes a pending query from a settled loaded one", () => {
+    const schema: ExtractionSchema = {
+      fields: [],
+      input: { cardinality: "one_per_file", selectionCriteria: null, guidance: "" },
+      output: {
+        format: "xlsx",
+        outputTemplate: null,
+        instruction: "",
+        generateSummary: false,
+        summaryTemplate: null,
+        contextDocs: [],
+      },
+    };
+
+    expect(schemaSeedKey(schema, true)).not.toBe(schemaSeedKey(schema, false));
+  });
+
+  it("is stable once the query has settled, so a background refetch does not reset the form", () => {
+    expect(schemaSeedKey(null, false)).toBe(schemaSeedKey(null, false));
   });
 });

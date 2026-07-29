@@ -1,8 +1,11 @@
+import type { ExtractionDocumentStatus } from "@rbrasier/domain";
+
 export interface ResultDocument {
   id: string;
   filename: string;
   treePath: string;
   readable: boolean;
+  status: ExtractionDocumentStatus;
 }
 
 export interface ResultFieldValue {
@@ -116,6 +119,25 @@ export interface RecordFilter {
   query: string;
   exceptionsOnly: boolean;
 }
+
+// The documents the run has not settled yet. They have produced no record to
+// show, so the grid lists them under the records it does have — otherwise a run
+// halfway through reads as a finished run with rows missing.
+export const pendingDocuments = (result: SampleResult, filter: RecordFilter): ResultDocument[] => {
+  // Nothing has gone wrong with a document still waiting its turn, so it is not
+  // part of the exceptions triage.
+  if (filter.exceptionsOnly) return [];
+
+  const needle = filter.query.trim().toLowerCase();
+  return result.documents.filter((document) => {
+    if (document.status !== "pending" && document.status !== "extracting") return false;
+    if (needle.length === 0) return true;
+    return (
+      document.filename.toLowerCase().includes(needle) ||
+      document.treePath.toLowerCase().includes(needle)
+    );
+  });
+};
 
 export const visibleRecords = (result: SampleResult, filter: RecordFilter): ResultRecord[] => {
   const exceptions = exceptionRecordIds(result);

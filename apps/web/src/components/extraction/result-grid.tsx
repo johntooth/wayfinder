@@ -13,11 +13,13 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import {
   exceptionRecordIds,
   fieldColumnKeys,
   fieldValue,
   pairFields,
+  pendingDocuments,
   recordExceptionReasons,
   toggleExpanded,
   visibleRecords,
@@ -137,6 +139,10 @@ export function ResultGrid({
     () => visibleRecords(result, { query, exceptionsOnly }),
     [result, query, exceptionsOnly],
   );
+  const awaiting = useMemo(
+    () => pendingDocuments(result, { query, exceptionsOnly }),
+    [result, query, exceptionsOnly],
+  );
   const columnKeys = useMemo(() => fieldColumnKeys(result.records), [result.records]);
   const documentsById = useMemo(
     () => new Map(result.documents.map((document) => [document.id, document])),
@@ -248,7 +254,10 @@ export function ResultGrid({
                 />
               );
             })}
-            {rows.length === 0 ? (
+            {awaiting.map((document) => (
+              <PendingRow key={document.id} document={document} columnCount={columnCount} />
+            ))}
+            {rows.length === 0 && awaiting.length === 0 ? (
               <tr>
                 <td colSpan={columnCount} className="px-[12px] py-[16px] text-[#8a857c]">
                   No records match the current filter.
@@ -306,6 +315,32 @@ export function ResultGrid({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// A document the run has not reached yet. It has no values to show, so the row
+// carries the filename and where it is in the queue — the operator can tell an
+// outstanding document from one that produced nothing.
+function PendingRow({ document, columnCount }: { document: ResultDocument; columnCount: number }) {
+  const extracting = document.status === "extracting";
+  return (
+    <tr className="border-b border-[#e5e1d8] bg-[#fbfaf7]" data-testid="pending-row">
+      <td className="px-[8px] py-[6px] align-middle">
+        <Spinner className="h-[13px] w-[13px] text-[#8a857c]" />
+      </td>
+      {/* The field columns are empty until this document is read, so the name
+          spans them rather than trailing a row of em-dashes. */}
+      <td colSpan={columnCount - 1} className="px-[12px] py-[6px] align-top text-[#6d6a65]">
+        <div className="flex min-w-0 items-start gap-[6px]">
+          <span className="line-clamp-3 min-w-0 break-words" title={document.treePath}>
+            {document.filename}
+          </span>
+          <span className="mt-[2px] inline-block shrink-0 rounded-[4px] bg-[#eef1fc] px-[5px] py-[1px] text-[10px] font-semibold text-[#3a5fd9]">
+            {extracting ? "Processing" : "Queued"}
+          </span>
+        </div>
+      </td>
+    </tr>
   );
 }
 
