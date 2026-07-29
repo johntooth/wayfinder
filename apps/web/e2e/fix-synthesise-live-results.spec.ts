@@ -25,6 +25,11 @@ import { test, expect } from './helpers/base';
 
 const atLogin = (url: string): boolean => url.includes('/login');
 
+// CI serves the app from `next dev`, which compiles a route the first time it is
+// visited. The editor and run screens are large, so the first navigation to each
+// can take well past the 5s default before anything paints.
+const ROUTE_COMPILE_TIMEOUT = 30_000;
+
 /** True when the Synthesise surface is reachable for this session. */
 async function synthesiseAvailable(page: Page): Promise<boolean> {
   await page.goto('/synthesise');
@@ -50,7 +55,9 @@ async function createSynthesis(page: Page, name: string): Promise<boolean> {
   await dialog.getByLabel('Name').fill(name);
   await dialog.getByRole('button', { name: /^Create$/ }).click();
 
-  await expect(page.getByRole('heading', { name: /Edit synthesis/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Edit synthesis/i })).toBeVisible({
+    timeout: ROUTE_COMPILE_TIMEOUT,
+  });
   return true;
 }
 
@@ -94,7 +101,9 @@ test.describe('Synthesise Information — live results, editor persistence, toas
     // the fix the form was seeded from the pending `null` rather than the row
     // that was just written — so every one of these came back empty.
     await page.goto(editorUrl);
-    await expect(page.getByRole('heading', { name: /Edit synthesis/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Edit synthesis/i })).toBeVisible({
+      timeout: ROUTE_COMPILE_TIMEOUT,
+    });
     await focusOutputCard(page);
 
     await expect(page.getByLabel('Field 1 label')).toHaveValue('Supplier Name');
@@ -122,7 +131,7 @@ test.describe('Synthesise Information — live results, editor persistence, toas
         buffer: Buffer.from(`${name} tender response from ${name} Ltd`),
       })),
     );
-    await expect(page.getByText('alpha.txt')).toBeVisible();
+    await expect(page.getByText('alpha.txt')).toBeVisible({ timeout: ROUTE_COMPILE_TIMEOUT });
 
     await focusOutputCard(page);
     await page.getByLabel('Field 1 label').fill('Supplier Name');
@@ -193,14 +202,24 @@ test.describe('Synthesise Information — live results, editor persistence, toas
     // rest.
     await expect(toasts.first()).toHaveAttribute('data-expanded', 'true');
 
-    const first = await toasts.nth(0).boundingBox();
-    const second = await toasts.nth(1).boundingBox();
-    expect(first).not.toBeNull();
-    expect(second).not.toBeNull();
-    if (!first || !second) return;
-
-    // Two disjoint rows: the upper one ends at or above where the lower begins.
-    const [upper, lower] = first.y <= second.y ? [first, second] : [second, first];
-    expect(upper.y + upper.height).toBeLessThanOrEqual(lower.y);
+    // The stack lifts into place over a transition, so measuring the instant the
+    // second toast mounts catches it mid-flight. Poll the overlap instead:
+    // expanded toasts separate within a few hundred milliseconds, collapsed ones
+    // sit on top of each other for as long as they are on screen.
+    await expect
+      .poll(
+        async () => {
+          const first = await toasts.nth(0).boundingBox();
+          const second = await toasts.nth(1).boundingBox();
+          if (!first || !second) return Number.POSITIVE_INFINITY;
+          const [upper, lower] = first.y <= second.y ? [first, second] : [second, first];
+          return upper.y + upper.height - lower.y;
+        },
+        // Under sonner's default 4s duration the first toast starts dismissing,
+        // so the window has to close before it does — the lift transition is
+        // 400ms, which leaves plenty of room.
+        { timeout: 3_000, message: 'concurrent toasts must occupy disjoint boxes' },
+      )
+      .toBeLessThanOrEqual(0);
   });
 });
