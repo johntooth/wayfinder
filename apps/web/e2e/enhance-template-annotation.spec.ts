@@ -284,15 +284,26 @@ test.describe('enhance: guided annotation upload', () => {
     });
     await mockSave(page);
 
+    // The download returns the document with annotations inserted; mock it so the
+    // fake .docx bytes don't have to be a real document.
+    await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template\/annotated$/, async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        headers: { 'Content-Disposition': 'attachment; filename="agreement.docx"' },
+        body: 'PK\x03\x04 annotated bytes',
+      });
+    });
+
     await uploadTemplate(page);
     await expect(page.getByText('Data fields found')).toBeVisible({ timeout: 10_000 });
     await page.getByRole('button', { name: 'Continue with these' }).click();
     await expect(page.getByText('{{ Supplier Name }}').first()).toBeVisible({ timeout: 5_000 });
 
-    // The Download button hands the document back and switches to the re-upload
-    // panel; the download itself is captured so headless does not stall on it.
+    // The Download button hands the annotated document back and switches to the
+    // re-upload panel; the download itself is captured so headless does not stall.
     const download = page.waitForEvent('download');
-    await page.getByRole('button', { name: 'Download' }).click();
+    await page.getByRole('button', { name: /Download to add fields/i }).click();
     await download;
 
     await expect(page.getByText(/upload the document here/i)).toBeVisible({ timeout: 5_000 });

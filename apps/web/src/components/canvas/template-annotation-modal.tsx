@@ -73,25 +73,31 @@ const CHEAT_SHEET: { syntax: string; meaning: string }[] = [
   { syntax: "{{ Middle Name (optional) }}", meaning: "May be left blank" },
 ];
 
-const downloadBlob = (file: File): void => {
-  const url = URL.createObjectURL(file);
+const downloadBlobData = (blob: Blob, filename: string): void => {
+  const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = file.name;
+  anchor.download = filename;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
 };
 
-const downloadFromUrl = (url: string): void => {
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = "";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
+const filenameFromDisposition = (header: string | null): string | null => {
+  if (!header) return null;
+  const match = /filename="?([^";]+)"?/.exec(header);
+  return match?.[1] ?? null;
 };
+
+// Strips the client-only fields, leaving the AnnotationRow shape the routes read.
+const toPayloadRows = (rows: EditableRow[]): AnnotationRow[] =>
+  rows.map(({ id, confirmed, model, ...row }) => {
+    void id;
+    void confirmed;
+    void model;
+    return row;
+  });
 
 export function TemplateAnnotationModal({
   file,
@@ -111,6 +117,7 @@ export function TemplateAnnotationModal({
   const [confirmingPattern, setConfirmingPattern] = useState(false);
   const [configIndex, setConfigIndex] = useState<number | null>(null);
   const [foundNothing, setFoundNothing] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   // The file currently under review. Held in state (not just the prop) so the
   // author can swap it via the re-upload panel and restart the flow in place.
   const [activeFile, setActiveFile] = useState<File | null>(file);
@@ -124,12 +131,7 @@ export function TemplateAnnotationModal({
       setStep("saving");
       setError(null);
 
-      const payloadRows = rowsToSave.map(({ id, confirmed, model, ...row }) => {
-        void id;
-        void confirmed;
-        void model;
-        return row;
-      });
+      const payloadRows = toPayloadRows(rowsToSave);
 
       try {
         // A file present (fresh upload or re-upload) writes a new template via
@@ -292,15 +294,36 @@ export function TemplateAnnotationModal({
   const removeRow = (index: number) => setRowModel(index, { ...rows[index]!.model, label: "" });
 
   // Hand the current document back so the author can place more fields in Word,
-  // then wait for the edited file. A file in hand (upload or re-upload) is sent
-  // straight down; otherwise the stored template is fetched by the GET route.
-  const downloadForEditing = () => {
-    if (activeFile) {
-      downloadBlob(activeFile);
-    } else {
-      downloadFromUrl(templateUrl);
+  // then wait for the edited file. The document comes back with the reviewed
+  // annotations already written in — a filled example's values become their
+  // {{ fields }} — so the author edits the marked-up version, not the raw one.
+  const downloadForEditing = async () => {
+    setDownloading(true);
+    setError(null);
+    try {
+      const body = new FormData();
+      if (activeFile) body.append("file", activeFile);
+      body.append("annotations", JSON.stringify(toPayloadRows(rows)));
+
+      const response = await fetch(`${templateUrl}/annotated`, { method: "POST", body });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        setError(payload.error ?? "Could not prepare the document for download.");
+        return;
+      }
+
+      const blob = await response.blob();
+      const name =
+        filenameFromDisposition(response.headers.get("Content-Disposition")) ??
+        activeFile?.name ??
+        "template.docx";
+      downloadBlobData(blob, name);
+      setStep("reupload");
+    } catch {
+      setError("Could not prepare the document for download.");
+    } finally {
+      setDownloading(false);
     }
-    setStep("reupload");
   };
 
   const onReupload = (event: ChangeEvent<HTMLInputElement>) => {
@@ -323,7 +346,7 @@ export function TemplateAnnotationModal({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onCancel()}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="flex max-h-[85vh] max-w-3xl flex-col">
         <DialogHeader>
           <DialogTitle>
             {isReentry ? "Edit template fields" : "Set up your template"}
@@ -332,7 +355,7 @@ export function TemplateAnnotationModal({
           <DialogCloseButton />
         </DialogHeader>
 
-        <DialogBody>
+        <DialogBody className="min-h-0 flex-1 overflow-y-auto">
           {error && (
             <p className="mb-3 rounded-[9px] border border-[#f0c9d4] bg-[#fdeef2] px-3 py-2 text-[12px] text-[#c2385a]">
               {error}
@@ -381,25 +404,32 @@ export function TemplateAnnotationModal({
                   />
                 ))}
               </div>
-
-              <div className="space-y-2 rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3">
-                <p className="text-[12px] text-[#6d6a65]">
-                  Need to add more fields? Download the document to place new data fields into it,
-                  using the annotation syntax, then upload it back.
-                </p>
-                <Button type="button" variant="secondary" onClick={downloadForEditing}>
-                  <Download size={13} className="mr-1" /> Download
-                </Button>
-              </div>
             </div>
           )}
         </DialogBody>
 
-        <DialogFooter>
-          <div className="mr-auto flex items-center gap-2">
+        <DialogFooter className="flex-wrap gap-y-2">
+          <div className="mr-auto flex flex-wrap items-center gap-x-3 gap-y-1">
             <Button type="button" variant="secondary" onClick={onCancel}>
               Cancel
             </Button>
+            {step === "review" && (
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void downloadForEditing()}
+                  disabled={downloading}
+                >
+                  <Download size={13} className="mr-1" />
+                  {downloading ? "Preparing…" : "Download to add fields"}
+                </Button>
+                <span className="max-w-[16rem] text-[11px] leading-tight text-[#6d6a65]">
+                  Need more fields? Place them in the document with the annotation syntax, then
+                  upload it back.
+                </span>
+              </div>
+            )}
             {step === "review" && blockedReason && (
               <span className="text-[12px] text-[#6d6a65]">{blockedReason}</span>
             )}
@@ -630,26 +660,32 @@ function ReviewRow({
         labelPlaceholder="e.g. Supplier Name"
       />
 
-      <code className="block truncate font-mono text-[11px] text-[#6d6a65]">
-        {row.line.trim() ? `{{ ${row.line.trim()} }}` : "— removed from the document —"}
-      </code>
+      {/* Two columns beneath the field: what goes into the document on the left,
+          how sure the AI was and where it sits on the right. A tag row's context
+          already contains the same {{ tag }} as the raw line, so context is shown
+          only for AI spans, whose context is real prose. */}
+      <div className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
+        <div className="min-w-0 space-y-0.5">
+          <code className="block truncate font-mono text-[11px] text-[#6d6a65]">
+            {row.line.trim() ? `{{ ${row.line.trim()} }}` : "— removed from the document —"}
+          </code>
+          {row.originalValue && (
+            <p className="text-[11px] text-[#5a5650]">
+              Replaces <span className="font-medium text-[#1a1814]">{row.originalValue}</span>
+            </p>
+          )}
+        </div>
 
-      {row.originalValue && (
-        <p className="text-[11px] text-[#5a5650]">
-          Replaces <span className="font-medium text-[#1a1814]">{row.originalValue}</span>
-        </p>
-      )}
-
-      {/* A tag row's surrounding line already contains this same {{ tag }}, so
-          showing it under the raw line above would just repeat the annotation.
-          Context is only additive for AI spans, whose context is real prose. */}
-      {row.context && row.kind !== "tag" && (
-        <p className="truncate text-[11px] text-[#6d6a65]" title={row.context}>
-          {row.context}
-        </p>
-      )}
-
-      {row.confidence !== null && <ConfidenceBar score={row.confidence} />}
+        <div className="min-w-0 space-y-0.5">
+          {row.confidence !== null && <ConfidenceBar score={row.confidence} />}
+          {row.context && row.kind !== "tag" && (
+            <p className="truncate text-[11px] text-[#6d6a65]" title={row.context}>
+              <span className="italic">In the document: </span>
+              {row.context}
+            </p>
+          )}
+        </div>
+      </div>
 
       {validation.blocking.map((message) => (
         <p key={message} className="flex items-start gap-1 text-[11px] text-[#c2385a]">

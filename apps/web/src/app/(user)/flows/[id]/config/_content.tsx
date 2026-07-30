@@ -165,7 +165,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
     );
     setExpertRole(data.flow.expertRole ?? "");
     if (data.nodes.length > 3) {
-      setTimeout(() => { fitView({ padding: 0.2 }); }, 100);
+      setTimeout(() => { fitView({ padding: 0.2, maxZoom: 1 }); }, 100);
     }
   }, [canvasQuery.data, fitView]);
 

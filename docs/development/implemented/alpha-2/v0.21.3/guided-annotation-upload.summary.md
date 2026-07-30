@@ -242,3 +242,27 @@ Follow-up changes after the first round of review, all inside the modal:
    list of candidate values (e.g. "Mobile phone, Laptop") is a fixed set — split
    into options, with `multiple: true` when several can apply — so a filled
    example like that returns a multi-select rather than plain text.
+
+### Second round
+
+7. **Scrollable modal.** The modal now caps at `85vh` with a `flex` column
+   layout; the body scrolls (`flex-1 overflow-y-auto`) while the header and
+   footer stay fixed, so a long field list no longer runs past the window.
+8. **Download moved to the footer.** The "add more fields" download left the
+   scrolling body for the footer's bottom-left action area (beside Cancel), so it
+   is always reachable regardless of scroll position.
+9. **Download returns the annotated document.** A new
+   `POST .../template/annotated` route applies the reviewed annotations with
+   `IDocumentGenerator.annotate` and streams the bytes back without persisting —
+   a fresh upload annotates the file in hand, re-entry annotates the stored
+   template with the current edits. The author now downloads the marked-up
+   document (a filled example's values already replaced with `{{ fields }}`),
+   adds more in Word, and re-uploads.
+10. **Two-column review row.** The metadata under each field is now two columns —
+    the raw annotation line and "Replaces …" on the left, the confidence bar and
+    an italic "In the document: …" context on the right — so a row reads without
+    a tall stack.
+11. **Single-node canvas zoom.** `fitView` is capped at `maxZoom: 1`
+    (`fitViewOptions` on the canvas, and the >3-node refit), so one step is framed
+    at the same scale as the empty "add your first step" canvas instead of the
+    default max of 2.
