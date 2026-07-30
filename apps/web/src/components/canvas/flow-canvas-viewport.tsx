@@ -16,7 +16,7 @@ import {
 } from "@xyflow/react";
 import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { NODE_TYPES } from "@/lib/canvas/rf-adapters";
+import { CANVAS_FIT_VIEW_OPTIONS, NODE_TYPES } from "@/lib/canvas/rf-adapters";
 import {
   findDisconnectedNodeIds,
   findNextStepAnchor,
@@ -72,6 +72,7 @@ export function FlowCanvasViewport({
         onNodeClick={onNodeClick}
         onNodeDragStop={onNodeDragStop}
         fitView
+        fitViewOptions={CANVAS_FIT_VIEW_OPTIONS}
         deleteKeyCode="Backspace"
       >
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
