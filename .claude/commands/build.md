@@ -38,12 +38,13 @@ List them before starting so the user can see the plan.
 - Fix every failure before moving to the next sub-component
 - Do not proceed until `validate.sh` exits 0
 
-### Step 3 — Playwright e2e test
+### Step 3 — Playwright e2e test (write it, don't run it)
 
 Once all sub-components pass validation, write at least one Playwright e2e test that exercises the completed feature end-to-end through the UI or API surface:
 - Place tests under `apps/web/e2e/` in a file named after the phase (e.g. `phase-<slug>.spec.ts`)
 - Cover the primary happy path and at least one error path visible to the user
-- The test must pass before proceeding to Step 4
+- **Do not run the e2e suite.** CI runs it — `.github/workflows/e2e.yml` fires on every pull request and push to `main` and `release/**`, sharded, against a full stack. A local run needs Postgres, Redis, MinIO and a built app, and only duplicates that. Run `/e2e` or `/e2e-cc-web` only if the user explicitly asks for a local run.
+- Review the spec by reading it, not by executing it: correct selectors, correct fixtures, no reliance on data another spec creates. If CI later reports it failing, fix it then.
 
 ### Step 4 — On completion
 
@@ -56,4 +57,6 @@ Once all sub-components pass validation, write at least one Playwright e2e test 
 - Update `VERSION` file and root `package.json` `version` (they must match)
 - Run `./validate.sh` one final time — fix all failures before declaring done
 - State the version bump applied (MINOR / PATCH — MAJOR is reserved for the first stable release)
-- Commit all changes, push the branch, then open a pull request via `mcp__github__create_pull_request` against `main` so CI runs automatically — new features never target a `release/*` branch (see **Release Branching** in `CLAUDE.md`). Include in the PR body: phase summary, files changed, version bump, and which e2e tests cover the new functionality.
+- Commit all changes and push the branch
+- **Always open the pull request** via `mcp__github__create_pull_request`, against `main` — no need to ask first, and never stop at "pushed". The PR is what starts CI, including the e2e suite that was deliberately not run locally. New features never target a `release/*` branch (see **Release Branching** in `CLAUDE.md`). Include in the PR body: phase summary, files changed, version bump, and which e2e tests cover the new functionality.
+- Report the PR URL, and note that the e2e suite runs there rather than locally.

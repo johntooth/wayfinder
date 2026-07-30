@@ -50,12 +50,12 @@ breaking existing tests. Do not refactor unrelated code in the same commit.
 
 Run `./validate.sh` and fix all failures.
 
-### Step 5 — Playwright e2e test
+### Step 5 — Playwright e2e test (write it, don't run it)
 
 Write at least one Playwright e2e test that exercises the fixed behaviour through the UI or API surface:
 - Place tests under `apps/web/e2e/` in a file named after the bug (e.g. `fix-<slug>.spec.ts`)
-- The test must fail on the unfixed code and pass after the fix — confirm this before moving on
 - Cover the exact reproduction steps from the bug report, plus any related edge cases the fix touches
+- **Do not run the e2e suite.** CI runs it — `.github/workflows/e2e.yml` fires on every pull request and push to `main` and `release/**`, sharded, against a full stack. The fail-then-pass proof lives in the Step 2 regression test, which is the guard that runs on every `./validate.sh`. Run `/e2e` or `/e2e-cc-web` only if the user explicitly asks for a local run.
 
 ### Step 6 — On completion
 
@@ -67,4 +67,6 @@ Write at least one Playwright e2e test that exercises the fixed behaviour throug
 - Apply a PATCH version bump
 - Update `VERSION` and root `package.json` `version`
 - Run `./validate.sh` one final time
-- Commit all changes, push the branch, then open a pull request via `mcp__github__create_pull_request` against the base branch from Step 0 (not necessarily `main`) so CI runs automatically. Include in the PR body: symptom, root cause, fix summary, and which e2e test covers it.
+- Commit all changes and push the branch
+- **Always open the pull request** via `mcp__github__create_pull_request`, against the base branch from Step 0 (not necessarily `main`) — no need to ask first, and never stop at "pushed". The PR is what starts CI, including the e2e suite that was deliberately not run locally. Include in the PR body: symptom, root cause, fix summary, and which e2e test covers it.
+- Report the PR URL, and note that the e2e suite runs there rather than locally.
