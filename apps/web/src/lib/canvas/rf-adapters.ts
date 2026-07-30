@@ -28,14 +28,6 @@ export const NODE_TYPES = {
 // coalesce a burst of keystrokes on a rename; short enough to feel live.
 export const CANVAS_DEBOUNCE_MS = 600;
 
-// Every fit-to-view on the canvas, whether React Flow's own initial one or an
-// imperative call. React Flow defaults fit-to-view's ceiling to the pane's
-// maxZoom of 2, so a canvas holding a single step magnifies it to twice the
-// scale it is drawn at everywhere else. Capping at 1 keeps a lone step matching
-// the empty canvas's "create your first step" prompt, and larger flows are
-// unaffected because they fit below 1 anyway.
-export const CANVAS_FIT_VIEW_OPTIONS = { padding: 0.2, maxZoom: 1 };
-
 export interface RawNode {
   id: string;
   name: string;

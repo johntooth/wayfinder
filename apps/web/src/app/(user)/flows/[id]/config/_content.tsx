@@ -50,7 +50,6 @@ import { compareStepLabels, computeStepNumbers } from "@/lib/flow-utils";
 import type { NextStepAnchor } from "@/lib/canvas/canvas-guidance";
 import {
   CANVAS_DEBOUNCE_MS as DEBOUNCE_MS,
-  CANVAS_FIT_VIEW_OPTIONS,
   readFields,
   toRfEdge,
   toRfNode,
@@ -155,7 +154,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
     );
     setExpertRole(data.flow.expertRole ?? "");
     if (data.nodes.length > 3) {
-      setTimeout(() => { fitView(CANVAS_FIT_VIEW_OPTIONS); }, 100);
+      setTimeout(() => { fitView({ padding: 0.2 }); }, 100);
     }
   }, [canvasQuery.data, fitView]);
 
