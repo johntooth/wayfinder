@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
-import { AlertTriangle, Download, Info, Loader2, Lock, Upload } from "lucide-react";
+import { AlertTriangle, Info, Loader2, Lock, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -60,23 +60,6 @@ export interface TemplateAnnotationModalProps {
   }) => void;
 }
 
-const downloadBlobData = (blob: Blob, filename: string): void => {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
-};
-
-const filenameFromDisposition = (header: string | null): string | null => {
-  if (!header) return null;
-  const match = /filename="?([^";]+)"?/.exec(header);
-  return match?.[1] ?? null;
-};
-
 // Strips the client-only fields, leaving the AnnotationRow shape the routes read.
 const toPayloadRows = (rows: EditableRow[]): AnnotationRow[] =>
   rows.map(({ id, model, ...row }) => {
@@ -101,7 +84,6 @@ export function TemplateAnnotationModal({
   );
   const [error, setError] = useState<string | null>(null);
   const [configIndex, setConfigIndex] = useState<number | null>(null);
-  const [downloading, setDownloading] = useState(false);
   // The file currently under review. Held in state (not just the prop) so the
   // author can swap it via the re-upload panel and restart the flow in place.
   const [activeFile, setActiveFile] = useState<File | null>(file);
@@ -227,38 +209,6 @@ export function TemplateAnnotationModal({
 
   const removeRow = (index: number) => setRowModel(index, { ...rows[index]!.model, label: "" });
 
-  // Hand the current document back so the author can place more fields in Word,
-  // then wait for the edited file. It comes back carrying the edits made here, so
-  // their copy and the saved template do not drift apart.
-  const downloadForEditing = async () => {
-    setDownloading(true);
-    setError(null);
-    try {
-      const body = new FormData();
-      if (activeFile) body.append("file", activeFile);
-      body.append("annotations", JSON.stringify(toPayloadRows(rows)));
-
-      const response = await fetch(`${templateUrl}/annotated`, { method: "POST", body });
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => ({}))) as { error?: string };
-        setError(payload.error ?? "Could not prepare the document for download.");
-        return;
-      }
-
-      const blob = await response.blob();
-      const name =
-        filenameFromDisposition(response.headers.get("Content-Disposition")) ??
-        activeFile?.name ??
-        "template.docx";
-      downloadBlobData(blob, name);
-      setStep("reupload");
-    } catch {
-      setError("Could not prepare the document for download.");
-    } finally {
-      setDownloading(false);
-    }
-  };
-
   const onReupload = (event: ChangeEvent<HTMLInputElement>) => {
     const next = event.target.files?.[0];
     if (reuploadInputRef.current) reuploadInputRef.current.value = "";
@@ -338,23 +288,6 @@ export function TemplateAnnotationModal({
             <Button type="button" variant="secondary" onClick={onCancel}>
               Cancel
             </Button>
-            {step === "review" && (
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => void downloadForEditing()}
-                  disabled={downloading}
-                >
-                  <Download size={13} className="mr-1" />
-                  {downloading ? "Preparing…" : "Download to add fields"}
-                </Button>
-                <span className="max-w-[16rem] text-[11px] leading-tight text-[#6d6a65]">
-                  Need more fields? Place them in the document with the annotation syntax, then
-                  upload it back.
-                </span>
-              </div>
-            )}
             {step === "review" && blockedReason && (
               <span className="text-[12px] text-[#6d6a65]">{blockedReason}</span>
             )}

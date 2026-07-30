@@ -15,8 +15,8 @@
  *   3. The raw annotation string beneath each row updates live as the author
  *      edits the field name and type — the teaching surface for the Word
  *      round-trip.
- *   4. Download-to-add-fields hands the document back and waits for a re-upload,
- *      which restarts the flow.
+ *   4. Re-uploading the document after adding placeholders in Word restarts the
+ *      flow and picks up the new fields.
  *   5. The config icon renders in an accent colour when a non-default option is
  *      set, in the structured conversation editor as well (the retrofit).
  */
@@ -233,53 +233,48 @@ test.describe('enhance: guided annotation upload', () => {
     await expect(page.getByText('agreement.docx').first()).toBeVisible({ timeout: 10_000 });
   });
 
-  test('downloading to add fields switches to a re-upload panel that restarts the flow', async ({
+  test('re-uploading the edited document restarts the flow with the new fields', async ({
     page,
   }) => {
     await createFlowAndOpenCanvas(page, `Template Reupload ${Date.now()}`);
     await addDocumentStep(page);
 
-    await mockAnalyse(page, {
-      filename: 'agreement.docx',
-      format: 'docx',
-      classification: 'annotated',
-      documentText: 'Made with {{ Supplier Name }}.',
-      rows: [
-        {
-          key: 'supplier_name',
-          line: 'Supplier Name',
-          occurrences: [{ sourceText: '{{ Supplier Name }}', occurrence: 0 }],
-          locked: false,
-        },
-      ],
+    // The author adds placeholders in Word between the two uploads, so the same
+    // filename comes back carrying a field the first pass did not have.
+    let uploads = 0;
+    await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template\/analyse$/, async (route: Route) => {
+      uploads += 1;
+      const annotated = uploads > 1;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          filename: 'agreement.docx',
+          format: 'docx',
+          classification: annotated ? 'annotated' : 'empty',
+          documentText: annotated ? 'Made with {{ Supplier Name }}.' : 'Supplier Name:',
+          rows: annotated
+            ? [
+                {
+                  key: 'supplier_name',
+                  line: 'Supplier Name',
+                  occurrences: [{ sourceText: '{{ Supplier Name }}', occurrence: 0 }],
+                  locked: false,
+                },
+              ]
+            : [],
+        }),
+      });
     });
     await mockSave(page);
 
-    // The download returns the document with annotations inserted; mock it so the
-    // fake .docx bytes don't have to be a real document.
-    await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template\/annotated$/, async (route: Route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        headers: { 'Content-Disposition': 'attachment; filename="agreement.docx"' },
-        body: 'PK\x03\x04 annotated bytes',
-      });
-    });
-
     await uploadTemplate(page);
-    await expect(page.getByText('1 data field found')).toBeVisible({ timeout: 10_000 });
-    await page.getByRole('button', { name: 'Edit fields' }).click();
-    await expect(page.getByText('{{ Supplier Name }}').first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('No data fields yet')).toBeVisible({ timeout: 10_000 });
 
-    // The Download button hands the annotated document back and switches to the
-    // re-upload panel; the download itself is captured so headless does not stall.
-    const download = page.waitForEvent('download');
-    await page.getByRole('button', { name: /Download to add fields/i }).click();
-    await download;
-
+    await page.getByRole('button', { name: "I've added them" }).click();
     await expect(page.getByText(/upload the document here/i)).toBeVisible({ timeout: 5_000 });
 
-    // Re-uploading restarts the flow from detection.
+    // Re-uploading restarts the flow from detection, now finding the field.
     await page
       .locator('input[type="file"][accept=".docx,.xlsx"]')
       .last()

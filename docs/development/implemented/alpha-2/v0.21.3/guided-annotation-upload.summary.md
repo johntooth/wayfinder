@@ -353,6 +353,12 @@ Follow-up changes after the first round of review, all inside the modal:
 
 15. **Kept, because none of it depended on inference.** The review editor and its
     live raw annotation line, validation with did-you-mean fixes, locked
-    section/group rows, the duplicate-occurrence note, download-to-add-fields via
-    `POST .../template/annotated` (which now applies only the author's own edits),
-    the re-upload panel, and the .xlsx header-mode passthrough.
+    section/group rows, the duplicate-occurrence note, the re-upload panel, and
+    the .xlsx header-mode passthrough.
+
+16. **Download-to-add-fields removed.** The button and its explainer are gone from
+    the review footer, and with them `POST .../template/annotated`, which nothing
+    else called. Adding more fields is now: edit the document in Word and upload
+    it again. The re-upload panel is still reached from the no-fields screen via
+    *I've added them*, and the node-config download link (a `GET` on the stored
+    template) is untouched.
