@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { classifyTemplateSource } from "@rbrasier/domain";
 import { rowsFromDocumentTags } from "@/lib/template-annotation";
 import {
   authoriseTemplateNode,
@@ -8,12 +7,13 @@ import {
   readUploadedTemplate,
 } from "@/lib/template-route-helpers";
 
-// Step 0 of the guided annotation flow: parse the uploaded document, decide
-// which branch it takes, and hand back the rows the review grid starts from.
+// Step 0 of the guided flow: read the uploaded document and hand back the
+// placeholders the author wrote into it. A document either carries {{ tags }} or
+// it does not — nothing about its content is inferred, and nothing is ever
+// written into it that the author did not type themselves.
 //
-// Nothing is persisted here. The browser holds the file and re-sends it on the
-// next step, so a filled example — which may carry real supplier data or PII —
-// never reaches our storage at all.
+// Nothing is persisted here. The browser holds the file and re-sends it on save,
+// so a document the author abandons never reaches our storage at all.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; nodeId: string }> },
@@ -34,7 +34,6 @@ export async function POST(
   }
 
   const { tags, documentTemplateContent } = extraction.data;
-  const classification = classifyTemplateSource(documentTemplateContent, tags.length);
 
   // A tagless .xlsx whose first row is a usable header already works today
   // (ADR-039 header mode). Annotating it would silently change its fill
@@ -47,8 +46,8 @@ export async function POST(
   return NextResponse.json({
     filename: safeFilename,
     format,
-    classification: headerModeReady ? "header" : classification,
+    classification: headerModeReady ? "header" : tags.length > 0 ? "annotated" : "empty",
     documentText: documentTemplateContent,
-    rows: classification === "annotated" ? rowsFromDocumentTags(documentTemplateContent) : [],
+    rows: rowsFromDocumentTags(documentTemplateContent),
   });
 }

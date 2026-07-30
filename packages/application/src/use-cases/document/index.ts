@@ -7,6 +7,5 @@ export * from "./render-data";
 export * from "./step-output-fields";
 export * from "./structured-fields";
 export * from "./summarise-template";
-export * from "./suggest-template-fields";
 export * from "./update-document-fields";
 export * from "./update-structured-output";

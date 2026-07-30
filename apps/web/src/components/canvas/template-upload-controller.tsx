@@ -32,8 +32,9 @@ export interface TemplateUploadController {
 }
 
 // Owns the handoff from the node-config file picker to the guided annotation
-// modal. Picking a file no longer uploads it: detection, the AI pass and field
-// review all happen in the modal, and only the annotated result is persisted.
+// modal. Picking a file no longer uploads it: reading the placeholders the author
+// wrote and reviewing them both happen in the modal, and only the reviewed
+// result is persisted.
 export function useTemplateUpload(
   fileInputRef: RefObject<HTMLInputElement | null>,
   onApply: (result: TemplateUploadResult) => void,

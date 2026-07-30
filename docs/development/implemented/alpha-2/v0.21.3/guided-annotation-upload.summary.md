@@ -309,3 +309,50 @@ Follow-up changes after the first round of review, all inside the modal:
     reporter supplied as the target. The review row now reads "Goes after …"
     instead of "Replaces …" for a caption-anchored field, since nothing is being
     replaced.
+
+### Fourth round — the AI pass is removed
+
+13. **All AI inference is gone from template upload.** Tested against real
+    documents, the AI pass was not reliable enough on anything complex: it
+    anchored to the wrong text, and each fix moved the failure rather than
+    removing it. Template fields are now authored by hand in Word, and the modal
+    reads what the author wrote. Nothing writes a placeholder into a document
+    that the author did not type.
+
+    **Deleted outright** — no dead code left behind:
+
+    - `SuggestTemplateFields` use case and its tests
+    - `suggestedTemplateFieldSchema` / `suggestedTemplateFieldsSchema` in
+      `@rbrasier/shared`, and the container wiring
+    - `POST .../template/suggest`
+    - `classifyTemplateSource` and `template-classification.ts` — a document
+      either carries tags or it does not, so guessing "blank vs filled example"
+      has nothing left to decide
+    - `rowsFromSuggestions`, `contextFor`, and the AI-only `AnnotationRow` fields
+      (`kind`, `context`, `originalValue`, `confidence`, `insertAfter`); a row is
+      now `{ key, line, occurrences, locked }`
+    - `branchFor` / `BranchOffer` / `BranchAction`, `isLowConfidence`, the
+      `confirmed` flag and its save gate, the filled-example confirmation step,
+      the confidence bar and "In the document: …" context in the review grid, and
+      the "the AI found nothing" fallback
+
+14. **Two screens after detection.** `analyse` reports `annotated`, `empty` or
+    `header` from the tag count alone.
+    - **Fields found** lists them as two columns of bullets with each type in
+      brackets. *Accept these fields* saves and closes straight from the list;
+      *Edit fields* opens the editor for renaming and retyping. A malformed
+      placeholder disables Accept and says to use Edit fields.
+    - **No fields yet** shows an animated demo typing three annotations into a
+      mock `your-template.docx` — a plain field, a date, a currency — with a
+      caret, looping. The state machine
+      (`annotation-typing-demo-model.ts`) is pure and unit-tested; the component
+      honours `prefers-reduced-motion` by showing the finished document still.
+      From here a link opens the **complete list of annotations**: every type,
+      choices, limits and the block constructs, each entry a form the validator
+      accepts.
+
+15. **Kept, because none of it depended on inference.** The review editor and its
+    live raw annotation line, validation with did-you-mean fixes, locked
+    section/group rows, the duplicate-occurrence note, download-to-add-fields via
+    `POST .../template/annotated` (which now applies only the author's own edits),
+    the re-upload panel, and the .xlsx header-mode passthrough.

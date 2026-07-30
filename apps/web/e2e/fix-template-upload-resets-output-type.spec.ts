@@ -79,13 +79,8 @@ test.describe('fix: template upload preserves output type and pre-filled fields'
           rows: [
             {
               key: 'client_name',
-              kind: 'tag',
               line: 'Client Name',
               occurrences: [{ sourceText: '{{Client Name}}', occurrence: 0 }],
-              context: 'Hello {{Client Name}}.',
-              originalValue: null,
-              confidence: null,
-              insertAfter: false,
               locked: false,
             },
           ],
@@ -126,10 +121,9 @@ test.describe('fix: template upload preserves output type and pre-filled fields'
     });
 
     // Walk the guided modal: the mocked document already carries a placeholder,
-    // so it offers to continue with what it found, then saves.
-    await expect(page.getByText('Data fields found')).toBeVisible({ timeout: 10_000 });
-    await page.getByRole('button', { name: 'Continue with these' }).click();
-    await page.getByRole('button', { name: 'Save template' }).click();
+    // so it is listed and accepted as it is.
+    await expect(page.getByText('1 data field found')).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: 'Accept these fields' }).click();
 
     await expect(page.locator('text=mock-template.docx').first()).toBeVisible({ timeout: 10_000 });
 

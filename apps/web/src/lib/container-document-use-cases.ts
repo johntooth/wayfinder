@@ -1,7 +1,6 @@
 import {
   CaptureStructuredStepOutput,
   GenerateDocument,
-  SuggestTemplateFields,
   SummariseTemplate,
   UpdateDocumentFields,
   UpdateStructuredStepOutput,
@@ -65,5 +64,4 @@ export const buildDocumentUseCases = (deps: DocumentUseCaseDeps) => ({
     deps.auditLogger,
   ),
   summariseTemplate: new SummariseTemplate(deps.languageModel),
-  suggestTemplateFields: new SuggestTemplateFields(deps.languageModel),
 });

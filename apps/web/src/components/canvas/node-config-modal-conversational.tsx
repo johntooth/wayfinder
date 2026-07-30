@@ -216,7 +216,7 @@ export function NodeConfigModalConversational({
           </p>
           <p className="text-[12px] text-[#6d6a65]">
             Already marked up with tags (e.g <code className="font-mono">{EXAMPLE_TAG}</code>)? Those
-            are picked up automatically — otherwise we&apos;ll help you add them.
+            are picked up automatically — otherwise we&apos;ll show you how to add them.
           </p>
           {!onUploadTemplate ? (
             <p className="rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3 text-[12px] text-[#6d6a65]">

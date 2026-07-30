@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
-import { AlertTriangle, Check, Download, Info, Loader2, Lock, Sparkles, Upload } from "lucide-react";
-import { ConfidenceBar } from "@/components/chat/confidence-bar";
+import { AlertTriangle, Download, Info, Loader2, Lock, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,6 +13,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { AnnotationRow } from "@/lib/template-annotation";
+import { AnnotationReference } from "./annotation-reference";
+import { AnnotationTypingDemo } from "./annotation-typing-demo";
 import { FieldConfigModal, FieldRow } from "./field-row";
 import {
   lineToModel,
@@ -24,16 +25,12 @@ import {
   type FieldRowType,
 } from "./field-row-model";
 import {
-  branchFor,
   duplicateCounts,
-  isLowConfidence,
   rowTypeLabel,
   saveBlockedReason,
   toEditableRows,
   validateRow,
   type AnnotationStep,
-  type BranchAction,
-  type BranchOffer,
   type EditableRow,
   type TemplateClassification,
 } from "./template-annotation-model";
@@ -63,16 +60,6 @@ export interface TemplateAnnotationModalProps {
   }) => void;
 }
 
-const CHEAT_SHEET: { syntax: string; meaning: string }[] = [
-  { syntax: "{{ Supplier Name }}", meaning: "A plain text value" },
-  { syntax: "{{ Start Date (date) }}", meaning: "A date" },
-  { syntax: "{{ Contract Value (currency) }}", meaning: "An amount of money" },
-  { syntax: "{{ Contact Email (email) }}", meaning: "An email address" },
-  { syntax: "{{ Status (options: Draft, Final) }}", meaning: "One of a fixed set of choices" },
-  { syntax: "{{ Notes (maxlen: 200) }}", meaning: "Text with a length limit" },
-  { syntax: "{{ Middle Name (optional) }}", meaning: "May be left blank" },
-];
-
 const downloadBlobData = (blob: Blob, filename: string): void => {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -92,9 +79,8 @@ const filenameFromDisposition = (header: string | null): string | null => {
 
 // Strips the client-only fields, leaving the AnnotationRow shape the routes read.
 const toPayloadRows = (rows: EditableRow[]): AnnotationRow[] =>
-  rows.map(({ id, confirmed, model, ...row }) => {
+  rows.map(({ id, model, ...row }) => {
     void id;
-    void confirmed;
     void model;
     return row;
   });
@@ -114,9 +100,7 @@ export function TemplateAnnotationModal({
     existingRows ? toEditableRows(existingRows) : [],
   );
   const [error, setError] = useState<string | null>(null);
-  const [confirmingPattern, setConfirmingPattern] = useState(false);
   const [configIndex, setConfigIndex] = useState<number | null>(null);
-  const [foundNothing, setFoundNothing] = useState(false);
   const [downloading, setDownloading] = useState(false);
   // The file currently under review. Held in state (not just the prop) so the
   // author can swap it via the re-upload panel and restart the flow in place.
@@ -179,7 +163,7 @@ export function TemplateAnnotationModal({
         const payload = (await response.json()) as AnalyseResponse & { error?: string };
         if (!response.ok) {
           setError(payload.error ?? "Could not read that document.");
-          setStep("branch");
+          setStep("detected");
           return;
         }
 
@@ -192,10 +176,10 @@ export function TemplateAnnotationModal({
           return;
         }
         setRows(toEditableRows(payload.rows));
-        setStep("branch");
+        setStep("detected");
       } catch {
         setError("Could not read that document.");
-        setStep("branch");
+        setStep("detected");
       }
     },
     [save, templateUrl],
@@ -206,56 +190,6 @@ export function TemplateAnnotationModal({
     analysedRef.current = true;
     void runAnalyse(file);
   }, [file, isReentry, runAnalyse]);
-
-  const suggest = async (mode: "empty" | "filled" | "augment") => {
-    if (!activeFile || !analysis) return;
-    setStep("suggesting");
-    setError(null);
-
-    const body = new FormData();
-    body.append("file", activeFile);
-    body.append("mode", mode);
-    body.append(
-      "existingLabels",
-      JSON.stringify(rows.map((row) => row.line).filter((line) => line.trim())),
-    );
-
-    try {
-      const response = await fetch(`${templateUrl}/suggest`, { method: "POST", body });
-      const payload = (await response.json()) as { rows?: AnnotationRow[]; error?: string };
-      if (!response.ok) {
-        setError(payload.error ?? "The AI could not analyse this document.");
-        setStep("review");
-        return;
-      }
-
-      const suggested = toEditableRows(payload.rows ?? []);
-      // Outcome D: never present an empty grid. Say so plainly and leave the
-      // author on the manual path, which always works.
-      setFoundNothing(suggested.length === 0);
-      setRows((current) => [...current, ...suggested]);
-      setStep("review");
-    } catch {
-      setError("The AI could not analyse this document.");
-      setStep("review");
-    }
-  };
-
-  const handleBranch = (action: BranchAction) => {
-    if (action === "continue") {
-      setStep("review");
-      return;
-    }
-    if (action === "cheatsheet") {
-      setStep("cheatsheet");
-      return;
-    }
-    if (action === "augment") {
-      void suggest("augment");
-      return;
-    }
-    void suggest(analysis?.classification === "filled" ? "filled" : "empty");
-  };
 
   const updateRow = (index: number, patch: Partial<EditableRow>) => {
     setRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -294,9 +228,8 @@ export function TemplateAnnotationModal({
   const removeRow = (index: number) => setRowModel(index, { ...rows[index]!.model, label: "" });
 
   // Hand the current document back so the author can place more fields in Word,
-  // then wait for the edited file. The document comes back with the reviewed
-  // annotations already written in — a filled example's values become their
-  // {{ fields }} — so the author edits the marked-up version, not the raw one.
+  // then wait for the edited file. It comes back carrying the edits made here, so
+  // their copy and the saved template do not drift apart.
   const downloadForEditing = async () => {
     setDownloading(true);
     setError(null);
@@ -333,16 +266,14 @@ export function TemplateAnnotationModal({
     setActiveFile(next);
     setAnalysis(null);
     setRows([]);
-    setConfirmingPattern(false);
-    setFoundNothing(false);
     void runAnalyse(next);
   };
 
   const duplicates = duplicateCounts(rows);
   const blockedReason = saveBlockedReason(rows);
   const activeConfigRow = configIndex !== null ? rows[configIndex] : null;
-  const offer: BranchOffer | null =
-    analysis && analysis.classification !== "header" ? branchFor(analysis.classification) : null;
+  const foundFields = rows.filter((row) => !row.locked && row.line.trim().length > 0);
+  const hasFields = foundFields.length > 0;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onCancel()}>
@@ -363,14 +294,16 @@ export function TemplateAnnotationModal({
           )}
 
           {step === "analysing" && <Working message="Reading your document…" />}
-          {step === "suggesting" && <Working message="Looking for the data fields in your document…" />}
           {step === "saving" && <Working message="Saving your template…" />}
 
-          {step === "branch" && offer && (
-            <BranchBody offer={offer} confirming={confirmingPattern} rows={rows} />
+          {step === "detected" && hasFields && (
+            <FoundFields fields={foundFields} blockedReason={blockedReason} />
+          )}
+          {step === "detected" && !hasFields && (
+            <NoFieldsYet onOpenReference={() => setStep("reference")} />
           )}
 
-          {step === "cheatsheet" && <CheatSheet />}
+          {step === "reference" && <AnnotationReference />}
 
           {step === "reupload" && <ReuploadPanel inputRef={reuploadInputRef} onFile={onReupload} />}
 
@@ -380,13 +313,6 @@ export function TemplateAnnotationModal({
                 Check each data field, set its type, and use the cog for choices and limits. The line
                 beneath each row is what goes into your document — copy it into Word any time.
               </p>
-
-              {foundNothing && (
-                <p className="rounded-[9px] border border-[#e6d9b8] bg-[#fbf6e8] px-3 py-2 text-[12px] text-[#8a6d1f]">
-                  The AI did not find any data fields it was confident about. Set them up in Word and
-                  upload again.
-                </p>
-              )}
 
               <div className="space-y-3">
                 {rows.map((row, index) => (
@@ -399,7 +325,6 @@ export function TemplateAnnotationModal({
                     onChangeType={(type) => changeType(index, type)}
                     onRemove={() => removeRow(index)}
                     onOpenConfig={() => setConfigIndex(index)}
-                    onConfirm={() => updateRow(index, { confirmed: true })}
                     onAcceptCorrection={(line) => acceptCorrection(index, line)}
                   />
                 ))}
@@ -435,42 +360,39 @@ export function TemplateAnnotationModal({
             )}
           </div>
 
-          {step === "branch" && offer && !confirmingPattern && (
+          {step === "detected" && hasFields && (
             <>
-              <Button type="button" variant="secondary" onClick={() => handleBranch(offer.secondary)}>
-                {offer.secondaryLabel}
+              <Button type="button" variant="secondary" onClick={() => setStep("review")}>
+                Edit fields
               </Button>
               <Button
                 type="button"
-                onClick={() =>
-                  offer.requiresConfirmation ? setConfirmingPattern(true) : handleBranch(offer.primary)
-                }
+                disabled={blockedReason !== null}
+                onClick={() => void save(rows, activeFile)}
               >
-                {offer.primary !== "continue" && <Sparkles size={13} className="mr-1" />}
-                {offer.primaryLabel}
+                Accept these fields
               </Button>
             </>
           )}
 
-          {step === "branch" && offer && confirmingPattern && (
-            <>
-              <Button type="button" variant="secondary" onClick={() => setConfirmingPattern(false)}>
-                Back
-              </Button>
-              <Button type="button" onClick={() => handleBranch(offer.primary)}>
-                Yes, use it as a pattern
-              </Button>
-            </>
+          {step === "detected" && !hasFields && (
+            <Button type="button" onClick={() => setStep("reupload")}>
+              I&apos;ve added them
+            </Button>
           )}
 
-          {step === "cheatsheet" && (
-            <Button type="button" onClick={onCancel}>
-              Done
+          {step === "reference" && (
+            <Button type="button" onClick={() => setStep("detected")}>
+              Back
             </Button>
           )}
 
           {step === "review" && (
-            <Button type="button" disabled={blockedReason !== null} onClick={() => void save(rows, activeFile)}>
+            <Button
+              type="button"
+              disabled={blockedReason !== null}
+              onClick={() => void save(rows, activeFile)}
+            >
               Save template
             </Button>
           )}
@@ -497,41 +419,69 @@ function Working({ message }: { message: string }) {
   );
 }
 
-function BranchBody({
-  offer,
-  confirming,
-  rows,
+function FoundFields({
+  fields,
+  blockedReason,
 }: {
-  offer: BranchOffer;
-  confirming: boolean;
-  rows: EditableRow[];
+  fields: EditableRow[];
+  blockedReason: string | null;
 }) {
-  const fields = rows.filter((row) => !row.locked && row.line.trim().length > 0);
-
   return (
     <div className="space-y-3">
       <div className="space-y-1">
-        <p className="text-[14px] font-medium text-[#1a1814]">{offer.title}</p>
-        <p className="text-[13px] text-[#5a5650]">{offer.body}</p>
+        <p className="text-[14px] font-medium text-[#1a1814]">
+          {fields.length === 1 ? "1 data field found" : `${fields.length} data fields found`}
+        </p>
+        <p className="text-[13px] text-[#5a5650]">
+          These are the placeholders in your document. Accept them as they are, or change their
+          names and types first.
+        </p>
       </div>
 
-      {fields.length > 0 && (
-        <div className="grid grid-cols-1 gap-x-6 gap-y-1 rounded-[9px] border border-[#e6e3dc] bg-[#f7f6f3] p-3 sm:grid-cols-2">
-          {fields.map((row) => (
-            <div key={row.id} className="flex items-baseline gap-1.5 text-[12px]">
-              <span className="text-[#3a5fd9]">•</span>
-              <span className="truncate text-[#1a1814]">{row.model.label || row.line}</span>
-              <span className="shrink-0 text-[#6d6a65]">({rowTypeLabel(row)})</span>
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="grid grid-cols-1 gap-x-6 gap-y-1 rounded-[9px] border border-[#e6e3dc] bg-[#f7f6f3] p-3 sm:grid-cols-2">
+        {fields.map((row) => (
+          <div key={row.id} className="flex items-baseline gap-1.5 text-[12px]">
+            <span className="text-[#3a5fd9]">•</span>
+            <span className="truncate text-[#1a1814]">{row.model.label || row.line}</span>
+            <span className="shrink-0 text-[#6d6a65]">({rowTypeLabel(row)})</span>
+          </div>
+        ))}
+      </div>
 
-      {offer.requiresConfirmation && confirming && (
-        <p className="rounded-[9px] border border-[#e6d9b8] bg-[#fbf6e8] p-3 text-[13px] text-[#8a6d1f]">
-          {offer.confirmationBody}
+      {blockedReason && (
+        <p className="rounded-[9px] border border-[#e6d9b8] bg-[#fbf6e8] px-3 py-2 text-[12px] text-[#8a6d1f]">
+          One or more placeholders need attention before this can be saved. Choose Edit fields to see
+          which.
         </p>
       )}
+    </div>
+  );
+}
+
+function NoFieldsYet({ onOpenReference }: { onOpenReference: () => void }) {
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1">
+        <p className="text-[14px] font-medium text-[#1a1814]">No data fields yet</p>
+        <p className="text-[13px] text-[#5a5650]">
+          This document has no placeholders in it. Open it in Word and type a name in double braces
+          wherever a value belongs — like this:
+        </p>
+      </div>
+
+      <AnnotationTypingDemo />
+
+      <p className="text-[12px] text-[#5a5650]">
+        Every kind of field is listed in the{" "}
+        <button
+          type="button"
+          className="font-medium text-[#3a5fd9] underline hover:text-[#2e4bb0]"
+          onClick={onOpenReference}
+        >
+          complete list of annotations
+        </button>
+        . Save the document, then upload it again and the fields will be picked up.
+      </p>
     </div>
   );
 }
@@ -557,44 +507,7 @@ function ReuploadPanel({
         <Upload size={20} />
         Click to upload your edited .docx or .xlsx
       </button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".docx,.xlsx"
-        className="sr-only"
-        onChange={onFile}
-      />
-    </div>
-  );
-}
-
-function CheatSheet() {
-  return (
-    <div className="space-y-3">
-      <p className="text-[13px] text-[#5a5650]">
-        Type these into your document wherever the AI should fill something in, then upload it
-        again — the flow picks up where it left off.
-      </p>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-[12px]">
-          <thead>
-            <tr className="border-b border-[#e6e3dc] text-[#6d6a65]">
-              <th className="py-1.5 pr-4 font-medium">Type this</th>
-              <th className="py-1.5 font-medium">To get</th>
-            </tr>
-          </thead>
-          <tbody>
-            {CHEAT_SHEET.map((entry) => (
-              <tr key={entry.syntax} className="border-b border-[#f0eee9] last:border-0">
-                <td className="py-1.5 pr-4">
-                  <code className="font-mono text-[#3a5fd9]">{entry.syntax}</code>
-                </td>
-                <td className="py-1.5 text-[#5a5650]">{entry.meaning}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <input ref={inputRef} type="file" accept=".docx,.xlsx" className="sr-only" onChange={onFile} />
     </div>
   );
 }
@@ -607,7 +520,6 @@ function ReviewRow({
   onChangeType,
   onRemove,
   onOpenConfig,
-  onConfirm,
   onAcceptCorrection,
 }: {
   row: EditableRow;
@@ -617,11 +529,9 @@ function ReviewRow({
   onChangeType: (type: FieldRowType) => void;
   onRemove: () => void;
   onOpenConfig: () => void;
-  onConfirm: () => void;
   onAcceptCorrection: (line: string) => void;
 }) {
   const validation = validateRow(row);
-  const needsConfirmation = isLowConfidence(row) && !row.confirmed;
 
   if (row.locked) {
     return (
@@ -642,11 +552,7 @@ function ReviewRow({
   return (
     <div
       className={`space-y-1.5 rounded-[9px] border p-2.5 ${
-        validation.blocking.length > 0
-          ? "border-[#f0c9d4] bg-[#fdfafb]"
-          : needsConfirmation
-            ? "border-[#e6d9b8] bg-[#fdfbf5]"
-            : "border-[#e6e3dc]"
+        validation.blocking.length > 0 ? "border-[#f0c9d4] bg-[#fdfafb]" : "border-[#e6e3dc]"
       }`}
     >
       <FieldRow
@@ -660,33 +566,9 @@ function ReviewRow({
         labelPlaceholder="e.g. Supplier Name"
       />
 
-      {/* Two columns beneath the field: what goes into the document on the left,
-          how sure the AI was and where it sits on the right. A tag row's context
-          already contains the same {{ tag }} as the raw line, so context is shown
-          only for AI spans, whose context is real prose. */}
-      <div className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
-        <div className="min-w-0 space-y-0.5">
-          <code className="block truncate font-mono text-[11px] text-[#6d6a65]">
-            {row.line.trim() ? `{{ ${row.line.trim()} }}` : "— removed from the document —"}
-          </code>
-          {row.originalValue && (
-            <p className="text-[11px] text-[#5a5650]">
-              {row.insertAfter ? "Goes after " : "Replaces "}
-              <span className="font-medium text-[#1a1814]">{row.originalValue}</span>
-            </p>
-          )}
-        </div>
-
-        <div className="min-w-0 space-y-0.5">
-          {row.confidence !== null && <ConfidenceBar score={row.confidence} />}
-          {row.context && row.kind !== "tag" && (
-            <p className="truncate text-[11px] text-[#6d6a65]" title={row.context}>
-              <span className="italic">In the document: </span>
-              {row.context}
-            </p>
-          )}
-        </div>
-      </div>
+      <code className="block truncate font-mono text-[11px] text-[#6d6a65]">
+        {row.line.trim() ? `{{ ${row.line.trim()} }}` : "— removed from the document —"}
+      </code>
 
       {validation.blocking.map((message) => (
         <p key={message} className="flex items-start gap-1 text-[11px] text-[#c2385a]">
@@ -713,16 +595,6 @@ function ReviewRow({
         <p className="text-[11px] text-[#6d6a65]">
           Asked once, fills {duplicateCount} places in the document.
         </p>
-      )}
-
-      {needsConfirmation && (
-        <button
-          type="button"
-          className="flex items-center gap-1 text-[11px] font-medium text-[#8a6d1f] hover:text-[#6d5518]"
-          onClick={onConfirm}
-        >
-          <Check size={12} /> The AI wasn&apos;t sure about this one — confirm it is right
-        </button>
       )}
     </div>
   );

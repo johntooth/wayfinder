@@ -520,8 +520,8 @@ export function NodeConfigModal({
   };
 
   // The picked file is handed to the guided annotation modal rather than
-  // uploaded straight away: detection, the AI pass and field review all happen
-  // before anything is persisted.
+  // uploaded straight away: reading its placeholders and reviewing them both
+  // happen before anything is persisted.
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (!onUploadTemplate) return;
     setUploadError(null);

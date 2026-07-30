@@ -2,28 +2,27 @@
  * enhance-template-annotation.spec.ts
  *
  * Covers the guided annotation upload flow (v0.21.3): uploading a document into
- * a "Generate document" step now opens a guided modal that detects, branches,
- * lets the author review fields through structured controls, and only then
- * persists an annotated template.
+ * a "Generate document" step opens a guided modal that lists the {{ placeholders }}
+ * the author wrote in the document, lets them accept those or edit the names and
+ * types, and only then persists the template. Nothing is inferred — no AI pass
+ * ever writes placeholders into a document.
  *
  * What is tested:
- *   1. A filled example is detected, demands explicit confirmation that its
- *      values will be replaced, then shows AI-inferred fields with their
- *      original value and confidence.
- *   2. A low-confidence field blocks saving until it is explicitly confirmed.
+ *   1. A document carrying placeholders lists them with their types and saves on
+ *      "Accept these fields".
+ *   2. A document with no placeholders shows the typing demo and links through to
+ *      the complete annotation reference.
  *   3. The raw annotation string beneath each row updates live as the author
  *      edits the field name and type — the teaching surface for the Word
  *      round-trip.
- *   4. An already-annotated document offers "Continue with these" and saves.
+ *   4. Download-to-add-fields hands the document back and waits for a re-upload,
+ *      which restarts the flow.
  *   5. The config icon renders in an accent colour when a non-default option is
  *      set, in the structured conversation editor as well (the retrofit).
  */
 
 import { test, expect } from './helpers/base';
 import type { Page, Route } from '@playwright/test';
-
-const FILLED_TEXT =
-  'This agreement is made with Acme Pty Ltd for catering services.\nThe total value is $184,500.00.';
 
 const fakeDocx = () => Buffer.from('PK\x03\x04 fake docx content');
 
@@ -60,16 +59,6 @@ async function addDocumentStep(page: Page): Promise<void> {
 async function mockAnalyse(page: Page, body: Record<string, unknown>): Promise<void> {
   await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template\/analyse$/, async (route: Route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
-  });
-}
-
-async function mockSuggest(page: Page, rows: unknown[]): Promise<void> {
-  await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template\/suggest$/, async (route: Route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ rows }),
-    });
   });
 }
 
@@ -115,99 +104,84 @@ async function uploadTemplate(page: Page): Promise<void> {
 }
 
 test.describe('enhance: guided annotation upload', () => {
-  test('a filled example confirms intent, then presents AI fields for review', async ({ page }) => {
+  test('the placeholders in the document are listed and accepted as they are', async ({ page }) => {
     await createFlowAndOpenCanvas(page, `Template Annotation ${Date.now()}`);
     await addDocumentStep(page);
 
     await mockAnalyse(page, {
       filename: 'agreement.docx',
       format: 'docx',
-      classification: 'filled',
-      documentText: FILLED_TEXT,
-      rows: [],
+      classification: 'annotated',
+      documentText: 'Made with {{ Supplier Name }} for {{ Contract Value (currency) }}.',
+      rows: [
+        {
+          key: 'supplier_name',
+          line: 'Supplier Name',
+          occurrences: [{ sourceText: '{{ Supplier Name }}', occurrence: 0 }],
+          locked: false,
+        },
+        {
+          key: 'contract_value',
+          line: 'Contract Value (currency)',
+          occurrences: [{ sourceText: '{{ Contract Value (currency) }}', occurrence: 0 }],
+          locked: false,
+        },
+      ],
     });
-    await mockSuggest(page, [
-      {
-        key: 'supplier_name:0',
-        kind: 'span',
-        line: 'Supplier Name (text)',
-        occurrences: [{ sourceText: 'Acme Pty Ltd', occurrence: 0 }],
-        context: 'This agreement is made with Acme Pty Ltd for catering services.',
-        originalValue: 'Acme Pty Ltd',
-        confidence: 92,
-        insertAfter: false,
-        locked: false,
-      },
-    ]);
     const save = await mockSave(page);
 
     await uploadTemplate(page);
 
-    // 1. The filled-example branch names the destructive part concretely and
-    //    will not proceed without an explicit confirmation.
-    await expect(page.getByText('This looks like a completed document')).toBeVisible({ timeout: 10_000 });
-    await page.getByRole('button', { name: 'Use this as a pattern' }).click();
-    await expect(page.getByText(/will be replaced with fields/i)).toBeVisible();
-    await page.screenshot({ path: 'screenshots/enhance-template-annotation-confirm.png', fullPage: true });
-    await page.getByRole('button', { name: 'Yes, use it as a pattern' }).click();
+    // 1. The fields the author wrote are listed with the type each one carries,
+    //    so accepting them is an informed decision rather than a blind one.
+    await expect(page.getByText('2 data fields found')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Supplier Name')).toBeVisible();
+    await expect(page.getByText('(Text)')).toBeVisible();
+    await expect(page.getByText('Contract Value')).toBeVisible();
+    await expect(page.getByText('(Currency)')).toBeVisible();
+    await page.screenshot({ path: 'screenshots/enhance-template-annotation-found.png', fullPage: true });
 
-    // 2. The review grid shows the value being replaced and the confidence, so
-    //    the author can verify the inference caught the right span.
-    // Exact, since the surrounding-context line quotes the same value.
-    await expect(page.getByText('Acme Pty Ltd', { exact: true })).toBeVisible({ timeout: 10_000 });
-    // A value span is replaced outright; a caption-anchored row would read
-    // "Goes after" instead, since a caption must survive annotation.
-    await expect(page.getByText(/^Replaces/)).toBeVisible();
-    await expect(page.getByText(/High confidence/)).toBeVisible();
-    await expect(page.getByText('{{ Supplier Name (text) }}')).toBeVisible();
-    await page.screenshot({ path: 'screenshots/enhance-template-annotation-review.png', fullPage: true });
+    // 2. Accepting saves straight from the list — no trip through the editor.
+    await page.getByRole('button', { name: 'Accept these fields' }).click();
 
-    await page.getByRole('button', { name: 'Save template' }).click();
-
-    // 3. The annotated template is persisted and reflected back in node config.
     await expect(page.getByText('agreement.docx').first()).toBeVisible({ timeout: 10_000 });
     expect(save.saved()).toBe(true);
     // The output type survives the round-trip through the guided modal.
     await expect(page.locator('input[type="radio"][value="generate_document"]')).toBeChecked();
   });
 
-  test('a low-confidence field blocks saving until it is confirmed', async ({ page }) => {
-    await createFlowAndOpenCanvas(page, `Template Low Confidence ${Date.now()}`);
+  test('a document with no placeholders is shown how to add them', async ({ page }) => {
+    await createFlowAndOpenCanvas(page, `Template No Fields ${Date.now()}`);
     await addDocumentStep(page);
 
     await mockAnalyse(page, {
       filename: 'agreement.docx',
       format: 'docx',
-      classification: 'filled',
-      documentText: FILLED_TEXT,
+      classification: 'empty',
+      documentText: 'Supplier Agreement\nSupplier Name:\nStart Date:',
       rows: [],
     });
-    await mockSuggest(page, [
-      {
-        key: 'supplier_name:0',
-        kind: 'span',
-        line: 'Supplier Name (text)',
-        occurrences: [{ sourceText: 'Acme Pty Ltd', occurrence: 0 }],
-        context: 'This agreement is made with Acme Pty Ltd.',
-        originalValue: 'Acme Pty Ltd',
-        confidence: 20,
-        insertAfter: false,
-        locked: false,
-      },
-    ]);
     await mockSave(page);
 
     await uploadTemplate(page);
-    await page.getByRole('button', { name: 'Use this as a pattern' }).click();
-    await page.getByRole('button', { name: 'Yes, use it as a pattern' }).click();
 
-    const saveButton = page.getByRole('button', { name: 'Save template' });
-    await expect(page.getByText(/Low confidence/)).toBeVisible({ timeout: 10_000 });
-    await expect(saveButton).toBeDisabled();
-    await expect(page.getByText(/Confirm the fields the AI was unsure about/i)).toBeVisible();
+    // 1. No inference is offered — the author is shown the syntax being typed
+    //    into a mock document, which is the only way fields get added.
+    await expect(page.getByText('No data fields yet')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('your-template.docx')).toBeVisible();
+    // The demo types the tag out a character at a time, so this settles rather
+    // than matching immediately.
+    await expect(page.getByText('{{ Supplier Name }}')).toBeVisible({ timeout: 15_000 });
+    await page.screenshot({ path: 'screenshots/enhance-template-annotation-demo.png', fullPage: true });
 
-    await page.getByRole('button', { name: /confirm it is right/i }).click();
-    await expect(saveButton).toBeEnabled();
+    // 2. The complete list of annotations is one click away.
+    await page.getByRole('button', { name: 'complete list of annotations' }).click();
+    await expect(page.getByText('Kinds of value')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('{{ Equipment (multi-options: Laptop, Phone) }}')).toBeVisible();
+    await page.screenshot({ path: 'screenshots/enhance-template-annotation-reference.png', fullPage: true });
+
+    await page.getByRole('button', { name: 'Back' }).click();
+    await expect(page.getByText('No data fields yet')).toBeVisible();
   });
 
   test('the raw annotation string updates live as the field is edited', async ({ page }) => {
@@ -222,13 +196,8 @@ test.describe('enhance: guided annotation upload', () => {
       rows: [
         {
           key: 'supplier_name',
-          kind: 'tag',
           line: 'Supplier Name',
           occurrences: [{ sourceText: '{{ Supplier Name }}', occurrence: 0 }],
-          context: 'Made with {{ Supplier Name }}.',
-          originalValue: null,
-          confidence: null,
-          insertAfter: false,
           locked: false,
         },
       ],
@@ -237,12 +206,12 @@ test.describe('enhance: guided annotation upload', () => {
 
     await uploadTemplate(page);
 
-    // The branch step lists the data fields it found, with their type, before
+    // The detected step lists the data fields it found, with their type, before
     // asking the author to decide.
-    await expect(page.getByText('Data fields found')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('1 data field found')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('Supplier Name')).toBeVisible();
     await expect(page.getByText('(Text)')).toBeVisible();
-    await page.getByRole('button', { name: 'Continue with these' }).click();
+    await page.getByRole('button', { name: 'Edit fields' }).click();
 
     await expect(page.getByText('{{ Supplier Name }}').first()).toBeVisible({ timeout: 5_000 });
 
@@ -278,13 +247,8 @@ test.describe('enhance: guided annotation upload', () => {
       rows: [
         {
           key: 'supplier_name',
-          kind: 'tag',
           line: 'Supplier Name',
           occurrences: [{ sourceText: '{{ Supplier Name }}', occurrence: 0 }],
-          context: 'Made with {{ Supplier Name }}.',
-          originalValue: null,
-          confidence: null,
-          insertAfter: false,
           locked: false,
         },
       ],
@@ -303,8 +267,8 @@ test.describe('enhance: guided annotation upload', () => {
     });
 
     await uploadTemplate(page);
-    await expect(page.getByText('Data fields found')).toBeVisible({ timeout: 10_000 });
-    await page.getByRole('button', { name: 'Continue with these' }).click();
+    await expect(page.getByText('1 data field found')).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: 'Edit fields' }).click();
     await expect(page.getByText('{{ Supplier Name }}').first()).toBeVisible({ timeout: 5_000 });
 
     // The Download button hands the annotated document back and switches to the
@@ -324,7 +288,7 @@ test.describe('enhance: guided annotation upload', () => {
         mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         buffer: fakeDocx(),
       });
-    await expect(page.getByText('Data fields found')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('1 data field found')).toBeVisible({ timeout: 10_000 });
   });
 
   test('the config icon takes an accent colour when a non-default option is set', async ({ page }) => {

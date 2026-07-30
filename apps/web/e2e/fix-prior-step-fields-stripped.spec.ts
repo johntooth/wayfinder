@@ -113,24 +113,14 @@ async function uploadMockTemplate(page: Page, stepName: string): Promise<void> {
         rows: [
           {
             key: 'client_name',
-            kind: 'tag',
             line: 'Client Name',
             occurrences: [{ sourceText: '{{Client Name}}', occurrence: 0 }],
-            context: 'Hello {{Client Name}}…',
-            originalValue: null,
-            confidence: null,
-            insertAfter: false,
             locked: false,
           },
           {
             key: 'project_scope',
-            kind: 'tag',
             line: 'Project Scope',
             occurrences: [{ sourceText: '{{Project Scope}}', occurrence: 0 }],
-            context: '…your project scope is {{Project Scope}}.',
-            originalValue: null,
-            confidence: null,
-            insertAfter: false,
             locked: false,
           },
         ],
@@ -182,10 +172,9 @@ async function uploadMockTemplate(page: Page, stepName: string): Promise<void> {
   });
 
   // Walk the guided modal: the mocked document already carries placeholders, so
-  // it offers to continue with what it found, then saves.
-  await expect(page.getByText('Data fields found')).toBeVisible({ timeout: 10_000 });
-  await page.getByRole('button', { name: 'Continue with these' }).click();
-  await page.getByRole('button', { name: 'Save template' }).click();
+  // they are listed and accepted as they are.
+  await expect(page.getByText('2 data fields found')).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: 'Accept these fields' }).click();
 
   // Wait for the filename confirmation to appear
   await expect(page.locator('text=mock-template.docx').first()).toBeVisible({ timeout: 10_000 });
