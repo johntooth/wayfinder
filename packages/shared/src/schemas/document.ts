@@ -50,7 +50,7 @@ export const suggestedTemplateFieldSchema = z.object({
   sourceText: z
     .string()
     .describe(
-      "The exact text in the document this field replaces, copied character for character. For an empty template, the label text the placeholder should follow.",
+      "The exact text in the document this field replaces, copied character for character — the value someone entered, never the caption naming it. Only for a blank template, where no value exists yet, give the caption the placeholder should follow.",
     ),
   occurrence: z
     .number()

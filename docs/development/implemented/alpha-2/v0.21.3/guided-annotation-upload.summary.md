@@ -266,3 +266,46 @@ Follow-up changes after the first round of review, all inside the modal:
     (`fitViewOptions` on the canvas, and the >3-node refit), so one step is framed
     at the same scale as the empty "add your first step" canvas instead of the
     default max of 2.
+
+### Third round — annotations landed on the caption, not the value
+
+12. **Annotations now replace the value, not the label.** Reported against a real
+    filled example: a form whose rows read `Employee Name | Richard Brasier` came
+    back annotated as `{{ Employee Name }} | Richard Brasier` — the caption was
+    consumed by the placeholder and the real value stayed hard-coded, leaving a
+    template nobody can read or fill.
+
+    The model was pointing `sourceText` at the caption. Word extracts one table
+    cell per line, so a caption and its value arrive as consecutive lines with
+    nothing marking which is which, and "Employee Name" reads far more like a
+    field than "Richard Brasier" does. Three changes, in order of how much they
+    are relied on:
+
+    - **Prompt.** The filled and augment briefs now say plainly that `sourceText`
+      is the answer and never the question, that Word tables extract one cell per
+      line, and that pointing at the caption erases it. A shared rule states that
+      `label` and `sourceText` must not be the same text outside a blank
+      template. The `sourceText` field description in
+      `suggestedTemplateFieldSchema` says the same.
+    - **Deterministic repair** (`resolveAnchor`). When `sourceText` still reads as
+      the field's own caption, the anchor is moved onto the value that caption
+      introduces — the rest of the caption's line ("Supplier Name: Acme Pty Ltd")
+      or the next non-empty line (the adjacent table cell) — and re-indexed by
+      that value's own occurrence count. Candidates longer than 120 characters,
+      ones ending in a colon, ones already carrying a tag, and ones matching any
+      other field's name are rejected, so a blank in the example can never annotate
+      the next caption. This makes the fix independent of the model getting it
+      right.
+    - **Insert-after anchoring.** Where no value can be recovered — a blank
+      template, or a field the example left empty — the suggestion carries
+      `insertAfter: true` and the placeholder is written *after* the caption rather
+      than over it. `buildAnnotationEdits` implements this as a replacement that
+      puts the caption back in front of the tag, so neither document generator
+      needs a notion of position. This also fixes the blank-template path, which
+      previously overwrote every caption it anchored to.
+
+    Verified against the reported document: the three captions survive and the
+    placeholders sit in the value cells, matching the hand-authored template the
+    reporter supplied as the target. The review row now reads "Goes after …"
+    instead of "Replaces …" for a caption-anchored field, since nothing is being
+    replaced.

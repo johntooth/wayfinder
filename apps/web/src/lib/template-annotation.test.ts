@@ -76,6 +76,7 @@ describe("rowsFromSuggestions", () => {
     occurrence: 0,
     context: "Made with Acme Pty Ltd.",
     confidence: 88,
+    insertAfter: false,
     ...overrides,
   });
 
@@ -91,6 +92,11 @@ describe("rowsFromSuggestions", () => {
 
   it("carries the confidence through for the confidence bar", () => {
     expect(rowsFromSuggestions([suggestion({ confidence: 42 })])[0]?.confidence).toBe(42);
+  });
+
+  it("carries the insert-after flag through for a caption-anchored suggestion", () => {
+    const rows = rowsFromSuggestions([suggestion({ sourceText: "Supplier Name:", insertAfter: true })]);
+    expect(rows[0]?.insertAfter).toBe(true);
   });
 
   it("keeps two suggestions over the same text as separate rows", () => {
@@ -111,6 +117,7 @@ describe("buildAnnotationEdits", () => {
     context: "",
     originalValue: null,
     confidence: null,
+    insertAfter: false,
     locked: false,
   };
 
@@ -150,6 +157,7 @@ describe("buildAnnotationEdits", () => {
         context: "",
         originalValue: "Acme Pty Ltd",
         confidence: 88,
+        insertAfter: false,
         locked: false,
       },
     ]);
@@ -173,11 +181,35 @@ describe("buildAnnotationEdits", () => {
         context: "",
         originalValue: "Acme Pty Ltd",
         confidence: 88,
+        insertAfter: false,
         locked: false,
       },
     ]);
     expect(edits).toEqual([
       { find: "Acme Pty Ltd", occurrence: 0, replacement: "{{ Supplier Name (text) }}" },
+    ]);
+  });
+
+  it("puts the caption back in front of the placeholder when inserting after it", () => {
+    const edits = buildAnnotationEdits([
+      {
+        key: "supplier_name",
+        kind: "span",
+        line: "Supplier Name (text)",
+        occurrences: [{ sourceText: "Supplier Name:", occurrence: 0 }],
+        context: "",
+        originalValue: "Supplier Name:",
+        confidence: 88,
+        insertAfter: true,
+        locked: false,
+      },
+    ]);
+    expect(edits).toEqual([
+      {
+        find: "Supplier Name:",
+        occurrence: 0,
+        replacement: "Supplier Name: {{ Supplier Name (text) }}",
+      },
     ]);
   });
 

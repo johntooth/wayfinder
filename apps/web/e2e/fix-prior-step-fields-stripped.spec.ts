@@ -119,6 +119,7 @@ async function uploadMockTemplate(page: Page, stepName: string): Promise<void> {
             context: 'Hello {{Client Name}}…',
             originalValue: null,
             confidence: null,
+            insertAfter: false,
             locked: false,
           },
           {
@@ -129,6 +130,7 @@ async function uploadMockTemplate(page: Page, stepName: string): Promise<void> {
             context: '…your project scope is {{Project Scope}}.',
             originalValue: null,
             confidence: null,
+            insertAfter: false,
             locked: false,
           },
         ],

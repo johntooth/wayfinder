@@ -671,7 +671,8 @@ function ReviewRow({
           </code>
           {row.originalValue && (
             <p className="text-[11px] text-[#5a5650]">
-              Replaces <span className="font-medium text-[#1a1814]">{row.originalValue}</span>
+              {row.insertAfter ? "Goes after " : "Replaces "}
+              <span className="font-medium text-[#1a1814]">{row.originalValue}</span>
             </p>
           )}
         </div>

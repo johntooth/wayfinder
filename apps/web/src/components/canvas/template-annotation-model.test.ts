@@ -22,6 +22,7 @@ const row = (overrides: Partial<EditableRow> = {}): EditableRow => {
     context: "Supplier: {{ Supplier Name }}",
     originalValue: null,
     confidence: null,
+    insertAfter: false,
     locked: false,
     confirmed: false,
     ...overrides,

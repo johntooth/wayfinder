@@ -173,6 +173,129 @@ describe("SuggestTemplateFields", () => {
     ]);
   });
 
+  // Word extracts one table cell per line, so a form's caption and the value
+  // someone typed arrive as consecutive lines. The model regularly points at the
+  // caption; annotating it there would delete the caption and leave the value
+  // hard-coded, so the anchor is moved onto the value.
+  describe("when the model points at the caption instead of the value", () => {
+    const FORM = "Employee Name\nRichard Brasier\n\nRequested By\nJoe Bloggs";
+
+    it("moves the anchor onto the value on the next line", async () => {
+      const languageModel = makeLanguageModel([
+        suggestion({ label: "Employee Name", sourceText: "Employee Name" }),
+      ]);
+      const useCase = new SuggestTemplateFields(languageModel);
+
+      const result = await useCase.execute({ documentText: FORM, mode: "filled" });
+
+      expect(result.data?.suggestions[0]?.sourceText).toBe("Richard Brasier");
+      expect(result.data?.suggestions[0]?.insertAfter).toBe(false);
+    });
+
+    it("moves the anchor onto a value sharing the caption's line", async () => {
+      const languageModel = makeLanguageModel([
+        suggestion({ label: "Supplier Name", sourceText: "Supplier Name:" }),
+      ]);
+      const useCase = new SuggestTemplateFields(languageModel);
+
+      const result = await useCase.execute({
+        documentText: "Supplier Name: Acme Pty Ltd",
+        mode: "filled",
+      });
+
+      expect(result.data?.suggestions[0]?.sourceText).toBe("Acme Pty Ltd");
+    });
+
+    it("indexes the moved anchor by its own occurrence count", async () => {
+      const languageModel = makeLanguageModel([
+        suggestion({ label: "Requested By", sourceText: "Requested By" }),
+      ]);
+      const useCase = new SuggestTemplateFields(languageModel);
+
+      const result = await useCase.execute({
+        documentText: "Approved By\nJoe Bloggs\n\nRequested By\nJoe Bloggs",
+        mode: "filled",
+      });
+
+      expect(result.data?.suggestions[0]?.occurrence).toBe(1);
+    });
+
+    it("places the placeholder after the caption when the example left it blank", async () => {
+      const languageModel = makeLanguageModel([
+        suggestion({ label: "Equipment Type", sourceText: "Equipment Type" }),
+        suggestion({ label: "Requested By", sourceText: "Joe Bloggs" }),
+      ]);
+      const useCase = new SuggestTemplateFields(languageModel);
+
+      const result = await useCase.execute({
+        documentText: "Equipment Type\n\nRequested By\nJoe Bloggs",
+        mode: "filled",
+      });
+
+      const equipment = result.data?.suggestions.find((field) => field.label === "Equipment Type");
+      expect(equipment?.sourceText).toBe("Equipment Type");
+      expect(equipment?.insertAfter).toBe(true);
+    });
+
+    it("never treats a run of prose as the value a caption introduces", async () => {
+      const prose = `Note ${"a".repeat(200)}`;
+      const languageModel = makeLanguageModel([suggestion({ label: "Note", sourceText: "Note" })]);
+      const useCase = new SuggestTemplateFields(languageModel);
+
+      const result = await useCase.execute({ documentText: prose, mode: "filled" });
+
+      expect(result.data?.suggestions[0]?.insertAfter).toBe(true);
+    });
+
+    it("does not move the anchor onto another field's caption", async () => {
+      const languageModel = makeLanguageModel([
+        suggestion({ label: "Equipment Type", sourceText: "Equipment Type" }),
+      ]);
+      const useCase = new SuggestTemplateFields(languageModel);
+
+      const result = await useCase.execute({
+        documentText: "Equipment Type\n\nRequested By\nJoe Bloggs",
+        mode: "filled",
+        existingLabels: ["Requested By"],
+      });
+
+      expect(result.data?.suggestions[0]?.sourceText).toBe("Equipment Type");
+      expect(result.data?.suggestions[0]?.insertAfter).toBe(true);
+    });
+  });
+
+  it("anchors a blank template's placeholder after its caption", async () => {
+    const languageModel = makeLanguageModel([
+      suggestion({ label: "Supplier Name", sourceText: "Supplier Name:" }),
+    ]);
+    const useCase = new SuggestTemplateFields(languageModel);
+
+    const result = await useCase.execute({ documentText: "Supplier Name:", mode: "empty" });
+
+    expect(result.data?.suggestions[0]?.sourceText).toBe("Supplier Name:");
+    expect(result.data?.suggestions[0]?.insertAfter).toBe(true);
+  });
+
+  it("replaces a value span outright rather than inserting after it", async () => {
+    const languageModel = makeLanguageModel([suggestion()]);
+    const useCase = new SuggestTemplateFields(languageModel);
+
+    const result = await useCase.execute({ documentText: DOCUMENT, mode: "filled" });
+
+    expect(result.data?.suggestions[0]?.insertAfter).toBe(false);
+  });
+
+  it("tells the model the caption is not the value on the filled path", async () => {
+    const languageModel = makeLanguageModel([]);
+    const useCase = new SuggestTemplateFields(languageModel);
+
+    await useCase.execute({ documentText: DOCUMENT, mode: "filled" });
+
+    const prompt = (languageModel.generateObject as ReturnType<typeof vi.fn>).mock.calls[0][0]
+      .prompt as string;
+    expect(prompt).toContain("never the question");
+  });
+
   it("tells the model to strip sample values on the filled path", async () => {
     const languageModel = makeLanguageModel([]);
     const useCase = new SuggestTemplateFields(languageModel);

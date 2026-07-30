@@ -85,6 +85,7 @@ test.describe('fix: template upload preserves output type and pre-filled fields'
               context: 'Hello {{Client Name}}.',
               originalValue: null,
               confidence: null,
+              insertAfter: false,
               locked: false,
             },
           ],

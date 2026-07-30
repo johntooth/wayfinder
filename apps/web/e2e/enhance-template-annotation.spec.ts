@@ -135,6 +135,7 @@ test.describe('enhance: guided annotation upload', () => {
         context: 'This agreement is made with Acme Pty Ltd for catering services.',
         originalValue: 'Acme Pty Ltd',
         confidence: 92,
+        insertAfter: false,
         locked: false,
       },
     ]);
@@ -154,6 +155,9 @@ test.describe('enhance: guided annotation upload', () => {
     //    the author can verify the inference caught the right span.
     // Exact, since the surrounding-context line quotes the same value.
     await expect(page.getByText('Acme Pty Ltd', { exact: true })).toBeVisible({ timeout: 10_000 });
+    // A value span is replaced outright; a caption-anchored row would read
+    // "Goes after" instead, since a caption must survive annotation.
+    await expect(page.getByText(/^Replaces/)).toBeVisible();
     await expect(page.getByText(/High confidence/)).toBeVisible();
     await expect(page.getByText('{{ Supplier Name (text) }}')).toBeVisible();
     await page.screenshot({ path: 'screenshots/enhance-template-annotation-review.png', fullPage: true });
@@ -187,6 +191,7 @@ test.describe('enhance: guided annotation upload', () => {
         context: 'This agreement is made with Acme Pty Ltd.',
         originalValue: 'Acme Pty Ltd',
         confidence: 20,
+        insertAfter: false,
         locked: false,
       },
     ]);
@@ -223,6 +228,7 @@ test.describe('enhance: guided annotation upload', () => {
           context: 'Made with {{ Supplier Name }}.',
           originalValue: null,
           confidence: null,
+          insertAfter: false,
           locked: false,
         },
       ],
@@ -278,6 +284,7 @@ test.describe('enhance: guided annotation upload', () => {
           context: 'Made with {{ Supplier Name }}.',
           originalValue: null,
           confidence: null,
+          insertAfter: false,
           locked: false,
         },
       ],

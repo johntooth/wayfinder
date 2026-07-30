@@ -24,6 +24,9 @@ export interface AnnotationRow {
   originalValue: string | null;
   // 0–100 for an AI suggestion, null for a tag the author wrote themselves.
   confidence: number | null;
+  // True when the placeholder is written after the matched text instead of over
+  // it, because the match is the caption naming the field rather than its value.
+  insertAfter: boolean;
   // Section and group tags are multi-line Word constructs that cannot be
   // meaningfully edited in a flat grid. They ride through untouched.
   locked: boolean;
@@ -75,6 +78,7 @@ export const rowsFromDocumentTags = (documentText: string): AnnotationRow[] => {
       context: contextFor(documentText, literal, seen),
       originalValue: null,
       confidence: null,
+      insertAfter: false,
       locked,
     });
   }
@@ -94,6 +98,7 @@ export const rowsFromSuggestions = (suggestions: SuggestedTemplateField[]): Anno
     context: suggestion.context,
     originalValue: suggestion.sourceText,
     confidence: suggestion.confidence,
+    insertAfter: suggestion.insertAfter,
     locked: false,
   }));
 
@@ -109,9 +114,12 @@ export const buildAnnotationEdits = (rows: AnnotationRow[]): TemplateAnnotationE
     // deleted from the document, whereas a suggestion the author rejected simply
     // never happens — the example's own text stays as it was.
     if (!line && row.kind === "span") continue;
-    const replacement = line ? `{{ ${line} }}` : "";
+    const tag = line ? `{{ ${line} }}` : "";
 
     for (const occurrence of row.occurrences) {
+      // Inserting after a caption is a replacement that puts the caption back in
+      // front of the placeholder, so the generators need no notion of position.
+      const replacement = row.insertAfter && tag ? `${occurrence.sourceText} ${tag}` : tag;
       if (occurrence.sourceText === replacement) continue;
       edits.push({
         find: occurrence.sourceText,
