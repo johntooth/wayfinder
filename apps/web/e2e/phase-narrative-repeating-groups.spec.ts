@@ -60,14 +60,11 @@ test.describe('phase: repeating / structured groups', () => {
     await createFlowAndOpenCanvas(page, `Groups Nesting ${Date.now()}`);
     await addGenerateDocumentStep(page);
 
-    // The real upload dry-run (extractFields) raises this on a nested group; mock
-    // the endpoint to return that same validation error so the UI surfacing is
-    // exercised end-to-end.
-    await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template$/, async (route: Route) => {
-      if (route.request().method() !== 'POST') {
-        await route.continue();
-        return;
-      }
+    // The real dry-run (extractFields) raises this on a nested group. Since
+    // v0.21.3 the first call an upload makes is the guided modal's detection
+    // step, so that is what returns the validation error — mocked here so the UI
+    // surfacing is exercised end-to-end.
+    await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template\/analyse$/, async (route: Route) => {
       await route.fulfill({
         status: 400,
         contentType: 'application/json',

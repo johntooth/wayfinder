@@ -72,6 +72,10 @@ export function FlowCanvasViewport({
         onNodeClick={onNodeClick}
         onNodeDragStop={onNodeDragStop}
         fitView
+        // Cap the fit zoom at 1: fitting a single node otherwise runs up to the
+        // default max of 2, which frames one step far too close. At 1 a lone node
+        // sits at the same scale as the empty "add your first step" canvas.
+        fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
         deleteKeyCode="Backspace"
       >
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} />

@@ -40,9 +40,41 @@ export interface ExtractFullTextOutput {
   text: string;
 }
 
+// One occurrence-addressed text substitution inside a template. The same shape
+// covers all three authoring cases: re-annotating an existing "{{ tag }}",
+// replacing a filled example's literal value with a new placeholder, and
+// inserting a placeholder beside a label in an empty template.
+export interface TemplateAnnotationEdit {
+  // The exact source text to replace, as it reads in the extracted document text.
+  find: string;
+  // Zero-based index among identical `find` occurrences, so a supplier name
+  // appearing three times is addressed as three separate edits.
+  occurrence: number;
+  // The literal text to put in its place, braces included where a placeholder is
+  // intended — e.g. "{{ Supplier Name (text) (maxlen: 80) }}".
+  replacement: string;
+}
+
+export interface AnnotateInput {
+  templateBytes: Buffer;
+  edits: TemplateAnnotationEdit[];
+}
+
+export interface AnnotateOutput {
+  bytes: Buffer;
+  appliedCount: number;
+  // Edits whose `find` text was absent at the requested occurrence. Returned
+  // rather than dropped: writing a template that silently missed half its
+  // placeholders is worse than telling the author which ones did not land.
+  unmatched: TemplateAnnotationEdit[];
+}
+
 export interface IDocumentGenerator {
   extractTags(input: ExtractTagsInput): Result<ExtractTagsOutput>;
   extractFields(input: ExtractFieldsInput): Result<ExtractFieldsOutput>;
   extractFullText(input: ExtractFullTextInput): Result<ExtractFullTextOutput>;
   generate(input: GenerateInput): Result<GenerateOutput>;
+  // Writes placeholders into a template without rendering it. The uploaded
+  // original is never mutated — the annotated bytes are a new document.
+  annotate(input: AnnotateInput): Result<AnnotateOutput>;
 }

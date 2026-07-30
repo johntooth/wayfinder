@@ -1,5 +1,7 @@
 import PizZip from "pizzip";
 import type {
+  AnnotateInput,
+  AnnotateOutput,
   ExtractFieldsInput,
   ExtractFieldsOutput,
   ExtractFullTextInput,
@@ -38,6 +40,10 @@ export class DocumentGeneratorRouter implements IDocumentGenerator {
 
   generate(input: GenerateInput): Result<GenerateOutput> {
     return this.select(input.templateBytes).generate(input);
+  }
+
+  annotate(input: AnnotateInput): Result<AnnotateOutput> {
+    return this.select(input.templateBytes).annotate(input);
   }
 
   private select(templateBytes: Buffer): IDocumentGenerator {

@@ -29,6 +29,11 @@ import type {
   ScheduleWhen,
 } from "./scheduled-node-config";
 import { NodeConfigModalConversational } from "./node-config-modal-conversational";
+import {
+  TemplateAnnotationHost,
+  templateValuesFrom,
+  useTemplateUpload,
+} from "./template-upload-controller";
 import { NodeConfigModalAuto } from "./node-config-modal-auto";
 import { NodeConfigModalScheduled } from "./node-config-modal-scheduled";
 import { NodeConfigModalApproval } from "./node-config-modal-approval";
@@ -98,6 +103,18 @@ export interface NodeConfigValues {
 interface NodeConfigModalProps {
   open: boolean;
   flowId: string;
+  // The node being configured, once it exists. Null before the step's first
+  // save, which is when template upload is unavailable anyway.
+  nodeId?: string | null;
+  // Applies a template result to the canvas state, so the guided annotation
+  // modal's save reaches the same place a direct upload does.
+  onTemplateApplied?: (result: {
+    path?: string;
+    filename?: string;
+    documentTemplateContent?: string | null;
+    documentTemplateFormat?: "docx" | "xlsx";
+    spreadsheetTemplateMode?: "tags" | "header" | null;
+  }) => void;
   initialValues?: Partial<NodeConfigValues>;
   onSave: (values: NodeConfigValues) => void;
   onDelete?: () => void;
@@ -159,6 +176,8 @@ const DEFAULT_VALUES: NodeConfigValues = {
 export function NodeConfigModal({
   open,
   flowId,
+  nodeId = null,
+  onTemplateApplied,
   initialValues,
   onSave,
   onDelete,
@@ -195,7 +214,6 @@ export function NodeConfigModal({
   }, [open, initialValues]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const [view, setView] = useState<"edit" | "preview">("edit");
   const [previewPrompt, setPreviewPrompt] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -206,6 +224,13 @@ export function NodeConfigModal({
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const [mcpPickerOpen, setMcpPickerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const templateUpload = useTemplateUpload(fileInputRef, (result) => {
+    setValues((current) => ({ ...current, ...templateValuesFrom(result) }));
+    onTemplateApplied?.(result);
+  });
+  // The template controls stay disabled while the guided modal owns the file —
+  // uploading itself now happens inside that modal, not here.
+  const isUploading = templateUpload.isOpen;
 
   const set = <K extends keyof NodeConfigValues>(key: K, value: NodeConfigValues[K]) =>
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -494,29 +519,13 @@ export function NodeConfigModal({
     }
   };
 
-  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !onUploadTemplate) return;
+  // The picked file is handed to the guided annotation modal rather than
+  // uploaded straight away: reading its placeholders and reviewing them both
+  // happen before anything is persisted.
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (!onUploadTemplate) return;
     setUploadError(null);
-    setIsUploading(true);
-    try {
-      const result = await onUploadTemplate(file, values);
-      if ("error" in result) {
-        setUploadError(result.error);
-        if (result.code === "NO_TEMPLATE_TAGS") {
-          setHelpDialogOpen(true);
-        }
-      } else {
-        set("documentTemplatePath", result.path);
-        set("documentTemplateFilename", result.filename);
-        set("documentTemplateContent", result.documentTemplateContent ?? null);
-        set("documentTemplateFormat", result.documentTemplateFormat ?? "docx");
-        set("spreadsheetTemplateMode", result.spreadsheetTemplateMode ?? null);
-      }
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
+    templateUpload.handleFileChange(e);
   };
 
   return (
@@ -616,6 +625,12 @@ export function NodeConfigModal({
                       fileInputRef={fileInputRef}
                       handleFileChange={handleFileChange}
                       isUploading={isUploading}
+                      onEditTemplateFields={templateUpload.editFields}
+                      templateDownloadUrl={
+                        nodeId && values.documentTemplatePath
+                          ? `/api/flows/${flowId}/nodes/${nodeId}/template`
+                          : null
+                      }
                       uploadError={uploadError}
                       setUploadError={setUploadError}
                       onOpenHelpDialog={() => setHelpDialogOpen(true)}
@@ -737,6 +752,12 @@ export function NodeConfigModal({
           </>
         )}
       </DialogContent>
+      <TemplateAnnotationHost
+        controller={templateUpload}
+        flowId={flowId}
+        nodeId={nodeId}
+        documentTemplateContent={values.documentTemplateContent}
+      />
       <TemplateTagsHelpDialog
         open={helpDialogOpen}
         onClose={() => setHelpDialogOpen(false)}

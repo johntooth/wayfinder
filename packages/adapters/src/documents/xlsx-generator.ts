@@ -1,6 +1,8 @@
 import PizZip from "pizzip";
 import { deriveFieldKey, domainError, err, ok, parseTemplateFields, templateFieldKey } from "@rbrasier/domain";
 import type {
+  AnnotateInput,
+  AnnotateOutput,
   ExtractFieldsInput,
   ExtractFieldsOutput,
   ExtractFullTextInput,
@@ -11,6 +13,7 @@ import type {
   GenerateOutput,
   IDocumentGenerator,
   Result,
+  TemplateAnnotationEdit,
   TemplateField,
 } from "@rbrasier/domain";
 
@@ -91,6 +94,46 @@ export class XlsxGenerator implements IDocumentGenerator {
       return ok({ bytes: bytes.data });
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to generate the spreadsheet from the template.", cause));
+    }
+  }
+
+  // Writes placeholders into the workbook without filling it. Annotating always
+  // moves a workbook to tag mode (ADR-039 precedence), so callers must recompute
+  // spreadsheetTemplateMode from the returned bytes rather than reuse the mode
+  // detected before annotation.
+  annotate(input: AnnotateInput): Result<AnnotateOutput> {
+    if (input.edits.length === 0) {
+      return ok({ bytes: input.templateBytes, appliedCount: 0, unmatched: [] });
+    }
+
+    try {
+      const zip = new PizZip(input.templateBytes);
+      const sharedStrings = readSharedStrings(zip);
+      const seenCounts = new Map<string, number>();
+      const applied = new Set<TemplateAnnotationEdit>();
+
+      for (const part of allSheetParts(zip)) {
+        const file = zip.file(part);
+        if (!file) continue;
+        zip.file(
+          part,
+          annotateSheet(file.asText(), sharedStrings, input.edits, seenCounts, applied),
+        );
+      }
+
+      return ok({
+        bytes: zip.generate({ type: "nodebuffer", compression: "DEFLATE" }) as Buffer,
+        appliedCount: applied.size,
+        unmatched: input.edits.filter((edit) => !applied.has(edit)),
+      });
+    } catch (cause) {
+      return err(
+        domainError(
+          "INFRA_FAILURE",
+          "Failed to write annotations into the spreadsheet template.",
+          cause,
+        ),
+      );
     }
   }
 
@@ -225,6 +268,79 @@ const fillSheetTags = (
 const inlineStringCell = (attributes: string, text: string): string => {
   const withoutType = attributes.replace(/\s+t="[^"]*"/g, "");
   return `<c${withoutType} t="inlineStr"><is><t xml:space="preserve">${escapeXml(text)}</t></is></c>`;
+};
+
+// ── annotation ───────────────────────────────────────────────────────────────
+
+// Rewrites only the cells an edit lands in, converting each to an inline string.
+// Every other cell keeps its bytes, so styling and untouched values survive on
+// the same terms as tag-mode fill.
+const annotateSheet = (
+  xml: string,
+  sharedStrings: string[],
+  edits: TemplateAnnotationEdit[],
+  seenCounts: Map<string, number>,
+  applied: Set<TemplateAnnotationEdit>,
+): string =>
+  xml.replace(/<c\b([^>]*?)(\/>|>([\s\S]*?)<\/c>)/g, (whole, attributes: string, tail: string, body: string) => {
+    if (tail === "/>") return whole;
+    const resolved = resolveCellText(attributes, body ?? "", sharedStrings);
+    if (!resolved) return whole;
+
+    const annotated = annotateCellText(resolved, edits, seenCounts, applied);
+    if (annotated === resolved) return whole;
+    return inlineStringCell(attributes, annotated);
+  });
+
+// Applies every edit that lands in one cell, advancing the workbook-wide
+// occurrence counter for each match — including matches no edit targets, since
+// skipping them would shift the indices the caller derived from the text.
+const annotateCellText = (
+  text: string,
+  edits: TemplateAnnotationEdit[],
+  seenCounts: Map<string, number>,
+  applied: Set<TemplateAnnotationEdit>,
+): string => {
+  interface Span {
+    start: number;
+    end: number;
+    replacement: string;
+    edit: TemplateAnnotationEdit;
+  }
+
+  const spans: Span[] = [];
+
+  for (const find of new Set(edits.map((edit) => edit.find))) {
+    if (!find) continue;
+    let searchFrom = 0;
+    for (;;) {
+      const start = text.indexOf(find, searchFrom);
+      if (start < 0) break;
+      const index = seenCounts.get(find) ?? 0;
+      seenCounts.set(find, index + 1);
+      searchFrom = start + find.length;
+
+      const edit = edits.find(
+        (candidate) =>
+          candidate.find === find && candidate.occurrence === index && !applied.has(candidate),
+      );
+      if (edit) {
+        spans.push({ start, end: start + find.length, replacement: edit.replacement, edit });
+      }
+    }
+  }
+
+  // Applied right to left so each splice leaves the earlier offsets valid.
+  const ordered = spans.sort((a, b) => b.start - a.start);
+  let result = text;
+  let lastStart = text.length;
+  for (const span of ordered) {
+    if (span.end > lastStart) continue;
+    result = result.slice(0, span.start) + span.replacement + result.slice(span.end);
+    lastStart = span.start;
+    applied.add(span.edit);
+  }
+  return result;
 };
 
 // ── header-mode append ───────────────────────────────────────────────────────
