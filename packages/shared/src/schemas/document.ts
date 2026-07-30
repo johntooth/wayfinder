@@ -39,7 +39,13 @@ export const suggestedTemplateFieldSchema = z.object({
   options: z
     .array(z.string())
     .describe(
-      "Allowed choices when the value is drawn from a fixed set, otherwise an empty array. Never include a comma inside a choice.",
+      "Allowed choices when the value is drawn from a fixed set, otherwise an empty array. A short comma- or slash-separated list of candidate values (e.g. \"Mobile phone, Laptop\") IS a fixed set — split it into one choice per entry. Never include a comma inside a choice.",
+    ),
+  multiple: z
+    .boolean()
+    .optional()
+    .describe(
+      "True when more than one of the options can apply at once (a multi-select). Only meaningful together with options.",
     ),
   sourceText: z
     .string()

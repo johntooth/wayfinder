@@ -1,28 +1,35 @@
 import { describe, it, expect } from "vitest";
+import { lineToModel } from "./field-row-model";
 import {
   branchFor,
   canSave,
   duplicateCounts,
   isLowConfidence,
+  rowTypeLabel,
   saveBlockedReason,
   toEditableRows,
   validateRow,
   type EditableRow,
 } from "./template-annotation-model";
 
-const row = (overrides: Partial<EditableRow> = {}): EditableRow => ({
-  id: "row-1",
-  key: "supplier_name",
-  kind: "tag",
-  line: "Supplier Name (text)",
-  occurrences: [{ sourceText: "{{ Supplier Name }}", occurrence: 0 }],
-  context: "Supplier: {{ Supplier Name }}",
-  originalValue: null,
-  confidence: null,
-  locked: false,
-  confirmed: false,
-  ...overrides,
-});
+const row = (overrides: Partial<EditableRow> = {}): EditableRow => {
+  const merged = {
+    id: "row-1",
+    key: "supplier_name",
+    kind: "tag" as const,
+    line: "Supplier Name (text)",
+    occurrences: [{ sourceText: "{{ Supplier Name }}", occurrence: 0 }],
+    context: "Supplier: {{ Supplier Name }}",
+    originalValue: null,
+    confidence: null,
+    locked: false,
+    confirmed: false,
+    ...overrides,
+  };
+  // Keep the model in step with whatever line the test set, unless it supplied
+  // its own — mirrors how the modal holds model and line together.
+  return { ...merged, model: overrides.model ?? lineToModel(merged.line) };
+};
 
 describe("branchFor", () => {
   it("offers continue-or-augment when the document already has placeholders", () => {
@@ -191,5 +198,27 @@ describe("toEditableRows", () => {
 
   it("starts every row unconfirmed", () => {
     expect(toEditableRows([{ ...row(), confidence: 20 } as never])[0]?.confirmed).toBe(false);
+  });
+
+  it("seeds each row's model from its line", () => {
+    const rows = toEditableRows([{ ...row({ line: "Contract Value (currency)" }) } as never]);
+    expect(rows[0]?.model.type).toBe("currency");
+  });
+
+  it("recovers a multi-select from a serialised multi-options line", () => {
+    const rows = toEditableRows([
+      { ...row({ line: "Equipment Type (multi-options: Mobile phone, Laptop)" }) } as never,
+    ]);
+    expect(rows[0]?.model.type).toBe("multiselect");
+    expect(rows[0]?.model.options).toEqual(["Mobile phone", "Laptop"]);
+  });
+});
+
+describe("rowTypeLabel", () => {
+  it("names the row's field type for the found-fields list", () => {
+    expect(rowTypeLabel(row({ line: "Start Date (date)" }))).toBe("Date");
+    expect(rowTypeLabel(row({ model: { ...row().model, type: "multiselect" } }))).toBe(
+      "Multi-select",
+    );
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Check, Info, Loader2, Lock, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { AlertTriangle, Check, Download, Info, Loader2, Lock, Sparkles, Upload } from "lucide-react";
 import { ConfidenceBar } from "@/components/chat/confidence-bar";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,11 +27,13 @@ import {
   branchFor,
   duplicateCounts,
   isLowConfidence,
+  rowTypeLabel,
   saveBlockedReason,
   toEditableRows,
   validateRow,
   type AnnotationStep,
   type BranchAction,
+  type BranchOffer,
   type EditableRow,
   type TemplateClassification,
 } from "./template-annotation-model";
@@ -71,6 +73,26 @@ const CHEAT_SHEET: { syntax: string; meaning: string }[] = [
   { syntax: "{{ Middle Name (optional) }}", meaning: "May be left blank" },
 ];
 
+const downloadBlob = (file: File): void => {
+  const url = URL.createObjectURL(file);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = file.name;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+};
+
+const downloadFromUrl = (url: string): void => {
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+};
+
 export function TemplateAnnotationModal({
   file,
   flowId,
@@ -89,34 +111,41 @@ export function TemplateAnnotationModal({
   const [confirmingPattern, setConfirmingPattern] = useState(false);
   const [configIndex, setConfigIndex] = useState<number | null>(null);
   const [foundNothing, setFoundNothing] = useState(false);
+  // The file currently under review. Held in state (not just the prop) so the
+  // author can swap it via the re-upload panel and restart the flow in place.
+  const [activeFile, setActiveFile] = useState<File | null>(file);
   const analysedRef = useRef(false);
+  const reuploadInputRef = useRef<HTMLInputElement>(null);
 
   const templateUrl = `/api/flows/${flowId}/nodes/${nodeId}/template`;
 
   const save = useCallback(
-    async (rowsToSave: EditableRow[]) => {
+    async (rowsToSave: EditableRow[], fileForSave: File | null) => {
       setStep("saving");
       setError(null);
 
-      const payloadRows = rowsToSave.map(({ id, confirmed, ...row }) => {
+      const payloadRows = rowsToSave.map(({ id, confirmed, model, ...row }) => {
         void id;
         void confirmed;
+        void model;
         return row;
       });
 
       try {
-        const response = isReentry
-          ? await fetch(templateUrl, {
+        // A file present (fresh upload or re-upload) writes a new template via
+        // POST; its absence means re-entry editing the stored one via PATCH.
+        const response = fileForSave
+          ? await (() => {
+              const body = new FormData();
+              body.append("file", fileForSave);
+              body.append("annotations", JSON.stringify(payloadRows));
+              return fetch(templateUrl, { method: "POST", body });
+            })()
+          : await fetch(templateUrl, {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ annotations: payloadRows }),
-            })
-          : await (() => {
-              const body = new FormData();
-              if (file) body.append("file", file);
-              body.append("annotations", JSON.stringify(payloadRows));
-              return fetch(templateUrl, { method: "POST", body });
-            })();
+            });
 
         const payload = (await response.json()) as Parameters<typeof onSaved>[0] & {
           error?: string;
@@ -133,53 +162,56 @@ export function TemplateAnnotationModal({
         setStep("review");
       }
     },
-    [file, isReentry, onSaved, templateUrl],
+    [onSaved, templateUrl],
   );
 
-  const analyse = useCallback(async () => {
-    if (!file) return;
-    setError(null);
-    const body = new FormData();
-    body.append("file", file);
+  const runAnalyse = useCallback(
+    async (fileToAnalyse: File) => {
+      setStep("analysing");
+      setError(null);
+      const body = new FormData();
+      body.append("file", fileToAnalyse);
 
-    try {
-      const response = await fetch(`${templateUrl}/analyse`, { method: "POST", body });
-      const payload = (await response.json()) as AnalyseResponse & { error?: string };
-      if (!response.ok) {
-        setError(payload.error ?? "Could not read that document.");
+      try {
+        const response = await fetch(`${templateUrl}/analyse`, { method: "POST", body });
+        const payload = (await response.json()) as AnalyseResponse & { error?: string };
+        if (!response.ok) {
+          setError(payload.error ?? "Could not read that document.");
+          setStep("branch");
+          return;
+        }
+
+        setAnalysis(payload);
+        // An .xlsx already usable in ADR-039 header mode keeps today's behaviour:
+        // annotating it would convert it to tag mode and change how it is filled,
+        // so it is stored as-is without entering the guided flow.
+        if (payload.classification === "header") {
+          await save([], fileToAnalyse);
+          return;
+        }
+        setRows(toEditableRows(payload.rows));
         setStep("branch");
-        return;
+      } catch {
+        setError("Could not read that document.");
+        setStep("branch");
       }
-
-      setAnalysis(payload);
-      // An .xlsx already usable in ADR-039 header mode keeps today's behaviour:
-      // annotating it would convert it to tag mode and change how it is filled,
-      // so it is stored as-is without entering the guided flow.
-      if (payload.classification === "header") {
-        await save([]);
-        return;
-      }
-      setRows(toEditableRows(payload.rows));
-      setStep("branch");
-    } catch {
-      setError("Could not read that document.");
-      setStep("branch");
-    }
-  }, [file, save, templateUrl]);
+    },
+    [save, templateUrl],
+  );
 
   useEffect(() => {
-    if (isReentry || analysedRef.current) return;
+    if (isReentry || analysedRef.current || !file) return;
     analysedRef.current = true;
-    void analyse();
-  }, [analyse, isReentry]);
+    void runAnalyse(file);
+  }, [file, isReentry, runAnalyse]);
 
   const suggest = async (mode: "empty" | "filled" | "augment") => {
-    if (!file || !analysis) return;
+    if (!activeFile || !analysis) return;
     setStep("suggesting");
     setError(null);
 
     const body = new FormData();
-    body.append("file", file);
+    body.append("file", activeFile);
     body.append("mode", mode);
     body.append(
       "existingLabels",
@@ -227,23 +259,67 @@ export function TemplateAnnotationModal({
     setRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   };
 
+  // Model is the source of truth; `line` is recomputed from it so validation and
+  // serialisation stay in step while the type survives even with no options yet.
+  const setRowModel = (index: number, next: FieldModel) => {
+    updateRow(index, { model: next, line: modelToLine(next) });
+  };
+
   const updateModel = (index: number, patch: Partial<FieldModel>) => {
-    const row = rows[index];
-    if (!row) return;
-    updateRow(index, { line: modelToLine({ ...lineToModel(row.line), ...patch }) });
+    setRows((current) =>
+      current.map((row, i) => {
+        if (i !== index) return row;
+        const model = { ...row.model, ...patch };
+        return { ...row, model, line: modelToLine(model) };
+      }),
+    );
   };
 
   const changeType = (index: number, type: FieldRowType) => {
-    const row = rows[index];
-    if (!row) return;
-    updateRow(index, { line: modelToLine(withType(lineToModel(row.line), type)) });
+    setRows((current) =>
+      current.map((row, i) => {
+        if (i !== index) return row;
+        const model = withType(row.model, type);
+        return { ...row, model, line: modelToLine(model) };
+      }),
+    );
   };
 
-  const removeRow = (index: number) => updateRow(index, { line: "" });
+  const acceptCorrection = (index: number, line: string) => {
+    updateRow(index, { line, model: lineToModel(line) });
+  };
+
+  const removeRow = (index: number) => setRowModel(index, { ...rows[index]!.model, label: "" });
+
+  // Hand the current document back so the author can place more fields in Word,
+  // then wait for the edited file. A file in hand (upload or re-upload) is sent
+  // straight down; otherwise the stored template is fetched by the GET route.
+  const downloadForEditing = () => {
+    if (activeFile) {
+      downloadBlob(activeFile);
+    } else {
+      downloadFromUrl(templateUrl);
+    }
+    setStep("reupload");
+  };
+
+  const onReupload = (event: ChangeEvent<HTMLInputElement>) => {
+    const next = event.target.files?.[0];
+    if (reuploadInputRef.current) reuploadInputRef.current.value = "";
+    if (!next) return;
+    setActiveFile(next);
+    setAnalysis(null);
+    setRows([]);
+    setConfirmingPattern(false);
+    setFoundNothing(false);
+    void runAnalyse(next);
+  };
 
   const duplicates = duplicateCounts(rows);
   const blockedReason = saveBlockedReason(rows);
   const activeConfigRow = configIndex !== null ? rows[configIndex] : null;
+  const offer: BranchOffer | null =
+    analysis && analysis.classification !== "header" ? branchFor(analysis.classification) : null;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onCancel()}>
@@ -264,31 +340,28 @@ export function TemplateAnnotationModal({
           )}
 
           {step === "analysing" && <Working message="Reading your document…" />}
-          {step === "suggesting" && <Working message="Looking for the fields in your document…" />}
+          {step === "suggesting" && <Working message="Looking for the data fields in your document…" />}
           {step === "saving" && <Working message="Saving your template…" />}
 
-          {step === "branch" && analysis && analysis.classification !== "header" && (
-            <BranchStep
-              classification={analysis.classification}
-              confirming={confirmingPattern}
-              onConfirmingChange={setConfirmingPattern}
-              onChoose={handleBranch}
-            />
+          {step === "branch" && offer && (
+            <BranchBody offer={offer} confirming={confirmingPattern} rows={rows} />
           )}
 
           {step === "cheatsheet" && <CheatSheet />}
 
+          {step === "reupload" && <ReuploadPanel inputRef={reuploadInputRef} onFile={onReupload} />}
+
           {step === "review" && (
             <div className="space-y-3">
               <p className="text-[12px] text-[#6d6a65]">
-                Check each field, set its type, and use the cog for choices and limits. The line
+                Check each data field, set its type, and use the cog for choices and limits. The line
                 beneath each row is what goes into your document — copy it into Word any time.
               </p>
 
               {foundNothing && (
                 <p className="rounded-[9px] border border-[#e6d9b8] bg-[#fbf6e8] px-3 py-2 text-[12px] text-[#8a6d1f]">
-                  The AI did not find any fields it was confident about. Add them yourself below, or
-                  mark them up in Word and upload again.
+                  The AI did not find any data fields it was confident about. Set them up in Word and
+                  upload again.
                 </p>
               )}
 
@@ -304,52 +377,70 @@ export function TemplateAnnotationModal({
                     onRemove={() => removeRow(index)}
                     onOpenConfig={() => setConfigIndex(index)}
                     onConfirm={() => updateRow(index, { confirmed: true })}
-                    onAcceptCorrection={(line) => updateRow(index, { line })}
+                    onAcceptCorrection={(line) => acceptCorrection(index, line)}
                   />
                 ))}
               </div>
 
-              <button
-                type="button"
-                className="text-[12px] text-[#3a5fd9] transition-colors hover:text-[#2e4bb0]"
-                onClick={() =>
-                  setRows((current) => [
-                    ...current,
-                    {
-                      id: `manual-${current.length}-${Date.now()}`,
-                      key: `manual_${current.length}`,
-                      kind: "span",
-                      line: "",
-                      occurrences: [],
-                      context: "",
-                      originalValue: null,
-                      confidence: null,
-                      locked: false,
-                      confirmed: false,
-                    },
-                  ])
-                }
-              >
-                + Add a field
-              </button>
+              <div className="space-y-2 rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3">
+                <p className="text-[12px] text-[#6d6a65]">
+                  Need to add more fields? Download the document to place new data fields into it,
+                  using the annotation syntax, then upload it back.
+                </p>
+                <Button type="button" variant="secondary" onClick={downloadForEditing}>
+                  <Download size={13} className="mr-1" /> Download
+                </Button>
+              </div>
             </div>
           )}
         </DialogBody>
 
         <DialogFooter>
-          {blockedReason && step === "review" && (
-            <span className="mr-auto text-[12px] text-[#6d6a65]">{blockedReason}</span>
+          <div className="mr-auto flex items-center gap-2">
+            <Button type="button" variant="secondary" onClick={onCancel}>
+              Cancel
+            </Button>
+            {step === "review" && blockedReason && (
+              <span className="text-[12px] text-[#6d6a65]">{blockedReason}</span>
+            )}
+          </div>
+
+          {step === "branch" && offer && !confirmingPattern && (
+            <>
+              <Button type="button" variant="secondary" onClick={() => handleBranch(offer.secondary)}>
+                {offer.secondaryLabel}
+              </Button>
+              <Button
+                type="button"
+                onClick={() =>
+                  offer.requiresConfirmation ? setConfirmingPattern(true) : handleBranch(offer.primary)
+                }
+              >
+                {offer.primary !== "continue" && <Sparkles size={13} className="mr-1" />}
+                {offer.primaryLabel}
+              </Button>
+            </>
           )}
-          <Button type="button" variant="secondary" onClick={onCancel}>
-            Cancel
-          </Button>
+
+          {step === "branch" && offer && confirmingPattern && (
+            <>
+              <Button type="button" variant="secondary" onClick={() => setConfirmingPattern(false)}>
+                Back
+              </Button>
+              <Button type="button" onClick={() => handleBranch(offer.primary)}>
+                Yes, use it as a pattern
+              </Button>
+            </>
+          )}
+
           {step === "cheatsheet" && (
             <Button type="button" onClick={onCancel}>
               Done
             </Button>
           )}
+
           {step === "review" && (
-            <Button type="button" disabled={blockedReason !== null} onClick={() => void save(rows)}>
+            <Button type="button" disabled={blockedReason !== null} onClick={() => void save(rows, activeFile)}>
               Save template
             </Button>
           )}
@@ -357,7 +448,7 @@ export function TemplateAnnotationModal({
 
         {activeConfigRow && configIndex !== null && (
           <FieldConfigModal
-            model={lineToModel(activeConfigRow.line)}
+            model={activeConfigRow.model}
             onChange={(patch) => updateModel(configIndex, patch)}
             onClose={() => setConfigIndex(null)}
           />
@@ -376,18 +467,16 @@ function Working({ message }: { message: string }) {
   );
 }
 
-function BranchStep({
-  classification,
+function BranchBody({
+  offer,
   confirming,
-  onConfirmingChange,
-  onChoose,
+  rows,
 }: {
-  classification: Exclude<TemplateClassification, "header">;
+  offer: BranchOffer;
   confirming: boolean;
-  onConfirmingChange: (value: boolean) => void;
-  onChoose: (action: BranchAction) => void;
+  rows: EditableRow[];
 }) {
-  const offer = branchFor(classification);
+  const fields = rows.filter((row) => !row.locked && row.line.trim().length > 0);
 
   return (
     <div className="space-y-3">
@@ -396,34 +485,55 @@ function BranchStep({
         <p className="text-[13px] text-[#5a5650]">{offer.body}</p>
       </div>
 
-      {offer.requiresConfirmation && confirming ? (
-        <div className="space-y-3 rounded-[9px] border border-[#e6d9b8] bg-[#fbf6e8] p-3">
-          <p className="text-[13px] text-[#8a6d1f]">{offer.confirmationBody}</p>
-          <div className="flex gap-2">
-            <Button type="button" onClick={() => onChoose(offer.primary)}>
-              Yes, use it as a pattern
-            </Button>
-            <Button type="button" variant="secondary" onClick={() => onConfirmingChange(false)}>
-              Back
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            onClick={() =>
-              offer.requiresConfirmation ? onConfirmingChange(true) : onChoose(offer.primary)
-            }
-          >
-            {offer.primary === "continue" ? null : <Sparkles size={13} className="mr-1" />}
-            {offer.primaryLabel}
-          </Button>
-          <Button type="button" variant="secondary" onClick={() => onChoose(offer.secondary)}>
-            {offer.secondaryLabel}
-          </Button>
+      {fields.length > 0 && (
+        <div className="grid grid-cols-1 gap-x-6 gap-y-1 rounded-[9px] border border-[#e6e3dc] bg-[#f7f6f3] p-3 sm:grid-cols-2">
+          {fields.map((row) => (
+            <div key={row.id} className="flex items-baseline gap-1.5 text-[12px]">
+              <span className="text-[#3a5fd9]">•</span>
+              <span className="truncate text-[#1a1814]">{row.model.label || row.line}</span>
+              <span className="shrink-0 text-[#6d6a65]">({rowTypeLabel(row)})</span>
+            </div>
+          ))}
         </div>
       )}
+
+      {offer.requiresConfirmation && confirming && (
+        <p className="rounded-[9px] border border-[#e6d9b8] bg-[#fbf6e8] p-3 text-[13px] text-[#8a6d1f]">
+          {offer.confirmationBody}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ReuploadPanel({
+  inputRef,
+  onFile,
+}: {
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  onFile: (event: ChangeEvent<HTMLInputElement>) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="text-[13px] text-[#5a5650]">
+        When you are done editing, upload the document here to pick the flow back up with your new
+        data fields.
+      </p>
+      <button
+        type="button"
+        className="flex w-full flex-col items-center gap-2 rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-6 text-center text-[13px] text-[#6d6a65] transition-colors hover:border-[#c5d0f7] hover:bg-[#eef1fc] hover:text-[#3a5fd9]"
+        onClick={() => inputRef.current?.click()}
+      >
+        <Upload size={20} />
+        Click to upload your edited .docx or .xlsx
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".docx,.xlsx"
+        className="sr-only"
+        onChange={onFile}
+      />
     </div>
   );
 }
@@ -510,7 +620,7 @@ function ReviewRow({
       }`}
     >
       <FieldRow
-        model={lineToModel(row.line)}
+        model={row.model}
         index={index}
         onChange={onChangeModel}
         onChangeType={onChangeType}
@@ -530,7 +640,10 @@ function ReviewRow({
         </p>
       )}
 
-      {row.context && (
+      {/* A tag row's surrounding line already contains this same {{ tag }}, so
+          showing it under the raw line above would just repeat the annotation.
+          Context is only additive for AI spans, whose context is real prose. */}
+      {row.context && row.kind !== "tag" && (
         <p className="truncate text-[11px] text-[#6d6a65]" title={row.context}>
           {row.context}
         </p>

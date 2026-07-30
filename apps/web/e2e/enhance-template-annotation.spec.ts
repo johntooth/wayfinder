@@ -231,8 +231,11 @@ test.describe('enhance: guided annotation upload', () => {
 
     await uploadTemplate(page);
 
-    // An already-annotated document offers to continue with what it found.
-    await expect(page.getByText('Placeholders found')).toBeVisible({ timeout: 10_000 });
+    // The branch step lists the data fields it found, with their type, before
+    // asking the author to decide.
+    await expect(page.getByText('Data fields found')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Supplier Name')).toBeVisible();
+    await expect(page.getByText('(Text)')).toBeVisible();
     await page.getByRole('button', { name: 'Continue with these' }).click();
 
     await expect(page.getByText('{{ Supplier Name }}').first()).toBeVisible({ timeout: 5_000 });
@@ -245,8 +248,65 @@ test.describe('enhance: guided annotation upload', () => {
     await page.getByLabel('Field 1 label').fill('Contract Value');
     await expect(page.getByText('{{ Contract Value (currency) }}')).toBeVisible();
 
+    // Switching to a select type sticks even before any choices are added — the
+    // type is held in state, not re-derived from a line that cannot carry an
+    // empty options list (the reported regression).
+    await page.getByLabel('Field 1 type').selectOption('multiselect');
+    await expect(page.getByLabel('Field 1 type')).toHaveValue('multiselect');
+
     await page.getByRole('button', { name: 'Save template' }).click();
     await expect(page.getByText('agreement.docx').first()).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('downloading to add fields switches to a re-upload panel that restarts the flow', async ({
+    page,
+  }) => {
+    await createFlowAndOpenCanvas(page, `Template Reupload ${Date.now()}`);
+    await addDocumentStep(page);
+
+    await mockAnalyse(page, {
+      filename: 'agreement.docx',
+      format: 'docx',
+      classification: 'annotated',
+      documentText: 'Made with {{ Supplier Name }}.',
+      rows: [
+        {
+          key: 'supplier_name',
+          kind: 'tag',
+          line: 'Supplier Name',
+          occurrences: [{ sourceText: '{{ Supplier Name }}', occurrence: 0 }],
+          context: 'Made with {{ Supplier Name }}.',
+          originalValue: null,
+          confidence: null,
+          locked: false,
+        },
+      ],
+    });
+    await mockSave(page);
+
+    await uploadTemplate(page);
+    await expect(page.getByText('Data fields found')).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: 'Continue with these' }).click();
+    await expect(page.getByText('{{ Supplier Name }}').first()).toBeVisible({ timeout: 5_000 });
+
+    // The Download button hands the document back and switches to the re-upload
+    // panel; the download itself is captured so headless does not stall on it.
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download' }).click();
+    await download;
+
+    await expect(page.getByText(/upload the document here/i)).toBeVisible({ timeout: 5_000 });
+
+    // Re-uploading restarts the flow from detection.
+    await page
+      .locator('input[type="file"][accept=".docx,.xlsx"]')
+      .last()
+      .setInputFiles({
+        name: 'agreement.docx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        buffer: fakeDocx(),
+      });
+    await expect(page.getByText('Data fields found')).toBeVisible({ timeout: 10_000 });
   });
 
   test('the config icon takes an accent colour when a non-default option is set', async ({ page }) => {

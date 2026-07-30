@@ -181,7 +181,7 @@ async function uploadMockTemplate(page: Page, stepName: string): Promise<void> {
 
   // Walk the guided modal: the mocked document already carries placeholders, so
   // it offers to continue with what it found, then saves.
-  await expect(page.getByText('Placeholders found')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText('Data fields found')).toBeVisible({ timeout: 10_000 });
   await page.getByRole('button', { name: 'Continue with these' }).click();
   await page.getByRole('button', { name: 'Save template' }).click();
 

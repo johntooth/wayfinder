@@ -75,7 +75,10 @@ const buildPrompt = (input: SuggestTemplateFieldsInput): string => {
     "  A span you cannot copy exactly will be discarded.",
     "- `occurrence` is the zero-based index of that span among identical copies.",
     "- `label` is a short Title Case name. Never include brackets or annotations.",
-    "- Use `options` only when the value is genuinely drawn from a fixed set.",
+    "- Use `options` when the value is drawn from a fixed set. A source value that is",
+    "  itself a short comma- or slash-separated list of candidates (e.g. \"Mobile phone,",
+    "  Laptop\") IS such a set — return each candidate as a separate option, and set",
+    "  `multiple: true` when more than one could be chosen at once.",
     "- Use `narrative` only for a paragraph the AI should compose, not a value.",
     "- `confidence` is how sure you are the span varies rather than being boilerplate.",
     "- Propose nothing at all rather than guessing. An empty list is a valid answer.",
@@ -119,7 +122,8 @@ const toField = (suggestion: SuggestedTemplateFieldObject): TemplateField | null
 
   const options = suggestion.options.map((option) => option.trim()).filter(Boolean);
   // A type and an options list are mutually exclusive in the grammar, so an
-  // options-backed suggestion serialises as text carrying (options: …).
+  // options-backed suggestion serialises as text carrying (options: …) — or
+  // (multi-options: …) when more than one choice can apply at once.
   const type: TemplateFieldType = options.length > 0 ? "text" : suggestion.type;
 
   return {
@@ -129,6 +133,7 @@ const toField = (suggestion: SuggestedTemplateFieldObject): TemplateField | null
     optional: suggestion.optional,
     raw: "",
     ...(options.length > 0 ? { options } : {}),
+    ...(options.length > 0 && suggestion.multiple ? { multiple: true } : {}),
   };
 };
 

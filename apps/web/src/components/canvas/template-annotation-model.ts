@@ -5,6 +5,7 @@ import {
   type AnnotationWarning,
 } from "@rbrasier/domain";
 import type { AnnotationRow } from "@/lib/template-annotation";
+import { lineToModel, TEMPLATE_TYPE_OPTIONS, type FieldModel } from "./field-row-model";
 
 // The guided flow's steps. Each processing step shows a loading indicator before
 // the surface that follows it.
@@ -14,7 +15,10 @@ export type AnnotationStep =
   | "suggesting"
   | "review"
   | "saving"
-  | "cheatsheet";
+  | "cheatsheet"
+  // The author chose to add fields in Word; the modal waits for them to
+  // re-upload the edited document, which restarts the flow.
+  | "reupload";
 
 // What the document turned out to be. `header` is an .xlsx that already works in
 // ADR-039 header mode and therefore skips the guided flow entirely.
@@ -38,19 +42,36 @@ const LOW_CONFIDENCE_THRESHOLD = 50;
 
 export interface EditableRow extends AnnotationRow {
   id: string;
+  // The edited field, held as structured state rather than re-derived from
+  // `line` each render. A single/multi-select with no choices yet serialises to
+  // a bare label (the grammar can't express an empty options list), so deriving
+  // the type from the round-tripped line would silently reset it back to text —
+  // the bug this holds the model to avoid. `line` is kept in sync for validation
+  // and serialisation.
+  model: FieldModel;
   // Explicit acknowledgement of a low-confidence AI suggestion. Save stays
   // disabled until every low-confidence row carries one.
   confirmed: boolean;
 }
 
 export const toEditableRows = (rows: AnnotationRow[]): EditableRow[] =>
-  rows.map((row, index) => ({ ...row, id: `${row.key}-${index}`, confirmed: false }));
+  rows.map((row, index) => ({
+    ...row,
+    id: `${row.key}-${index}`,
+    model: lineToModel(row.line),
+    confirmed: false,
+  }));
+
+// The author-facing type name for a row, e.g. "Multi-select", used where the
+// found fields are listed before editing.
+export const rowTypeLabel = (row: EditableRow): string =>
+  TEMPLATE_TYPE_OPTIONS.find((option) => option.value === row.model.type)?.label ?? "Text";
 
 export const branchFor = (classification: Exclude<TemplateClassification, "header">): BranchOffer => {
   if (classification === "annotated") {
     return {
-      title: "Placeholders found",
-      body: "This document already has fields marked up. You can review them as they are, or let the AI look for any you have missed.",
+      title: "Data fields found",
+      body: "These data fields are already marked up in your document. Review them as they are, or let the AI look for any you have missed.",
       primary: "continue",
       primaryLabel: "Continue with these",
       secondary: "augment",
@@ -62,8 +83,8 @@ export const branchFor = (classification: Exclude<TemplateClassification, "heade
 
   if (classification === "empty") {
     return {
-      title: "No placeholders yet",
-      body: "This looks like a blank template. The AI can mark up the fields for you, or you can add them yourself in Word.",
+      title: "No data fields yet",
+      body: "This looks like a blank template. The AI can mark up the data fields for you, or you can add them yourself in Word.",
       primary: "suggest",
       primaryLabel: "Add fields with AI",
       secondary: "cheatsheet",

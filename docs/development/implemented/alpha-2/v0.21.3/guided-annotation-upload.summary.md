@@ -207,3 +207,38 @@ relevant, walks the guided modal; the behaviours they guard are unchanged.
 - **Deleting the previous template file on re-upload.** Published flow versions
   snapshot the node config, so an older version still points at that storage key
   and must stay restorable. Only its retrieval chunks are dropped.
+
+---
+
+## Review revisions (same PR, pre-merge)
+
+Follow-up changes after the first round of review, all inside the modal:
+
+1. **Found fields are shown, not asked about blind.** The branch step now lists
+   the detected data fields in two columns of bullets with the type in brackets
+   (`rowTypeLabel`), so the author sees what was found before choosing. Wording
+   changed throughout from "placeholders" to "data fields".
+2. **Branch actions moved to the modal footer** — Cancel bottom-left, the branch
+   actions (and the filled-example confirm/back) bottom-right, matching the rest
+   of the dialog.
+3. **Doubled annotation display fixed.** A `tag` row's surrounding-context line
+   already contains the same `{{ tag }}`, so it was repeating the raw annotation
+   line above it. Context is now shown only for AI `span` rows, whose context is
+   real prose.
+4. **"Add a field" removed.** A flat grid can't say where in the document a new
+   field goes, so the button was replaced with a "Need to add more fields?
+   Download…" block. Download hands the current document back (the uploaded file,
+   or the stored template via GET on re-entry) and switches the modal to a
+   re-upload panel; re-uploading restarts the flow from detection.
+5. **Type-change regression fixed.** `EditableRow` now holds the `FieldModel` in
+   state instead of re-deriving it from `line` each render. A single/multi-select
+   with no choices yet serialises to a bare label (the grammar can't express an
+   empty options list), so the old code reset the type back to text the instant
+   it was chosen. `line` is still kept in sync for validation and serialisation.
+   The structured conversation editor already held its models in state, so it was
+   not affected the same way; both now behave identically.
+6. **AI multi-select inference.** `suggestedTemplateFieldSchema` gained a
+   `multiple` flag and the prompt now tells the model that a short comma/slash
+   list of candidate values (e.g. "Mobile phone, Laptop") is a fixed set — split
+   into options, with `multiple: true` when several can apply — so a filled
+   example like that returns a multi-select rather than plain text.

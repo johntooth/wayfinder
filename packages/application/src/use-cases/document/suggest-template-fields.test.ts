@@ -60,6 +60,35 @@ describe("SuggestTemplateFields", () => {
     expect(result.data?.suggestions[0]?.line).toBe("Status (options: Approved, Rejected) (optional)");
   });
 
+  it("serialises a multi-select when the model marks the options as multiple", async () => {
+    const languageModel = makeLanguageModel([
+      suggestion({
+        label: "Equipment Type",
+        sourceText: "Acme Pty Ltd",
+        options: ["Mobile phone", "Laptop"],
+        multiple: true,
+      }),
+    ]);
+    const useCase = new SuggestTemplateFields(languageModel);
+
+    const result = await useCase.execute({ documentText: DOCUMENT, mode: "filled" });
+
+    expect(result.data?.suggestions[0]?.line).toBe(
+      "Equipment Type (multi-options: Mobile phone, Laptop)",
+    );
+  });
+
+  it("ignores the multiple flag when there are no options to multi-select", async () => {
+    const languageModel = makeLanguageModel([
+      suggestion({ label: "Supplier Name", options: [], multiple: true }),
+    ]);
+    const useCase = new SuggestTemplateFields(languageModel);
+
+    const result = await useCase.execute({ documentText: DOCUMENT, mode: "filled" });
+
+    expect(result.data?.suggestions[0]?.line).toBe("Supplier Name");
+  });
+
   it("drops a suggestion whose sourceText is not in the document", async () => {
     const languageModel = makeLanguageModel([
       suggestion({ sourceText: "Northwind Trading Ltd" }),
