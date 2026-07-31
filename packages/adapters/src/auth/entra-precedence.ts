@@ -22,10 +22,16 @@ export interface LinkedAccount {
  * live sessions in the same flow strips the attacker of everything the gate was
  * protecting instead.
  *
- * Better Auth issues the post-link session after this runs, so revoking every
- * session here does not disturb the sign-in that triggered the link. A throw
- * propagates out of Better Auth's `linkAccount` and fails the sign-in, which is
- * the safe direction: no link is recorded while a usable password survives.
+ * Must be driven from Better Auth's `account.create.before` hook. Better Auth
+ * wraps each request in `runWithAdapter`, which defers `create.after` hooks to
+ * the end of the request — by then the post-link session exists and revoking
+ * every session for the user destroys the sign-in that triggered the link.
+ * `create.before` is awaited inline, so the revocation lands strictly before
+ * the new session is issued.
+ *
+ * A throw propagates out of Better Auth's `linkAccount` and fails the sign-in,
+ * which is the safe direction: no link is recorded while a usable password
+ * survives.
  */
 export const applyEntraPrecedence = async (
   database: Database,

@@ -191,10 +191,22 @@ account failed the gate and the Entra callback returned `account not linked`.
   `databaseHooks.account.create.after` hook.
 - `packages/adapters/src/auth/entra-precedence.ts` (new) — `applyEntraPrecedence`
   deletes the user's `credential` account row and revokes their sessions when a
-  `microsoft` account row is created. Verified against `better-auth`'s
-  `with-hooks.mjs`: the hook is reached from both `linkAccount` and
-  `createOAuthUser`, and `queueAfterTransactionHook` runs it before the caller
-  issues the post-link session, so the sign-in that triggered the link survives.
+  `microsoft` account row is created. Reached from both `linkAccount` and
+  `createOAuthUser`.
+
+  **It must be a `create.before` hook.** The first attempt used `create.after`
+  and failed e2e: Better Auth wraps each request in `runWithAdapter`, which
+  collects after-hooks and flushes them when the request *ends* — past the point
+  where the post-link session is issued — so the revocation deleted the session
+  belonging to the sign-in that had just succeeded, and the user was bounced back
+  to `/login`. The library's own doc comment on `queueAfterTransactionHook` says
+  the hook "will execute immediately" outside a transaction, which is only true
+  when no async-storage store exists at all; during an endpoint one always does.
+  `create.before` is awaited inline, so the revocation lands strictly before the
+  new session. Pinned by
+  `packages/adapters/src/auth/__tests__/better-auth-hook-ordering.test.ts`, which
+  observes the real ordering (`account.before → session.create → account.after`)
+  through a memory-adapter Better Auth instance.
 - Dropped `"email-password"` from `trustedProviders`. It was inert — the
   credential `providerId` is `"credential"`, and `trustedProviders` is only
   consulted for the OAuth provider being signed in with.

@@ -140,7 +140,7 @@ describe("createAuth account linking", () => {
               requireLocalEmailVerified?: boolean;
             };
           };
-          databaseHooks?: { account?: { create?: { after?: unknown } } };
+          databaseHooks?: { account?: { create?: { before?: unknown; after?: unknown } } };
         };
       }
     ).options;
@@ -163,6 +163,15 @@ describe("createAuth account linking", () => {
   // Disabling the local-verification gate is only safe because this hook strips
   // the password the moment an Entra identity attaches to the account.
   it("registers the account-create hook that enforces Entra precedence", () => {
-    expect(typeof linkingOptions()?.databaseHooks?.account?.create?.after).toBe("function");
+    expect(typeof linkingOptions()?.databaseHooks?.account?.create?.before).toBe("function");
+  });
+
+  // It has to be `before`, not `after`. Better Auth wraps the whole request in
+  // `runWithAdapter`, which defers every `create.after` hook to the end of that
+  // request — i.e. after the post-link session has been issued — so revoking
+  // sessions from an `after` hook destroys the sign-in that triggered the link
+  // and the user lands back on /login.
+  it("does not enforce precedence from an after hook", () => {
+    expect(linkingOptions()?.databaseHooks?.account?.create?.after).toBeUndefined();
   });
 });

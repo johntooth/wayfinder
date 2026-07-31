@@ -165,7 +165,12 @@ export const createAuth = (db: Database, config: CreateAuthOptions): Auth => {
     databaseHooks: {
       account: {
         create: {
-          after: async (account) => {
+          // `before`, not `after`: Better Auth runs the whole request inside
+          // `runWithAdapter`, which queues every `create.after` hook until the
+          // request ends — past the point where the post-link session has been
+          // issued. Revoking sessions from there kills the sign-in that
+          // triggered the link. `create.before` is awaited inline instead.
+          before: async (account) => {
             await applyEntraPrecedence(db, {
               userId: account.userId,
               providerId: account.providerId,
