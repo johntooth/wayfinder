@@ -2,3 +2,15 @@ packages:
   - "apps/*"
   - "packages/*"
   - "mocks"
+  # redline's UI mount (ADR-0019, delivery-plan item 3 step 1). This fork's
+  # apps/web binds to redline's framework-free brains + view models, which are
+  # source-only TypeScript workspace packages. Globbing them in here — rather
+  # than a bare file: dependency — is what lets their internal `workspace:*`
+  # links (redline-application -> redline-domain, etc.) resolve inside this
+  # workspace, mirroring how apps/web already consumes @rbrasier/*. redline
+  # lives two levels up (this fork is redline's services/wayfinder submodule).
+  # apps/* there is only @redline/redline-web; packages/* is the four @redline/*
+  # libraries. Delete these two globs and the apps/web deps to unwind at
+  # upstreaming — nothing in the fork's own tree depends on them.
+  - "../../apps/*"
+  - "../../packages/*"
