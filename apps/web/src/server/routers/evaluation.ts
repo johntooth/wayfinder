@@ -21,8 +21,8 @@ import { authenticatedProcedure, router } from "../trpc";
 // renderPivotView the redline shell and its Playwright e2e pin.
 
 // The slice of the controller this router drives. Declared here so the router
-// stays typed before container-redline.ts (item 3 step 2) wires the concrete
-// WorkflowController onto ctx.container.redline; that step replaces this cast
+// stays typed before `container-redline.ts` wires the concrete
+// WorkflowController onto ctx.container.redline; that module replaces this cast
 // with a real container field.
 interface EvaluationController {
   openReviewGrid(input: { evaluationId: string }): Promise<Result<ReviewGrid>>;
@@ -54,8 +54,8 @@ const redlineCodeMap: Record<DomainError["code"], TRPCError["code"]> = {
 const toTrpcError = (error: DomainError): TRPCError =>
   new TRPCError({ code: redlineCodeMap[error.code], message: error.message, cause: error.cause });
 
-// Authentication is the gate today; item 3 step 4 swaps this for the
-// `evaluation:review` permission once Better Auth carries that permission key.
+// Authentication is the gate today; the `evaluation:review` permission replaces
+// it once the fork branch adds that permission key to Better Auth.
 const reviewProcedure = authenticatedProcedure;
 
 const evaluationIdInput = z.object({ evaluationId: z.string().uuid() });

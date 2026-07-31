@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { err, ok, domainError } from "@rbrasier/domain";
+import { err, ok, domainError } from "@redline/redline-domain";
 import type { Container } from "@/lib/container";
 import { createCallerFactory, router, type TrpcContext } from "../trpc";
 import { evaluationRouter } from "./evaluation";
@@ -74,13 +74,24 @@ describe("evaluation.reviewGrid", () => {
     expect(controller.openReviewGrid).not.toHaveBeenCalled();
   });
 
-  it("maps a domain error to a tRPC error", async () => {
+  it("maps a redline domain error to a tRPC error, message intact", async () => {
     const controller = makeController({
       openReviewGrid: vi.fn().mockResolvedValue(err(domainError("NOT_FOUND", "no such evaluation"))),
     });
     await expect(
       createCaller(contextWith(makeContainer(controller))).evaluation.reviewGrid({ evaluationId }),
     ).rejects.toThrow(/no such evaluation/i);
+  });
+
+  it("maps a redline-only error code the fork's own taxonomy lacks", async () => {
+    const controller = makeController({
+      openReviewGrid: vi
+        .fn()
+        .mockResolvedValue(err(domainError("NOT_IMPLEMENTED", "similarity search deferred"))),
+    });
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.reviewGrid({ evaluationId }),
+    ).rejects.toThrow(/similarity search deferred/i);
   });
 });
 
