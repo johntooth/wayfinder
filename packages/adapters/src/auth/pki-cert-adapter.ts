@@ -1,6 +1,13 @@
 import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
-import { domainError, err, ok, type IUserRepository, type Result } from "@rbrasier/domain";
+import {
+  domainError,
+  err,
+  normaliseEmail,
+  ok,
+  type IUserRepository,
+  type Result,
+} from "@rbrasier/domain";
 import type { Database } from "../db/client";
 import { core_sessions, core_users } from "../db/schema/core";
 
@@ -74,7 +81,9 @@ export class PkiCertAdapter {
     }
 
     const name = this.extractCnFromDn(subjectDn) ?? email;
-    return ok({ email, name, fingerprint, subjectDn });
+    // Certificate subject names carry whatever case the CA issued; the account
+    // key must not depend on it, or the same person gets a second user row.
+    return ok({ email: normaliseEmail(email), name, fingerprint, subjectDn });
   }
 
   private extractEmailFromDn(dn: string): string | null {

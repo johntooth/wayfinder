@@ -112,3 +112,66 @@ describe("createAuth id generation", () => {
     expect(options?.advanced?.database?.generateId).toBe("uuid");
   });
 });
+
+describe("createAuth account linking", () => {
+  const database = createDatabase("postgres://user:pass@localhost:5432/wayfinder_test");
+
+  const config = {
+    secret: "test-secret-value-at-least-32-chars-long",
+    baseURL: "http://localhost:3000",
+    adminSeedEmail: undefined,
+    authMethod: { type: "email-password" } as AuthMethod,
+    authConfig: {
+      emailPasswordEnabled: true,
+      entraEnabled: true,
+      entra: { tenantId: "tenant", clientId: "client", clientSecret: "secret" },
+    } satisfies AuthConfig,
+  };
+
+  const linkingOptions = () => {
+    const auth = createAuth(database, config);
+    return (
+      auth as unknown as {
+        options?: {
+          account?: {
+            accountLinking?: {
+              enabled?: boolean;
+              trustedProviders?: string[];
+              requireLocalEmailVerified?: boolean;
+            };
+          };
+          databaseHooks?: { account?: { create?: { before?: unknown; after?: unknown } } };
+        };
+      }
+    ).options;
+  };
+
+  // Better Auth refuses to link an OAuth identity into a local user whose
+  // `emailVerified` is false, and Wayfinder never verifies email addresses —
+  // so without this every password account was unreachable via Entra.
+  it("does not require a locally verified email before linking", () => {
+    expect(linkingOptions()?.account?.accountLinking?.requireLocalEmailVerified).toBe(false);
+  });
+
+  it("keeps implicit linking enabled with Microsoft trusted", () => {
+    const accountLinking = linkingOptions()?.account?.accountLinking;
+
+    expect(accountLinking?.enabled).toBe(true);
+    expect(accountLinking?.trustedProviders).toContain("microsoft");
+  });
+
+  // Disabling the local-verification gate is only safe because this hook strips
+  // the password the moment an Entra identity attaches to the account.
+  it("registers the account-create hook that enforces Entra precedence", () => {
+    expect(typeof linkingOptions()?.databaseHooks?.account?.create?.before).toBe("function");
+  });
+
+  // It has to be `before`, not `after`. Better Auth wraps the whole request in
+  // `runWithAdapter`, which defers every `create.after` hook to the end of that
+  // request — i.e. after the post-link session has been issued — so revoking
+  // sessions from an `after` hook destroys the sign-in that triggered the link
+  // and the user lands back on /login.
+  it("does not enforce precedence from an after hook", () => {
+    expect(linkingOptions()?.databaseHooks?.account?.create?.after).toBeUndefined();
+  });
+});

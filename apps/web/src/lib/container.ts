@@ -561,6 +561,7 @@ const build = () => {
       adminSeedEmail: env.ADMIN_SEED_EMAIL,
       authMethod,
       authConfig,
+      entraAuthority: env.ENTRA_AUTHORITY,
     });
   };
 
