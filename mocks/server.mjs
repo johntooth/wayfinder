@@ -21,10 +21,11 @@ import { createServer } from "node:http";
 import { mock as mcpToolsStreamableHttp } from "./mcp-tools/streamable-http.mjs";
 import { mock as mcpToolsSse } from "./mcp-tools/sse.mjs";
 import { mock as entraOidc } from "./entra/oidc.mjs";
+import { mock as pkiProxy } from "./pki/proxy.mjs";
 
 const PORT = Number(process.env.MOCKS_PORT ?? 4001);
 
-const MOCKS = [mcpToolsStreamableHttp, mcpToolsSse, entraOidc];
+const MOCKS = [mcpToolsStreamableHttp, mcpToolsSse, entraOidc, pkiProxy];
 
 const routes = new Map();
 for (const mock of MOCKS) {

@@ -5,13 +5,22 @@
 #   --with-mocks, --mocks   Start the shared mocks HTTP server (mocks/server.mjs)
 #                           on MOCKS_PORT (default 4001). All local mocks share
 #                           this one port; each mock owns a URL path — e.g. the
-#                           MCP tools mock is at :4001/mcp and the mock Entra
-#                           identity provider at :4001/entra. To add a new mock,
+#                           MCP tools mock is at :4001/mcp, the mock Entra
+#                           identity provider at :4001/entra, and the mock PKI
+#                           reverse proxy at :4001/pki. To add a new mock,
 #                           follow the instructions at the top of
 #                           mocks/server.mjs and pick a new path (not a new port).
 #                           This flag also exports ENTRA_* fallbacks so Entra
 #                           sign-in points at the mock; you still have to enable
 #                           Entra ID in /admin/settings.
+#
+#   --with-pki              Implies --with-mocks, and additionally boots the web
+#                           app in PKI mode (AUTH_METHOD=pki-and-email-password,
+#                           PKI_TRUSTED_PROXY_IPS=127.0.0.1) so the mock proxy at
+#                           :4001/pki/connect can mint sessions. Separate from
+#                           --with-mocks because AUTH_METHOD is read at boot and
+#                           changes how unauthenticated requests are redirected —
+#                           it is not an in-app toggle the way Entra is.
 
 set -euo pipefail
 
@@ -25,13 +34,18 @@ API_PORT=${API_PORT:-3001}
 MOCKS_PORT=${MOCKS_PORT:-4001}
 
 WITH_MOCKS=0
+WITH_PKI=0
 for arg in "$@"; do
   case "$arg" in
     --with-mocks|--mocks)
       WITH_MOCKS=1
       ;;
+    --with-pki|--pki)
+      WITH_MOCKS=1
+      WITH_PKI=1
+      ;;
     -h|--help)
-      sed -n '2,14p' "$0"
+      sed -n '2,23p' "$0"
       exit 0
       ;;
     *)
@@ -260,6 +274,22 @@ if [ "$WITH_MOCKS" -eq 1 ]; then
   export ENTRA_CLIENT_ID="${ENTRA_CLIENT_ID:-mock-client}"
   export ENTRA_CLIENT_SECRET="${ENTRA_CLIENT_SECRET:-mock-secret}"
   echo "  mock Entra at $ENTRA_AUTHORITY — switch Entra ID on in /admin/settings to use it"
+
+  # Tell the mock PKI proxy where to forward certificates. Harmless when the app
+  # is not in PKI mode: nothing calls the mock unless you visit its picker.
+  export MOCK_PKI_APP_ORIGIN="${MOCK_PKI_APP_ORIGIN:-http://localhost:$WEB_PORT}"
+
+  if [ "$WITH_PKI" -eq 1 ]; then
+    # Unlike Entra, PKI is not an in-app toggle — the container only builds
+    # PkiCertAdapter when AUTH_METHOD names it, and the adapter refuses to
+    # construct with an empty trusted-proxy list.
+    export AUTH_METHOD="pki-and-email-password"
+    export PKI_TRUSTED_PROXY_IPS="${PKI_TRUSTED_PROXY_IPS:-127.0.0.1}"
+    echo "  PKI mode on (AUTH_METHOD=$AUTH_METHOD, trusted proxies: $PKI_TRUSTED_PROXY_IPS)"
+    echo "  mock PKI picker at http://localhost:$MOCKS_PORT/pki/connect?redirect=/chats"
+  else
+    echo "  mock PKI at http://localhost:$MOCKS_PORT/pki — re-run with --with-pki to boot the app in PKI mode"
+  fi
 fi
 
 echo "→ starting dev servers (Ctrl-C to stop)"
