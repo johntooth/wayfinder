@@ -154,6 +154,11 @@ const serverEnvSchema = z.object({
   ENTRA_TENANT_ID: z.string().optional(),
   ENTRA_CLIENT_ID: z.string().optional(),
   ENTRA_CLIENT_SECRET: z.string().optional(),
+  // Overrides the login.microsoftonline.com host that every Entra endpoint is
+  // derived from. Env-only and deliberately absent from the admin card: the
+  // sign-in flow must not be repointable at an arbitrary host from the UI.
+  // Used by the local mock Entra server (restart.sh --with-mocks).
+  ENTRA_AUTHORITY: z.string().url().optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

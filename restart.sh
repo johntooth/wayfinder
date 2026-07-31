@@ -5,9 +5,13 @@
 #   --with-mocks, --mocks   Start the shared mocks HTTP server (mocks/server.mjs)
 #                           on MOCKS_PORT (default 4001). All local mocks share
 #                           this one port; each mock owns a URL path — e.g. the
-#                           MCP tools mock is at :4001/mcp. To add a new mock,
+#                           MCP tools mock is at :4001/mcp and the mock Entra
+#                           identity provider at :4001/entra. To add a new mock,
 #                           follow the instructions at the top of
 #                           mocks/server.mjs and pick a new path (not a new port).
+#                           This flag also exports ENTRA_* fallbacks so Entra
+#                           sign-in points at the mock; you still have to enable
+#                           Entra ID in /admin/settings.
 
 set -euo pipefail
 
@@ -27,7 +31,7 @@ for arg in "$@"; do
       WITH_MOCKS=1
       ;;
     -h|--help)
-      sed -n '2,10p' "$0"
+      sed -n '2,14p' "$0"
       exit 0
       ;;
     *)
@@ -247,6 +251,15 @@ if [ "$WITH_MOCKS" -eq 1 ]; then
   log="$ROOT/.mocks-logs/server.log"
   (cd "$ROOT/mocks" && MOCKS_PORT="$MOCKS_PORT" node server.mjs) >"$log" 2>&1 &
   echo "  mocks server pid $! (logs: .mocks-logs/server.log)"
+
+  # Point Entra sign-in at the mock identity provider. These are fallbacks only:
+  # an auth_config row in admin_system_settings still overrides them (ADR-025),
+  # and enabling Entra remains an explicit admin action.
+  export ENTRA_AUTHORITY="http://localhost:$MOCKS_PORT/entra"
+  export ENTRA_TENANT_ID="${ENTRA_TENANT_ID:-mock-tenant}"
+  export ENTRA_CLIENT_ID="${ENTRA_CLIENT_ID:-mock-client}"
+  export ENTRA_CLIENT_SECRET="${ENTRA_CLIENT_SECRET:-mock-secret}"
+  echo "  mock Entra at $ENTRA_AUTHORITY — switch Entra ID on in /admin/settings to use it"
 fi
 
 echo "→ starting dev servers (Ctrl-C to stop)"

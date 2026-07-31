@@ -1,3 +1,13 @@
+/**
+ * The canonical form of an email address used as the account key.
+ *
+ * One address must resolve to one account whatever the sign-in method, so every
+ * lookup and every write has to agree on spelling. Better Auth already
+ * lowercases on its own paths; certificate subject names and hand-typed admin
+ * addresses do not, and `core_users.email` is a case-sensitive unique column.
+ */
+export const normaliseEmail = (email: string): string => email.trim().toLowerCase();
+
 export interface User {
   readonly id: string;
   readonly email: string;

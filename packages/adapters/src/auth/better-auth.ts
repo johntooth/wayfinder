@@ -3,6 +3,8 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { isEntraConfigured, type AuthConfig as AuthMethodsConfig } from "@rbrasier/domain";
 import type { Database } from "../db/client";
 import { core_accounts, core_sessions, core_users, core_verification_tokens } from "../db/schema/core";
+import { applyEntraPrecedence } from "./entra-precedence";
+import { userInfoFromIdToken } from "./entra-user-info";
 import type { PkiConfig } from "./pki-cert-adapter";
 
 export type AuthMethod =
@@ -18,21 +20,29 @@ export interface CreateAuthOptions {
   readonly adminSeedEmail: string | undefined;
   readonly authMethod: AuthMethod;
   readonly authConfig: AuthMethodsConfig;
+  readonly entraAuthority?: string;
 }
 
 export interface MicrosoftProviderOptions {
   readonly clientId: string;
   readonly clientSecret: string;
   readonly tenantId: string;
+  readonly authority?: string;
 }
 
 /**
  * Resolves Better Auth's Microsoft social-provider options from the runtime
  * auth config, or null when Entra must not be offered (disabled, or enabled
  * but missing credentials — fail closed per ADR-025).
+ *
+ * `authority` overrides the login.microsoftonline.com host every endpoint is
+ * derived from. It exists for the local mock Entra server and for sovereign
+ * clouds; it is env-only by design, so no admin can repoint the auth flow at an
+ * arbitrary host from the settings UI.
  */
 export const microsoftProviderFor = (
   authConfig: AuthMethodsConfig,
+  authority?: string,
 ): MicrosoftProviderOptions | null => {
   if (!authConfig.entraEnabled) return null;
   if (!isEntraConfigured(authConfig.entra)) return null;
@@ -40,6 +50,7 @@ export const microsoftProviderFor = (
     clientId: authConfig.entra.clientId,
     clientSecret: authConfig.entra.clientSecret,
     tenantId: authConfig.entra.tenantId,
+    ...(authority ? { authority } : {}),
   };
 };
 
@@ -68,7 +79,7 @@ export const createAuth = (db: Database, config: CreateAuthOptions): Auth => {
   }
 
   const emailPasswordEnabled = config.authConfig.emailPasswordEnabled;
-  const microsoftProvider = microsoftProviderFor(config.authConfig);
+  const microsoftProvider = microsoftProviderFor(config.authConfig, config.entraAuthority);
 
   return betterAuth({
     database: drizzleAdapter(db, {
@@ -123,11 +134,18 @@ export const createAuth = (db: Database, config: CreateAuthOptions): Auth => {
         createdAt: "created_at",
         updatedAt: "updated_at",
       },
-      // A first Entra sign-in whose verified email matches an existing user
-      // links to that user instead of creating a duplicate (ADR-025).
+      // A first Entra sign-in whose email matches an existing user links to that
+      // user instead of creating a duplicate (ADR-025).
       accountLinking: {
         enabled: true,
-        trustedProviders: ["microsoft", "email-password"],
+        trustedProviders: ["microsoft"],
+        // Better Auth otherwise refuses to link unless the local row already has
+        // `emailVerified: true`, which Wayfinder never sets — no verification
+        // email is configured — so every password account was unreachable via
+        // Entra. The gate protects against an attacker pre-registering at a
+        // victim's address; `applyEntraPrecedence` below removes that attacker's
+        // password and sessions at link time instead.
+        requireLocalEmailVerified: false,
       },
     },
     verification: {
@@ -144,6 +162,18 @@ export const createAuth = (db: Database, config: CreateAuthOptions): Auth => {
       autoSignIn: true,
       requireEmailVerification: false,
     },
+    databaseHooks: {
+      account: {
+        create: {
+          after: async (account) => {
+            await applyEntraPrecedence(db, {
+              userId: account.userId,
+              providerId: account.providerId,
+            });
+          },
+        },
+      },
+    },
     ...(microsoftProvider
       ? {
           socialProviders: {
@@ -151,6 +181,17 @@ export const createAuth = (db: Database, config: CreateAuthOptions): Auth => {
               clientId: microsoftProvider.clientId,
               clientSecret: microsoftProvider.clientSecret,
               tenantId: microsoftProvider.tenantId,
+              ...(microsoftProvider.authority
+                ? {
+                    authority: microsoftProvider.authority,
+                    // A custom authority is not Microsoft Graph's tenant, and the
+                    // stock profile-photo call is hardcoded to graph.microsoft.com
+                    // and throws when unreachable. Read the identity from the id
+                    // token instead.
+                    getUserInfo: async (token: { idToken?: string }) =>
+                      userInfoFromIdToken(token),
+                  }
+                : {}),
             },
           },
         }

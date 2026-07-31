@@ -87,6 +87,10 @@ jobs:
       SCHEDULER_TICK_SECRET: e2e-scheduler-tick-secret
       TEST_AUTH_BYPASS: "true"
       TEST_ADMIN_EMAIL: admin@example.com
+      # Points Entra sign-in at the mock identity provider started below, so the
+      # account-linking spec can drive a real OAuth code flow without Azure.
+      ENTRA_AUTHORITY: http://localhost:4001/entra
+      MOCKS_PORT: "4001"
       USE_REAL_AI: ${{ inputs.use_real_ai == true && 'true' || 'false' }}
       BASE_URL: http://localhost:3000
 
@@ -155,6 +159,21 @@ jobs:
       # unless NODE_OPTIONS already sets it, in which case it defers to that. So
       # any value below ~8 GB *lowers* the threshold; this raises it instead.
       # It is a ceiling, not a reservation — V8 still only grows as needed.
+      # The shared mocks server (one port, one path per mock). Only the mock
+      # Entra identity provider is needed here; it must be up before the app so
+      # the OAuth code flow has somewhere to go.
+      - name: Start mocks server
+        run: |
+          node server.mjs > /tmp/mocks.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:4001/healthz >/dev/null 2>&1; then
+              echo "mocks ready"; exit 0
+            fi
+            sleep 1
+          done
+          echo "mocks server did not become ready"; cat /tmp/mocks.log; exit 1
+        working-directory: mocks
+
       - name: Start app
         env:
           NODE_OPTIONS: --max-old-space-size=10240

@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import {
   domainError,
   err,
+  normaliseEmail,
   ok,
   type CreateAdminAccountInput,
   type IAdminAccountCreator,
@@ -60,16 +61,19 @@ export class BetterAuthAdminAccountCreator implements IAdminAccountCreator {
 
         const auth = await this.getAuth();
         const api = auth.api as unknown as SignUpApi;
+        // Better Auth stores the address lowercased, so the promote below has to
+        // match on the same form or a hand-typed capital letter loses the admin.
+        const email = normaliseEmail(input.email);
         // Better Auth inserts the user + credential row on its own connection and
         // commits; the row is visible to this READ COMMITTED transaction below.
         await api.signUpEmail({
-          body: { email: input.email, password: input.password, name: input.name },
+          body: { email, password: input.password, name: input.name },
         });
 
         const [promoted] = await tx
           .update(core_users)
           .set({ is_admin: true, updated_at: new Date() })
-          .where(eq(core_users.email, input.email))
+          .where(eq(core_users.email, email))
           .returning({ id: core_users.id });
         if (!promoted) {
           return err(
