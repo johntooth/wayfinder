@@ -10,6 +10,7 @@ import {
   type Approval,
   type ApprovalDecision,
   type ApprovalNodeConfig,
+  type ApprovalStatus,
   type CompletedStep,
   type FlowNode,
   type FlowNodeType,
@@ -68,6 +69,11 @@ const field = (key: string, label: string, value: string): StepOutputField => ({
 const stringOrNull = (value: unknown): string | null =>
   typeof value === "string" && value.length > 0 ? value : null;
 
+// Derived, never selected. Only an approval earns the widened status; a
+// rejection or change request records the decision the approver chose.
+const derivedStatus = (decision: ApprovalDecision, editsMade: boolean): ApprovalStatus =>
+  decision === "approved" && editsMade ? "approved_with_edits" : decision;
+
 // The record key prefix for this approval node. Derived across the flow's whole
 // approval set so two steps sharing a label get distinct keys, and derived from
 // the label so the prefix reads as the step name in a report (ADR-040 §5).
@@ -79,6 +85,13 @@ const approvalStepKey = (nodes: FlowNode[], nodeId: string): string => {
   const index = approvalNodes.findIndex((node) => node.id === nodeId);
   return index >= 0 ? keys[index]! : "approval";
 };
+
+// What the approval is about, resolved once per decision.
+interface ResolvedSubject {
+  description: string | null;
+  nodeId: string | null;
+  signatureFieldKey: string | null;
+}
 
 // A committed decision plus how the chat and notification side effects should
 // describe it. Produced inside the transaction, consumed after it commits.
@@ -132,7 +145,20 @@ export class DecideApproval {
     }
 
     const decidedAt = new Date();
-    const recordSnapshot = await this.buildRecord(approval, input, decidedAt);
+    // Resolved once: the record, the attestation and the edit derivation all
+    // need the same subject, and a second resolution could disagree with the
+    // first if the session moved between them.
+    const subject = await this.resolveSubject(approval);
+    const edits = await this.approverEdits(approval, input, subject.nodeId);
+    const status = derivedStatus(input.decision, edits.length > 0);
+    const recordSnapshot = await this.buildRecord({
+      approval,
+      input,
+      decidedAt,
+      status,
+      editedFieldKeys: edits,
+      subject,
+    });
 
     // The concurrency-gated approval update and the session advance/route commit
     // together: a crash between them must never leave a decided approval sitting
@@ -140,7 +166,7 @@ export class DecideApproval {
     // message and notification run only after the commit succeeds, so a
     // rolled-back decision leaves no trace of its side effects.
     const effect = await this.unitOfWork.withTransaction((repositories) =>
-      this.decideWithin(repositories, approval, input, decidedAt, recordSnapshot),
+      this.decideWithin(repositories, approval, input, decidedAt, recordSnapshot, status),
     );
     if (effect.error) return effect;
 
@@ -155,7 +181,7 @@ export class DecideApproval {
       resourceId: approval.id,
       metadata: { decision: input.decision, comment: input.comment ?? null },
     });
-    await this.recordDecisionMessage(decided, input.decision, routedBack, routingError);
+    await this.recordDecisionMessage(decided, routedBack, routingError);
     await this.writeSignature(decided);
     this.notify(decided, input.decision, routedBack);
 
@@ -179,11 +205,15 @@ export class DecideApproval {
   // the five guaranteed keys prefixed by its step key; an approval carrying a
   // signature slot also gets the rendered attestation, stored rather than
   // recomputed so a later change around it can never alter what was signed.
-  private async buildRecord(
-    approval: Approval,
-    input: DecideApprovalInput,
-    decidedAt: Date,
-  ): Promise<Record<string, unknown> | null> {
+  private async buildRecord(parts: {
+    approval: Approval;
+    input: DecideApprovalInput;
+    decidedAt: Date;
+    status: ApprovalStatus;
+    editedFieldKeys: string[];
+    subject: ResolvedSubject;
+  }): Promise<Record<string, unknown> | null> {
+    const { approval, input, decidedAt, status, editedFieldKeys, subject } = parts;
     const existing = approval.recordSnapshot ?? {};
     const stepOutputs =
       input.decision === "approved" ? await this.snapshot(approval.sessionId) : null;
@@ -191,7 +221,6 @@ export class DecideApproval {
     const nodes = await this.flowNodesOfFlow(approval.flowId);
     const stepKey = approvalStepKey(nodes, approval.nodeId);
     const approver = await this.approverIdentity(input.decidedByUserId);
-    const subject = await this.resolveSubject(approval, existing);
 
     const record: Record<string, unknown> = {
       ...existing,
@@ -199,13 +228,17 @@ export class DecideApproval {
       [STEP_KEY]: stepKey,
       ...buildApprovalRecord({
         stepKey,
-        decision: input.decision,
+        // The recorded status, so a reader filtering for "approved but changed
+        // by the approver" tests one key rather than reconstructing it.
+        decision: status,
         approverName: approver.name,
         approverEmail: approver.email,
         decidedAt,
         comment: input.comment ?? null,
         subjectDescription: subject.description,
         subjectNodeId: subject.nodeId,
+        editsMade: editedFieldKeys.length > 0,
+        ...(editedFieldKeys.length > 0 ? { editedFieldKeys } : {}),
         ...(subject.signatureFieldKey ? { signatureFieldKey: subject.signatureFieldKey } : {}),
       }),
     };
@@ -220,7 +253,9 @@ export class DecideApproval {
         approverName: approver.name,
         approverEmail: approver.email,
         approverRole: approver.role,
-        decision: input.decision,
+        // The block names what was recorded, so a document signed by an approver
+        // who also edited it says so on its face.
+        decision: status,
         decidedAt,
         comment: input.comment ?? null,
         subjectDescription: subject.description,
@@ -234,6 +269,37 @@ export class DecideApproval {
       [ATTESTATION_TEXT_KEY]: attestation.text,
       [`${stepKey}.verification_code`]: attestation.verificationCode,
     };
+  }
+
+  // The field keys *this* approver changed on *their own* subject step during
+  // *their* pending window. Edits by the originator before the request, or by a
+  // different approver, do not qualify — the status answers "did the person who
+  // signed this also change it", and nothing else (ADR-045 §4).
+  private async approverEdits(
+    approval: Approval,
+    input: DecideApprovalInput,
+    subjectNodeId: string | null,
+  ): Promise<string[]> {
+    if (input.decision !== "approved" || !this.messages || !subjectNodeId) return [];
+
+    const messages = await this.messages.listBySession(approval.sessionId);
+    if (messages.error) return [];
+
+    const latest = messages.data
+      .filter((message) => message.stepNodeId === subjectNodeId && message.document)
+      .sort((first, second) => second.createdAt.getTime() - first.createdAt.getTime())[0];
+    if (!latest?.document?.editHistory) return [];
+
+    const keys = new Set<string>();
+    for (const edit of latest.document.editHistory) {
+      if (edit.editedByUserId !== input.decidedByUserId) continue;
+      // The pending window opened when the row was raised. An earlier edit by
+      // the same person was made as an ordinary participant, not as the
+      // approver, so it does not earn the status.
+      if (new Date(edit.editedAt) < approval.createdAt) continue;
+      for (const change of edit.changes) keys.add(change.key);
+    }
+    return [...keys];
   }
 
   private async flowNodesOfFlow(flowId: string): Promise<FlowNode[]> {
@@ -257,14 +323,8 @@ export class DecideApproval {
     };
   }
 
-  private async resolveSubject(
-    approval: Approval,
-    existing: Record<string, unknown>,
-  ): Promise<{
-    description: string | null;
-    nodeId: string | null;
-    signatureFieldKey: string | null;
-  }> {
+  private async resolveSubject(approval: Approval): Promise<ResolvedSubject> {
+    const existing = approval.recordSnapshot ?? {};
     const resolved = this.approvalSubject
       ? await this.approvalSubject.execute({ approvalId: approval.id })
       : null;
@@ -294,9 +354,13 @@ export class DecideApproval {
     input: DecideApprovalInput,
     decidedAt: Date,
     recordSnapshot: Record<string, unknown> | null,
+    status: ApprovalStatus,
   ): Promise<Result<DecisionEffect>> {
     const updated = await repositories.approvals.updateIfPending(approval.id, {
-      status: input.decision,
+      // The one place the recorded status can differ from the chosen decision.
+      // Everything downstream still branches on `input.decision`, which keeps
+      // its three values, so nothing about advancement changes.
+      status,
       decidedByUserId: input.decidedByUserId,
       decidedAt,
       comment: input.comment ?? null,
@@ -346,12 +410,11 @@ export class DecideApproval {
   // fail the decision, mirroring the projection above.
   private async recordDecisionMessage(
     approval: Approval,
-    decision: ApprovalDecision,
     routedBack: boolean,
     routingError?: string,
   ): Promise<void> {
     if (!this.messages) return;
-    const summary = this.decisionSummary(decision, routedBack);
+    const summary = this.decisionSummary(approval.status, routedBack);
     const parts = [summary];
     if (approval.comment) parts.push(`Comment: ${approval.comment}`);
     if (routingError) parts.push(routingError);
@@ -368,12 +431,19 @@ export class DecideApproval {
     }
   }
 
-  private decisionSummary(decision: ApprovalDecision, routedBack: boolean): string {
-    if (decision === "approved") return "Approval granted.";
-    if (decision === "changes_requested") return "Changes requested by the approver.";
-    return routedBack
-      ? "Approval rejected — routed back to the originator."
-      : "Approval rejected — the request was closed.";
+  // Reads the recorded status rather than the button pressed, so an approval the
+  // approver also edited says so in the thread the originator is watching.
+  private decisionSummary(status: ApprovalStatus, routedBack: boolean): string {
+    const summary: Record<ApprovalStatus, string> = {
+      pending: "Approval is still awaiting a decision.",
+      approved: "Approval granted.",
+      approved_with_edits: "Approval granted, with edits made by the approver.",
+      changes_requested: "Changes requested by the approver.",
+      rejected: routedBack
+        ? "Approval rejected — routed back to the originator."
+        : "Approval rejected — the request was closed.",
+    };
+    return summary[status];
   }
 
   // `changes_requested` always routes back; `rejected` routes back only when the

@@ -3,7 +3,7 @@
 // domain+shared-only import rule. Bodies stay minimal (names + link) to keep PII
 // out of email.
 
-import type { ApprovalDecision } from "@rbrasier/domain";
+import type { ApprovalStatus } from "@rbrasier/domain";
 import type { EmailContent } from "./templates";
 
 const escapeHtml = (value: string): string =>
@@ -39,26 +39,34 @@ export const buildApprovalRequestedEmail = (input: ApprovalRequestedEmailInput):
   };
 };
 
-// The originator-facing label depends on the routing outcome, not just the raw
-// decision: a routed-back decision (changes requested, or rejected with
-// route-back) reads as "returned for revision"; a rejection that closed the
-// request reads as "declined".
-const decisionLabel = (decision: ApprovalDecision, routedBack: boolean | undefined): string => {
-  if (decision === "approved") return "approved";
-  if (decision === "changes_requested") return "returned for revision";
-  return routedBack ? "returned for revision" : "declined";
+// Exhaustive by type, not by comparison: adding an ApprovalStatus without a
+// label here fails to compile, so no recorded outcome can reach an originator
+// unnamed (ADR-045 §4).
+const STATUS_LABEL: Record<ApprovalStatus, string> = {
+  pending: "still awaiting a decision",
+  approved: "approved",
+  approved_with_edits: "approved with edits",
+  rejected: "declined",
+  changes_requested: "returned for revision",
 };
+
+// The originator-facing label depends on the routing outcome as well as the
+// recorded status: a rejection that routed the session back reads as "returned
+// for revision" rather than "declined", because the work is still live.
+const outcomeLabel = (status: ApprovalStatus, routedBack: boolean | undefined): string =>
+  status === "rejected" && routedBack ? STATUS_LABEL.changes_requested : STATUS_LABEL[status];
 
 export interface ApprovalDecidedEmailInput {
   flowName: string;
-  decision: ApprovalDecision;
+  // The recorded status, so an approval its own approver edited says so.
+  status: ApprovalStatus;
   routedBack?: boolean;
   comment: string | null;
   sessionUrl: string;
 }
 
 export const buildApprovalDecidedEmail = (input: ApprovalDecidedEmailInput): EmailContent => {
-  const label = decisionLabel(input.decision, input.routedBack);
+  const label = outcomeLabel(input.status, input.routedBack);
   const commentLine = input.comment ? [`Comment: ${input.comment}`, ""] : [];
   return {
     subject: `Your '${input.flowName}' approval was ${label}`,

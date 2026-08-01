@@ -7,17 +7,30 @@ export type ApproverSource =
   | "second_level_supervisor"
   | "dynamic";
 
-export type ApprovalStatus = "pending" | "approved" | "rejected" | "changes_requested";
+// What is *recorded*. `approved_with_edits` is derived by the system at decision
+// time, never selected: an approval earns it when the approver who signed it also
+// changed their own subject step while it was pending (ADR-045 §4). A
+// self-declared "approved with edits" could be claimed without editing and
+// withheld after editing, which makes it worthless exactly where it matters.
+export type ApprovalStatus =
+  | "pending"
+  | "approved"
+  | "approved_with_edits"
+  | "rejected"
+  | "changes_requested";
 
-// The three terminal decisions an approver can record. `pending` is excluded —
-// a decision always moves the row out of `pending`.
+// The three terminal decisions an approver can *choose*. `pending` is excluded —
+// a decision always moves the row out of `pending` — and so is
+// `approved_with_edits`, which is not a button. Widening `ApprovalStatus` is
+// therefore free at every branch point, because control flow reads the decision.
 export type ApprovalDecision = "approved" | "rejected" | "changes_requested";
 
 // Every status that means "this approval approved". The single definition, so a
 // caller never has to enumerate the literals itself — an ESLint rule forbids
-// comparing an approval status to a literal outside this file for exactly that
-// reason (ADR-045 §4).
-export const APPROVED_STATUSES: readonly ApprovalStatus[] = ["approved"];
+// comparing an approval status to a literal outside the domain for exactly that
+// reason (ADR-045 §4). A future `status === "approved"` would silently exclude
+// edited approvals, and no compiler would object.
+export const APPROVED_STATUSES: readonly ApprovalStatus[] = ["approved", "approved_with_edits"];
 
 export const isApproved = (status: ApprovalStatus): boolean => APPROVED_STATUSES.includes(status);
 

@@ -1665,6 +1665,175 @@ describe("DecideApproval", () => {
       expect(applied).toEqual([approval.id]);
     });
 
+    describe("approved_with_edits", () => {
+      // A document on the subject step whose edit history the derivation reads.
+      const seedEditedDocument = async (
+        messages: InMemoryMessages,
+        edits: Array<{ editedByUserId: string; editedAt: string; keys: string[] }>,
+      ) => {
+        await messages.create({
+          sessionId: "session-1",
+          role: "assistant",
+          content: "Here is the draft.",
+          stepNodeId: "node-draft",
+          document: {
+            filename: "instrument.docx",
+            storagePath: "generated/session-1/instrument-r1.docx",
+            summary: null,
+            generatedAt: "2026-08-01T11:00:00.000Z",
+            editHistory: edits.map((edit) => ({
+              editedAt: edit.editedAt,
+              editedByUserId: edit.editedByUserId,
+              storagePath: "generated/session-1/instrument-r1.docx",
+              changes: edit.keys.map((key) => ({ key, previousValue: "a", newValue: "b" })),
+            })),
+          },
+        });
+      };
+
+      const decideWith = async (
+        edits: Array<{ editedByUserId: string; editedAt: string; keys: string[] }>,
+        decision: "approved" | "rejected" = "approved",
+      ) => {
+        const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+        const approval = await seedConfirmed(approvals);
+        const messages = new InMemoryMessages();
+        await seedEditedDocument(messages, edits);
+        const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users, messages });
+
+        await sut.execute({
+          approvalId: approval.id,
+          decidedByUserId: "manager-1",
+          decision,
+          routeBack: true,
+        });
+
+        return approvals.rows.get(approval.id)!;
+      };
+
+      const laterThanRaise = new Date(Date.now() + 60_000).toISOString();
+      const beforeRaise = new Date(Date.now() - 60_000).toISOString();
+
+      it("records approved_with_edits when the approver edited their own subject step", async () => {
+        const decided = await decideWith([
+          { editedByUserId: "manager-1", editedAt: laterThanRaise, keys: ["commencement_date"] },
+        ]);
+
+        expect(decided.status).toBe("approved_with_edits");
+        expect(decided.recordSnapshot!["manager_review.decision"]).toBe("approved_with_edits");
+        expect(decided.recordSnapshot!["manager_review.edits_made"]).toBe(true);
+        expect(decided.recordSnapshot!["manager_review.edited_field_keys"]).toEqual([
+          "commencement_date",
+        ]);
+      });
+
+      it("records plain approved when the approver changed nothing", async () => {
+        const decided = await decideWith([]);
+
+        expect(decided.status).toBe("approved");
+        expect(decided.recordSnapshot!["manager_review.edits_made"]).toBe(false);
+      });
+
+      it("does not count the originator's edits", async () => {
+        const decided = await decideWith([
+          { editedByUserId: "operator-1", editedAt: laterThanRaise, keys: ["amount"] },
+        ]);
+
+        expect(decided.status).toBe("approved");
+      });
+
+      it("does not count another approver's edits", async () => {
+        const decided = await decideWith([
+          { editedByUserId: "finance-1", editedAt: laterThanRaise, keys: ["amount"] },
+        ]);
+
+        expect(decided.status).toBe("approved");
+      });
+
+      it("does not count the same person's edits made before the approval was raised", async () => {
+        const decided = await decideWith([
+          { editedByUserId: "manager-1", editedAt: beforeRaise, keys: ["amount"] },
+        ]);
+
+        expect(decided.status).toBe("approved");
+      });
+
+      it("says so in the thread the originator is watching", async () => {
+        const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+        const approval = await seedConfirmed(approvals);
+        const messages = new InMemoryMessages();
+        await seedEditedDocument(messages, [
+          { editedByUserId: "manager-1", editedAt: laterThanRaise, keys: ["amount"] },
+        ]);
+        const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users, messages });
+
+        await sut.execute({
+          approvalId: approval.id,
+          decidedByUserId: "manager-1",
+          decision: "approved",
+        });
+
+        const systemMessage = messages.rows.find(
+          (row) => row.role === "system" && row.content.includes("Approval granted"),
+        );
+        expect(systemMessage?.content).toContain("edits made by the approver");
+      });
+
+      it("never widens a rejection", async () => {
+        const decided = await decideWith(
+          [{ editedByUserId: "manager-1", editedAt: laterThanRaise, keys: ["amount"] }],
+          "rejected",
+        );
+
+        expect(decided.status).toBe("rejected");
+      });
+
+      // A regression guard: control flow reads `input.decision`, which keeps its
+      // three values, so the widened status must not change advancement at all.
+      it("advances the session exactly as a plain approval does", async () => {
+        const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+        const approval = await seedConfirmed(approvals);
+        const messages = new InMemoryMessages();
+        await seedEditedDocument(messages, [
+          { editedByUserId: "manager-1", editedAt: laterThanRaise, keys: ["amount"] },
+        ]);
+        const edges = new InMemoryFlowEdges();
+        edges.rows.push({
+          id: "edge-1",
+          flowId: "flow-1",
+          fromNodeId: "node-appr",
+          toNodeId: "node-next",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        const sut = new DecideApproval(
+          unitOfWorkFor(approvals, sessions),
+          approvals,
+          sessions,
+          edges,
+          stepOutputs,
+          new RecordingAuditLogger(),
+          undefined,
+          messages,
+          users,
+          nodes,
+          sha256Hex,
+          new ResolveApprovalSubject(approvals, nodes, stepOutputs, messages),
+        );
+
+        const result = await sut.execute({
+          approvalId: approval.id,
+          decidedByUserId: "manager-1",
+          decision: "approved",
+        });
+
+        expect(approvals.rows.get(approval.id)!.status).toBe("approved_with_edits");
+        expect(result.data?.advanced).toBe(true);
+        expect(result.data?.newNodeId).toBe("node-next");
+        expect(sessions.rows.get("session-1")?.currentNodeId).toBe("node-next");
+      });
+    });
+
     it("keeps the decision when the re-render fails", async () => {
       const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
       const approval = await seedConfirmed(approvals);

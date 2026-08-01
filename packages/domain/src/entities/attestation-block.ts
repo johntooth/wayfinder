@@ -9,7 +9,7 @@
 // append-only audit log (ADR-033). Nothing here may be described to users as a
 // qualified or PKI signature.
 
-import type { ApprovalStatus } from "./approval";
+import { isApproved, type ApprovalStatus } from "./approval";
 import { canonicalAuditString, type Sha256Hex } from "./audit-hash";
 
 export interface AttestationInput {
@@ -35,6 +35,7 @@ export interface AttestationBlock {
 const DECISION_LABEL: Record<ApprovalStatus, string> = {
   pending: "Pending",
   approved: "Approved",
+  approved_with_edits: "Approved with edits",
   rejected: "Rejected",
   changes_requested: "Changes requested",
 };
@@ -87,7 +88,7 @@ export const buildAttestationBlock = (
 
   // "Approved by" is only true of an approval. A rejection carrying that label
   // would misread at a glance, which is the one thing an attestation must not do.
-  const byLabel = input.decision === "approved" ? "Approved by:  " : "Decided by:   ";
+  const byLabel = isApproved(input.decision) ? "Approved by:  " : "Decided by:   ";
 
   const lines = [`${byLabel} ${identity}`];
   if (input.approverRole) lines.push(`Role:          ${input.approverRole}`);
