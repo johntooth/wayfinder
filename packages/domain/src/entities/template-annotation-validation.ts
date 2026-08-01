@@ -10,6 +10,7 @@ const MODIFIER_VOCABULARY = [
   "email",
   "yesno",
   "narrative",
+  "approval",
   "options",
   "multi-options",
   "multiple",

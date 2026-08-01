@@ -7,6 +7,7 @@ import {
   parseTemplateField,
   parseTemplateFields,
   templateFieldToLine,
+  validateTemplateFieldValue,
 } from "./template-field";
 
 describe("deriveFieldKey", () => {
@@ -491,6 +492,104 @@ describe("repeating group fields", () => {
       const parsed = parseTemplateField("#Risk Section");
       expect(parsed.error).toBeUndefined();
       expect(templateFieldToLine(parsed.data!)).toBe("#Risk Section");
+    });
+  });
+
+  describe("signature fields", () => {
+    it("parses an (approval) tag as an optional signature field", () => {
+      const result = parseTemplateField("Delegate Signature (approval)");
+
+      expect(result.error).toBeUndefined();
+      expect(result.data).toMatchObject({
+        key: "delegate_signature",
+        label: "Delegate Signature",
+        type: "signature",
+        optional: true,
+      });
+    });
+
+    it("rejects (approval) combined with another type keyword", () => {
+      expect(parseTemplateField("Signature (approval) (text)").error?.code).toBe(
+        "VALIDATION_FAILED",
+      );
+      expect(parseTemplateField("Signature (date) (approval)").error?.code).toBe(
+        "VALIDATION_FAILED",
+      );
+      expect(parseTemplateField("Signature (approval) (narrative)").error?.code).toBe(
+        "VALIDATION_FAILED",
+      );
+    });
+
+    it("rejects (approval) combined with an options list", () => {
+      expect(parseTemplateField("Signature (approval) (options: A, B)").error?.code).toBe(
+        "VALIDATION_FAILED",
+      );
+      expect(parseTemplateField("Signature (multi-options: A, B) (approval)").error?.code).toBe(
+        "VALIDATION_FAILED",
+      );
+    });
+
+    it("rejects length, numeric and multiple annotations on a signature", () => {
+      expect(parseTemplateField("Signature (approval) (maxlen: 200)").error?.code).toBe(
+        "VALIDATION_FAILED",
+      );
+      expect(parseTemplateField("Signature (approval) (min: 1)").error?.code).toBe(
+        "VALIDATION_FAILED",
+      );
+      expect(parseTemplateField("Signature (max: 3) (approval)").error?.code).toBe(
+        "VALIDATION_FAILED",
+      );
+      expect(parseTemplateField("Signature (approval) (multiple)").error?.code).toBe(
+        "VALIDATION_FAILED",
+      );
+    });
+
+    it("rejects a signature inside a repeating group", () => {
+      const result = parseTemplateFields([
+        "#Findings (repeat)",
+        "Detail",
+        "Signature (approval)",
+        "/Findings",
+      ]);
+
+      expect(result.error?.code).toBe("VALIDATION_FAILED");
+    });
+
+    it("allows a signature beside ordinary fields at the top level", () => {
+      const result = parseTemplateFields([
+        "Client Name",
+        "Delegate Signature (approval)",
+        "Finance Signature (approval)",
+      ]);
+
+      expect(result.error).toBeUndefined();
+      expect(result.data?.map((field) => [field.key, field.type])).toEqual([
+        ["client_name", "text"],
+        ["delegate_signature", "signature"],
+        ["finance_signature", "signature"],
+      ]);
+    });
+
+    it("round-trips back to the (approval) annotation, not the type name", () => {
+      const parsed = parseTemplateField("Delegate Signature (approval)");
+      expect(parsed.error).toBeUndefined();
+
+      expect(templateFieldToLine(parsed.data!)).toBe("Delegate Signature (approval)");
+    });
+
+    it("describes a signature as system-filled so it is never asked for", () => {
+      const parsed = parseTemplateField("Delegate Signature (approval)");
+
+      expect(describeTemplateFieldFormat(parsed.data!)).toContain("approval");
+    });
+
+    it("accepts an empty value and refuses a typed one", () => {
+      const parsed = parseTemplateField("Delegate Signature (approval)");
+
+      expect(validateTemplateFieldValue(parsed.data!, "")).toEqual({ data: "" });
+      expect(validateTemplateFieldValue(parsed.data!, "Jane Doe").error?.code).toBe(
+        "VALIDATION_FAILED",
+      );
     });
   });
 

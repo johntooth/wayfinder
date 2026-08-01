@@ -29,6 +29,11 @@ export interface Approval {
   readonly decidedByUserId: string | null;
   readonly decidedAt: Date | null;
   readonly comment: string | null;
+  // Frozen at decision time and never recomputed (ADR-040 §3). Carries the
+  // session's `stepOutputs` alongside a flat, dot-separated record whose keys are
+  // prefixed by the approval step's key — `<step_key>.decision`,
+  // `.approver_name`, `.approver_email`, `.decided_at` and `.comment` are the
+  // guaranteed minimum. Built by `buildApprovalRecord` in `approval-record.ts`.
   readonly recordSnapshot: Record<string, unknown> | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
