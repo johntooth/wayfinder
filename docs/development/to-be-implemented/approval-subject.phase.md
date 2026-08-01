@@ -53,8 +53,8 @@ See the PRD.
   attributed and announced.
 - `ApprovalStatus` gains **`approved_with_edits`**, derived at decision time when
   that approver edited their own subject step while pending. The approver's input
-  enum stays at three values; a shared `isApproved(status)` predicate replaces
-  every `=== "approved"` equality test.
+  enum stays at three values, so no existing branch changes; an `isApproved`
+  predicate and an ESLint rule keep future readers safe.
 
 ## 3. Non-goals
 
@@ -98,6 +98,7 @@ No schema change.
 | domain | `packages/domain/src/entities/node-output.ts` | `nodeFieldSet` filters `signature` out; `validateStructuredFieldSet` rejects it as it does `section` |
 | domain | `packages/domain/src/entities/approval.ts` | document the step-prefixed `recordSnapshot` shape (no new column); add `approved_with_edits` to `ApprovalStatus` (not to `ApprovalDecision`) and an `isApproved(status)` predicate beside it |
 | adapters | `packages/adapters/src/db/schema/wayfinder.ts` | add `approved_with_edits` to the `status` text-column enum list. TS-only refinement, no CHECK constraint — **no migration** |
+| root | `eslint.config.mjs` | `no-restricted-syntax` rejecting literal comparison against an approval status outside the domain, pointing at `isApproved` |
 | domain | new — attestation block builder | pure: approval record → block text + verification code, canonicalised as in `audit-hash.ts` |
 | application | approval-raise use-case (`packages/application/src/use-cases/session/…` approval) | resolve subject: step snapshot or one-call custom summary; attach to the pending approval |
 | application | `packages/application/src/use-cases/approvals/list-pending-approvals-with-context.ts` | resolve `previousStep` from `approvalSubject`, not `advancedFrom`; resolve the document at read time so the current revision is shown |
@@ -182,16 +183,25 @@ No schema change.
    edit-then-approve hashes the post-edit state; a later edit leaves an
    already-decided `recordSnapshot` untouched.
 8a. **Domain + application — `approved_with_edits`.** Add the status variant and
-   the `isApproved` predicate, then convert **every** `=== "approved"` site to it
-   (`decide-approval.ts:89,143,200`, `approval-templates.ts:47`,
-   `approvals/_content.tsx`, and any found by a fresh grep — the compiler will not
-   flag a missed one). Derive the status at decision time from that approver's
-   edits to their own subject step during their pending window; write
-   `.edits_made` and `.edited_field_keys` into the record. Tests: edit-then-approve
-   yields `approved_with_edits`; approve-without-editing yields `approved`;
-   originator edits and another approver's edits do **not** qualify; **an
-   `approved_with_edits` approval advances the session**; the router still accepts
-   exactly three decision values.
+   an `isApproved` predicate beside it. **Do not go converting `=== "approved"`
+   sites** — every one of them reads `input.decision`, which keeps its three
+   values, and nothing compares `approval.status` to `"approved"`. Confirm that
+   with a fresh grep rather than assuming; if the grep still comes back empty, the
+   only change is that `updateIfPending({ status: input.decision })` becomes a
+   derivation. Derive the status from that approver's edits to their own subject
+   step during their pending window; write `.edits_made` and `.edited_field_keys`
+   into the record. Tests: edit-then-approve yields `approved_with_edits`;
+   approve-without-editing yields `approved`; originator edits and another
+   approver's edits do **not** qualify; an `approved_with_edits` approval advances
+   the session (a regression guard, expected to pass unchanged); the router still
+   accepts exactly three decision values.
+8b. **Lint — keep it that way.** Add an ESLint `no-restricted-syntax` rule
+   rejecting literal comparison against an approval status outside the domain,
+   pointing offenders at `isApproved`. Follow the `no-restricted-imports` pattern
+   already in `eslint.config.mjs`. Make the status → display/notification mapping
+   exhaustive with a `never` check. This is what actually resolves the risk: a
+   future `status === "approved"` becomes a lint failure instead of a silent
+   exclusion of edited approvals.
 9. **Adapters — repository + xlsx.** Persist/read the extended snapshot via jsonb;
    round-trip subject and record keys with no schema change. xlsx upload rejects
    `(approval)` with a clear message.
@@ -255,7 +265,10 @@ Mirror PRD §10:
       `approved_with_edits`; approving without editing produces `approved`; the
       originator's or another approver's edits do not qualify.
 - [ ] An `approved_with_edits` approval advances the session exactly as
-      `approved` does, asserted directly.
+      `approved` does (regression guard — expected to pass without touching the
+      advance path).
+- [ ] An ESLint rule rejects a literal comparison against an approval status
+      outside the domain, verified by a fixture that fails lint.
 - [ ] "Approved with edits" appears in the approvals UI, the decision chat message
       and the notification; `<step_key>.decision` carries it in the record.
 - [ ] The `approval.decide` router still accepts exactly three decision values.
@@ -297,9 +310,10 @@ Mirror PRD §10:
   edit" note (ADR-045 §5).
 - Step 7 changes behaviour for anyone depending on the current
   cancel-on-second-change-request; release-note material.
-- The `approved_with_edits` conversion (step 8a) is the highest-risk edit in the
-  phase: `=== "approved"` sites still compile when missed and simply stop being
-  true, so an edited approval would silently fail to advance. Grep fresh rather
-  than trusting the listed line numbers, and assert the advance path.
+- `approved_with_edits` costs nothing against today's code (step 8a) — control
+  flow reads `decision`, not `status`. The exposure is future code, which the
+  lint rule in step 8b exists to close. If the fresh grep in 8a *does* turn up a
+  `approval.status === "approved"`, that finding changes the shape of 8a and
+  should be raised before proceeding.
 - Downstream consumers of `status` (n8n record export, ADR-020) will see a new
   value; release-note material.

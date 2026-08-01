@@ -98,13 +98,40 @@ Approve / Request changes. Only the recorded status gains a value.
 Drizzle `enum` on it is a TypeScript-level refinement, and there is no CHECK
 constraint in `drizzle/`. Adding the value is additive at the database.
 
-**The hazard is the `=== "approved"` branches.** Advancement is gated on an
-equality test (`decide-approval.ts:143`), as are the notification copy
-(`approval-templates.ts:47`), the decision summary (`:200`) and the approvals UI.
-Every one becomes a predicate — `isApproved(status)`, covering both approved
-states — because missing a single site means an approved-with-edits session
-silently refuses to advance. The predicate lives in the domain beside the type so
-there is one definition to get right.
+**Existing control flow is unaffected, because it reads the decision, not the
+status.** This is the reason the widening is cheap, and it is worth stating
+explicitly so nobody "fixes" what is already correct:
+
+| Site | Reads | Affected |
+| ---- | ----- | -------- |
+| `decide-approval.ts:143` — **advancement** | `input.decision` | no |
+| `decide-approval.ts:89` — snapshot | `input.decision` | no |
+| `decide-approval.ts:200` — decision summary | `decision` param | no |
+| `approval-templates.ts:47` — notification copy | `decision` param | no |
+| `decide-approval.ts:81` — decided guard | `status !== "pending"` | no — correct with a fourth decided value |
+| repository queries | `status = 'pending'` | no |
+
+Nothing in the codebase compares `approval.status` to `"approved"`. Since
+`ApprovalDecision` keeps its three values, an approval carrying edits advances
+exactly as it does today. The only change is that `updateIfPending({ status:
+input.decision })` stops being a direct assignment and becomes a derivation.
+
+**The risk is future code, so it is guarded structurally rather than by
+convention.** A `status === "approved"` written later would silently exclude
+edited approvals, and no compiler would object. Three defences, in order of how
+much work they do:
+
+1. An ESLint `no-restricted-syntax` rule forbidding literal comparison against an
+   approval status outside the domain. This is the one that actually holds — it
+   turns a future silent bug into a build failure, permanently. The config
+   already restricts imports for architectural reasons (`eslint.config.mjs`), so
+   the mechanism is established.
+2. `isApproved(status)` in the domain beside the type, as the single definition
+   of "this approval approved". A helper for future readers — **not** a migration;
+   there is nothing to convert today.
+3. The status → display/notification mapping is exhaustive, with a `never` check,
+   so a fifth value cannot be added without every rendering site failing to
+   compile.
 
 ### 5. The attestation binds the post-edit state
 
@@ -187,12 +214,10 @@ the history to learn that the signature predates an edit.
   a pending approval for this user on this session, and is this its subject
   step?) rather than a static ownership test. More surface to get wrong, and it
   needs direct test coverage.
-- A fourth `ApprovalStatus` value reaches every `=== "approved"` branch (§4).
-  These are equality tests scattered across application, notification and web
-  code, and the compiler will **not** flag a missed one — an untouched
-  `=== "approved"` still compiles and just stops being true. Each site must be
-  converted to the shared predicate deliberately, with a test that an
-  edited approval advances the session.
+- A fourth `ApprovalStatus` value is a type the compiler cannot police at
+  comparison sites: a future `status === "approved"` would silently exclude
+  edited approvals. No existing site has this shape (§4), so the cost is a lint
+  rule to keep it that way, not a conversion.
 - Anything outside this repo reading `status` — an exported record, an n8n
   record-export payload (ADR-020) — will see a value it has not met before.
 - Adding the guard to `getFields` / `updateFields` may break any caller that
