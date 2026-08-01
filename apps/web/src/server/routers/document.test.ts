@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@rbrasier/domain";
 import type { Container } from "@/lib/container";
 import { createCallerFactory, router, type TrpcContext } from "../trpc";
 import { documentRouter } from "./document";
@@ -40,7 +40,9 @@ const node = {
   },
 };
 
-const session = { id: "sess-1", status: "active" };
+const session = { id: "sess-1", status: "active", userId: "user-1" };
+
+const flow = { id: "flow-1", ownerUserId: "user-1", visibility: { kind: "private" } };
 
 const makeContainer = (overrides: Record<string, unknown> = {}): Container =>
   ({
@@ -50,15 +52,31 @@ const makeContainer = (overrides: Record<string, unknown> = {}): Container =>
       sessions: { findById: vi.fn().mockResolvedValue(ok(session)) },
       flowNodes: { findById: vi.fn().mockResolvedValue(ok(node)) },
       sessionStepOutputs: { findByMessageId: vi.fn().mockResolvedValue(ok(stepOutput)) },
-      approvals: { hasRecordedSnapshot: vi.fn().mockResolvedValue(ok(false)) },
+      approvals: {
+        hasRecordedSnapshot: vi.fn().mockResolvedValue(ok(false)),
+        listBySession: vi.fn().mockResolvedValue(ok([])),
+      },
+      users: { findById: vi.fn().mockResolvedValue(ok({ id: "user-1", email: "a@b.c" })) },
     },
     useCases: {
+      getSession: { execute: vi.fn().mockResolvedValue(ok({ session, flow, messages: [] })) },
+      resolveSessionAccess: {
+        execute: vi.fn().mockResolvedValue(ok({ role: "owner", canSend: true, readOnly: false })),
+      },
       updateDocumentFields: {
         execute: vi.fn().mockResolvedValue(ok({ document: message.document })),
       },
     },
     ...overrides,
   }) as unknown as Container;
+
+// Simulates a caller the session does not admit — resolveSessionAccess is the
+// single place that decides, so denying there denies both procedures.
+const denyAccess = (container: Container): void => {
+  (container.useCases.resolveSessionAccess.execute as ReturnType<typeof vi.fn>).mockResolvedValue(
+    err(domainError("FORBIDDEN", "You do not have access to this session.")),
+  );
+};
 
 const contextWith = (container: Container): TrpcContext => ({
   container,
@@ -101,6 +119,61 @@ describe("documentEditability", () => {
       hasSnapshot: true,
     });
     expect(result.editable).toBe(false);
+  });
+});
+
+describe("document field authorisation", () => {
+  it("rejects getFields for a caller with no access to the message's session", async () => {
+    const container = makeContainer();
+    denyAccess(container);
+    const caller = createCaller(contextWith(container));
+
+    await expect(
+      caller.document.getFields({ messageId: "11111111-1111-1111-1111-111111111111" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("rejects updateFields for a caller with no access to the message's session", async () => {
+    const container = makeContainer();
+    denyAccess(container);
+    const caller = createCaller(contextWith(container));
+
+    await expect(
+      caller.document.updateFields({
+        messageId: "11111111-1111-1111-1111-111111111111",
+        values: { supplier_name: "New Co" },
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(container.useCases.updateDocumentFields.execute).not.toHaveBeenCalled();
+  });
+
+  it("allows getFields for a read-only participant", async () => {
+    const container = makeContainer();
+    (container.useCases.resolveSessionAccess.execute as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok({ role: "viewer", canSend: false, readOnly: true }),
+    );
+    const caller = createCaller(contextWith(container));
+
+    const result = await caller.document.getFields({
+      messageId: "11111111-1111-1111-1111-111111111111",
+    });
+
+    expect(result.fields).toHaveLength(2);
+  });
+
+  it("rejects updateFields for a read-only participant", async () => {
+    const container = makeContainer();
+    (container.useCases.resolveSessionAccess.execute as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok({ role: "viewer", canSend: false, readOnly: true }),
+    );
+    const caller = createCaller(contextWith(container));
+
+    await expect(
+      caller.document.updateFields({
+        messageId: "11111111-1111-1111-1111-111111111111",
+        values: { supplier_name: "New Co" },
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });
 
