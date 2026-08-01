@@ -99,7 +99,10 @@ only discover it when a user cannot sign in.
 | `isAtLeastOneMethodEnabled` | `packages/domain/src/entities/runtime-config.ts` | existing | Extended to count PKI, but only when usable. |
 | `PkiCertAdapter` | `packages/adapters/src/auth/pki-cert-adapter.ts` | existing | Session TTL resolved per request instead of at construction. |
 | `admin_system_settings` | `packages/adapters/src/db/schema/wayfinder.ts` | existing | Stores the extended `auth_config` JSON row. No schema change. |
+| `EnvDefaults` | `packages/adapters/src/config/runtime-config-defaults.ts` | existing | Gains a `pki` group — `authMethodNamesPki`, `hasTrustedProxies`, `sessionTtlHours`. The single point at which the environment enters config resolution, and it carries a **boolean**, never the addresses. |
+| `RuntimeConfigStore.isPkiEnvConfigured()` | `packages/adapters/src/config/runtime-config-store.ts` | new | The one accessor the router, the PKI probe and the lockout guard read the environment gate through. |
 | `PKI_TRUSTED_PROXY_IPS` | environment | existing | Unchanged. Read-only precondition. |
+| `PKI_SESSION_TTL_HOURS` | environment | existing | Degrades to a legacy seed for `pki.sessionTtlHours`, mirroring `AUTH_METHOD`, so a deployment that tuned the TTL keeps it across the upgrade. |
 | `ConnectivityTarget` | `packages/domain/src/entities/connectivity.ts` | existing | Gains `auth-entra`, `auth-pki`, `auth-email-password`. The existing `entra` target is left alone — see §12. |
 | `probeAuthEntra` / `probeAuthPki` / `probeAuthEmailPassword` | `packages/adapters/src/health/connectivity-probes.ts` | new | One per method, following `probeAiConnectivity`. |
 | `WizardRequirement` | `apps/web/src/components/onboarding/wizard-requirement.tsx` | existing | Reused per enabled method. No component change expected. |
@@ -145,7 +148,7 @@ only discover it when a user cannot sign in.
 | `/admin/settings` → Authentication card | Test buttons per enabled method, driven by the same shared `useConnectivity()` controller the storage and AI cards already use. |
 | `/login` | "Sign in with your certificate" control when PKI is enabled. |
 | Unauthenticated page requests | Always redirect to `/login`; the `AUTH_METHOD` branch in `middleware.ts` is removed. |
-| `/api/auth/cert` | 403 when PKI is disabled in config (replacing a container-presence 404). |
+| `/api/auth/cert` | 403 when PKI is not **usable** — disabled, or enabled with the environment gate unsatisfied (replacing a container-presence 404). |
 
 ## 8. Database changes
 
@@ -172,8 +175,9 @@ of the older ADR is not misled. ADR-042 records:
   list is env-only. Entra's client secret is safe in the DB because leaking it
   does not grant impersonation; this value is not equivalent.
 - **The middleware simplification** and its user-visible consequence (§12).
-- That `AUTH_METHOD` degrades to a **legacy fallback** seeding the initial
-  `pkiEnabled` default.
+- That `AUTH_METHOD` and `PKI_SESSION_TTL_HOURS` degrade to **legacy fallbacks**,
+  seeding the initial `pkiEnabled` and `pki.sessionTtlHours` defaults and
+  deciding nothing thereafter.
 
 ## 10. Acceptance criteria
 
@@ -183,10 +187,14 @@ of the older ADR is not misled. ADR-042 records:
       is satisfied; a config with PKI as the sole enabled method and no
       `PKI_TRUSTED_PROXY_IPS` is rejected as zero-usable-methods.
 - [ ] `RuntimeConfigStore.getAuthConfig()` defaults `pkiEnabled` from
-      `AUTH_METHOD` naming PKI, so an existing deployment upgrades with no env
-      change and no admin action.
+      `AUTH_METHOD` naming PKI and `pki.sessionTtlHours` from
+      `PKI_SESSION_TTL_HOURS`, so an existing deployment upgrades with no env
+      change, no admin action, and its configured TTL intact.
 - [ ] Reading an `auth_config` row written before this change yields the new
       fields at their defaults rather than `undefined`.
+- [ ] The environment reaches config resolution only through `EnvDefaults.pki`
+      and `RuntimeConfigStore.isPkiEnvConfigured()`; no router, probe or
+      component reads `process.env.PKI_TRUSTED_PROXY_IPS` directly.
 - [ ] `settings.getAuthConfig` returns `pki.envConfigured` as a boolean and
       **never** returns the trusted-proxy IP values in any form.
 - [ ] `settings.setAuthConfig` rejects `pkiEnabled: true` when the environment
@@ -201,9 +209,20 @@ of the older ADR is not misled. ADR-042 records:
 - [ ] With PKI enabled, `/login` shows "Sign in with your certificate" and a
       certificate presented through the trusted proxy creates a session.
 - [ ] With PKI and Email + Password both enabled, `/login` shows both controls.
-- [ ] `/api/auth/cert` returns 403 when PKI is disabled in config.
+- [ ] `/api/auth/cert` returns 403 when PKI is disabled in config, **and** when
+      it is enabled with `PKI_TRUSTED_PROXY_IPS` absent — the check runs before
+      the adapter, so the dropped-variable case is a 403 rather than a 400 from
+      the adapter's error path.
+- [ ] `PkiCertAdapter` constructs with an empty trusted-proxy list and returns an
+      `INFRA_FAILURE` Result per request instead of throwing; no new
+      `DomainErrorCode` is introduced.
 - [ ] `middleware.ts` no longer reads `AUTH_METHOD`; an unauthenticated request
       to a protected route redirects to `/login` in every configuration.
+- [ ] The `AuthMethod` union no longer carries `pki` or `pki-and-email-password`,
+      and no code path consults `AUTH_METHOD` beyond seeding the `pkiEnabled`
+      default.
+- [ ] Boot logs a warning when `AUTH_METHOD` names PKI while the resolved config
+      has `pkiEnabled` false.
 - [ ] `ConnectivityTarget` gains `auth-entra`, `auth-pki` and
       `auth-email-password`; the existing `entra` (Graph/directory) target is
       unchanged and still probes `User.Read.All`.
@@ -255,8 +274,10 @@ of the older ADR is not misled. ADR-042 records:
   maintainer chose that base with the trade-off stated. Recorded so it is a
   decision on the record rather than an oversight.
 - **Silent contradiction.** After the upgrade, `AUTH_METHOD` may name PKI while
-  the DB says disabled. Decide during build whether to log a warning at boot; a
-  silent contradiction is harder to debug than a log line.
+  the DB says disabled. **Resolved:** boot logs a warning when the two disagree —
+  a silent contradiction is harder to debug than a log line. The inert `pki`
+  arms of the `AuthMethod` union are deleted in the same pass, so nothing else
+  still looks like it selects an auth method from the environment.
 - **Depends on the `GET` fix.** The `/login` control is a plain navigation to
   `/api/auth/cert`, which answered 405 until PR #209. This phase must not start
   until #209 is on the base branch.
