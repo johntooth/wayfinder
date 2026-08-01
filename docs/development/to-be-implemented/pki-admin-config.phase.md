@@ -5,7 +5,8 @@
 - **Base branch**: `release/alpha-2` — chosen by the maintainer. See §9 for the
   risk this carries; `/doc-review` should weigh it rather than assume it.
 - **PRD**: `docs/development/prd/pki-admin-config.prd.md`
-- **ADR**: supersedes ADR-025 §5 ("PKI stays as-is"). Needs ADR-042 — see §7.
+- **ADR**: `docs/development/adr/042-pki-under-runtime-auth-config.adr.md`,
+  superseding ADR-025 §5 ("PKI stays as-is").
 - **Depends on**:
   - **PR #209** — `/api/auth/cert` must answer `GET` before the login-page
     button can work. It is a plain navigation, not a form post. Do not start
@@ -79,7 +80,39 @@ disabled input is a UI affordance, not an authorisation check.
 | apps/web | `app/api/auth/cert/route.ts` | Return **403** when `pkiEnabled` is false, replacing the container-presence 404. |
 | apps/web | `app/(auth)/login/page.tsx` | Render "Sign in with your certificate" → `/api/auth/cert?redirect=…` when `enabledAuthMethods.pki`. |
 | apps/web | `server/routers/settings.ts` | Extend `authConfigInputSchema`; `getAuthConfig` returns `pki.envConfigured: boolean`; `enabledAuthMethods` gains `pki`. |
-| apps/web | `components/settings/auth-methods-card.tsx` | The three-state PKI row from §3. |
+| apps/web | `components/settings/auth-methods-card.tsx` | The three-state PKI row from §3, plus a Test button per enabled method. |
+| domain | `entities/connectivity.ts` | `ConnectivityTarget` gains `auth-entra`, `auth-pki`, `auth-email-password`. Leave the existing `entra` target alone (§4a). |
+| adapters | `health/connectivity-probes.ts` | `probeAuthEntra`, `probeAuthPki`, `probeAuthEmailPassword`. |
+| adapters | `health/composite-connectivity-tester.ts` | Route the three new targets. |
+| apps/web | `components/onboarding/setup-wizard.tsx` | A `WizardRequirement` per **enabled** method; extend `requiredReady` (currently storage + AI only, line 80). |
+
+## 4a. Per-method sign-in tests
+
+ADR-041 §2 requires a live Test before a wizard step counts as done. That rule
+is applied to storage and AI only — authentication renders ungated, so setup can
+finish with an enabled, broken sign-in method. This phase closes that.
+
+One target per method, not one aggregate: the operator needs to know *which*
+method failed.
+
+| Target | Verifies |
+| ------ | -------- |
+| `auth-entra` | OIDC discovery doc from `{authority}/{tenantId}/v2.0/.well-known/openid-configuration`, then a client-credentials token request. |
+| `auth-pki` | `PKI_TRUSTED_PROXY_IPS` parses to ≥1 valid address, `pkiEnabled` true, cert route mounted. |
+| `auth-email-password` | Credential provider enabled on the built instance, and ≥1 account carries a password. |
+
+**Do not reuse the existing `entra` target.** It probes Graph `/users` and needs
+the `User.Read.All` application permission, which serves the people-directory
+feature — sign-in needs none of it. A registration configured correctly for
+sign-in only would fail it while sign-in works. Gating the wizard on that probe
+would block setup on a permission the login flow never uses.
+
+**`auth-pki` must not overstate itself.** The app is behind the proxy and cannot
+originate a certificate handshake, so this is a configuration check. Its success
+message says so.
+
+Only **enabled** methods are tested and gate. That is also the escape hatch when
+a probe fails transiently: turning the method off unblocks the wizard.
 
 `getAuthConfig` returns **only the boolean** `envConfigured` — never the IP list
 itself. The client has no business knowing the trust anchor's contents, and an
@@ -106,17 +139,21 @@ would leave zero *usable* methods, with a message naming what is missing.
 JSON blob need no DDL. Reads of rows written before this phase must tolerate the
 absent keys and default them — cover it with a test.
 
-## 7. ADR required
+## 7. ADR — written
 
-ADR-025 §5 states "The PKI / client-certificate path remains env-configured and
+ADR-025 §5 stated "The PKI / client-certificate path remains env-configured and
 outside the admin card this phase… Bringing PKI under the same card is future
-work." This phase *is* that work, so §5 must not be left standing as current
+work." This phase *is* that work, so §5 could not be left standing as current
 guidance.
 
-Write **ADR-042 — PKI under runtime auth config**, superseding ADR-025 §5, and
-record specifically: the env/DB split in §2, why the trust anchor does not move,
-and the middleware simplification in §8. Amending ADR-025 in place is the wrong
-move — the reasoning that made §5 correct at the time should stay readable.
+**[ADR-042 — PKI Under Runtime Auth Config, and Per-Method Sign-In
+Verification](../adr/042-pki-under-runtime-auth-config.adr.md)** supersedes it,
+recording the env/DB split (§2), why the trust anchor does not move, the
+middleware simplification (§8), and the per-method wizard tests (§4a).
+
+ADR-025 §5 was **not** rewritten — it carries a pointer to ADR-042 and keeps its
+original text, so the reasoning that made the deferral correct at the time stays
+readable.
 
 ## 8. Behaviour change for existing PKI deployments
 
@@ -144,11 +181,19 @@ did not ask for one.
 3. **`AUTH_METHOD` becomes legacy.** It seeds the initial `pkiEnabled` default
    and nothing else. Decide during build whether to warn on boot when it names
    PKI while the DB says off — a silent contradiction is worse than a log line.
-4. **Wizard "configured" semantics.** `wizard-requirements.ts` resolves a step
-   via `resolveRequirement(configured, status)`. PKI has no live connectivity
-   probe, so if it ever becomes a wizard *requirement* it would be `unsupported`.
-   This phase treats auth as it is treated today — not a gated requirement — so
-   no change is expected; confirm during build rather than assume.
+4. **Wizard "configured" semantics.** `resolveRequirement(configured, status)`
+   maps a configured target with no live probe to `unsupported`, which counts as
+   satisfied. All three auth probes in §4a return a real ok/failed status, so
+   none should land there — if one does, the gate silently passes. Assert the
+   status explicitly in tests rather than trusting the default.
+5. **Gating setup on auth tests can strand an operator.** A transient Entra
+   outage makes the wizard unfinishable. Disabling the method is the escape
+   hatch, since only enabled methods gate — confirm the UI makes that obvious
+   rather than leaving the operator stuck on a red badge.
+6. **The `entra` badge changes meaning.** After this phase, `entra` (Graph)
+   and `auth-entra` (sign-in) answer different questions. Anyone reading the old
+   badge as "sign-in works" was already wrong, but the split makes it explicit —
+   check nothing in the UI implies otherwise.
 
 ## 10. Implementation order (tests first)
 
@@ -159,7 +204,13 @@ did not ask for one.
    rejection of an ungated enable.
 5. `AuthMethodsCard` three-state row (§3).
 6. `middleware.ts` simplification + `/login` certificate button + route 403.
-7. E2E: `apps/web/e2e/enhance-pki-admin-config.spec.ts` — greyed-out with
+7. Connectivity targets + the three probes (§4a), each with a test asserting no
+   secret material reaches `message`.
+8. Wizard requirements per enabled method; extend `requiredReady`.
+9. E2E: `apps/web/e2e/enhance-pki-admin-config.spec.ts` — greyed-out with
    subtext when the env gate is unset; enabled and toggleable when set; the
    certificate button appears on `/login`; sign-in completes through the mock
-   proxy at `:4001/pki` (PR #209).
+   proxy at `:4001/pki` (PR #209); the wizard blocks Finish while an enabled
+   method's test has not passed, and unblocks when that method is disabled.
+
+Step 0 is **write ADR-042** — done; `docs/development/adr/042-pki-under-runtime-auth-config.adr.md`.

@@ -32,6 +32,14 @@ follow, and each one blocks a real deployment:
    `/admin/settings` → Authentication sees Email + Password and Entra ID, and no
    indication that certificate sign-in exists at all, let alone what it needs.
 
+A fourth problem is adjacent and worth fixing in the same pass. ADR-041 §2
+established that the first-run wizard requires a **live Test** before a step
+counts as done — configuration alone is not enough, because defaults can make an
+unconfigured install look configured. That rule is applied to storage and AI
+only. Authentication is rendered in the wizard but gated by nothing, so **an
+operator can finish setup with a sign-in method that is enabled and broken** and
+only discover it when a user cannot sign in.
+
 ## 2. Users / Personas
 
 - **Application administrator** — an ops/IT lead configuring the deployment from
@@ -60,6 +68,12 @@ follow, and each one blocks a real deployment:
 - The server **refuses to leave zero usable methods**, counting PKI as usable
   only when its environment gate is satisfied.
 - Existing PKI deployments keep working across the upgrade with no env change.
+- **Every enabled sign-in method has a positive test in the setup wizard**, using
+  the same Test-button pattern as AI and object storage. Setup cannot complete
+  while an enabled method fails its test. Disabled methods are not tested and do
+  not gate.
+- Each method reports **its own** result, so an operator sees which one is
+  broken rather than that "authentication" is broken.
 
 ## 4. Non-goals
 
@@ -86,6 +100,17 @@ follow, and each one blocks a real deployment:
 | `PkiCertAdapter` | `packages/adapters/src/auth/pki-cert-adapter.ts` | existing | Session TTL resolved per request instead of at construction. |
 | `admin_system_settings` | `packages/adapters/src/db/schema/wayfinder.ts` | existing | Stores the extended `auth_config` JSON row. No schema change. |
 | `PKI_TRUSTED_PROXY_IPS` | environment | existing | Unchanged. Read-only precondition. |
+| `ConnectivityTarget` | `packages/domain/src/entities/connectivity.ts` | existing | Gains `auth-entra`, `auth-pki`, `auth-email-password`. The existing `entra` target is left alone — see §12. |
+| `probeAuthEntra` / `probeAuthPki` / `probeAuthEmailPassword` | `packages/adapters/src/health/connectivity-probes.ts` | new | One per method, following `probeAiConnectivity`. |
+| `WizardRequirement` | `apps/web/src/components/onboarding/wizard-requirement.tsx` | existing | Reused per enabled method. No component change expected. |
+
+### What each test actually verifies
+
+| Method | Verifies |
+| ------ | -------- |
+| Entra ID | OIDC discovery document fetched from `{authority}/{tenantId}/v2.0/.well-known/openid-configuration`, then a client-credentials token request. Proves the authority is reachable, the tenant is real, and the client ID + secret are valid. |
+| PKI | `PKI_TRUSTED_PROXY_IPS` parses to ≥1 valid address, `pkiEnabled` is true, and the certificate route is mounted. **Configuration only** — see §12. |
+| Email + Password | The credential provider is enabled on the built auth instance, and at least one account carries a password. |
 
 ## 6. User stories
 
@@ -101,6 +126,11 @@ follow, and each one blocks a real deployment:
   first-run wizard as in the settings screen.
 - As an **admin**, I am stopped with a clear message if I try to save a
   configuration that would leave no usable sign-in method.
+- As an **admin** in the first-run wizard, every sign-in method I have turned on
+  shows a Test button, and I cannot finish setup until each one passes — so I
+  never hand the app to my users with a broken login.
+- As an **admin** who mistyped an Entra client secret, the wizard tells me
+  *Entra* failed and why, rather than that "authentication" failed.
 - As an **end user**, I click "Sign in with your certificate" and my smart card
   signs me in.
 - As an **operator upgrading** an existing PKI deployment, my `AUTH_METHOD`
@@ -111,7 +141,8 @@ follow, and each one blocks a real deployment:
 | Surface | Change |
 | ------- | ------ |
 | `/admin/settings` → Authentication card | PKI row in three states (absent env / off / on). |
-| First-run setup wizard | Inherits the same row — the wizard renders `AuthMethodsCard` directly (`setup-wizard.tsx:193`). One component, not two. |
+| First-run setup wizard | Inherits the same row — the wizard renders `AuthMethodsCard` directly (`setup-wizard.tsx:193`). One component, not two. Additionally gains a `WizardRequirement` per **enabled** method, joining storage and AI in `requiredReady` (`setup-wizard.tsx:80`). |
+| `/admin/settings` → Authentication card | Test buttons per enabled method, driven by the same shared `useConnectivity()` controller the storage and AI cards already use. |
 | `/login` | "Sign in with your certificate" control when PKI is enabled. |
 | Unauthenticated page requests | Always redirect to `/login`; the `AUTH_METHOD` branch in `middleware.ts` is removed. |
 | `/api/auth/cert` | 403 when PKI is disabled in config (replacing a container-presence 404). |
@@ -127,8 +158,10 @@ default them — covered by an explicit acceptance criterion in §10.
 
 ## 9. Architectural decisions
 
-Requires **ADR-042 — PKI under runtime auth config**, superseding ADR-025 §5.
-It must record:
+Recorded in **[ADR-042 — PKI Under Runtime Auth Config, and Per-Method Sign-In
+Verification](../adr/042-pki-under-runtime-auth-config.adr.md)**, which
+supersedes ADR-025 §5. That section now carries a pointer to ADR-042 so a reader
+of the older ADR is not misled. ADR-042 records:
 
 - The **env/DB split**: the switch and the TTL are application config; the
   trusted-proxy list is a security boundary and stays in the environment.
@@ -171,6 +204,25 @@ It must record:
 - [ ] `/api/auth/cert` returns 403 when PKI is disabled in config.
 - [ ] `middleware.ts` no longer reads `AUTH_METHOD`; an unauthenticated request
       to a protected route redirects to `/login` in every configuration.
+- [ ] `ConnectivityTarget` gains `auth-entra`, `auth-pki` and
+      `auth-email-password`; the existing `entra` (Graph/directory) target is
+      unchanged and still probes `User.Read.All`.
+- [ ] `probeAuthEntra` succeeds against a valid tenant + client ID + secret
+      **without** requiring the `User.Read.All` application permission, and
+      fails with a sanitised reason on a bad secret or unknown tenant.
+- [ ] `probeAuthPki` succeeds only when `PKI_TRUSTED_PROXY_IPS` parses to at
+      least one valid address **and** `pkiEnabled` is true; its success message
+      states that configuration was verified, not that a certificate exchange
+      completed.
+- [ ] `probeAuthEmailPassword` fails when the method is enabled but no account
+      carries a password.
+- [ ] No probe returns secret material in `message` — asserted per probe.
+- [ ] The wizard renders a `WizardRequirement` for each **enabled** method and
+      for no disabled method; toggling a method off removes its requirement.
+- [ ] `requiredReady` in the wizard is false while any enabled method's test has
+      not passed, and the Finish control stays blocked.
+- [ ] Each method's failure surfaces its own name and reason, distinguishable
+      from the other methods' results.
 - [ ] `./validate.sh` passes; version is `0.22.0` in both `VERSION` and root
       `package.json`.
 
@@ -208,3 +260,26 @@ It must record:
 - **Depends on the `GET` fix.** The `/login` control is a plain navigation to
   `/api/auth/cert`, which answered 405 until PR #209. This phase must not start
   until #209 is on the base branch.
+
+- **The existing `entra` probe tests the wrong thing for sign-in.**
+  `probeEntraConnectivity` calls Microsoft Graph `/users`, which needs the
+  `User.Read.All` **application** permission. That permission serves the
+  people-directory feature; sign-in needs none of it. An app registration set up
+  correctly for sign-in only (`openid`/`profile`/`email`) would **fail** that
+  probe while sign-in works perfectly — so reusing it as a wizard gate would
+  block setup on a permission the login flow does not use. Hence a separate
+  `auth-entra` probe. Worth confirming during build that no deployment currently
+  relies on the `entra` badge to mean "sign-in works", because after this change
+  it explicitly does not.
+
+- **A PKI test cannot be end-to-end.** The application sits behind the mTLS
+  proxy and cannot originate a client-certificate handshake, so `auth-pki`
+  verifies configuration only. The wording wherever its result is surfaced must
+  not imply certificate sign-in has been proven working — a green tick that
+  means less than the operator thinks is worse than no tick at all.
+
+- **Gating setup on auth tests can strand an operator.** If a method's probe
+  fails for a transient reason (Entra tenant briefly unreachable), the wizard
+  becomes unfinishable. Decide during build whether disabling the offending
+  method is a sufficient escape hatch — it should be, since a disabled method
+  does not gate — and confirm the UI makes that path obvious.
