@@ -1,5 +1,6 @@
 export * from "./admin-account-creator";
 export * from "./admin-lookup";
+export * from "./admin-recovery";
 export * from "./better-auth";
 export * from "./pki-cert-adapter";
 export * from "./seed-admin";
