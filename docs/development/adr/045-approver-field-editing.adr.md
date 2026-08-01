@@ -69,7 +69,44 @@ the same surface that already carries decisions (`recordDecisionMessage`).
 Silent third-party mutation of someone's document is the failure mode. The
 originator must not discover a changed value by reading the final artefact.
 
-### 4. The attestation binds the post-edit state
+### 4. An approval carrying edits is recorded as `approved_with_edits`
+
+**Separate the decision from the outcome.** They have been the same value until
+now because nothing could make them differ:
+
+| Concept | Values | Who sets it |
+| --- | --- | --- |
+| `ApprovalDecision` — what the approver **chooses** | `approved`, `rejected`, `changes_requested` | the approver, in the UI |
+| `ApprovalStatus` — what is **recorded** | the above, plus **`approved_with_edits`** | the system, at decision time |
+
+`approved_with_edits` is derived, never selected. An approval earns it when **that
+approver** made at least one edit to **their own subject step** during **their
+pending window**. Edits by the originator before the request, or by a different
+approver, do not qualify — the status answers "did the person who signed this
+also change it", and nothing else.
+
+Deriving it rather than offering it as a fourth button is the load-bearing part.
+A self-declared "I approved with edits" can be claimed without editing or
+withheld after editing, which makes it worthless as a control precisely where it
+matters. The system knows the answer; it should not ask.
+
+The decision input enum is therefore unchanged, and so is the approver's UI: the
+`approval.decide` router still accepts three values, and the buttons still read
+Approve / Request changes. Only the recorded status gains a value.
+
+**No migration.** `app_session_approvals.status` is a plain `text` column; the
+Drizzle `enum` on it is a TypeScript-level refinement, and there is no CHECK
+constraint in `drizzle/`. Adding the value is additive at the database.
+
+**The hazard is the `=== "approved"` branches.** Advancement is gated on an
+equality test (`decide-approval.ts:143`), as are the notification copy
+(`approval-templates.ts:47`), the decision summary (`:200`) and the approvals UI.
+Every one becomes a predicate — `isApproved(status)`, covering both approved
+states — because missing a single site means an approved-with-edits session
+silently refuses to advance. The predicate lives in the domain beside the type so
+there is one definition to get right.
+
+### 5. The attestation binds the post-edit state
 
 An approver who edits and then approves signs **what they left behind**, not what
 they were sent. Concretely: the edit re-renders and repoints the document
@@ -81,7 +118,7 @@ action. A UI that let an approver approve and edit in a single submit would make
 the signed state ambiguous, so the edit must commit first and be visible in the
 document the approver is looking at when they decide.
 
-### 5. A decided approval's record is frozen; the document is not
+### 6. A decided approval's record is frozen; the document is not
 
 A later edit to the same fields — by the originator after a change request, or by
 a second approver — does **not** alter an already-decided approval's
@@ -106,10 +143,20 @@ the history to learn that the signature predates an edit.
 - **Give approvers a general session-edit right.** Simpler to implement and
   wrong: it grants edit access to steps the approver was never asked about.
   Rejected on least-privilege.
-- **Approve-with-amendments as a new decision outcome.** Rejected: ADR-018's
-  three outcomes are load-bearing across notifications, routing and reporting,
-  and this need is met by editing plus an ordinary approval without expanding the
-  enum.
+- **`approved_with_edits` as a fourth thing the approver picks.** Rejected: it can
+  be claimed without editing and withheld after editing, so it stops being
+  evidence of anything. Derived from the edit record instead (§4).
+- **Leave the status as plain `approved` and show "(edited)" from
+  `editHistory` in the UI only.** The information survives, but it lives outside
+  the approval record — so a report over `recordSnapshot` cannot filter on it, and
+  the audit answer to "which approvals were changed by their approver" needs a
+  join through document history. Rejected: this is a governance signal and belongs
+  in the record.
+- **A boolean `editsMade` beside an unchanged status.** Honest, and it splits one
+  question across two fields that every consumer must then remember to read
+  together. The status is what reporting, notifications and the UI already branch
+  on; putting the answer there keeps one thing to check. The boolean survives in
+  the record as supporting detail (ADR-040 §5), not as the primary signal.
 - **Let the approver propose edits for the originator to accept.** Safer, and it
   reintroduces exactly the round trip this feature exists to remove. Rejected for
   v1; revisit if approver edits prove contentious in practice.
@@ -130,6 +177,8 @@ the history to learn that the signature predates an edit.
   this feature.
 - Every approver edit is attributed, announced in the thread, and retained in
   `editHistory`.
+- "Was this approved as submitted, or changed by its approver?" is answerable
+  from the status alone, and filterable in reporting.
 - What was signed stays retrievable, whatever happens to the document afterwards.
 
 **Negative**
@@ -138,6 +187,14 @@ the history to learn that the signature predates an edit.
   a pending approval for this user on this session, and is this its subject
   step?) rather than a static ownership test. More surface to get wrong, and it
   needs direct test coverage.
+- A fourth `ApprovalStatus` value reaches every `=== "approved"` branch (§4).
+  These are equality tests scattered across application, notification and web
+  code, and the compiler will **not** flag a missed one — an untouched
+  `=== "approved"` still compiles and just stops being true. Each site must be
+  converted to the shared predicate deliberately, with a test that an
+  edited approval advances the session.
+- Anything outside this repo reading `status` — an exported record, an n8n
+  record-export payload (ADR-020) — will see a value it has not met before.
 - Adding the guard to `getFields` / `updateFields` may break any caller that
   relied on their being open — the E2E fixtures should be checked before
   assuming no legitimate caller does.

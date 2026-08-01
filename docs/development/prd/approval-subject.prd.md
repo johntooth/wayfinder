@@ -88,6 +88,10 @@ sequential approvals, all reachable in today's code:
 - **An approver can correct a field and approve**, rather than making a round
   trip over a typo. The edit is scoped to their own approval's subject step,
   attributed, announced in the thread, and bound into what they sign.
+- **An approval carrying the approver's own edits is recorded as
+  `approved_with_edits`**, derived from the edit record rather than self-declared,
+  so "approved as submitted" and "approved after the approver changed it" are
+  distinguishable in the UI, the notification and the report.
 - **Document field access is authorised** against the session — a fix that ships
   first, before any approver capability is added on top of it.
 
@@ -95,9 +99,9 @@ sequential approvals, all reachable in today's code:
 
 - No change to approver **resolution** (`approverSource`, delegation) — this PRD is
   about the subject, the signature, the record, routing and approver editing.
-- No new decision outcomes — `approved` / `rejected` / `changes_requested` are
-  unchanged. In particular there is no "approve with amendments": an approver who
-  edits then approves uses the existing outcome.
+- No new **approver-selectable** decisions — the approver still chooses between
+  `approved`, `rejected` and `changes_requested`. The recorded **status** gains
+  `approved_with_edits`, which the system derives; the approver never picks it.
 - The approver does **not** choose the change-request return step at decision
   time; it is authored on the node, like the subject.
 - No approver rights beyond their own approval's subject step, and none once the
@@ -117,7 +121,9 @@ sequential approvals, all reachable in today's code:
 | ------ | -------- | -------------- | ----- |
 | `ApprovalNodeConfig.approvalSubject` | `packages/domain/src/entities/flow-node.ts` | existing (add field) | `{ kind: "step"; nodeId }` (default: last completed) \| `{ kind: "custom"; instruction }`. Mirrors the `FieldValueSource` shape. |
 | `PriorStepField` / prior-step resolution | `packages/domain/src/entities/field-value-source.ts` | existing (reuse) | supplies the config-time list of prior steps to choose from. |
-| `Approval.recordSnapshot` | `packages/domain/src/entities/approval.ts` | existing (reuse) | now carries the step-prefixed record — `<step_key>.decision`, `.approver_name`, `.approver_email`, `.decided_at`, `.comment`, plus `.subject_description` / `.subject_node_id` — locked at decision time. |
+| `Approval.recordSnapshot` | `packages/domain/src/entities/approval.ts` | existing (reuse) | now carries the step-prefixed record — `<step_key>.decision`, `.approver_name`, `.approver_email`, `.decided_at`, `.comment`, plus `.edits_made` / `.edited_field_keys` and `.subject_description` / `.subject_node_id` — locked at decision time. |
+| `ApprovalStatus` | `packages/domain/src/entities/approval.ts` | existing (add variant) | gains `approved_with_edits`, derived at decision time. `ApprovalDecision` (the approver's input) is unchanged at three values. No migration — `status` is a `text` column with a TS-only enum and no CHECK constraint. |
+| `isApproved(status)` | `packages/domain/src/entities/approval.ts` | new (predicate) | the single definition of "this approval advanced the session", replacing every `status === "approved"` equality test. |
 | `TemplateFieldType: "signature"` | `packages/domain/src/entities/template-field.ts` | existing (add variant) | parsed from the `(approval)` annotation. Excluded from `nodeFieldSet`, so it is never gathered conversationally. |
 | `ApprovalNodeConfig.signatureFieldKey` | `packages/domain/src/entities/flow-node.ts` | existing (add field) | which signature slot this approval step fills. Auto-bound when the template has exactly one; chosen from a dropdown when it has several. |
 | Attestation block | `packages/application` (render path) | new (pure builder) | the rendered signature value: name, email, role, decision, UTC timestamp, comment and a verification code derived from the ADR-033 hash chain. |
@@ -154,6 +160,8 @@ sequential approvals, all reachable in today's code:
     approve, instead of sending it back over a typo.
 14. As an **originator**, an approver's edit appears in the thread naming who
     changed what, and in the document's edit history.
+15. As an **auditor**, I can tell an approval that was accepted as submitted from
+    one the approver changed before signing, from the status alone.
 
 ## 7. Pages / surfaces affected
 
@@ -268,6 +276,18 @@ new table.
       **post-edit** state.
 - [ ] A later edit does not alter an already-decided approval's `recordSnapshot`,
       and the signed revision remains retrievable.
+- [ ] An approver who edits their subject step and then approves produces status
+      `approved_with_edits`; one who approves without editing produces `approved`.
+- [ ] Edits by the originator, or by a *different* approver, do not make an
+      approval `approved_with_edits`.
+- [ ] An `approved_with_edits` approval **advances the session** exactly as
+      `approved` does — asserted directly, since a missed `=== "approved"` branch
+      still compiles and simply stops being true.
+- [ ] The status reads "Approved with edits" in the approvals UI, the decision
+      chat message and the approval notification.
+- [ ] `<step_key>.decision` reads `approved_with_edits`, with `.edits_made` and
+      `.edited_field_keys` alongside.
+- [ ] The `approval.decide` router still accepts exactly three decision values.
 - [ ] `VERSION` = `package.json#version` = `0.22.0`; `./validate.sh` passes.
 
 ## 11. Out of scope / future work
@@ -311,6 +331,13 @@ new table.
 - The unauthorised-access fix on `getFields` / `updateFields` may break a caller
   that relied on their being open — check the E2E fixtures before assuming none
   does.
+- The fourth `ApprovalStatus` value reaches equality tests (`=== "approved"`) in
+  application, notification and web code. **The compiler will not flag a missed
+  one** — it still compiles and quietly stops being true, so an edited approval
+  would fail to advance the session. Convert each site to the shared predicate
+  deliberately and test the advance path directly.
+- Consumers outside this repo that read `status` — an n8n record export (ADR-020),
+  any downstream report — will encounter a value they have not seen before.
 - `nearest_editable` and "last completed step" both need the taken path on a
   branching flow. One resolver serving both, or they will drift.
 - A flow whose approval precedes any conversational step has no editable return

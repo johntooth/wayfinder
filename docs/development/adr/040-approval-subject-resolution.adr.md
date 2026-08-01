@@ -111,11 +111,13 @@ prefixed with the **step key**:
 
 ```
 {
-  "manager_review.decision":            "approved",
+  "manager_review.decision":            "approved_with_edits",
   "manager_review.approver_name":       "Jane Doe",
   "manager_review.approver_email":      "jane.doe@example.com",
   "manager_review.decided_at":          "2026-08-01T14:32:11.204Z",
   "manager_review.comment":             "Within delegated authority.",
+  "manager_review.edits_made":          true,
+  "manager_review.edited_field_keys":   ["commencement_date"],
   "manager_review.subject_description": "Draft delegation instrument produced by 'Prepare instrument'",
   "manager_review.subject_node_id":     "b1f2…",
   "manager_review.signature_field_key": "delegate_signature",
@@ -130,6 +132,13 @@ prefixed with the **step key**:
 The five keys `decision`, `approver_name`, `approver_email`, `decided_at` and
 `comment` are the **guaranteed minimum** — present on every decided approval,
 whatever the flow looks like.
+
+`decision` carries the recorded **status**, so it may read `approved_with_edits`
+(ADR-045 §4) — the value the approver's edits earned, not the button they
+pressed. `edits_made` and `edited_field_keys` accompany it as supporting detail;
+a reader filtering for "approved but changed by the approver" should test
+`decision`, which is the single signal, rather than reconstructing it from the
+boolean.
 
 - **The prefix is `deriveFieldKey(node label)`** — the existing helper in
   `template-field.ts`, already how every field key in the product is derived.

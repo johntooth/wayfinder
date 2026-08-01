@@ -51,11 +51,16 @@ See the PRD.
 - Session-scoped authorisation on `document.getFields` / `updateFields`, then a
   right for a pending approver to edit **their own approval's subject step**,
   attributed and announced.
+- `ApprovalStatus` gains **`approved_with_edits`**, derived at decision time when
+  that approver edited their own subject step while pending. The approver's input
+  enum stays at three values; a shared `isApproved(status)` predicate replaces
+  every `=== "approved"` equality test.
 
 ## 3. Non-goals
 
-Changes to approver resolution/delegation; new decision outcomes (no "approve
-with amendments"); migration; multi-**subject** approvals (multi-*signature* is
+Changes to approver resolution/delegation; new **approver-selectable** decisions
+(the recorded status gains one, the input enum does not); migration;
+multi-**subject** approvals (multi-*signature* is
 in scope); operator-typed subjects; signature images; X.509 / PKI document
 sealing; `(approval)` in xlsx templates; a public verification lookup surface;
 approver-chosen routing at decision time; approver rights beyond their own
@@ -91,7 +96,8 @@ No schema change.
 | domain | `packages/domain/src/entities/flow-node.ts` | add `ApprovalNodeConfig.approvalSubject` (step \| custom; absent ⇒ step/last-completed), `signatureFieldKey?`, `changesRequestedTarget?` (step \| nearest_editable; absent ⇒ nearest_editable) |
 | domain | `packages/domain/src/entities/template-field.ts` | `(approval)` annotation → `signature` type; reject combined types, numeric/length annotations, and use inside a `(repeat)` group; handle in `describeType`, `templateFieldToLine`, `validateTemplateFieldValue` |
 | domain | `packages/domain/src/entities/node-output.ts` | `nodeFieldSet` filters `signature` out; `validateStructuredFieldSet` rejects it as it does `section` |
-| domain | `packages/domain/src/entities/approval.ts` | document the step-prefixed `recordSnapshot` shape (no new column) |
+| domain | `packages/domain/src/entities/approval.ts` | document the step-prefixed `recordSnapshot` shape (no new column); add `approved_with_edits` to `ApprovalStatus` (not to `ApprovalDecision`) and an `isApproved(status)` predicate beside it |
+| adapters | `packages/adapters/src/db/schema/wayfinder.ts` | add `approved_with_edits` to the `status` text-column enum list. TS-only refinement, no CHECK constraint — **no migration** |
 | domain | new — attestation block builder | pure: approval record → block text + verification code, canonicalised as in `audit-hash.ts` |
 | application | approval-raise use-case (`packages/application/src/use-cases/session/…` approval) | resolve subject: step snapshot or one-call custom summary; attach to the pending approval |
 | application | `packages/application/src/use-cases/approvals/list-pending-approvals-with-context.ts` | resolve `previousStep` from `approvalSubject`, not `advancedFrom`; resolve the document at read time so the current revision is shown |
@@ -175,6 +181,17 @@ No schema change.
    after deciding; may not edit a session where they hold no pending approval; an
    edit-then-approve hashes the post-edit state; a later edit leaves an
    already-decided `recordSnapshot` untouched.
+8a. **Domain + application — `approved_with_edits`.** Add the status variant and
+   the `isApproved` predicate, then convert **every** `=== "approved"` site to it
+   (`decide-approval.ts:89,143,200`, `approval-templates.ts:47`,
+   `approvals/_content.tsx`, and any found by a fresh grep — the compiler will not
+   flag a missed one). Derive the status at decision time from that approver's
+   edits to their own subject step during their pending window; write
+   `.edits_made` and `.edited_field_keys` into the record. Tests: edit-then-approve
+   yields `approved_with_edits`; approve-without-editing yields `approved`;
+   originator edits and another approver's edits do **not** qualify; **an
+   `approved_with_edits` approval advances the session**; the router still accepts
+   exactly three decision values.
 9. **Adapters — repository + xlsx.** Persist/read the extended snapshot via jsonb;
    round-trip subject and record keys with no schema change. xlsx upload rejects
    `(approval)` with a clear message.
@@ -185,8 +202,10 @@ No schema change.
     warning when no editable step precedes the node. Tests cover each count, both
     subject kinds, and the no-editable-predecessor warning.
 11. **Web — approver UI, gate + email.** Editable subject-step fields in the
-    decision UI, committing before the decision is taken. Show "You are requesting
-    approval of: …" at the gate and in the approver request/email.
+    decision UI, committing before the decision is taken. Surface "Approved with
+    edits" in the approvals list, the decision chat message and the approval
+    notification. Show "You are requesting approval of: …" at the gate and in the
+    approver request/email.
 12. **Version + validate.** Bump `VERSION` and `package.json#version` to `0.22.0`
     (re-confirm against the base branch first). Run `./validate.sh`; fix all
     failures. Move this phase doc to `docs/development/implemented/alpha-2/v0.22.0/`
@@ -232,6 +251,14 @@ Mirror PRD §10:
       else; the edit is attributed in `editHistory` and announced in the thread.
 - [ ] Edit-then-approve hashes the post-edit state; a later edit does not alter an
       already-decided `recordSnapshot`, and the signed revision stays retrievable.
+- [ ] An approver who edits their subject step then approves produces
+      `approved_with_edits`; approving without editing produces `approved`; the
+      originator's or another approver's edits do not qualify.
+- [ ] An `approved_with_edits` approval advances the session exactly as
+      `approved` does, asserted directly.
+- [ ] "Approved with edits" appears in the approvals UI, the decision chat message
+      and the notification; `<step_key>.decision` carries it in the record.
+- [ ] The `approval.decide` router still accepts exactly three decision values.
 - [ ] Architecture intact (Result at boundaries); no migration.
 - [ ] `VERSION` = `package.json#version` = `0.22.0`; `./validate.sh` passes.
 
@@ -270,3 +297,9 @@ Mirror PRD §10:
   edit" note (ADR-045 §5).
 - Step 7 changes behaviour for anyone depending on the current
   cancel-on-second-change-request; release-note material.
+- The `approved_with_edits` conversion (step 8a) is the highest-risk edit in the
+  phase: `=== "approved"` sites still compile when missed and simply stop being
+  true, so an edited approval would silently fail to advance. Grep fresh rather
+  than trusting the listed line numbers, and assert the advance path.
+- Downstream consumers of `status` (n8n record export, ADR-020) will see a new
+  value; release-note material.
