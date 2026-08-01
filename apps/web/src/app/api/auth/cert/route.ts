@@ -22,7 +22,7 @@ function extractSourceIp(request: Request): string {
   return request.headers.get("x-real-ip") ?? "unknown";
 }
 
-export async function POST(request: Request): Promise<NextResponse> {
+async function signInWithCertificate(request: Request): Promise<NextResponse> {
   const container = getContainer();
 
   if (!container.pkiCertAdapter) {
@@ -50,4 +50,24 @@ export async function POST(request: Request): Promise<NextResponse> {
   });
 
   return response;
+}
+
+// GET is the method that matters in production: when AUTH_METHOD names PKI,
+// middleware.ts answers an unauthenticated page request with a redirect here,
+// and the browser follows it with a plain navigation. The mTLS proxy attaches
+// the x-ssl-client-* headers to that request exactly as it does to any other, so
+// there is nothing for a POST to add.
+//
+// Minting a session from a GET is safe here precisely because the identity comes
+// from headers only the trusted proxy can set — never from ambient credentials
+// the browser would attach on its own. A cross-site request cannot forge them,
+// and one arriving through the proxy carries its own sender's certificate.
+export async function GET(request: Request): Promise<NextResponse> {
+  return signInWithCertificate(request);
+}
+
+// Kept for callers that drive the exchange directly rather than being redirected
+// into it — the mock proxy in mocks/pki/proxy.mjs among them.
+export async function POST(request: Request): Promise<NextResponse> {
+  return signInWithCertificate(request);
 }

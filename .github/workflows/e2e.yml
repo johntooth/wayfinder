@@ -192,8 +192,13 @@ jobs:
 
       # Each shard emits a machine-readable "blob" report; the report job below
       # merges every shard's blob into one HTML report and one results.json.
+      # --project=chromium, not the whole config: the `pki` project needs an app
+      # booted with AUTH_METHOD=pki-and-email-password and would only skip here,
+      # while still counting toward the shard split and shifting which specs land
+      # on which machine. Its dependencies (setup, seed, cleanup) are pulled in
+      # automatically. The e2e-pki job below runs that project for real.
       - name: Run Playwright tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
-        run: npx playwright test --config=playwright.config.ts --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=blob
+        run: npx playwright test --config=playwright.config.ts --project=chromium --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=blob
         working-directory: apps/web/e2e
 
       # A test failing with a connection error means the dev server died or
@@ -215,6 +220,118 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-test-results-shard-${{ matrix.shard }}-${{ github.run_number }}
+          path: apps/web/e2e/test-results/
+          retention-days: 7
+
+  # ── PKI client-certificate sign-in ────────────────────────────────────────
+  # A separate job, not a shard, because PKI is chosen at boot: AUTH_METHOD
+  # rewires how middleware.ts redirects unauthenticated requests (to
+  # /api/auth/cert rather than /login), so it cannot be switched on for the main
+  # suite without changing every other spec's sign-in path. Deliberately lean —
+  # the `pki` Playwright project skips the seed, so no MinIO and no embedding
+  # model are needed here.
+  e2e-pki:
+    name: Playwright E2E (PKI client certificates)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: wayfinder_e2e_pki
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wayfinder_e2e_pki
+      BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET || 'e2e-test-secret-must-be-at-least-32-chars-long' }}
+      BETTER_AUTH_URL: http://localhost:3000
+      SETTINGS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      LANGFUSE_HOST: ""
+      SETUP_TOKEN: ""
+      N8N_WEBHOOK_SECRET: ""
+      TEST_AUTH_BYPASS: "true"
+      TEST_ADMIN_EMAIL: admin@example.com
+      ADMIN_SEED_EMAIL: admin@example.com
+      # Boots the cert adapter (the container builds it only when AUTH_METHOD
+      # names PKI) while leaving email/password on, which the spec needs to
+      # register the account a certificate then has to match.
+      AUTH_METHOD: pki-and-email-password
+      # The mock proxy forwards as 127.0.0.1; the adapter rejects any other source.
+      PKI_TRUSTED_PROXY_IPS: 127.0.0.1
+      MOCKS_PORT: "4001"
+      MOCK_PKI_APP_ORIGIN: http://localhost:3000
+      BASE_URL: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run database migrations
+        run: pnpm db:migrate
+
+      - name: Install Playwright browsers
+        run: npm install && npx playwright install --with-deps chromium
+        working-directory: apps/web/e2e
+
+      # Must be up before the app: the spec's first navigation is to the mock's
+      # certificate picker.
+      - name: Start mocks server
+        run: |
+          node server.mjs > /tmp/mocks.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:4001/healthz >/dev/null 2>&1; then
+              echo "mocks ready"; exit 0
+            fi
+            sleep 1
+          done
+          echo "mocks server did not become ready"; cat /tmp/mocks.log; exit 1
+        working-directory: mocks
+
+      - name: Start app in PKI mode
+        env:
+          NODE_OPTIONS: --max-old-space-size=10240
+        run: pnpm --filter @wayfinder/web dev > /tmp/app.log 2>&1 &
+
+      - name: Wait for app to be ready
+        run: ./node_modules/.bin/wait-on http://localhost:3000 --timeout 120000
+        working-directory: apps/web/e2e
+
+      - name: Dump app log on boot failure
+        if: failure()
+        run: tail -n 300 /tmp/app.log || true
+
+      - name: Run PKI certificate specs
+        run: npx playwright test --config=playwright.config.ts --project=pki
+        working-directory: apps/web/e2e
+
+      - name: Dump app and mocks logs on test failure
+        if: failure()
+        run: |
+          tail -n 300 /tmp/app.log || true
+          tail -n 100 /tmp/mocks.log || true
+
+      - name: Upload traces and videos (failures only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-pki-results-${{ github.run_number }}
           path: apps/web/e2e/test-results/
           retention-days: 7
 

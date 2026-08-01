@@ -260,6 +260,63 @@ describe("PkiCertAdapter", () => {
     });
   });
 
+  // The certificate is the credential, but the email address inside it is the
+  // account key — the same rule Entra sign-in follows. cert_fingerprint and
+  // cert_subject_dn are written on every login and never read to find a user,
+  // so a re-issued certificate keeps the account and a new address never
+  // reuses one.
+  describe("authenticate — the address is the account key", () => {
+    it("adopts an account that already exists at the certificate's address", async () => {
+      const { adapter, users } = makePkiAdapter();
+      const existing = await users.create({ email: "jane@acme.com", name: "Jane Smith" });
+
+      await adapter.authenticate(validHeaders(), "10.0.0.1");
+
+      expect(users.store.size).toBe(1);
+      expect(existing.data?.id).toBeDefined();
+      const result = await adapter.authenticate(validHeaders(), "10.0.0.1");
+      expect(result.data?.userId).toBe(existing.data?.id);
+    });
+
+    it("matches an existing lowercase account when the certificate is issued in mixed case", async () => {
+      const { adapter, users } = makePkiAdapter();
+      const existing = await users.create({ email: "jane@acme.com", name: "Jane Smith" });
+
+      const result = await adapter.authenticate(
+        validHeaders({ "x-ssl-client-san-email": "Jane@ACME.com" }),
+        "10.0.0.1",
+      );
+
+      expect(users.store.size).toBe(1);
+      expect(result.data?.userId).toBe(existing.data?.id);
+    });
+
+    it("does not key on the fingerprint — one certificate naming a new address provisions a new account", async () => {
+      const { adapter, users } = makePkiAdapter();
+      await adapter.authenticate(validHeaders(), "10.0.0.1");
+
+      await adapter.authenticate(
+        validHeaders({ "x-ssl-client-san-email": "someone-else@acme.com" }),
+        "10.0.0.1",
+      );
+
+      expect(users.store.size).toBe(2);
+    });
+
+    it("keeps one account when the same person's certificate is re-issued with a new fingerprint", async () => {
+      const { adapter, users } = makePkiAdapter();
+      const first = await adapter.authenticate(validHeaders(), "10.0.0.1");
+
+      const second = await adapter.authenticate(
+        validHeaders({ "x-ssl-client-fingerprint": "sha256:rotated999" }),
+        "10.0.0.1",
+      );
+
+      expect(users.store.size).toBe(1);
+      expect(second.data?.userId).toBe(first.data?.userId);
+    });
+  });
+
   describe("authenticate — cert field update", () => {
     it("calls db.update on every login to refresh cert_fingerprint and cert_subject_dn", async () => {
       const db = makeDbMock();
