@@ -832,15 +832,8 @@ describe("DecideApproval", () => {
     const sessions = new InMemorySessions();
     sessions.add(checkpointedSession());
     const notifier = new RecordingNotifier();
-    const sut = new DecideApproval(
-      unitOfWorkFor(approvals, sessions),
-      approvals,
-      sessions,
-      new InMemoryFlowEdges(),
-      new InMemoryStepOutputs(),
-      new RecordingAuditLogger(),
-      notifier,
-    );
+    const { nodes, stepOutputs } = await routableFlow();
+    const sut = routingSut({ approvals, sessions, nodes, stepOutputs, notifier });
 
     const result = await sut.execute({
       approvalId: approval.id,
@@ -857,19 +850,53 @@ describe("DecideApproval", () => {
     expect(result.data?.advanced).toBe(true);
   });
 
-  it("changes_requested: returns advanced=true and newNodeId=previousNodeId", async () => {
+  // A flow of `Prepare instrument (conversational) → Manager review (approval)`
+  // where the conversational step has run — the ordinary shape a change request
+  // has to return to.
+  const routableFlow = async () => {
+    const nodes = new InMemoryFlowNodes();
+    nodes.add(approvalNode({ id: "node-appr", name: "Manager review" }));
+    nodes.add(
+      approvalNode({ id: "node-prev", type: "conversational", name: "Prepare instrument" }),
+    );
+    const stepOutputs = new InMemoryStepOutputs();
+    await stepOutputs.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-prev",
+      fields: [{ key: "amount", label: "Amount", type: "text", value: "$1,200" }],
+    });
+    return { nodes, stepOutputs };
+  };
+
+  const routingSut = (parts: {
+    approvals: InMemoryApprovals;
+    sessions: InMemorySessions;
+    nodes: InMemoryFlowNodes;
+    stepOutputs: InMemoryStepOutputs;
+    messages?: InMemoryMessages;
+    notifier?: RecordingNotifier;
+  }) =>
+    new DecideApproval(
+      unitOfWorkFor(parts.approvals, parts.sessions),
+      parts.approvals,
+      parts.sessions,
+      new InMemoryFlowEdges(),
+      parts.stepOutputs,
+      new RecordingAuditLogger(),
+      parts.notifier,
+      parts.messages ?? new InMemoryMessages(),
+      new InMemoryUsers(),
+      parts.nodes,
+    );
+
+  it("changes_requested: returns to the nearest editable step", async () => {
     const approvals = new InMemoryApprovals();
     const approval = await seedConfirmed(approvals);
     const sessions = new InMemorySessions();
     sessions.add(checkpointedSession());
-    const sut = new DecideApproval(
-      unitOfWorkFor(approvals, sessions),
-      approvals,
-      sessions,
-      new InMemoryFlowEdges(),
-      new InMemoryStepOutputs(),
-      new RecordingAuditLogger(),
-    );
+    const { nodes, stepOutputs } = await routableFlow();
+    const sut = routingSut({ approvals, sessions, nodes, stepOutputs });
 
     const result = await sut.execute({
       approvalId: approval.id,
@@ -883,19 +910,13 @@ describe("DecideApproval", () => {
     expect(result.data?.sessionCompleted).toBe(false);
   });
 
-  it("rejected + routeBack: routes the session back to the previous node", async () => {
+  it("rejected + routeBack: routes the session back to the nearest editable step", async () => {
     const approvals = new InMemoryApprovals();
     const approval = await seedConfirmed(approvals);
     const sessions = new InMemorySessions();
     sessions.add(checkpointedSession());
-    const sut = new DecideApproval(
-      unitOfWorkFor(approvals, sessions),
-      approvals,
-      sessions,
-      new InMemoryFlowEdges(),
-      new InMemoryStepOutputs(),
-      new RecordingAuditLogger(),
-    );
+    const { nodes, stepOutputs } = await routableFlow();
+    const sut = routingSut({ approvals, sessions, nodes, stepOutputs });
 
     const result = await sut.execute({
       approvalId: approval.id,
@@ -939,29 +960,223 @@ describe("DecideApproval", () => {
     expect(notifier.calls[0]?.routedBack).toBe(false);
   });
 
-  it("rejected + no previous node in checkpoint: cancels the session", async () => {
-    const approvals = new InMemoryApprovals();
-    const approval = await seedConfirmed(approvals);
-    const sessions = new InMemorySessions();
-    sessions.add(session({ graphCheckpoint: null }));
-    const sut = new DecideApproval(
-      unitOfWorkFor(approvals, sessions),
-      approvals,
-      sessions,
-      new InMemoryFlowEdges(),
-      new InMemoryStepOutputs(),
-      new RecordingAuditLogger(),
-    );
+  describe("change-request routing", () => {
+    it("holds the session when no return target resolves, and never cancels it", async () => {
+      const approvals = new InMemoryApprovals();
+      const approval = await seedConfirmed(approvals);
+      const sessions = new InMemorySessions();
+      sessions.add(session({ graphCheckpoint: null }));
+      const nodes = new InMemoryFlowNodes();
+      nodes.add(approvalNode({ id: "node-appr", name: "Manager review" }));
+      const messages = new InMemoryMessages();
+      const sut = routingSut({
+        approvals,
+        sessions,
+        nodes,
+        stepOutputs: new InMemoryStepOutputs(),
+        messages,
+      });
 
-    const result = await sut.execute({
-      approvalId: approval.id,
-      decidedByUserId: "manager-1",
-      decision: "rejected",
-      routeBack: true,
+      const result = await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "changes_requested",
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(result.data?.advanced).toBe(false);
+      expect(sessions.rows.get("session-1")?.status).toBe("active");
+      expect(sessions.rows.get("session-1")?.currentNodeId).toBe("node-appr");
+      const systemMessage = messages.rows.find((row) => row.role === "system");
+      expect(systemMessage?.content).toContain("no step to return to");
     });
 
-    expect(result.data?.sessionCompleted).toBe(true);
-    expect(sessions.rows.get("session-1")?.status).toBe("cancelled");
+    it("holds rather than cancels when a rejection asks to route back and cannot", async () => {
+      const approvals = new InMemoryApprovals();
+      const approval = await seedConfirmed(approvals);
+      const sessions = new InMemorySessions();
+      sessions.add(session({ graphCheckpoint: null }));
+      const nodes = new InMemoryFlowNodes();
+      nodes.add(approvalNode({ id: "node-appr", name: "Manager review" }));
+      const sut = routingSut({
+        approvals,
+        sessions,
+        nodes,
+        stepOutputs: new InMemoryStepOutputs(),
+      });
+
+      const result = await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "rejected",
+        routeBack: true,
+      });
+
+      expect(result.data?.sessionCompleted).toBe(false);
+      expect(sessions.rows.get("session-1")?.status).toBe("active");
+    });
+
+    it("returns to the step the author named, not the nearest editable one", async () => {
+      const approvals = new InMemoryApprovals();
+      const approval = await seedConfirmed(approvals);
+      const sessions = new InMemorySessions();
+      sessions.add(checkpointedSession());
+      const { stepOutputs } = await routableFlow();
+      await stepOutputs.create({
+        sessionId: "session-1",
+        flowId: "flow-1",
+        nodeId: "node-intake",
+        fields: [],
+      });
+      const nodes = new InMemoryFlowNodes();
+      nodes.add(approvalNode({ id: "node-intake", type: "conversational", name: "Gather" }));
+      nodes.add(approvalNode({ id: "node-prev", type: "conversational", name: "Prepare" }));
+      nodes.add(
+        approvalNode({
+          id: "node-appr",
+          name: "Manager review",
+          config: {
+            approverSource: "first_level_supervisor",
+            changesRequestedTarget: { kind: "step", nodeId: "node-intake" },
+          },
+        }),
+      );
+      const sut = routingSut({ approvals, sessions, nodes, stepOutputs });
+
+      const result = await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "changes_requested",
+      });
+
+      expect(result.data?.newNodeId).toBe("node-intake");
+    });
+
+    it("holds when the named target has been deleted from the flow", async () => {
+      const approvals = new InMemoryApprovals();
+      const approval = await seedConfirmed(approvals);
+      const sessions = new InMemorySessions();
+      sessions.add(checkpointedSession());
+      const { stepOutputs } = await routableFlow();
+      const nodes = new InMemoryFlowNodes();
+      nodes.add(approvalNode({ id: "node-prev", type: "conversational", name: "Prepare" }));
+      nodes.add(
+        approvalNode({
+          id: "node-appr",
+          name: "Manager review",
+          config: {
+            approverSource: "first_level_supervisor",
+            changesRequestedTarget: { kind: "step", nodeId: "node-deleted" },
+          },
+        }),
+      );
+      const sut = routingSut({ approvals, sessions, nodes, stepOutputs });
+
+      const result = await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "changes_requested",
+      });
+
+      expect(result.data?.advanced).toBe(false);
+      expect(sessions.rows.get("session-1")?.status).toBe("active");
+    });
+
+    it("skips a preceding approval, which has nothing an operator can change", async () => {
+      const approvals = new InMemoryApprovals();
+      const approval = await seedConfirmed(approvals, { nodeId: "node-appr-b" });
+      const sessions = new InMemorySessions();
+      sessions.add(
+        session({ graphCheckpoint: { currentNodeId: "node-appr-b", advancedFrom: "node-appr" } }),
+      );
+      const { nodes, stepOutputs } = await routableFlow();
+      nodes.add(approvalNode({ id: "node-appr-b", name: "Finance review" }));
+      await stepOutputs.create({
+        sessionId: "session-1",
+        flowId: "flow-1",
+        nodeId: "node-appr",
+        fields: [{ key: "outcome", label: "Outcome", type: "text", value: "approved" }],
+      });
+      const sut = routingSut({ approvals, sessions, nodes, stepOutputs });
+
+      const result = await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "changes_requested",
+      });
+
+      expect(result.data?.newNodeId).toBe("node-prev");
+    });
+
+    // The build before ADR-044 wrote `advancedFrom: null` on route-back, so
+    // `routeBackOrCancel` found no previous node the second time and cancelled
+    // the session outright.
+    it("routes two change requests in a row, instead of cancelling on the second", async () => {
+      const approvals = new InMemoryApprovals();
+      const sessions = new InMemorySessions();
+      sessions.add(checkpointedSession());
+      const { nodes, stepOutputs } = await routableFlow();
+      const sut = routingSut({ approvals, sessions, nodes, stepOutputs });
+
+      const first = await seedConfirmed(approvals);
+      const firstResult = await sut.execute({
+        approvalId: first.id,
+        decidedByUserId: "manager-1",
+        decision: "changes_requested",
+      });
+
+      // The operator makes the changes and reaches the approval again, raising a
+      // new row — a decided approval is never reopened (ADR-044 §5).
+      const second = await seedConfirmed(approvals);
+      const secondResult = await sut.execute({
+        approvalId: second.id,
+        decidedByUserId: "manager-1",
+        decision: "changes_requested",
+      });
+
+      expect(firstResult.data?.newNodeId).toBe("node-prev");
+      expect(secondResult.data?.newNodeId).toBe("node-prev");
+      expect(sessions.rows.get("session-1")?.status).toBe("active");
+    });
+
+    it("keeps the approval node on the checkpoint rather than blanking it", async () => {
+      const approvals = new InMemoryApprovals();
+      const approval = await seedConfirmed(approvals);
+      const sessions = new InMemorySessions();
+      sessions.add(checkpointedSession());
+      const { nodes, stepOutputs } = await routableFlow();
+      const sut = routingSut({ approvals, sessions, nodes, stepOutputs });
+
+      await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "changes_requested",
+      });
+
+      expect(sessions.rows.get("session-1")?.graphCheckpoint).toEqual({
+        currentNodeId: "node-prev",
+        advancedFrom: "node-appr",
+      });
+    });
+
+    it("still cancels on an explicit reject-and-close", async () => {
+      const approvals = new InMemoryApprovals();
+      const approval = await seedConfirmed(approvals);
+      const sessions = new InMemorySessions();
+      sessions.add(checkpointedSession());
+      const { nodes, stepOutputs } = await routableFlow();
+      const sut = routingSut({ approvals, sessions, nodes, stepOutputs });
+
+      const result = await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "rejected",
+        routeBack: false,
+      });
+
+      expect(result.data?.sessionCompleted).toBe(true);
+      expect(sessions.rows.get("session-1")?.status).toBe("cancelled");
+    });
   });
 
   it("rejects a second decision on an already-decided approval", async () => {

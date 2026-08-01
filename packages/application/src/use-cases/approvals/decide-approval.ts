@@ -1,14 +1,18 @@
 import {
   buildApprovalRecord,
   buildAttestationBlock,
+  changesRequestedTargetOf,
   deriveStepKeys,
+  nearestEditableNodeId,
   domainError,
   err,
   ok,
   type Approval,
   type ApprovalDecision,
   type ApprovalNodeConfig,
+  type CompletedStep,
   type FlowNode,
+  type FlowNodeType,
   type IApprovalRepository,
   type IAuditLogger,
   type IFlowEdgeRepository,
@@ -81,6 +85,10 @@ const approvalStepKey = (nodes: FlowNode[], nodeId: string): string => {
 interface DecisionEffect {
   output: DecideApprovalOutput;
   routedBack: boolean;
+  // Set when a change request could not resolve a step to return to. The
+  // decision still stands and the session is held, not cancelled — the message
+  // tells the operator why nothing moved.
+  routingError?: string;
 }
 
 // Records an approver's decision. Approve snapshots the step outputs and advances
@@ -136,7 +144,7 @@ export class DecideApproval {
     );
     if (effect.error) return effect;
 
-    const { output, routedBack } = effect.data;
+    const { output, routedBack, routingError } = effect.data;
     const decided = output.approval;
 
     await this.projectDecision(decided, decidedAt);
@@ -147,7 +155,7 @@ export class DecideApproval {
       resourceId: approval.id,
       metadata: { decision: input.decision, comment: input.comment ?? null },
     });
-    await this.recordDecisionMessage(decided, input.decision, routedBack);
+    await this.recordDecisionMessage(decided, input.decision, routedBack, routingError);
     await this.writeSignature(decided);
     this.notify(decided, input.decision, routedBack);
 
@@ -340,10 +348,14 @@ export class DecideApproval {
     approval: Approval,
     decision: ApprovalDecision,
     routedBack: boolean,
+    routingError?: string,
   ): Promise<void> {
     if (!this.messages) return;
     const summary = this.decisionSummary(decision, routedBack);
-    const content = approval.comment ? `${summary}\n\nComment: ${approval.comment}` : summary;
+    const parts = [summary];
+    if (approval.comment) parts.push(`Comment: ${approval.comment}`);
+    if (routingError) parts.push(routingError);
+    const content = parts.join("\n\n");
     try {
       await this.messages.create({
         sessionId: approval.sessionId,
@@ -364,10 +376,11 @@ export class DecideApproval {
       : "Approval rejected — the request was closed.";
   }
 
-  // Non-approve decisions either return the session to the originator (route-back)
-  // or close it. `changes_requested` always routes back; `rejected` routes back
-  // only when the approver chose to, and a missing previous node forces a cancel
-  // since there is nowhere to return to.
+  // `changes_requested` always routes back; `rejected` routes back only when the
+  // approver chose to. Cancelling is reachable from exactly one place — an
+  // explicit reject-and-close — because a session that cannot resolve a return
+  // target has a routing gap, and turning a routing gap into data loss is what
+  // this method used to do (ADR-044 §3).
   private async routeBackOrCancel(
     repositories: TransactionalRepositories,
     approval: Approval,
@@ -380,32 +393,81 @@ export class DecideApproval {
       return err(domainError("NOT_FOUND", `Session ${approval.sessionId} not found.`));
     }
 
-    const previousNodeId = this.previousNodeId(session);
     const shouldRouteBack = input.decision === "changes_requested" || input.routeBack === true;
-
-    if (shouldRouteBack && previousNodeId) {
-      const moved = await repositories.sessions.update(session.id, {
-        currentNodeId: previousNodeId,
-        graphCheckpoint: { currentNodeId: previousNodeId, advancedFrom: null },
-      });
-      if (moved.error) return moved;
+    if (!shouldRouteBack) {
+      const cancelled = await repositories.sessions.update(session.id, { status: "cancelled" });
+      if (cancelled.error) return cancelled;
       return ok({
-        output: { approval, advanced: true, newNodeId: previousNodeId, sessionCompleted: false },
-        routedBack: true,
+        output: { approval, advanced: false, newNodeId: null, sessionCompleted: true },
+        routedBack: false,
       });
     }
 
-    const cancelled = await repositories.sessions.update(session.id, { status: "cancelled" });
-    if (cancelled.error) return cancelled;
+    const targetNodeId = await this.returnTarget(approval);
+    if (!targetNodeId) {
+      // Held, not cancelled. The session stays on the approval node with the
+      // problem named in the thread, so an author can fix the flow and the work
+      // survives.
+      return ok({
+        output: { approval, advanced: false, newNodeId: null, sessionCompleted: false },
+        routedBack: true,
+        routingError:
+          "The approver asked for changes, but this approval step has no step to return to. Set \"On changes requested, return to\" on the approval step.",
+      });
+    }
+
+    const moved = await repositories.sessions.update(session.id, {
+      currentNodeId: targetNodeId,
+      // Records the approval node that sent the work back, rather than null.
+      // The checkpoint keeps describing the last real transition, so a second
+      // change request has a coherent graph to reason about (ADR-044 §4).
+      graphCheckpoint: { currentNodeId: targetNodeId, advancedFrom: approval.nodeId },
+    });
+    if (moved.error) return moved;
     return ok({
-      output: { approval, advanced: false, newNodeId: null, sessionCompleted: true },
-      routedBack: false,
+      output: { approval, advanced: true, newNodeId: targetNodeId, sessionCompleted: false },
+      routedBack: true,
     });
   }
 
-  private previousNodeId(session: { graphCheckpoint: Record<string, unknown> | null }): string | null {
-    const value = session.graphCheckpoint?.["advancedFrom"];
-    return typeof value === "string" ? value : null;
+  // Where work resumes: the step the author named, or the nearest prior step an
+  // operator can actually change. Never `advancedFrom` — with two approvals in
+  // sequence that names the previous *approval*, a node with nothing to edit.
+  private async returnTarget(approval: Approval): Promise<string | null> {
+    const nodes = await this.flowNodesOfFlow(approval.flowId);
+    const config = (nodes.find((node) => node.id === approval.nodeId)?.config ??
+      {}) as unknown as ApprovalNodeConfig;
+    const target = changesRequestedTargetOf(config);
+
+    if (target.kind === "step") {
+      // A named node that has since been deleted resolves to nothing, which
+      // holds the session rather than routing it somewhere arbitrary.
+      return nodes.some((node) => node.id === target.nodeId) ? target.nodeId : null;
+    }
+
+    const completed = await this.completedSteps(approval.sessionId);
+    const nodeTypes = new Map<string, FlowNodeType>(nodes.map((node) => [node.id, node.type]));
+    return nearestEditableNodeId(completed, nodeTypes, approval.nodeId);
+  }
+
+  // The same taken-path input the subject resolver uses, so "last completed
+  // step" and `nearest_editable` cannot come to disagree about what ran.
+  private async completedSteps(sessionId: string): Promise<CompletedStep[]> {
+    const outputs = await this.sessionStepOutputs.listBySession(sessionId);
+    const fromOutputs = outputs.error
+      ? []
+      : outputs.data.map((output) => ({ nodeId: output.nodeId, createdAt: output.createdAt }));
+
+    if (!this.messages) return fromOutputs;
+    const messages = await this.messages.listBySession(sessionId);
+    if (messages.error) return fromOutputs;
+
+    return [
+      ...fromOutputs,
+      ...messages.data
+        .filter((message) => message.stepNodeId)
+        .map((message) => ({ nodeId: message.stepNodeId!, createdAt: message.createdAt })),
+    ];
   }
 
   private async snapshot(sessionId: string): Promise<Record<string, unknown> | null> {
