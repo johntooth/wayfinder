@@ -65,6 +65,34 @@ describe("evaluation.reviewGrid", () => {
     expect(result.requirementFilterOptions).toEqual(["req-1"]);
   });
 
+  it("forwards the sort and filter to the grid's server-side view shaping", async () => {
+    const view = vi.fn().mockReturnValue([]);
+    const controller = makeController({
+      openReviewGrid: vi.fn().mockResolvedValue(ok({ view, requirementIds: () => ["req-1"] })),
+    });
+    const sort = { key: "estimateAud", direction: "desc" } as const;
+    const filter = { query: "acme", requirementId: "req-1" };
+
+    await createCaller(contextWith(makeContainer(controller))).evaluation.reviewGrid({
+      evaluationId,
+      sort,
+      filter,
+    });
+
+    expect(view).toHaveBeenCalledWith({ sort, filter });
+  });
+
+  it("rejects a sort key that is not a review column", async () => {
+    const controller = makeController();
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.reviewGrid({
+        evaluationId,
+        sort: { key: "not-a-column", direction: "asc" },
+      } as never),
+    ).rejects.toThrow();
+    expect(controller.openReviewGrid).not.toHaveBeenCalled();
+  });
+
   it("refuses an unauthenticated caller", async () => {
     const controller = makeController();
     const context = { ...contextWith(makeContainer(controller)), userId: null };

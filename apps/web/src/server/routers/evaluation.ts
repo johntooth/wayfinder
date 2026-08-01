@@ -1,11 +1,14 @@
 import {
   PIVOT_AXES,
+  REVIEW_COLUMNS,
   renderPivotView,
   renderReviewGridView,
   type EvaluationWorkbook,
   type PivotMeasureKind,
   type PricingPivot,
+  type ReviewColumnKey,
   type ReviewGrid,
+  type SortDirection,
 } from "@redline/redline-web";
 import type { DomainError, Result } from "@redline/redline-domain";
 import { isErr } from "@redline/redline-domain";
@@ -62,12 +65,35 @@ const evaluationIdInput = z.object({ evaluationId: z.string().uuid() });
 
 const measureInput = z.enum(["sum", "avg"]) satisfies z.ZodType<PivotMeasureKind>;
 
+// The sortable column keys, taken from the view model's own column set so the
+// router never drifts from what renderReviewGridView renders. Only sortable
+// columns are accepted; renderReviewGridView ignores a non-sortable key anyway.
+const columnKeyEnum = z.enum(
+  REVIEW_COLUMNS.map((column) => column.key) as [ReviewColumnKey, ...ReviewColumnKey[]],
+);
+const directionInput = z.enum(["asc", "desc"]) satisfies z.ZodType<SortDirection>;
+
+// Sort and filter cross the wire so the tested renderReviewGridView does the
+// shaping server-side (delivery-plan item 3: "render the built view models",
+// no client-side re-implementation of the sort/filter logic).
+const reviewGridInput = evaluationIdInput.extend({
+  sort: z.object({ key: columnKeyEnum, direction: directionInput }).optional(),
+  filter: z
+    .object({ query: z.string().optional(), requirementId: z.string().optional() })
+    .optional(),
+});
+
 export const evaluationRouter = router({
   // The sortable/filterable review table for an evaluation at the review stage.
-  reviewGrid: reviewProcedure.input(evaluationIdInput).query(async ({ ctx, input }) => {
+  reviewGrid: reviewProcedure.input(reviewGridInput).query(async ({ ctx, input }) => {
     const grid = await controllerOf(ctx).openReviewGrid({ evaluationId: input.evaluationId });
     if (isErr(grid)) throw toTrpcError(grid.error);
-    return renderReviewGridView({ evaluationId: input.evaluationId, grid: grid.data });
+    return renderReviewGridView({
+      evaluationId: input.evaluationId,
+      grid: grid.data,
+      sort: input.sort,
+      filter: input.filter,
+    });
   }),
 
   // A single pricing pivot (per vendor, per requirement, or the cross-tab),
