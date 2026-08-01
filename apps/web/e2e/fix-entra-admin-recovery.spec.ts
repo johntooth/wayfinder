@@ -27,7 +27,7 @@
  * as they were found.
  */
 
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import type { Browser, Page } from '@playwright/test';
 import { test, expect } from './helpers/base';
@@ -160,24 +160,45 @@ const passwordSignIn = async (
   };
 };
 
-// spawnSync rather than execFileSync: the non-admin warning goes to stderr, and
-// the test asserts on it as well as on stdout.
-const runRecoveryCommand = (email: string, password: string): string => {
-  const result = spawnSync(
-    'pnpm',
-    ['--filter', '@wayfinder/api', 'recover-admin', '--', '--email', email],
-    { cwd: repoRoot, input: password, encoding: 'utf8', timeout: 120_000 },
-  );
-  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
-  expect(result.status, `recover-admin exited ${result.status}:\n${output}`).toBe(0);
-  return output;
-};
+// Spawned asynchronously, not with spawnSync: the command is a cold pnpm + tsx
+// start that takes tens of seconds on a CI runner, and blocking the worker's
+// event loop for that long makes Playwright tear the test down mid-call instead
+// of reporting whatever the command said. stdout and stderr are both collected
+// because the non-admin warning goes to stderr.
+const runRecoveryCommand = (email: string, password: string): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const child = spawn(
+      'pnpm',
+      ['--filter', '@wayfinder/api', 'recover-admin', '--', '--email', email],
+      { cwd: repoRoot },
+    );
+
+    let output = '';
+    child.stdout.on('data', (chunk: Buffer) => {
+      output += chunk.toString('utf8');
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      output += chunk.toString('utf8');
+    });
+
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) return resolve(output);
+      reject(new Error(`recover-admin exited ${code}:\n${output}`));
+    });
+
+    child.stdin.end(password);
+  });
 
 test.describe('Fix: an admin locked out by an Entra outage can be recovered', () => {
   test('recover-admin restores a working password without the identity provider', async ({
     page,
     browser,
   }) => {
+    // Well past the 45s default: this single test registers a user, promotes
+    // them, saves settings, completes an OAuth round-trip, signs in three
+    // times, and shells out to a cold pnpm + tsx start.
+    test.setTimeout(240_000);
     test.skip(!(await mockEntraRunning()), 'mock Entra not reachable on :4001');
 
     const email = uniqueEmail();
@@ -207,7 +228,7 @@ test.describe('Fix: an admin locked out by an Entra outage can be recovered', ()
 
       // Entra is now the only way in. Break glass — no identity provider
       // involved, just shell and database access to the deployment.
-      const output = runRecoveryCommand(email, RECOVERED_PASSWORD);
+      const output = await runRecoveryCommand(email, RECOVERED_PASSWORD);
       expect(output).toContain('Password sign-in restored');
       expect(output).not.toContain('not an administrator');
 
@@ -229,7 +250,9 @@ test.describe('Fix: an admin locked out by an Entra outage can be recovered', ()
       });
       await afterRecovery.close();
     } finally {
-      await setEntraEnabled(page, false);
+      // Never let cleanup become the reported failure: if the body ran out of
+      // time the page is already closed, and the useful error is the body's.
+      if (!page.isClosed()) await setEntraEnabled(page, false).catch(() => {});
     }
   });
 });
