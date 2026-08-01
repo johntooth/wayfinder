@@ -37,6 +37,18 @@ const openAuthenticationDialog = async (page: Page): Promise<void> => {
   await expect(page.getByTestId('auth-pki-row')).toBeVisible({ timeout: 10000 });
 };
 
+// A tRPC query driven through the page's request context, so it carries the
+// session cookies. Reading the browser's own response body is not an option:
+// Chromium discards it once the page settles, and waitForResponse(...).text()
+// then fails with "No data found for resource".
+const trpcQuery = async (page: Page, procedure: string): Promise<string> => {
+  const response = await page.request.get(
+    `/api/trpc/${procedure}?input=${encodeURIComponent('{}')}`,
+    { failOnStatusCode: false },
+  );
+  return response.text();
+};
+
 // Matches the shape every other spec uses: superjson batch of one.
 const trpcMutate = async (
   page: Page,
@@ -112,13 +124,10 @@ test.describe('PKI under the admin Authentication card', () => {
   });
 
   test('never sends the trusted-proxy addresses to the client', async ({ page }) => {
-    // Read what the card actually received rather than hand-rolling a tRPC URL.
-    const configResponse = page.waitForResponse(
-      (response) => response.url().includes('settings.getAuthConfig') && response.ok(),
-      { timeout: 20000 },
-    );
+    // Sign in first: getAuthConfig is admin-scoped.
     await openAuthenticationCard(page);
-    const payload = await (await configResponse).text();
+
+    const payload = await trpcQuery(page, 'settings.getAuthConfig');
 
     // envConfigured is a boolean; the addresses behind it never leave the server.
     expect(payload).toContain('envConfigured');
@@ -131,12 +140,13 @@ test.describe('PKI on the sign-in page', () => {
     const context = await browser.newContext({ storageState: undefined });
     try {
       const page = await context.newPage();
-      const methodsResponse = page.waitForResponse(
-        (response) => response.url().includes('settings.enabledAuthMethods') && response.ok(),
-        { timeout: 20000 },
-      );
       await page.goto('/login');
-      const pkiOffered = (await (await methodsResponse).text()).includes('"pki":true');
+
+      // enabledAuthMethods is public, so a signed-out context can ask it
+      // directly — the same source the page itself renders from.
+      const pkiOffered = (await trpcQuery(page, 'settings.enabledAuthMethods')).includes(
+        '"pki":true',
+      );
       const certificateControl = page.getByTestId('login-certificate');
 
       if (pkiOffered) {

@@ -5,6 +5,11 @@ const getSessionCookie = (req: NextRequest) =>
     .getAll()
     .find((c) => c.name.endsWith(".session_token") || c.name === "better-auth.session_token");
 
+// Sign-in destinations are not somewhere to send a visitor back to, so they
+// carry no redirect: bouncing /admin/login to /login?redirect=/admin/login
+// would just point at another login page.
+const AUTH_PATHS = new Set(["/login", "/admin/login", "/register", "/admin/register"]);
+
 // Always /login, in every configuration. Middleware runs in the Edge runtime and
 // cannot read the database, so it cannot know which methods are enabled; the
 // login page can, and renders the right controls (ADR-042 §2). The requested
@@ -13,7 +18,9 @@ const getSessionCookie = (req: NextRequest) =>
 const redirectToLogin = (req: NextRequest, pathname: string): NextResponse => {
   const url = req.nextUrl.clone();
   url.pathname = "/login";
-  url.searchParams.set("redirect", pathname);
+  if (!AUTH_PATHS.has(pathname)) {
+    url.searchParams.set("redirect", pathname);
+  }
   return NextResponse.redirect(url);
 };
 
