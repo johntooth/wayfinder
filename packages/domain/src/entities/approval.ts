@@ -13,6 +13,14 @@ export type ApprovalStatus = "pending" | "approved" | "rejected" | "changes_requ
 // a decision always moves the row out of `pending`.
 export type ApprovalDecision = "approved" | "rejected" | "changes_requested";
 
+// Every status that means "this approval approved". The single definition, so a
+// caller never has to enumerate the literals itself — an ESLint rule forbids
+// comparing an approval status to a literal outside this file for exactly that
+// reason (ADR-045 §4).
+export const APPROVED_STATUSES: readonly ApprovalStatus[] = ["approved"];
+
+export const isApproved = (status: ApprovalStatus): boolean => APPROVED_STATUSES.includes(status);
+
 export interface Approval {
   readonly id: string;
   readonly sessionId: string;

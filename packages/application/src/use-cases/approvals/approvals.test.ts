@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, it, expect } from "vitest";
 import {
   domainError,
@@ -1203,6 +1204,278 @@ describe("DecideApproval", () => {
 
     const decisionMessage = messages.rows.find((row) => row.role === "system");
     expect(decisionMessage?.content).toContain("routed back to the originator");
+  });
+
+  describe("record locked at decision time", () => {
+    const sha256Hex = (value: string) => createHash("sha256").update(value, "utf8").digest("hex");
+
+    const buildRecording = (parts: {
+      approvals: InMemoryApprovals;
+      sessions: InMemorySessions;
+      nodes: InMemoryFlowNodes;
+      stepOutputs?: InMemoryStepOutputs;
+      messages?: InMemoryMessages;
+      users?: InMemoryUsers;
+      applySignature?: { execute: (input: { approvalId: string }) => Promise<unknown> };
+    }) => {
+      const stepOutputs = parts.stepOutputs ?? new InMemoryStepOutputs();
+      const messages = parts.messages ?? new InMemoryMessages();
+      const users = parts.users ?? new InMemoryUsers();
+      const subject = new ResolveApprovalSubject(
+        parts.approvals,
+        parts.nodes,
+        stepOutputs,
+        messages,
+      );
+      return new DecideApproval(
+        unitOfWorkFor(parts.approvals, parts.sessions),
+        parts.approvals,
+        parts.sessions,
+        new InMemoryFlowEdges(),
+        stepOutputs,
+        new RecordingAuditLogger(),
+        undefined,
+        messages,
+        users,
+        parts.nodes,
+        sha256Hex,
+        subject,
+        parts.applySignature as never,
+      );
+    };
+
+    const seedFlow = async () => {
+      const approvals = new InMemoryApprovals();
+      const sessions = new InMemorySessions();
+      sessions.add(session());
+      const nodes = new InMemoryFlowNodes();
+      nodes.add(approvalNode({ id: "node-appr", name: "Manager review" }));
+      nodes.add(approvalNode({ id: "node-draft", type: "conversational", name: "Prepare instrument" }));
+      const stepOutputs = new InMemoryStepOutputs();
+      await stepOutputs.create({
+        sessionId: "session-1",
+        flowId: "flow-1",
+        nodeId: "node-draft",
+        fields: [{ key: "amount", label: "Amount", type: "text", value: "$1,200" }],
+      });
+      const users = new InMemoryUsers();
+      users.add({ ...user("manager-1", "manager@corp.test"), name: "Jane Doe" });
+      return { approvals, sessions, nodes, stepOutputs, users };
+    };
+
+    it("writes the five guaranteed keys, prefixed by the step key", async () => {
+      const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+      const approval = await seedConfirmed(approvals);
+      const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+      await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "approved",
+        comment: "Within delegated authority.",
+      });
+
+      const record = approvals.rows.get(approval.id)!.recordSnapshot!;
+      expect(record["manager_review.decision"]).toBe("approved");
+      expect(record["manager_review.approver_name"]).toBe("Jane Doe");
+      expect(record["manager_review.approver_email"]).toBe("manager@corp.test");
+      expect(record["manager_review.decided_at"]).toEqual(expect.any(String));
+      expect(record["manager_review.comment"]).toBe("Within delegated authority.");
+    });
+
+    it("copies the approver's name and does not re-read it after a rename", async () => {
+      const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+      const approval = await seedConfirmed(approvals);
+      const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+      await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "approved",
+      });
+      users.add({ ...user("manager-1", "new@corp.test"), name: "Jane Married" });
+
+      const record = approvals.rows.get(approval.id)!.recordSnapshot!;
+      expect(record["manager_review.approver_name"]).toBe("Jane Doe");
+      expect(record["manager_review.approver_email"]).toBe("manager@corp.test");
+    });
+
+    it("locks the resolved subject into the record", async () => {
+      const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+      const approval = await seedConfirmed(approvals);
+      const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+      await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "approved",
+      });
+
+      const record = approvals.rows.get(approval.id)!.recordSnapshot!;
+      expect(record["manager_review.subject_description"]).toContain("Prepare instrument");
+      expect(record["manager_review.subject_node_id"]).toBe("node-draft");
+    });
+
+    it("does not change the record when the session continues past the approval", async () => {
+      const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+      const approval = await seedConfirmed(approvals);
+      const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+      await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "approved",
+      });
+      const locked = { ...approvals.rows.get(approval.id)!.recordSnapshot! };
+
+      // The session carries on and the draft step captures a different value.
+      await stepOutputs.create({
+        sessionId: "session-1",
+        flowId: "flow-1",
+        nodeId: "node-draft",
+        fields: [{ key: "amount", label: "Amount", type: "text", value: "$9,999" }],
+      });
+
+      expect(approvals.rows.get(approval.id)!.recordSnapshot).toEqual(locked);
+    });
+
+    it("gives two approval steps non-colliding key sets", async () => {
+      const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+      nodes.add(approvalNode({ id: "node-appr-2", name: "Finance review" }));
+      const first = await seedConfirmed(approvals);
+      const second = await seedConfirmed(approvals, { nodeId: "node-appr-2" });
+      const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+      await sut.execute({ approvalId: first.id, decidedByUserId: "manager-1", decision: "approved" });
+      await sut.execute({
+        approvalId: second.id,
+        decidedByUserId: "manager-1",
+        decision: "approved",
+      });
+
+      const firstKeys = Object.keys(approvals.rows.get(first.id)!.recordSnapshot!);
+      const secondKeys = Object.keys(approvals.rows.get(second.id)!.recordSnapshot!);
+      expect(firstKeys).toContain("manager_review.decision");
+      expect(secondKeys).toContain("finance_review.decision");
+      expect(secondKeys).not.toContain("manager_review.decision");
+    });
+
+    it("suffixes the key when two approval steps share a label", async () => {
+      const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+      nodes.add(approvalNode({ id: "node-appr-2", name: "Manager review" }));
+      const second = await seedConfirmed(approvals, { nodeId: "node-appr-2" });
+      const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+      await sut.execute({
+        approvalId: second.id,
+        decidedByUserId: "manager-1",
+        decision: "approved",
+      });
+
+      expect(approvals.rows.get(second.id)!.recordSnapshot).toHaveProperty(
+        "manager_review_2.decision",
+      );
+    });
+
+    it("records a change request too, so every decision leaves a trail", async () => {
+      const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+      const approval = await seedConfirmed(approvals);
+      const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+      await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "changes_requested",
+        comment: "Fix the date.",
+      });
+
+      const record = approvals.rows.get(approval.id)!.recordSnapshot!;
+      expect(record["manager_review.decision"]).toBe("changes_requested");
+      expect(record["manager_review.comment"]).toBe("Fix the date.");
+    });
+
+    it("freezes the attestation block when the node targets a signature slot", async () => {
+      const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+      nodes.add(
+        approvalNode({
+          id: "node-appr",
+          name: "Manager review",
+          config: {
+            approverSource: "first_level_supervisor",
+            signatureFieldKey: "delegate_signature",
+          },
+        }),
+      );
+      const approval = await seedConfirmed(approvals);
+      const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+      await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "approved",
+        comment: "Signed off.",
+      });
+
+      const record = approvals.rows.get(approval.id)!.recordSnapshot!;
+      expect(record.signatureFieldKey).toBe("delegate_signature");
+      expect(record.attestationText).toContain("Jane Doe");
+      expect(record.attestationText).toContain("Approved");
+      expect(record["manager_review.verification_code"]).toMatch(/^[0-9A-F]{12}$/);
+    });
+
+    it("triggers the document re-render after the decision commits", async () => {
+      const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+      const applied: string[] = [];
+      const approval = await seedConfirmed(approvals);
+      const sut = buildRecording({
+        approvals,
+        sessions,
+        nodes,
+        stepOutputs,
+        users,
+        applySignature: {
+          execute: async (input) => {
+            applied.push(input.approvalId);
+            return ok({ applied: false, reason: "no_signature_slot" });
+          },
+        },
+      });
+
+      await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "approved",
+      });
+
+      expect(applied).toEqual([approval.id]);
+    });
+
+    it("keeps the decision when the re-render fails", async () => {
+      const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+      const approval = await seedConfirmed(approvals);
+      const sut = buildRecording({
+        approvals,
+        sessions,
+        nodes,
+        stepOutputs,
+        users,
+        applySignature: {
+          execute: async () => {
+            throw new Error("object storage unavailable");
+          },
+        },
+      });
+
+      const result = await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "approved",
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(approvals.rows.get(approval.id)!.status).toBe("approved");
+      expect(approvals.rows.get(approval.id)!.recordSnapshot).toBeTruthy();
+    });
   });
 });
 

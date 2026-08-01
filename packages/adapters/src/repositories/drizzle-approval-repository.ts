@@ -1,5 +1,6 @@
-import { and, desc, eq, isNotNull, ne, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, or } from "drizzle-orm";
 import {
+  APPROVED_STATUSES,
   domainError,
   err,
   ok,
@@ -12,14 +13,15 @@ import {
 import type { Database } from "../db/client";
 import { app_session_approvals } from "../db/schema/wayfinder";
 
-// The governed record exists once an approval has been *decided*. A pending row
-// also carries a `record_snapshot` — the resolved subject is cached there so the
-// gate, the request and the email read one sentence (ADR-040 §2) — and that
-// cache must not be mistaken for a decision that locks the document.
+// The governed record exists once an approval has *approved* something. Two
+// other states carry a `record_snapshot` and must not lock the document: a
+// pending row caches the resolved subject there (ADR-040 §2), and a
+// `changes_requested` row records its decision — locking on that one would stop
+// the operator making the very changes they were asked for (ADR-044 §3).
 export const recordedSnapshotWhere = (sessionId: string) =>
   and(
     eq(app_session_approvals.session_id, sessionId),
-    ne(app_session_approvals.status, "pending"),
+    inArray(app_session_approvals.status, [...APPROVED_STATUSES]),
     isNotNull(app_session_approvals.record_snapshot),
   );
 

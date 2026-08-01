@@ -62,6 +62,7 @@ export * from "./retention-policy";
 export * from "./approval";
 export * from "./approval-record";
 export * from "./taken-path";
+export * from "./attestation-block";
 export * from "./person";
 export * from "./hr-dataset";
 export * from "./rate-limit";

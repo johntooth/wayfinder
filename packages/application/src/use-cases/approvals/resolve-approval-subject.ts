@@ -18,6 +18,7 @@ import {
   type SessionStepOutput,
   type StepOutputField,
 } from "@rbrasier/domain";
+import { SUBJECT_DESCRIPTION_KEY, SUBJECT_NODE_ID_KEY } from "./approval-record-keys";
 
 export interface ResolveApprovalSubjectInput {
   approvalId: string;
@@ -33,9 +34,6 @@ export interface ResolvedApprovalSubject {
   // statement refers to. Null for the custom case.
   snapshot: StepOutputField[] | null;
 }
-
-const SUBJECT_DESCRIPTION_KEY = "subjectDescription";
-const SUBJECT_NODE_ID_KEY = "subjectNodeId";
 
 // Resolves what an approval is asking to be approved (ADR-040 §2). Runs once per
 // approval: the resolved statement is cached on the pending row, so a custom

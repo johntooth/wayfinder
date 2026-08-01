@@ -1,22 +1,38 @@
 import {
+  buildApprovalRecord,
+  buildAttestationBlock,
+  deriveStepKeys,
   domainError,
   err,
   ok,
   type Approval,
   type ApprovalDecision,
+  type ApprovalNodeConfig,
+  type FlowNode,
   type IApprovalRepository,
   type IAuditLogger,
   type IFlowEdgeRepository,
+  type IFlowNodeRepository,
   type ISessionMessageRepository,
   type ISessionRepository,
   type ISessionStepOutputRepository,
   type IUnitOfWork,
   type IUserRepository,
   type Result,
+  type Sha256Hex,
   type StepOutputField,
   type TransactionalRepositories,
 } from "@rbrasier/domain";
 import type { IApprovalDecidedNotifier } from "../notifications/notify-on-approval-decided";
+import type { ApplyApprovalSignature } from "./apply-approval-signature";
+import {
+  ATTESTATION_TEXT_KEY,
+  SIGNATURE_FIELD_KEY,
+  STEP_KEY,
+  SUBJECT_DESCRIPTION_KEY,
+  SUBJECT_NODE_ID_KEY,
+} from "./approval-record-keys";
+import type { ResolveApprovalSubject } from "./resolve-approval-subject";
 
 export interface DecideApprovalInput {
   approvalId: string;
@@ -45,6 +61,21 @@ const field = (key: string, label: string, value: string): StepOutputField => ({
   value,
 });
 
+const stringOrNull = (value: unknown): string | null =>
+  typeof value === "string" && value.length > 0 ? value : null;
+
+// The record key prefix for this approval node. Derived across the flow's whole
+// approval set so two steps sharing a label get distinct keys, and derived from
+// the label so the prefix reads as the step name in a report (ADR-040 §5).
+const approvalStepKey = (nodes: FlowNode[], nodeId: string): string => {
+  const approvalNodes = [...nodes]
+    .filter((node) => node.type === "approval")
+    .sort((first, second) => first.createdAt.getTime() - second.createdAt.getTime());
+  const keys = deriveStepKeys(approvalNodes.map((node) => node.name));
+  const index = approvalNodes.findIndex((node) => node.id === nodeId);
+  return index >= 0 ? keys[index]! : "approval";
+};
+
 // A committed decision plus how the chat and notification side effects should
 // describe it. Produced inside the transaction, consumed after it commits.
 interface DecisionEffect {
@@ -66,8 +97,16 @@ export class DecideApproval {
     private readonly notifier?: IApprovalDecidedNotifier,
     private readonly messages?: ISessionMessageRepository,
     // Needed to authorise decisions on email-assigned approvals — the decider's
-    // account email must match the assigned address.
+    // account email must match the assigned address, and to copy the approver's
+    // identity into the record rather than joining it at read time.
     private readonly users?: IUserRepository,
+    // The record-building dependencies. Optional so the decision path still
+    // works unwired: an approval that records no subject or signature is worse
+    // than one that does, but losing the decision itself would be worse again.
+    private readonly flowNodes?: IFlowNodeRepository,
+    private readonly sha256Hex?: Sha256Hex,
+    private readonly approvalSubject?: ResolveApprovalSubject,
+    private readonly applySignature?: ApplyApprovalSignature,
   ) {}
 
   async execute(input: DecideApprovalInput): Promise<Result<DecideApprovalOutput>> {
@@ -85,10 +124,7 @@ export class DecideApproval {
     }
 
     const decidedAt = new Date();
-    const recordSnapshot =
-      input.decision === "approved"
-        ? await this.snapshot(approval.sessionId)
-        : approval.recordSnapshot;
+    const recordSnapshot = await this.buildRecord(approval, input, decidedAt);
 
     // The concurrency-gated approval update and the session advance/route commit
     // together: a crash between them must never leave a decided approval sitting
@@ -112,9 +148,133 @@ export class DecideApproval {
       metadata: { decision: input.decision, comment: input.comment ?? null },
     });
     await this.recordDecisionMessage(decided, input.decision, routedBack);
+    await this.writeSignature(decided);
     this.notify(decided, input.decision, routedBack);
 
     return ok(output);
+  }
+
+  // The decision is already committed and the record already frozen, so a
+  // storage failure here loses a re-render, not an approval (ADR-043 §6). It is
+  // a retryable follow-up: the attestation lives in the record and can be
+  // written into the document again.
+  private async writeSignature(approval: Approval): Promise<void> {
+    if (!this.applySignature) return;
+    try {
+      await this.applySignature.execute({ approvalId: approval.id });
+    } catch {
+      // Ignore — the approval row remains the source of truth.
+    }
+  }
+
+  // The record frozen at decision time (ADR-040 §3). Every decided approval gets
+  // the five guaranteed keys prefixed by its step key; an approval carrying a
+  // signature slot also gets the rendered attestation, stored rather than
+  // recomputed so a later change around it can never alter what was signed.
+  private async buildRecord(
+    approval: Approval,
+    input: DecideApprovalInput,
+    decidedAt: Date,
+  ): Promise<Record<string, unknown> | null> {
+    const existing = approval.recordSnapshot ?? {};
+    const stepOutputs =
+      input.decision === "approved" ? await this.snapshot(approval.sessionId) : null;
+
+    const nodes = await this.flowNodesOfFlow(approval.flowId);
+    const stepKey = approvalStepKey(nodes, approval.nodeId);
+    const approver = await this.approverIdentity(input.decidedByUserId);
+    const subject = await this.resolveSubject(approval, existing);
+
+    const record: Record<string, unknown> = {
+      ...existing,
+      ...(stepOutputs ?? {}),
+      [STEP_KEY]: stepKey,
+      ...buildApprovalRecord({
+        stepKey,
+        decision: input.decision,
+        approverName: approver.name,
+        approverEmail: approver.email,
+        decidedAt,
+        comment: input.comment ?? null,
+        subjectDescription: subject.description,
+        subjectNodeId: subject.nodeId,
+        ...(subject.signatureFieldKey ? { signatureFieldKey: subject.signatureFieldKey } : {}),
+      }),
+    };
+
+    if (!subject.signatureFieldKey || !this.sha256Hex) return record;
+
+    const attestation = buildAttestationBlock(
+      {
+        approvalId: approval.id,
+        sessionId: approval.sessionId,
+        nodeId: approval.nodeId,
+        approverName: approver.name,
+        approverEmail: approver.email,
+        approverRole: approver.role,
+        decision: input.decision,
+        decidedAt,
+        comment: input.comment ?? null,
+        subjectDescription: subject.description,
+      },
+      this.sha256Hex,
+    );
+
+    return {
+      ...record,
+      [SIGNATURE_FIELD_KEY]: subject.signatureFieldKey,
+      [ATTESTATION_TEXT_KEY]: attestation.text,
+      [`${stepKey}.verification_code`]: attestation.verificationCode,
+    };
+  }
+
+  private async flowNodesOfFlow(flowId: string): Promise<FlowNode[]> {
+    if (!this.flowNodes) return [];
+    const result = await this.flowNodes.listByFlow(flowId);
+    return result.error ? [] : result.data;
+  }
+
+  // Copied in, never joined at read time: a later rename, an email change or a
+  // deleted account must not alter what the record says was true (ADR-040 §5).
+  private async approverIdentity(
+    userId: string,
+  ): Promise<{ name: string | null; email: string | null; role: string | null }> {
+    if (!this.users) return { name: null, email: null, role: null };
+    const result = await this.users.findById(userId);
+    if (result.error || !result.data) return { name: null, email: null, role: null };
+    return {
+      name: result.data.name,
+      email: result.data.email,
+      role: result.data.role,
+    };
+  }
+
+  private async resolveSubject(
+    approval: Approval,
+    existing: Record<string, unknown>,
+  ): Promise<{
+    description: string | null;
+    nodeId: string | null;
+    signatureFieldKey: string | null;
+  }> {
+    const resolved = this.approvalSubject
+      ? await this.approvalSubject.execute({ approvalId: approval.id })
+      : null;
+
+    const description =
+      resolved && !resolved.error
+        ? resolved.data.description
+        : stringOrNull(existing[SUBJECT_DESCRIPTION_KEY]);
+    const nodeId =
+      resolved && !resolved.error
+        ? resolved.data.subjectNodeId
+        : stringOrNull(existing[SUBJECT_NODE_ID_KEY]);
+
+    const nodes = await this.flowNodesOfFlow(approval.flowId);
+    const config = (nodes.find((node) => node.id === approval.nodeId)?.config ??
+      {}) as unknown as ApprovalNodeConfig;
+
+    return { description, nodeId, signatureFieldKey: config.signatureFieldKey ?? null };
   }
 
   // The atomic core: the pending-guard update and the session write share one

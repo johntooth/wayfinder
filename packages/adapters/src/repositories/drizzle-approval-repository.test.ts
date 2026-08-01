@@ -6,17 +6,25 @@ import { recordedSnapshotWhere } from "./drizzle-approval-repository";
 const render = (statement: SQL | undefined) => new PgDialect().sqlToQuery(statement!);
 
 describe("recordedSnapshotWhere", () => {
-  it("counts only a decided approval, so a pending row's cached subject is not a lock", () => {
+  it("counts only an approval that approved something", () => {
     const { sql, params } = render(recordedSnapshotWhere("sess-1"));
     const text = sql.toLowerCase();
 
     expect(text).toContain("session_id");
     expect(text).toContain("record_snapshot");
     expect(text).toContain("is not null");
-    // Without the status test, caching the resolved subject on a pending
-    // approval would lock the document before anyone had decided anything.
     expect(text).toContain("status");
     expect(params).toContain("sess-1");
-    expect(params).toContain("pending");
+    expect(params).toContain("approved");
+  });
+
+  it("does not lock on a pending or changes-requested row", () => {
+    // A pending row caches the resolved subject in the same column, and a change
+    // request has to leave the document editable — that is the whole point of
+    // the outcome.
+    const { params } = render(recordedSnapshotWhere("sess-1"));
+
+    expect(params).not.toContain("pending");
+    expect(params).not.toContain("changes_requested");
   });
 });

@@ -107,6 +107,7 @@ import {
   SetColumnMapping,
   SetFeatureFlagRoles,
   StartSession,
+  ApplyApprovalSignature,
   ResolveApprovalSubject,
   SuggestApprover,
   TrackUsage,
@@ -186,6 +187,7 @@ import {
   QuotaEnforcer,
   RuntimeConfigStore,
   SystemClock,
+  sha256Hex,
   TtlCache,
   createAuth,
   createCachedSessionResolver,
@@ -604,6 +606,14 @@ const build = () => {
     sessionMessages,
     llm,
   );
+  const applyApprovalSignature = new ApplyApprovalSignature(
+    approvals,
+    flowNodes,
+    sessionMessages,
+    sessionStepOutputs,
+    documentGenerator,
+    objectStorage,
+  );
 
   return {
     env,
@@ -757,6 +767,7 @@ const build = () => {
         llm,
       ),
       resolveApprovalSubject,
+      applyApprovalSignature,
       confirmAndSend: new ConfirmAndSend(approvals, auditLogger, notifyOnApprovalRequested),
       decideApproval: new DecideApproval(
         unitOfWork,
@@ -768,6 +779,10 @@ const build = () => {
         notifyOnApprovalDecided,
         sessionMessages,
         users,
+        flowNodes,
+        sha256Hex,
+        resolveApprovalSubject,
+        applyApprovalSignature,
       ),
       listPendingApprovals: new ListPendingApprovals(approvals),
       listPendingApprovalsWithContext: new ListPendingApprovalsWithContext(
