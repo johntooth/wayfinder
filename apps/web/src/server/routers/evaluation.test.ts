@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { err, ok, domainError } from "@redline/redline-domain";
+import type { PermissionKey } from "@rbrasier/domain";
 import type { Container } from "@/lib/container";
 import { createCallerFactory, router, type TrpcContext } from "../trpc";
 import { evaluationRouter } from "./evaluation";
@@ -100,6 +101,32 @@ describe("evaluation.reviewGrid", () => {
       createCaller(context).evaluation.reviewGrid({ evaluationId }),
     ).rejects.toThrow(/authentication required/i);
     expect(controller.openReviewGrid).not.toHaveBeenCalled();
+  });
+
+  it("refuses a caller lacking the evaluation:review permission", async () => {
+    const controller = makeController();
+    const context = {
+      ...contextWith(makeContainer(controller)),
+      isAdmin: false,
+      permissions: new Set<PermissionKey>(),
+    };
+    await expect(
+      createCaller(context).evaluation.reviewGrid({ evaluationId }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(controller.openReviewGrid).not.toHaveBeenCalled();
+  });
+
+  it("admits a non-admin caller holding evaluation:review", async () => {
+    const controller = makeController();
+    const context = {
+      ...contextWith(makeContainer(controller)),
+      isAdmin: false,
+      permissions: new Set<PermissionKey>(["evaluation:review"]),
+    };
+    await expect(
+      createCaller(context).evaluation.reviewGrid({ evaluationId }),
+    ).resolves.toBeDefined();
+    expect(controller.openReviewGrid).toHaveBeenCalledWith({ evaluationId });
   });
 
   it("maps a redline domain error to a tRPC error, message intact", async () => {

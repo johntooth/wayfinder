@@ -14,7 +14,7 @@ import type { DomainError, Result } from "@redline/redline-domain";
 import { isErr } from "@redline/redline-domain";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { authenticatedProcedure, router } from "../trpc";
+import { permissionProcedure, router } from "../trpc";
 
 // The redline evaluation-review surface (delivery-plan item 3), served by the
 // forked Wayfinder over redline's WorkflowController. Every procedure is
@@ -57,9 +57,11 @@ const redlineCodeMap: Record<DomainError["code"], TRPCError["code"]> = {
 const toTrpcError = (error: DomainError): TRPCError =>
   new TRPCError({ code: redlineCodeMap[error.code], message: error.message, cause: error.cause });
 
-// Authentication is the gate today; the `evaluation:review` permission replaces
-// it once the fork branch adds that permission key to Better Auth.
-const reviewProcedure = authenticatedProcedure;
+// Every review-side procedure is gated on `evaluation:review` (ADR-0006, added
+// on the redline fork branch): admins pass via the wildcard, Power Users hold it
+// by default (seed-roles), and an unauthenticated caller is rejected upstream by
+// authenticatedProcedure, which permissionProcedure composes.
+const reviewProcedure = permissionProcedure("evaluation:review");
 
 const evaluationIdInput = z.object({ evaluationId: z.string().uuid() });
 

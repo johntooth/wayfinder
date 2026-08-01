@@ -46,11 +46,14 @@ const SYSTEM_ROLE_SEEDS: SystemRoleSeed[] = [
     },
     // Extraction authoring and running (ADR-033 §7) are advanced capabilities, so
     // Power Users hold them by default; admins hold them via the wildcard.
+    // evaluation:review (ADR-0006, redline fork) is likewise a specialist
+    // capability granted to Power Users out of the box.
     defaultPermissions: [
       "flow:advanced_config",
       "workflow:publish_to_everyone",
       "extraction:author",
       "extraction:run",
+      "evaluation:review",
     ],
   },
 ];
