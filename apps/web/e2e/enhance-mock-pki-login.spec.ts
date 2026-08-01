@@ -143,6 +143,25 @@ test.describe('Mock PKI: client-certificate login', () => {
     }
   });
 
+  // middleware.ts redirects unauthenticated page requests to /api/auth/cert with
+  // a plain navigation when AUTH_METHOD names PKI. The route used to export only
+  // POST, so that redirect dead-ended on 405 and certificate sign-in could never
+  // complete in a real deployment. Without cert headers the request is refused —
+  // 401, from the trusted-proxy check — and it is that 401 rather than a 405
+  // which proves the method is routed at all.
+  test('the cert route answers the GET that middleware redirects with', async ({
+    request,
+    baseURL,
+  }) => {
+    const response = await request.get(`${baseURL}/api/auth/cert?redirect=/chats`, {
+      maxRedirects: 0,
+      failOnStatusCode: false,
+    });
+
+    expect(response.status()).not.toBe(405);
+    expect(response.status()).toBe(401);
+  });
+
   test('a certificate that fails chain verification mints no session', async ({ browser }) => {
     const email = uniqueEmail();
     const context = await browser.newContext({ storageState: undefined });

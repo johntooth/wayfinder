@@ -1,4 +1,4 @@
-# Implementation summary — mock PKI client-certificate proxy (v0.21.5)
+# Implementation summary — mock PKI client-certificate proxy (v0.21.6)
 
 ## What shipped
 
@@ -56,17 +56,31 @@ verification, and an open-redirect attempt on the `redirect` parameter.
 `cert_fingerprint` and `cert_subject_dn` are written on every login but never
 read to find a user. One address is one `core_users` row across both methods.
 
+## Bug fixed: certificate sign-in dead-ended on 405
+
+Building the mock surfaced a defect unit tests could not reach: **PKI browser
+sign-in never completed.** `middleware.ts` redirects unauthenticated page
+requests to `/api/auth/cert`, the browser follows with a GET, and the route
+exported only `POST` — so Next answered 405.
+
+`signInWithCertificate` is now shared behind both `GET` and `POST`. GET is the
+production path; the mTLS proxy attaches `x-ssl-client-*` to that navigation
+like any other request. Minting a session from a GET is safe here because the
+identity comes only from headers the trusted proxy sets, never from ambient
+browser credentials — so it cannot be forged cross-site.
+
+Covered by `apps/web/src/app/api/auth/cert/route.test.ts` (6 cases) plus an e2e
+case asserting 401-not-405 on a bare GET.
+
 ## Recorded, not changed
 
 - **PKI has no precedence rule.** Entra runs `applyEntraPrecedence` to destroy
   the credential row on link; PKI adopts an existing password account and leaves
   the password working. A product decision, not a mock's.
-- **`/api/auth/cert` is POST-only while `middleware.ts` redirects to it with a
-  GET** (405 in a PKI mode, for a browser navigation to a protected page). The
-  mock POSTs directly so it does not depend on that path. Worth its own change:
-  letting a session-minting endpoint answer GET has CSRF implications.
+- **PKI has no `/admin/settings` switch.** It is the only method configured
+  purely by environment. See the phase doc for why, and what making it
+  configurable would take.
 
 ## Version
 
-PATCH → **0.21.5**. Tooling and tests only; no schema change, no application
-behaviour change.
+PATCH → **0.21.6**. Tooling, test cover, and one bug fix; no schema change.

@@ -99,13 +99,46 @@ Both are out of scope for a mock, and both deserve their own deliberate change:
    already has a password account adopts that account and leaves the password
    working. Whether that is correct is a product decision, not a mock's.
 
-2. **`/api/auth/cert` is POST-only, but `middleware.ts` redirects to it with a
-   GET.** In a PKI mode, an unauthenticated request to `/admin` is 302'd to
-   `/api/auth/cert?redirect=/admin`, which the browser follows as a GET; the
-   route exports only `POST`, so Next answers 405. The mock does not depend on
-   this path (it POSTs directly), so it is not fixed here — and making a
-   session-minting endpoint answer GET has CSRF implications worth weighing
-   separately.
+2. ~~**`/api/auth/cert` is POST-only, but `middleware.ts` redirects to it with a
+   GET.**~~ **Fixed in this version** — see below.
+
+## Bug fix — certificate sign-in dead-ended on 405
+
+Building the mock surfaced a defect that unit tests could not: **PKI browser
+sign-in never completed in a real deployment.**
+
+When `AUTH_METHOD` names PKI, `middleware.ts` answers an unauthenticated page
+request with a redirect to `/api/auth/cert?redirect=<path>`. The browser follows
+that with a plain navigation — a GET. The route exported only `POST`, so Next
+answered **405** and the redirect was a dead end. Nothing caught it because the
+adapter's unit tests call `authenticate` directly and never touch the route.
+
+The fix extracts the handler into `signInWithCertificate` and exports both `GET`
+and `POST` against it. GET is the method that matters in production: the mTLS
+proxy attaches `x-ssl-client-*` to that navigation exactly as it does to any
+other request, so there is nothing a POST could add.
+
+**On minting a session from a GET.** This is safe here for a specific reason,
+not by convention. The identity comes entirely from headers only the trusted
+proxy can set — never from ambient credentials the browser attaches on its own.
+A cross-site request cannot forge those headers, and one arriving through the
+proxy carries its own sender's certificate, so the classic login-CSRF shape
+(forcing a victim into the attacker's session) needs control of the proxy, which
+is already total compromise. POST is kept for callers that drive the exchange
+directly, the mock among them.
+
+Covered by `apps/web/src/app/api/auth/cert/route.test.ts` (6 cases, including
+the 405 regression and the open-redirect guard) and one e2e case asserting the
+route answers 401 rather than 405 to a bare GET.
+
+## CI: the `pki` project is excluded from the sharded run
+
+The main `e2e` job now runs `--project=chromium` rather than the whole config.
+The `pki` project needs an app booted in PKI mode and would only skip there,
+but it still counted toward the shard split and shifted which specs landed on
+which machine. Its `setup`/`seed`/`cleanup` dependencies are pulled in
+automatically, so the sharded run is byte-for-byte the distribution it had
+before this branch.
 
 ## Files
 
@@ -113,14 +146,16 @@ Both are out of scope for a mock, and both deserve their own deliberate change:
 |---|---|
 | `mocks/pki/proxy.mjs` | new — the mock mTLS reverse proxy |
 | `mocks/server.mjs` | register the mock |
-| `restart.sh` | `--with-pki` flag; `MOCK_PKI_APP_ORIGIN` export |
+| `restart.sh` | `--with-pki` flag; prints the env block it exports |
 | `.env.example` | point the PKI block at the mock |
+| `apps/web/src/app/api/auth/cert/route.ts` | **fix** — export `GET` alongside `POST` |
+| `apps/web/src/app/api/auth/cert/route.test.ts` | new — route cover incl. the 405 regression |
 | `apps/web/e2e/enhance-mock-pki-login.spec.ts` | new — e2e cover |
 | `apps/web/e2e/playwright.config.ts` | `pki` project, excluded from `chromium` |
-| `.github/workflows/e2e.yml` | `e2e-pki` job |
+| `.github/workflows/e2e.yml` | `e2e-pki` job; shard run pinned to `--project=chromium` |
 | `packages/adapters/src/auth/__tests__/pki-cert-adapter.test.ts` | account-key tests |
 
 ## Version
 
-PATCH → **0.21.5**. Dev and test tooling plus test cover; no schema change, no
-change to application behaviour.
+PATCH → **0.21.6**. Tooling, test cover, and one bug fix to an auth route that
+was unreachable by the method its own middleware used. No schema change.

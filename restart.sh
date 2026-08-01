@@ -10,17 +10,21 @@
 #                           reverse proxy at :4001/pki. To add a new mock,
 #                           follow the instructions at the top of
 #                           mocks/server.mjs and pick a new path (not a new port).
-#                           This flag also exports ENTRA_* fallbacks so Entra
-#                           sign-in points at the mock; you still have to enable
-#                           Entra ID in /admin/settings.
+#                           This flag also points Entra sign-in at the mock via
+#                           ENTRA_AUTHORITY. It does not enable Entra or fill in
+#                           credentials — it prints the values to paste into
+#                           /admin/settings, so a mocked install starts with the
+#                           same auth methods as any other.
 #
 #   --with-pki              Implies --with-mocks, and additionally boots the web
-#                           app in PKI mode (AUTH_METHOD=pki-and-email-password,
-#                           PKI_TRUSTED_PROXY_IPS=127.0.0.1) so the mock proxy at
-#                           :4001/pki/connect can mint sessions. Separate from
-#                           --with-mocks because AUTH_METHOD is read at boot and
-#                           changes how unauthenticated requests are redirected —
-#                           it is not an in-app toggle the way Entra is.
+#                           app in PKI mode so the mock proxy at
+#                           :4001/pki/connect can mint sessions. PKI is the one
+#                           method with no /admin/settings switch: AUTH_METHOD is
+#                           read at boot and also decides where middleware.ts
+#                           sends unauthenticated requests, so it can only come
+#                           from the environment. This flag exports what the run
+#                           needs and prints the same block for .env, rather than
+#                           enabling anything behind your back.
 
 set -euo pipefail
 
@@ -45,7 +49,7 @@ for arg in "$@"; do
       WITH_PKI=1
       ;;
     -h|--help)
-      sed -n '2,23p' "$0"
+      sed -n '2,27p' "$0"
       exit 0
       ;;
     *)
@@ -266,29 +270,55 @@ if [ "$WITH_MOCKS" -eq 1 ]; then
   (cd "$ROOT/mocks" && MOCKS_PORT="$MOCKS_PORT" node server.mjs) >"$log" 2>&1 &
   echo "  mocks server pid $! (logs: .mocks-logs/server.log)"
 
-  # Point Entra sign-in at the mock identity provider. These are fallbacks only:
-  # an auth_config row in admin_system_settings still overrides them (ADR-025),
-  # and enabling Entra remains an explicit admin action.
+  # Point Entra sign-in at the mock identity provider, and *only* that. The
+  # credentials are deliberately not exported: a full set of ENTRA_* env vars
+  # switches Entra on by itself (ADR-025 §1 — env-only deployments keep the DB
+  # row optional), so exporting them here would silently enable Entra on every
+  # mocked install. The mock exists to give a real deployment something to test
+  # against, not to turn the feature on, so the values are printed to paste in.
   export ENTRA_AUTHORITY="http://localhost:$MOCKS_PORT/entra"
-  export ENTRA_TENANT_ID="${ENTRA_TENANT_ID:-mock-tenant}"
-  export ENTRA_CLIENT_ID="${ENTRA_CLIENT_ID:-mock-client}"
-  export ENTRA_CLIENT_SECRET="${ENTRA_CLIENT_SECRET:-mock-secret}"
-  echo "  mock Entra at $ENTRA_AUTHORITY — switch Entra ID on in /admin/settings to use it"
+  cat <<EOF
+  mock Entra at $ENTRA_AUTHORITY
+  To use it, open /admin/settings → Authentication, switch Microsoft Entra ID on
+  and paste these (the mock accepts any values; these just have to be non-empty):
+    Tenant ID      mock-tenant
+    Client ID      mock-client
+    Client secret  mock-secret
+EOF
 
-  # Tell the mock PKI proxy where to forward certificates. Harmless when the app
-  # is not in PKI mode: nothing calls the mock unless you visit its picker.
+  # Where the mock PKI proxy forwards the certificates it issues. Safe to export
+  # unconditionally: it configures the mock, not the app, and nothing reaches the
+  # mock unless you open its picker.
   export MOCK_PKI_APP_ORIGIN="${MOCK_PKI_APP_ORIGIN:-http://localhost:$WEB_PORT}"
 
   if [ "$WITH_PKI" -eq 1 ]; then
-    # Unlike Entra, PKI is not an in-app toggle — the container only builds
-    # PkiCertAdapter when AUTH_METHOD names it, and the adapter refuses to
-    # construct with an empty trusted-proxy list.
+    # PKI is the one method with no /admin/settings switch, so unlike Entra above
+    # there is nothing to paste into the app: the container builds PkiCertAdapter
+    # only when AUTH_METHOD names PKI, the adapter refuses to construct with an
+    # empty trusted-proxy list, and middleware.ts reads AUTH_METHOD too. Exporting
+    # is therefore the only way to honour the flag — but it lasts for this run
+    # only, so print the same block for .env rather than editing it silently.
     export AUTH_METHOD="pki-and-email-password"
     export PKI_TRUSTED_PROXY_IPS="${PKI_TRUSTED_PROXY_IPS:-127.0.0.1}"
-    echo "  PKI mode on (AUTH_METHOD=$AUTH_METHOD, trusted proxies: $PKI_TRUSTED_PROXY_IPS)"
-    echo "  mock PKI picker at http://localhost:$MOCKS_PORT/pki/connect?redirect=/chats"
+    export PKI_SESSION_TTL_HOURS="${PKI_SESSION_TTL_HOURS:-8}"
+    cat <<EOF
+  mock PKI at http://localhost:$MOCKS_PORT/pki
+  PKI mode is on for this run only — these were exported, not written to .env.
+  To keep it on across plain \`./restart.sh\` runs, put this in .env:
+    AUTH_METHOD=$AUTH_METHOD
+    PKI_TRUSTED_PROXY_IPS=$PKI_TRUSTED_PROXY_IPS
+    PKI_SESSION_TTL_HOURS=$PKI_SESSION_TTL_HOURS
+  Then present a certificate at
+    http://localhost:$MOCKS_PORT/pki/connect?redirect=/chats
+  Email/password still works alongside it; drop the "-and-email-password" suffix
+  for certificate-only sign-in.
+EOF
   else
-    echo "  mock PKI at http://localhost:$MOCKS_PORT/pki — re-run with --with-pki to boot the app in PKI mode"
+    cat <<EOF
+  mock PKI at http://localhost:$MOCKS_PORT/pki
+  The app is not in PKI mode, so its picker will be refused (the cert route 404s
+  until AUTH_METHOD names PKI). Re-run with --with-pki to boot in PKI mode.
+EOF
   fi
 fi
 

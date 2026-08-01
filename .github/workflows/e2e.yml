@@ -192,8 +192,13 @@ jobs:
 
       # Each shard emits a machine-readable "blob" report; the report job below
       # merges every shard's blob into one HTML report and one results.json.
+      # --project=chromium, not the whole config: the `pki` project needs an app
+      # booted with AUTH_METHOD=pki-and-email-password and would only skip here,
+      # while still counting toward the shard split and shifting which specs land
+      # on which machine. Its dependencies (setup, seed, cleanup) are pulled in
+      # automatically. The e2e-pki job below runs that project for real.
       - name: Run Playwright tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
-        run: npx playwright test --config=playwright.config.ts --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=blob
+        run: npx playwright test --config=playwright.config.ts --project=chromium --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=blob
         working-directory: apps/web/e2e
 
       # A test failing with a connection error means the dev server died or
