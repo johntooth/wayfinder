@@ -1,6 +1,6 @@
-# PRD — Approval Subject, Signature & Record
+# PRD — Approval Subject, Signature, Record, Routing & Approver Editing
 
-- **Status**: Draft (scope extended 2026-08-01 — signature tag, slot selection, record metadata)
+- **Status**: Draft (scope extended 2026-08-01 — signature tag, slot selection, record metadata, change-request routing, approver field editing)
 - **Date**: 2026-07-19
 - **Author**: rbrasier
 - **Target version**: 0.22.0  (bump: MINOR — new feature, additive `app_flow_nodes.config` + `app_session_approvals.record_snapshot` jsonb; no migration. Computed from the `release/alpha-2` line at `0.21.7`; re-confirm against `VERSION` on the base branch at build time. See `docs/guides/versioning.md`.)
@@ -27,6 +27,24 @@ Three related gaps sit alongside it:
   metadata is not namespaced, so a report cannot tell the manager approval from
   the finance approval, and the approver's name and email are not captured for
   reporting at all.
+
+Making multi-signature documents ordinary exposes three further defects in
+sequential approvals, all reachable in today's code:
+
+- **The second approver is shown the wrong thing.** Approval context resolves
+  from `session.graphCheckpoint.advancedFrom`, a single-slot back-pointer. After
+  approval A advances to approval B, that points at A — a node with no document —
+  so B sees A's decision metadata instead of the document it is signing.
+- **A change request returns to the wrong step, then destroys the session.**
+  Route-back targets the same back-pointer, so B's change request parks the
+  session on approval A, where nothing can be edited. Route-back also clears the
+  pointer, so the *next* change request finds no target and **cancels the
+  session** outright.
+- **Document field access is not authorised at all.** `document.getFields` and
+  `document.updateFields` carry no session-ownership check, so any authenticated
+  user with a message UUID can read and edit another user's document fields.
+  This is a live defect independent of every feature here, and it is why an
+  approver cannot be *granted* edit rights until it is fixed.
 
 ## 2. Users / Personas
 
@@ -60,13 +78,31 @@ Three related gaps sit alongside it:
 - The approval record is **namespaced by step**, so a flow with several approval
   steps produces a report-ready record that names, at minimum, the **date/time,
   approver name, approver email, decision and comment** for each.
+- **Every approver sees the document they are actually signing**, resolved from
+  the configured subject and at its current revision — so a second approver sees
+  the first approver's signature already in place.
+- The approval node config gains **"On changes requested, return to:"** — a
+  dropdown over prior steps, defaulting to the nearest prior step an operator can
+  actually edit — and a session can no longer be cancelled by a failure to
+  resolve that target.
+- **An approver can correct a field and approve**, rather than making a round
+  trip over a typo. The edit is scoped to their own approval's subject step,
+  attributed, announced in the thread, and bound into what they sign.
+- **Document field access is authorised** against the session — a fix that ships
+  first, before any approver capability is added on top of it.
 
 ## 4. Non-goals
 
 - No change to approver **resolution** (`approverSource`, delegation) — this PRD is
-  only about the subject, the signature and the record.
-- No new decision outcomes (`approved` / `rejected` / `changes_requested`
-  unchanged).
+  about the subject, the signature, the record, routing and approver editing.
+- No new decision outcomes — `approved` / `rejected` / `changes_requested` are
+  unchanged. In particular there is no "approve with amendments": an approver who
+  edits then approves uses the existing outcome.
+- The approver does **not** choose the change-request return step at decision
+  time; it is authored on the node, like the subject.
+- No approver rights beyond their own approval's subject step, and none once the
+  approval is decided.
+- No segregation-of-duty toggle to forbid edit-then-approve (noted as future work).
 - No database migration — config, snapshot and signature all ride existing jsonb.
 - **One subject per approval node.** Multiple *signatures* on one document are
   supported (one per approval step); one approval node approving several
@@ -85,6 +121,9 @@ Three related gaps sit alongside it:
 | `TemplateFieldType: "signature"` | `packages/domain/src/entities/template-field.ts` | existing (add variant) | parsed from the `(approval)` annotation. Excluded from `nodeFieldSet`, so it is never gathered conversationally. |
 | `ApprovalNodeConfig.signatureFieldKey` | `packages/domain/src/entities/flow-node.ts` | existing (add field) | which signature slot this approval step fills. Auto-bound when the template has exactly one; chosen from a dropdown when it has several. |
 | Attestation block | `packages/application` (render path) | new (pure builder) | the rendered signature value: name, email, role, decision, UTC timestamp, comment and a verification code derived from the ADR-033 hash chain. |
+| `ApprovalNodeConfig.changesRequestedTarget` | `packages/domain/src/entities/flow-node.ts` | existing (add field) | `{ kind: "step"; nodeId }` \| `{ kind: "nearest_editable" }` (default). Where a change request returns the session. |
+| `PendingApprovalContext.previousStep` | `packages/application/src/use-cases/approvals/list-pending-approvals-with-context.ts` | existing (change) | resolves from `approvalSubject` instead of `advancedFrom`, at read time so the current revision is shown. |
+| Document field authorisation | `apps/web/src/server/routers/document.ts` | existing (fix) | `getFields` / `updateFields` gain a session-access check; then a scoped right for the pending approver of that step. |
 
 ## 6. User stories
 
@@ -105,17 +144,35 @@ Three related gaps sit alongside it:
    itself once I decide.
 9. As a **reporting user**, I can read a flow's approvals and tell each step's
    decision apart by name, with the date/time, approver, decision and comment.
+10. As a **second approver**, I open the request and see the document itself, at
+    its current revision, with the first approver's signature already on it.
+11. As a **flow owner**, I can say which step a change request returns to, so it
+    lands where the work can actually be done.
+12. As an **operator**, a change request never cancels my session — it returns me
+    to an editable step, or holds and tells me why it could not.
+13. As an **approver**, I can correct a field on the step I am approving and then
+    approve, instead of sending it back over a typo.
+14. As an **originator**, an approver's edit appears in the thread naming who
+    changed what, and in the document's edit history.
 
 ## 7. Pages / surfaces affected
 
 - `apps/web/src/components/canvas/node-config-modal-approval.tsx` — the "What is
   being approved" selector (prior-step dropdown defaulting to last completed +
-  custom free-text) **and** the signature-slot dropdown (shown only when the
-  subject step's template declares more than one signature field).
+  custom free-text), the signature-slot dropdown (shown only when the subject
+  step's template declares more than one signature field), **and** the "On
+  changes requested, return to:" dropdown.
 - Approval-raise application use-case — resolve the subject (step snapshot or AI
   summary), attach to the approval, snapshot at decision.
+- `list-pending-approvals-with-context.ts` — resolve the approver's document /
+  fields panel from `approvalSubject` rather than `advancedFrom`.
 - Approval-decision use-case (`decide-approval.ts`) — build the attestation
-  block, write the step-prefixed record, re-render the document revision.
+  block, write the step-prefixed record, re-render the document revision, and
+  route a change request to the configured target instead of the back-pointer.
+- `apps/web/src/server/routers/document.ts` — session-access authorisation on
+  `getFields` / `updateFields`, then the scoped approver-edit right.
+- The approver's decision UI — editable fields for the subject step while the
+  approval is pending.
 - Template parsing and gathering — `template-field.ts` (`(approval)` annotation),
   `node-output.ts` (`nodeFieldSet` exclusion), `render-data.ts` (signature
   substitution).
@@ -133,7 +190,7 @@ new table.
 
 | Table | Change | Prefix valid? |
 | ----- | ------ | ------------- |
-| `app_flow_nodes` | none (jsonb `config` gains `approvalSubject`, `signatureFieldKey`) | n/a |
+| `app_flow_nodes` | none (jsonb `config` gains `approvalSubject`, `signatureFieldKey`, `changesRequestedTarget`) | n/a |
 | `app_session_approvals` | none (jsonb `record_snapshot` gains the step-prefixed record) | n/a |
 
 ## 9. Architectural decisions
@@ -142,10 +199,13 @@ new table.
   step-prefixed record metadata (§5).
 - **New:** ADR-043 — Approval signature tag, slot selection and the attestation
   block.
-- **Assumes:** ADR-018 (approval step & approver resolution), ADR-023 (email
-  notification transport), ADR-024 (document re-render and revision retention),
-  ADR-033 (append-only audit log and hash chain), ADR-038 (step output types),
-  ADR-039 (xlsx template format), the `FieldValueSource` `step_field` precedent.
+- **New:** ADR-044 — Change-request routing target and back-pointer repair.
+- **New:** ADR-045 — Approver field editing and document authorisation.
+- **Assumes:** ADR-018 (approval step & approver resolution), ADR-021 (RBAC),
+  ADR-023 (email notification transport), ADR-024 (document re-render, revision
+  retention, `editHistory`), ADR-033 (append-only audit log and hash chain),
+  ADR-038 (step output types), ADR-039 (xlsx template format), the
+  `FieldValueSource` `step_field` precedent.
 - **Related but not used:** ADR-042 brings client-certificate PKI under runtime
   auth config. That is *sign-in* authentication and provides no document-signing
   credential; the signature here does not depend on it.
@@ -184,6 +244,30 @@ new table.
       key sets in one record.
 - [ ] An xlsx template containing an `(approval)` tag is rejected at upload with
       a message naming the limitation.
+- [ ] In `conversational → approval A → approval B`, B's request shows the
+      **document** (not A's decision fields), at the revision carrying A's
+      signature, with B's own slot still empty.
+- [ ] The approval config offers "On changes requested, return to:", defaulting
+      to the nearest prior conversational step and skipping approval, auto,
+      scheduled and MCP nodes.
+- [ ] `changes_requested` routes to the configured target; when no target can be
+      resolved the session **holds at the approval node with an error** and is
+      never cancelled.
+- [ ] Only `rejected` with route-back declined can cancel a session.
+- [ ] Two change requests in a row on one session both route correctly (the
+      current build cancels on the second).
+- [ ] `document.getFields` / `updateFields` reject a caller with no access to the
+      message's session — verified by a test that asserts the pre-fix behaviour
+      is gone.
+- [ ] A pending approver can edit fields of their own approval's subject step,
+      and cannot edit any other step or any session where they hold no pending
+      approval.
+- [ ] An approver's edit records `editedByUserId` in `editHistory` and posts a
+      system message naming the approver and the changed fields.
+- [ ] An approver who edits then approves produces a verification hash over the
+      **post-edit** state.
+- [ ] A later edit does not alter an already-decided approval's `recordSnapshot`,
+      and the signed revision remains retrievable.
 - [ ] `VERSION` = `package.json#version` = `0.22.0`; `./validate.sh` passes.
 
 ## 11. Out of scope / future work
@@ -199,6 +283,12 @@ new table.
 - A verification surface (`/verify/<code>` lookup against the audit chain).
 - Indexed columns for subject- or approval-level reporting, if jsonb reads prove
   too slow.
+- A per-flow segregation-of-duty toggle forbidding edit-then-approve by the same
+  person (ADR-045).
+- A full visited-node history on the session checkpoint — useful for other
+  reasons, but not a substitute for the configured routing target (ADR-044).
+- Approver-proposed edits requiring originator acceptance, rather than direct
+  edits (ADR-045).
 
 ## 12. Risks / open questions
 
@@ -218,3 +308,16 @@ new table.
   reports spanning a rename must tolerate two key sets.
 - The attestation block is **not** a qualified electronic signature. Every place
   it is described to users must say so.
+- The unauthorised-access fix on `getFields` / `updateFields` may break a caller
+  that relied on their being open — check the E2E fixtures before assuming none
+  does.
+- `nearest_editable` and "last completed step" both need the taken path on a
+  branching flow. One resolver serving both, or they will drift.
+- A flow whose approval precedes any conversational step has no editable return
+  target; warn at authoring time, not at decision time.
+- Approver editing concentrates authorship and sign-off in one person by design.
+  Flows with segregation-of-duty requirements will need the toggle listed in §11.
+- **Open:** whether an edit made after a signature should mark that attestation
+  block as superseded in the current revision. Recomputing the hash is not an
+  option — it would re-sign on the signer's behalf. Leaning towards a
+  "superseded by a later edit" note (ADR-045 §5).

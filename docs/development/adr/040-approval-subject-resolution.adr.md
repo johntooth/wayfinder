@@ -2,9 +2,12 @@
 
 - **Status**: Proposed (scoped by `approval-subject.prd.md`)
 - **Date**: 2026-07-19
-- **Extended**: 2026-08-01 — §5 (step-prefixed record metadata)
+- **Extended**: 2026-08-01 — §5 (step-prefixed record metadata); §2 (approver
+  context resolves from `approvalSubject`, not `advancedFrom`)
 - **See also**: ADR-043 (approval signature tag, slot selection, attestation
-  block), which consumes the record this ADR locks
+  block), which consumes the record this ADR locks; ADR-044 (change-request
+  routing), which replaces the other `advancedFrom` read; ADR-045 (approver
+  field editing)
 
 ## Context
 
@@ -58,6 +61,33 @@ The resolved `subjectDescription` (and `subjectNodeId` for the step case) is sho
 to the operator at the gate and to the approver in the request and email
 (ADR-023). The custom summary is computed **once** and cached on the pending
 approval, not recomputed per render.
+
+**The approver's context follows `approvalSubject`, not `advancedFrom`.**
+`ListPendingApprovalsWithContext` currently resolves the previous step from
+`session.graphCheckpoint.advancedFrom` — a single-slot back-pointer to the node
+the session last advanced from. That is wrong the moment two approval nodes sit
+in sequence:
+
+| Flow position | `advancedFrom` |
+| --- | --- |
+| conversational → approval A | conversational node |
+| A approves, advances to approval B | **approval A** |
+
+So approval B resolves its "previous step" to approval A, which holds no
+document. The lookup falls through to that node's projected decision fields
+(`outcome`, `decided_at`, `decided_by`, `comment`) and the second approver is
+shown decision metadata instead of the document they are meant to sign.
+
+The statement and the artefact must therefore come from the same place. Both the
+`subjectDescription` and the document-or-fields panel resolve from
+`approvalSubject` (defaulting, as ever, to the last completed step), and
+`advancedFrom` is used only for what it actually records — the immediately
+preceding advance. Splitting them is how the two drifted apart in the first
+place.
+
+The document is resolved **at read time**, so the approver always sees the
+current revision of it — including any signature written by an earlier approval
+step (ADR-043 §6).
 
 ### 3. Lock at decision time
 

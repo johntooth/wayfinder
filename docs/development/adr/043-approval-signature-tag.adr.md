@@ -164,6 +164,24 @@ Retaining the prior revision is the point, not a side effect — the unsigned dr
 and the signed instrument both survive, so an auditor can see the document as it
 stood when it was sent for approval.
 
+**The re-render repoints the document, so later steps see the signed copy.**
+`update-document-fields` already updates the message's `SessionDocument.storagePath`
+to the new revision. The signature fill must go through that same update rather
+than writing a detached object, because the next approval step resolves its
+document *by pointer, at read time* (ADR-040 §2). Write a new object without
+moving the pointer and a second approver is shown the unsigned original — which
+is precisely the failure this section exists to prevent.
+
+So in a flow of `conversational (2 slots) → approval A → approval B`, with both
+approvals subject to the conversational step:
+
+1. A decides → slot 1 renders A's attestation → document becomes `-r2`, pointer moves.
+2. B's context resolves the conversational step's document *now* → `-r2`, **carrying A's signature**, with slot 2 still empty because it is undecided.
+3. B decides → slot 2 renders → `-r3`.
+
+Signature slots are independent, so approvals may decide in any order; each fills
+only its own `signatureFieldKey` and leaves the others as they stand.
+
 ### 7. docx only for v1
 
 An xlsx template (ADR-039) in `tags` mode **rejects** `(approval)` at upload with
