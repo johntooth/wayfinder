@@ -41,11 +41,26 @@ import {
   scheduledConfigFromValues,
   scheduledValuesFromConfig,
 } from "@/components/canvas/scheduled-node-config";
+import {
+  decodeApprovalSubject,
+  decodeChangesRequestedTarget,
+  encodeApprovalSubject,
+  encodeChangesRequestedTarget,
+  type PriorStep,
+} from "@/components/canvas/approval-node-config";
 import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/flow-metadata-dialog";
 import { trpc } from "@/trpc/client";
 import type { ConversationalNodeData } from "@/components/canvas/conversational-node";
 import { normaliseOutputType } from "@rbrasier/domain";
-import type { FieldValueSource, FlowContextDoc, PermissionKey, PriorStepField, TemplateField } from "@rbrasier/domain";
+import type {
+  ApprovalSubject,
+  ChangesRequestedTarget,
+  FieldValueSource,
+  FlowContextDoc,
+  PermissionKey,
+  PriorStepField,
+  TemplateField,
+} from "@rbrasier/domain";
 import { compareStepLabels, computeStepNumbers } from "@/lib/flow-utils";
 import type { NextStepAnchor } from "@/lib/canvas/canvas-guidance";
 import {
@@ -356,10 +371,24 @@ function CanvasInner({ flowId }: { flowId: string }) {
         return { ...scheduledConfigFromValues(values), notifyOnComplete: values.notifyOnComplete };
       }
       if (values.type === "approval") {
+        const approvalSubject = decodeApprovalSubject({
+          kind: values.approvalSubjectKind,
+          nodeId: values.approvalSubjectNodeId,
+          instruction: values.approvalSubjectInstruction,
+        });
+        const changesRequestedTarget = decodeChangesRequestedTarget(
+          values.changesRequestedTargetNodeId,
+        );
         return {
           approverSource: values.approverSource,
           roleHint: values.roleHint,
           instructions: values.approvalInstructions,
+          // Each is written only when the author chose something other than the
+          // default, so an untouched node stores nothing new and keeps behaving
+          // exactly as it did.
+          ...(approvalSubject ? { approvalSubject } : {}),
+          ...(values.signatureFieldKey ? { signatureFieldKey: values.signatureFieldKey } : {}),
+          ...(changesRequestedTarget ? { changesRequestedTarget } : {}),
           notifyOnComplete: values.notifyOnComplete,
         };
       }
@@ -524,6 +553,62 @@ function CanvasInner({ flowId }: { flowId: string }) {
     return result;
   }, [editingNodeId, rfNodes, stepNumbers]);
 
+  // Steps earlier than the one being edited, whatever they declare. The subject
+  // and return-target dropdowns list steps, so a conversational step that
+  // declares no fields still has to appear — `priorStepFields` drops it.
+  const priorSteps = useMemo<PriorStep[]>(() => {
+    if (!editingNodeId) return [];
+    const currentLabel = stepNumbers.get(editingNodeId);
+    if (currentLabel == null) return [];
+    const typeByNodeType: Record<string, PriorStep["type"]> = {
+      autoNode: "auto",
+      scheduledNode: "scheduled",
+      approvalNode: "approval",
+      mcpNode: "mcp",
+      conversationalNode: "conversational",
+    };
+    const result: PriorStep[] = [];
+    for (const node of rfNodes) {
+      const label = stepNumbers.get(node.id);
+      if (label == null) continue;
+      if (compareStepLabels(label, currentLabel) >= 0) continue;
+      const stepName = (node.data as { name?: string }).name ?? "Step";
+      result.push({
+        nodeId: node.id,
+        stepLabel: `${label}. ${stepName}`,
+        type: typeByNodeType[node.type ?? ""] ?? "conversational",
+      });
+    }
+    return result;
+  }, [editingNodeId, rfNodes, stepNumbers]);
+
+  // Signature slots other approval steps already claim on the same subject step,
+  // so two nodes cannot be saved targeting one slot (ADR-043 §5).
+  const takenSignatureFieldKeys = useMemo<string[]>(() => {
+    const editing = rfNodes.find((node) => node.id === editingNodeId);
+    const editingSubject = (
+      ((editing?.data as { config?: Record<string, unknown> })?.config ?? {}) as Record<
+        string,
+        unknown
+      >
+    ).approvalSubject as ApprovalSubject | undefined;
+    const subjectNodeId = editingSubject?.kind === "step" ? (editingSubject.nodeId ?? "") : "";
+    if (!subjectNodeId) return [];
+    const keys: string[] = [];
+    for (const node of rfNodes) {
+      if (node.id === editingNodeId || node.type !== "approvalNode") continue;
+      const config = ((node.data as { config?: Record<string, unknown> }).config ?? {}) as Record<
+        string,
+        unknown
+      >;
+      const subject = config.approvalSubject as ApprovalSubject | undefined;
+      if (subject?.kind !== "step" || subject.nodeId !== subjectNodeId) continue;
+      const key = config.signatureFieldKey;
+      if (typeof key === "string" && key) keys.push(key);
+    }
+    return keys;
+  }, [editingNodeId, rfNodes]);
+
   // A reference is stale when a step binds a value (a request field or a
   // schedule anchor) to a prior-step field that no longer exists in the graph —
   // e.g. the source step or field was deleted after the binding was authored.
@@ -578,6 +663,9 @@ function CanvasInner({ flowId }: { flowId: string }) {
     | (ConversationalNodeData & { config?: Record<string, unknown> })
     | undefined;
   const editingConfig = (editingData?.config ?? {}) as Record<string, unknown>;
+  const encodedApprovalSubject = encodeApprovalSubject(
+    editingConfig.approvalSubject as ApprovalSubject | undefined,
+  );
   const initialConfigValues: Partial<NodeConfigValues> | undefined = editingData
     ? {
         name: editingData.name,
@@ -600,6 +688,13 @@ function CanvasInner({ flowId }: { flowId: string }) {
             | undefined) ?? "first_level_supervisor",
         roleHint: (editingConfig.roleHint as string | null) ?? "",
         approvalInstructions: (editingConfig.instructions as string | null) ?? "",
+        approvalSubjectKind: encodedApprovalSubject.kind,
+        approvalSubjectNodeId: encodedApprovalSubject.nodeId,
+        approvalSubjectInstruction: encodedApprovalSubject.instruction,
+        signatureFieldKey: (editingConfig.signatureFieldKey as string | null) ?? "",
+        changesRequestedTargetNodeId: encodeChangesRequestedTarget(
+          editingConfig.changesRequestedTarget as ChangesRequestedTarget | undefined,
+        ),
         aiInstruction: (editingConfig.aiInstruction as string | null) ?? editingData.aiInstruction ?? "",
         doneWhen: (editingConfig.doneWhen as string | null) ?? "",
         neverDone: Boolean(editingConfig.neverDone),
@@ -700,6 +795,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         onClose={handleConfigClose}
         isSaving={isSavingConfig}
         priorStepFields={priorStepFields}
+        priorSteps={priorSteps}
+        takenSignatureFieldKeys={takenSignatureFieldKeys}
         skillsEnabled={skillsEnabled}
         mcpEnabled={mcpEnabled}
         onUploadTemplate={editingNodeId ? handleUploadTemplate : undefined}

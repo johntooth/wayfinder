@@ -196,6 +196,18 @@ describe("XlsxGenerator", () => {
       expect(result.data?.fields.map((field) => field.key)).toEqual(["name"]);
     });
 
+    it("rejects an (approval) signature tag, naming the limitation", () => {
+      const templateBytes = buildXlsx([
+        ["{{ Client Email (email) }}", "{{ Delegate Signature (approval) }}"],
+      ]);
+
+      const result = generator.extractFields({ templateBytes });
+
+      expect(result.error?.code).toBe("VALIDATION_FAILED");
+      expect(result.error?.message).toContain("Delegate Signature");
+      expect(result.error?.message).toContain(".docx");
+    });
+
     it("rejects a workbook with no tags and no usable header row", () => {
       const templateBytes = buildXlsx([[], [""]]);
 

@@ -54,6 +54,20 @@ export class XlsxGenerator implements IDocumentGenerator {
       if (tagsResult.data.tags.length > 0) {
         const parsed = parseTemplateFields(tagsResult.data.tags);
         if (parsed.error) return parsed;
+
+        // Signature semantics in a spreadsheet cell are unclear — cell geometry,
+        // and header-mode templates that carry no tags at all — and guessing
+        // would produce a signature nobody can rely on. Rejected at upload with
+        // the limitation named, rather than silently at render (ADR-043 §7).
+        const signature = parsed.data.find((field) => field.type === "signature");
+        if (signature) {
+          return err(
+            domainError(
+              "VALIDATION_FAILED",
+              `"${signature.label}" uses the (approval) signature tag, which is only supported in Word (.docx) templates. Remove it from this spreadsheet.`,
+            ),
+          );
+        }
         return ok({ fields: parsed.data });
       }
 

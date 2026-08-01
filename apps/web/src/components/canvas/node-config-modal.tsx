@@ -37,6 +37,7 @@ import {
 import { NodeConfigModalAuto } from "./node-config-modal-auto";
 import { NodeConfigModalScheduled } from "./node-config-modal-scheduled";
 import { NodeConfigModalApproval } from "./node-config-modal-approval";
+import type { ApprovalSubjectKind, PriorStep } from "./approval-node-config";
 import { NodeConfigModalMcp } from "./node-config-modal-mcp";
 import {
   CopyButton,
@@ -97,6 +98,17 @@ export interface NodeConfigValues {
   approverSource: ApproverSourceMode;
   roleHint: string;
   approvalInstructions: string;
+  // What is being approved (ADR-040). An empty `approvalSubjectNodeId` means the
+  // last completed step, matching the runtime default for an unconfigured node.
+  approvalSubjectKind: ApprovalSubjectKind;
+  approvalSubjectNodeId: string;
+  approvalSubjectInstruction: string;
+  // The signature slot this approval fills on the subject step's template
+  // (ADR-043 §5). Empty when the template declares none.
+  signatureFieldKey: string;
+  // Where a change request returns the session (ADR-044 §1). Empty means the
+  // nearest prior editable step.
+  changesRequestedTargetNodeId: string;
   notifyOnComplete: boolean;
 }
 
@@ -122,6 +134,13 @@ interface NodeConfigModalProps {
   isSaving?: boolean;
   // Fields declared by steps earlier in the flow, offered as value sources.
   priorStepFields?: PriorStepField[];
+  // Steps earlier in the flow, with their type — the approval subject and
+  // return-target dropdowns list steps, not fields, so a conversational step
+  // that declares nothing still has to appear.
+  priorSteps?: PriorStep[];
+  // Signature slots other approval steps already claim, so two nodes cannot
+  // target one slot (ADR-043 §5).
+  takenSignatureFieldKeys?: string[];
   // Power-user feature flags (ADR-022). When off, the conversational Skills and
   // MCP-tools sections are hidden — a step never offers a capability the author's
   // organisation has not enabled.
@@ -170,6 +189,11 @@ const DEFAULT_VALUES: NodeConfigValues = {
   approverSource: "first_level_supervisor",
   roleHint: "",
   approvalInstructions: "",
+  approvalSubjectKind: "step",
+  approvalSubjectNodeId: "",
+  approvalSubjectInstruction: "",
+  signatureFieldKey: "",
+  changesRequestedTargetNodeId: "",
   notifyOnComplete: false,
 };
 
@@ -184,6 +208,8 @@ export function NodeConfigModal({
   onClose,
   isSaving = false,
   priorStepFields = [],
+  priorSteps = [],
+  takenSignatureFieldKeys = [],
   skillsEnabled = false,
   mcpEnabled = false,
   onUploadTemplate,
@@ -683,7 +709,15 @@ export function NodeConfigModal({
                     />
                   )}
 
-                  {isApproval && <NodeConfigModalApproval values={values} set={set} />}
+                  {isApproval && (
+                    <NodeConfigModalApproval
+                      values={values}
+                      set={set}
+                      priorSteps={priorSteps}
+                      priorStepFields={priorStepFields}
+                      takenSignatureFieldKeys={takenSignatureFieldKeys}
+                    />
+                  )}
 
                   {isMcp && (
                     <NodeConfigModalMcp

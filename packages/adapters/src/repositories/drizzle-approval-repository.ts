@@ -185,7 +185,16 @@ export class DrizzleApprovalRepository implements IApprovalRepository {
   }
 
   private patchToColumns(patch: ApprovalUpdate): Record<string, unknown> {
-    return {
+    return approvalPatchToColumns(patch);
+  }
+}
+
+// The column mapping, pure and exported so the jsonb round-trip can be asserted
+// without a database. `record_snapshot` is written whole: the step-prefixed
+// report keys, the resolved subject and the frozen attestation all ride the
+// existing column, so extending the record needs no migration (ADR-040 §4).
+export const approvalPatchToColumns = (patch: ApprovalUpdate): Record<string, unknown> => {
+  return {
       ...(patch.approverUserId !== undefined ? { approver_user_id: patch.approverUserId } : {}),
       ...(patch.approverEmail !== undefined ? { approver_email: patch.approverEmail } : {}),
       ...(patch.isOverride !== undefined ? { is_override: patch.isOverride } : {}),
@@ -197,6 +206,5 @@ export class DrizzleApprovalRepository implements IApprovalRepository {
       ...(patch.comment !== undefined ? { comment: patch.comment } : {}),
       ...(patch.recordSnapshot !== undefined ? { record_snapshot: patch.recordSnapshot } : {}),
       updated_at: new Date(),
-    };
-  }
-}
+  };
+};
