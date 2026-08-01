@@ -108,6 +108,7 @@ import {
   SetFeatureFlagRoles,
   StartSession,
   ApplyApprovalSignature,
+  ApproverEditSubjectFields,
   ResolveApprovalSubject,
   SuggestApprover,
   TrackUsage,
@@ -599,6 +600,23 @@ const build = () => {
 
   // Shared, not constructed twice: the approval gate and the approver's context
   // must resolve the subject the same way or they drift apart (ADR-040 §2).
+  const documentUseCases = buildDocumentUseCases({
+    documentGenerator,
+    objectStorage,
+    languageModel: llm,
+    sessionMessages,
+    sessionStepOutputs,
+    sessions,
+    flowNodes,
+    approvals,
+    auditLogger,
+  });
+  const approverEditSubjectFields = new ApproverEditSubjectFields(
+    approvals,
+    users,
+    sessionMessages,
+    documentUseCases.updateDocumentFields,
+  );
   const resolveApprovalSubject = new ResolveApprovalSubject(
     approvals,
     flowNodes,
@@ -630,17 +648,7 @@ const build = () => {
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter, ...skillsAndMcp.services },
     repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds, extractionRuns: extraction.repository, extractionDrafts: extraction.draftRepository, ...skillsAndMcp.repos },
     useCases: {
-      ...buildDocumentUseCases({
-        documentGenerator,
-        objectStorage,
-        languageModel: llm,
-        sessionMessages,
-        sessionStepOutputs,
-        sessions,
-        flowNodes,
-        approvals,
-        auditLogger,
-      }),
+      ...documentUseCases,
       evaluateStepReadiness: new EvaluateStepReadiness(llm, documentGenerator, objectStorage),
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
@@ -768,6 +776,7 @@ const build = () => {
       ),
       resolveApprovalSubject,
       applyApprovalSignature,
+      approverEditSubjectFields,
       confirmAndSend: new ConfirmAndSend(approvals, auditLogger, notifyOnApprovalRequested),
       decideApproval: new DecideApproval(
         unitOfWork,

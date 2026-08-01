@@ -82,7 +82,8 @@ const authoriseSession = async (
   const outcome = await authorizeSessionAccess(container, sessionId, userId, isAdmin, {
     requireSend,
     // The approver grant (ADR-018) is read-only, so it opens the field view but
-    // never the edit.
+    // never the edit. An approver's *scoped* edit right is a different check —
+    // see `canSend` below.
     allowApprover: !requireSend,
   });
   if (outcome.authorized) return;
@@ -90,6 +91,22 @@ const authoriseSession = async (
     code: ACCESS_CODE[outcome.status],
     message: accessError(outcome.status),
   });
+};
+
+// Whether the caller has ordinary send access to the session. False for an
+// approver, who is a read-only viewer — their edit goes through the scoped
+// approver path instead, which checks that the step is their own subject.
+const hasSendAccess = async (
+  container: Container,
+  sessionId: string,
+  userId: string,
+  isAdmin: boolean,
+): Promise<boolean> => {
+  const outcome = await authorizeSessionAccess(container, sessionId, userId, isAdmin, {
+    requireSend: true,
+    allowApprover: false,
+  });
+  return outcome.authorized;
 };
 
 export const documentRouter = router({
@@ -173,7 +190,30 @@ export const documentRouter = router({
       if (messageResult.error) throw toTrpcError(messageResult.error);
       const message = messageResult.data;
       if (!message) throw toTrpcError(domainError("NOT_FOUND", "Record not found."));
-      await authoriseSession(ctx.container, message.sessionId, ctx.userId, ctx.isAdmin, true);
+
+      // Two ways in: ordinary send access, or a pending approver editing the one
+      // step their approval is about (ADR-045 §2). The approver path re-checks
+      // that scope itself, so a caller with neither is rejected by the first
+      // check below.
+      const canSend = await hasSendAccess(
+        ctx.container,
+        message.sessionId,
+        ctx.userId,
+        ctx.isAdmin,
+      );
+      if (!canSend) {
+        const approverEdit = await ctx.container.useCases.approverEditSubjectFields.execute({
+          messageId: input.messageId,
+          editedByUserId: ctx.userId,
+          values: input.values,
+          groupItems: input.groupItems,
+        });
+        if (approverEdit.error) throw toTrpcError(approverEdit.error);
+        if (approverEdit.data.fieldErrors) {
+          return { ok: false as const, fieldErrors: approverEdit.data.fieldErrors };
+        }
+        return { ok: true as const, document: approverEdit.data.document };
+      }
 
       const nodeResult = message.stepNodeId
         ? await ctx.container.repos.flowNodes.findById(message.stepNodeId)

@@ -34,6 +34,11 @@ export interface UpdateDocumentFieldsInput {
   // here keeps the items extracted at generation (a scalar-only edit); a group
   // present replaces them wholesale after validation.
   groupItems?: Record<string, Array<Record<string, string>>>;
+  // Set only by the approver-edit path, which has already established that the
+  // caller holds a pending approval whose subject is this step. It lifts the
+  // post-approval lock, because the thing that lock protects — the record — is
+  // frozen independently and is not what an approver is changing (ADR-045 §6).
+  editedAsPendingApprover?: boolean;
 }
 
 export interface DocumentFieldError {
@@ -88,7 +93,11 @@ export class UpdateDocumentFields {
     }
     const currentDocument = message.document;
 
-    const guard = await this.guard(message.sessionId, message.stepNodeId);
+    const guard = await this.guard(
+      message.sessionId,
+      message.stepNodeId,
+      input.editedAsPendingApprover === true,
+    );
     if (guard.error) return guard;
     const { config, templateBytes } = guard.data;
 
@@ -221,6 +230,7 @@ export class UpdateDocumentFields {
   private async guard(
     sessionId: string,
     stepNodeId: string | null,
+    isPendingApprover: boolean,
   ): Promise<Result<{ config: ConversationalNodeConfig; templateBytes: Buffer }>> {
     const sessionResult = await this.sessions.findById(sessionId);
     if (sessionResult.error) return sessionResult;
@@ -241,12 +251,14 @@ export class UpdateDocumentFields {
       return err(domainError("FORBIDDEN", "Manual editing is disabled for this step."));
     }
 
-    const snapshotResult = await this.approvals.hasRecordedSnapshot(sessionId);
-    if (snapshotResult.error) return snapshotResult;
-    if (snapshotResult.data) {
-      return err(
-        domainError("FORBIDDEN", "This document is locked after an approval snapshot."),
-      );
+    if (!isPendingApprover) {
+      const snapshotResult = await this.approvals.hasRecordedSnapshot(sessionId);
+      if (snapshotResult.error) return snapshotResult;
+      if (snapshotResult.data) {
+        return err(
+          domainError("FORBIDDEN", "This document is locked after an approval snapshot."),
+        );
+      }
     }
 
     if (!config.documentTemplatePath) {

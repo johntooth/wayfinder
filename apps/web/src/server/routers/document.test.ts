@@ -66,15 +66,23 @@ const makeContainer = (overrides: Record<string, unknown> = {}): Container =>
       updateDocumentFields: {
         execute: vi.fn().mockResolvedValue(ok({ document: message.document })),
       },
+      approverEditSubjectFields: {
+        execute: vi.fn().mockResolvedValue(ok({ document: message.document })),
+      },
     },
     ...overrides,
   }) as unknown as Container;
 
-// Simulates a caller the session does not admit — resolveSessionAccess is the
-// single place that decides, so denying there denies both procedures.
+// Simulates a caller the session does not admit at all: no participant access,
+// and no pending approval to give them the scoped approver edit right either.
 const denyAccess = (container: Container): void => {
   (container.useCases.resolveSessionAccess.execute as ReturnType<typeof vi.fn>).mockResolvedValue(
     err(domainError("FORBIDDEN", "You do not have access to this session.")),
+  );
+  (
+    container.useCases.approverEditSubjectFields.execute as ReturnType<typeof vi.fn>
+  ).mockResolvedValue(
+    err(domainError("FORBIDDEN", "You may only edit the step your own pending approval is about.")),
   );
 };
 
@@ -161,11 +169,32 @@ describe("document field authorisation", () => {
     expect(result.fields).toHaveLength(2);
   });
 
-  it("rejects updateFields for a read-only participant", async () => {
+  it("routes a read-only caller's edit through the scoped approver path", async () => {
     const container = makeContainer();
     (container.useCases.resolveSessionAccess.execute as ReturnType<typeof vi.fn>).mockResolvedValue(
       ok({ role: "viewer", canSend: false, readOnly: true }),
     );
+    const caller = createCaller(contextWith(container));
+
+    await caller.document.updateFields({
+      messageId: "11111111-1111-1111-1111-111111111111",
+      values: { supplier_name: "New Co" },
+    });
+
+    // The scoped path checks the caller holds a pending approval whose subject
+    // is this step; the ordinary edit path must not run for a read-only caller.
+    expect(container.useCases.approverEditSubjectFields.execute).toHaveBeenCalled();
+    expect(container.useCases.updateDocumentFields.execute).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the approver path's refusal when the step is not their subject", async () => {
+    const container = makeContainer();
+    (container.useCases.resolveSessionAccess.execute as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok({ role: "viewer", canSend: false, readOnly: true }),
+    );
+    (
+      container.useCases.approverEditSubjectFields.execute as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(err(domainError("FORBIDDEN", "Not your subject step.")));
     const caller = createCaller(contextWith(container));
 
     await expect(
