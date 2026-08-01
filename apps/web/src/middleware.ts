@@ -1,21 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const AUTH_METHOD = process.env.AUTH_METHOD ?? "email-password";
-const PKI_MODES = new Set(["pki", "pki-and-email-password"]);
-
 const getSessionCookie = (req: NextRequest) =>
   req.cookies
     .getAll()
     .find((c) => c.name.endsWith(".session_token") || c.name === "better-auth.session_token");
 
+// Always /login, in every configuration. Middleware runs in the Edge runtime and
+// cannot read the database, so it cannot know which methods are enabled; the
+// login page can, and renders the right controls (ADR-042 §2). The requested
+// path rides along so a certificate sign-in still lands where the user was
+// headed — the deep link survives the extra click.
 const redirectToLogin = (req: NextRequest, pathname: string): NextResponse => {
   const url = req.nextUrl.clone();
-  if (PKI_MODES.has(AUTH_METHOD)) {
-    url.pathname = "/api/auth/cert";
-    url.searchParams.set("redirect", pathname);
-  } else {
-    url.pathname = "/login";
-  }
+  url.pathname = "/login";
+  url.searchParams.set("redirect", pathname);
   return NextResponse.redirect(url);
 };
 

@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { domainError, err, ok, type AiConfig, type EmbeddingsConfig, type N8nConfig, type Result, type StorageConfig } from "@rbrasier/domain";
+import { domainError, err, ok, type AiConfig, type AuthConfig, type EmbeddingsConfig, type N8nConfig, type Result, type StorageConfig } from "@rbrasier/domain";
 import {
   probeAiConnectivity,
+  probeAuthEmailPassword,
+  probeAuthEntra,
+  probeAuthPki,
   probeEmailConnectivity,
   probeEmbeddingsConnectivity,
   probeEntraConnectivity,
@@ -263,5 +266,183 @@ describe("probeEmailConnectivity", () => {
 
     expect(result.ok).toBe(false);
     expect(result.message).toContain("EAUTH");
+  });
+});
+
+// ── per-method sign-in probes (ADR-042 §5) ──────────────────────────────────
+
+const authConfig = (overrides: Partial<AuthConfig> = {}): AuthConfig => ({
+  emailPasswordEnabled: false,
+  entraEnabled: false,
+  entra: { tenantId: "", clientId: "", clientSecret: "" },
+  pkiEnabled: false,
+  pki: { sessionTtlHours: 8 },
+  ...overrides,
+});
+
+const entraEnabled = authConfig({
+  entraEnabled: true,
+  entra: { tenantId: "tenant-1", clientId: "client-1", clientSecret: "super-secret" },
+});
+
+const jsonResponse = (body: unknown): Response =>
+  ({ ok: true, status: 200, json: async () => body }) as unknown as Response;
+
+describe("probeAuthEntra", () => {
+  const discovery = { token_endpoint: "https://login.example/tenant-1/oauth2/v2.0/token" };
+
+  it("fetches the OIDC discovery document and then a client-credentials token", async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(discovery))
+      .mockResolvedValueOnce(okResponse());
+
+    const result = await probeAuthEntra(entraEnabled, { fetchFn });
+
+    expect(result.ok).toBe(true);
+    expect(result.target).toBe("auth-entra");
+    const discoveryUrl = fetchFn.mock.calls[0][0] as string;
+    expect(discoveryUrl).toContain("/tenant-1/v2.0/.well-known/openid-configuration");
+    expect(fetchFn.mock.calls[1][0]).toBe(discovery.token_endpoint);
+  });
+
+  // The whole reason this is not the existing `entra` target: sign-in needs no
+  // Graph permission, so the probe must never call Graph (ADR-042 §5).
+  it("never calls Microsoft Graph", async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(discovery))
+      .mockResolvedValueOnce(okResponse());
+
+    await probeAuthEntra(entraEnabled, { fetchFn });
+
+    for (const call of fetchFn.mock.calls) {
+      expect(String(call[0])).not.toContain("graph.microsoft.com");
+    }
+  });
+
+  it("reports a sanitised status when the tenant is unknown", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(statusResponse(400));
+
+    const result = await probeAuthEntra(entraEnabled, { fetchFn });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe("HTTP 400");
+  });
+
+  it("reports a sanitised status when the client secret is wrong", async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(discovery))
+      .mockResolvedValueOnce(statusResponse(401));
+
+    const result = await probeAuthEntra(entraEnabled, { fetchFn });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe("HTTP 401");
+  });
+
+  it("never puts the client secret in the message", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(statusResponse(401));
+
+    const result = await probeAuthEntra(entraEnabled, { fetchFn });
+
+    expect(result.message ?? "").not.toContain("super-secret");
+  });
+
+  it("skips when Entra sign-in is disabled", async () => {
+    const fetchFn = vi.fn();
+
+    const result = await probeAuthEntra(authConfig(), { fetchFn });
+
+    expect(result.skipped).toBe(true);
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it("skips when Entra is enabled but its credentials are incomplete", async () => {
+    const fetchFn = vi.fn();
+
+    const result = await probeAuthEntra(authConfig({ entraEnabled: true }), { fetchFn });
+
+    expect(result.skipped).toBe(true);
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+});
+
+describe("probeAuthPki", () => {
+  it("succeeds when the switch is on and the environment gate is satisfied", async () => {
+    const result = await probeAuthPki(authConfig({ pkiEnabled: true }), true);
+
+    expect(result.ok).toBe(true);
+    expect(result.target).toBe("auth-pki");
+  });
+
+  // A green tick that means more than it checked is worse than no tick at all.
+  it("says configuration was verified, not that a certificate exchange completed", async () => {
+    const result = await probeAuthPki(authConfig({ pkiEnabled: true }), true);
+
+    expect(result.message).toMatch(/configuration/i);
+    expect(result.message ?? "").not.toMatch(/certificate (exchange|sign-in) (completed|works)/i);
+  });
+
+  it("fails and names the missing variable when the environment gate is unsatisfied", async () => {
+    const result = await probeAuthPki(authConfig({ pkiEnabled: true }), false);
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("PKI_TRUSTED_PROXY_IPS");
+  });
+
+  it("skips when PKI is disabled", async () => {
+    const result = await probeAuthPki(authConfig(), true);
+
+    expect(result.skipped).toBe(true);
+  });
+
+  it("never reports a proxy address", async () => {
+    const result = await probeAuthPki(authConfig({ pkiEnabled: true }), true);
+
+    expect(result.message ?? "").not.toMatch(/\d+\.\d+\.\d+\.\d+/);
+  });
+});
+
+describe("probeAuthEmailPassword", () => {
+  it("succeeds when the method is enabled and an account carries a password", async () => {
+    const result = await probeAuthEmailPassword(authConfig({ emailPasswordEnabled: true }), {
+      countAccountsWithPassword: async () => 3,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.target).toBe("auth-email-password");
+  });
+
+  it("fails when the method is enabled but no account carries a password", async () => {
+    const result = await probeAuthEmailPassword(authConfig({ emailPasswordEnabled: true }), {
+      countAccountsWithPassword: async () => 0,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/no account/i);
+  });
+
+  it("skips when the method is disabled", async () => {
+    const countAccountsWithPassword = vi.fn();
+
+    const result = await probeAuthEmailPassword(authConfig(), { countAccountsWithPassword });
+
+    expect(result.skipped).toBe(true);
+    expect(countAccountsWithPassword).not.toHaveBeenCalled();
+  });
+
+  it("reports a sanitised reason when the account lookup fails", async () => {
+    const result = await probeAuthEmailPassword(authConfig({ emailPasswordEnabled: true }), {
+      countAccountsWithPassword: async () => {
+        throw Object.assign(new Error("connect ECONNREFUSED 10.0.0.5:5432"), {
+          code: "ECONNREFUSED",
+        });
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe("ECONNREFUSED");
   });
 });

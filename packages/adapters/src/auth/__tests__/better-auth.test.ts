@@ -9,22 +9,6 @@ describe("AuthMethod discriminated union", () => {
     expect(method.type).toBe("email-password");
   });
 
-  it("accepts pki with config", () => {
-    const method: AuthMethod = {
-      type: "pki",
-      pkiConfig: { trustedProxyIps: ["10.0.0.1"], sessionTtlHours: 8 },
-    };
-    expect(method.type).toBe("pki");
-  });
-
-  it("accepts pki-and-email-password as a combined mode", () => {
-    const method: AuthMethod = {
-      type: "pki-and-email-password",
-      pkiConfig: { trustedProxyIps: ["10.0.0.1"], sessionTtlHours: 8 },
-    };
-    expect(method.type).toBe("pki-and-email-password");
-  });
-
   it("accepts google-oauth and other", () => {
     const a: AuthMethod = { type: "google-oauth" };
     const b: AuthMethod = { type: "other" };

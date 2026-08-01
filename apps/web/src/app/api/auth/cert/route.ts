@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isPkiUsable } from "@rbrasier/domain";
 import { getContainer } from "@/lib/container";
 
 const SAFE_REDIRECT_RE = /^\/(?!\/)/;
@@ -13,6 +14,14 @@ function safeRedirectPath(raw: string | null): string {
   }
 }
 
+// A misconfigured deployment is the server's fault, not the caller's, so it must
+// not be reported as a 400 alongside a malformed certificate header.
+function statusFor(code: string): number {
+  if (code === "UNAUTHORIZED") return 401;
+  if (code === "INFRA_FAILURE") return 500;
+  return 400;
+}
+
 function extractSourceIp(request: Request): string {
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) {
@@ -25,8 +34,14 @@ function extractSourceIp(request: Request): string {
 async function signInWithCertificate(request: Request): Promise<NextResponse> {
   const container = getContainer();
 
-  if (!container.pkiCertAdapter) {
-    return NextResponse.json({ error: "PKI auth is not enabled." }, { status: 404 });
+  // Not usable, not merely disabled: an enabled PKI whose PKI_TRUSTED_PROXY_IPS
+  // went missing in a later deploy is just as unable to authenticate anyone, and
+  // answering 403 here keeps it from reaching the adapter for a vaguer error
+  // (ADR-042 §1). The adapter is always constructed now, so its presence says
+  // nothing about whether certificate sign-in is on.
+  const authConfig = await container.runtimeConfig.getAuthConfig();
+  if (!isPkiUsable(authConfig, container.runtimeConfig.isPkiEnvConfigured())) {
+    return NextResponse.json({ error: "Certificate sign-in is not enabled." }, { status: 403 });
   }
 
   const { searchParams } = new URL(request.url);
@@ -36,8 +51,7 @@ async function signInWithCertificate(request: Request): Promise<NextResponse> {
   const result = await container.pkiCertAdapter.authenticate(request.headers, sourceIp);
 
   if (result.error) {
-    const status = result.error.code === "UNAUTHORIZED" ? 401 : 400;
-    return NextResponse.json({ error: result.error.message }, { status });
+    return NextResponse.json({ error: result.error.message }, { status: statusFor(result.error.code) });
   }
 
   const response = NextResponse.redirect(new URL(redirectTo, request.url), 302);

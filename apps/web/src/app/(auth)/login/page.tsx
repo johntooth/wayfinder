@@ -29,6 +29,14 @@ function LoginForm() {
   const methodsQuery = trpc.settings.enabledAuthMethods.useQuery();
   const emailPasswordEnabled = methodsQuery.data?.emailPassword ?? true;
   const entraEnabled = methodsQuery.data?.entra ?? false;
+  // Defaults to off until the query resolves, so an install that does not offer
+  // certificates never flashes a control the user cannot use.
+  const pkiEnabled = methodsQuery.data?.pki ?? false;
+
+  // Middleware sends the path the visitor was denied; certificate sign-in hands
+  // it back to the cert route so the deep link survives the trip through /login.
+  const redirectTo = searchParams.get("redirect") ?? "/chats";
+  const certificateHref = `/api/auth/cert?redirect=${encodeURIComponent(redirectTo)}`;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -170,6 +178,24 @@ function LoginForm() {
                 disabled={submitting}
               >
                 Sign in with Microsoft
+              </Button>
+            </div>
+          )}
+          {pkiEnabled && (
+            <div className="space-y-4">
+              {(emailPasswordEnabled || entraEnabled) && (
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="h-px flex-1 bg-border" />
+                  or
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+              )}
+              {/* A plain navigation, not a fetch: the mTLS proxy attaches the
+                  x-ssl-client-* headers to the browser's own request. */}
+              <Button asChild type="button" variant="outline" className="w-full">
+                <a href={certificateHref} data-testid="login-certificate">
+                  Sign in with your certificate
+                </a>
               </Button>
             </div>
           )}

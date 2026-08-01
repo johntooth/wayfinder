@@ -5,12 +5,12 @@ import type { Database } from "../db/client";
 import { core_accounts, core_sessions, core_users, core_verification_tokens } from "../db/schema/core";
 import { applyEntraPrecedence } from "./entra-precedence";
 import { userInfoFromIdToken } from "./entra-user-info";
-import type { PkiConfig } from "./pki-cert-adapter";
 
+// PKI is deliberately absent: certificate sign-in is decided by the runtime
+// auth config, not by the process's boot-time mechanism, and Better Auth never
+// handled it in the first place (ADR-042 §3).
 export type AuthMethod =
   | { readonly type: "email-password" }
-  | { readonly type: "pki"; readonly pkiConfig: PkiConfig }
-  | { readonly type: "pki-and-email-password"; readonly pkiConfig: PkiConfig }
   | { readonly type: "google-oauth" }
   | { readonly type: "other" };
 

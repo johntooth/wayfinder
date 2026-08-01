@@ -42,12 +42,14 @@ const mocksRunning = async (): Promise<boolean> => {
   }
 };
 
-// The container only builds PkiCertAdapter when AUTH_METHOD names PKI; without
-// it the route answers 404 rather than the 401 an untrusted caller would get.
+// The adapter is built unconditionally now, so its presence says nothing: the
+// route answers 403 when certificate sign-in is not usable — disabled in
+// settings, or enabled with PKI_TRUSTED_PROXY_IPS unset (ADR-042 §1) — and 401
+// when it is usable but the caller is not a trusted proxy.
 const pkiAuthEnabled = async (baseURL: string): Promise<boolean> => {
   try {
     const response = await fetch(`${baseURL}/api/auth/cert`, { method: 'POST', redirect: 'manual' });
-    return response.status !== 404;
+    return response.status !== 403 && response.status !== 404;
   } catch {
     return false;
   }
@@ -88,7 +90,7 @@ test.describe('Mock PKI: client-certificate login', () => {
     test.skip(!(await mocksRunning()), `mocks server not reachable on ${MOCKS_ORIGIN}`);
     test.skip(
       !(await pkiAuthEnabled(baseURL ?? 'http://localhost:3000')),
-      'PKI auth is off — boot the app with AUTH_METHOD=pki-and-email-password',
+      'certificate sign-in is not usable — boot with ./restart.sh --with-pki',
     );
   });
 

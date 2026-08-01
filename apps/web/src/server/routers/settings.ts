@@ -22,6 +22,7 @@ import {
   type SiemConfig,
   isAiConfigured,
   isAtLeastOneMethodEnabled,
+  isPkiUsable,
   isEmailConfigured,
   isEntraConfigured,
   isN8nConfigured,
@@ -30,7 +31,6 @@ import {
   normaliseAboutLinkUrl,
   type AiConfig,
   type AiPurpose,
-  type AuthConfig,
   type BedrockCredentials,
   type ConnectivityTarget,
   type EmailConfig,
@@ -47,6 +47,7 @@ import {
 import { DEFAULT_MODELS_FOR, RuntimeConfigStore, resolveContextWindow } from "@rbrasier/adapters";
 import { adminProcedure, publicProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
+import { authConfigInputSchema, mergeAuthConfig } from "./settings-auth";
 import { getReindexStatus, startReindex } from "@/lib/reindex-runner";
 
 const providerSchema = z.enum(["anthropic", "openai", "mistral", "bedrock"]);
@@ -270,41 +271,6 @@ export const mergeApiKeys = (
 const apiKeyState = (value: string | null): "set" | "unset" =>
   value && value.length > 0 ? "set" : "unset";
 
-const authConfigInputSchema = z.object({
-  emailPasswordEnabled: z.boolean(),
-  entraEnabled: z.boolean(),
-  entra: z.object({
-    tenantId: z.string().default(""),
-    clientId: z.string().default(""),
-    // Empty/omitted secret keeps the stored one — admins can't read it back.
-    clientSecret: z.string().nullable().optional(),
-  }),
-});
-
-type AuthConfigInput = {
-  emailPasswordEnabled: boolean;
-  entraEnabled: boolean;
-  entra: { tenantId: string; clientId: string; clientSecret?: string | null };
-};
-
-/**
- * Merge an incoming auth config with the stored one. A blank/omitted secret
- * keeps the previously-stored value so saving the form does not wipe a secret
- * the admin can never read back from the redacted display.
- */
-export const mergeAuthConfig = (incoming: AuthConfigInput, stored: AuthConfig): AuthConfig => ({
-  emailPasswordEnabled: incoming.emailPasswordEnabled,
-  entraEnabled: incoming.entraEnabled,
-  entra: {
-    tenantId: incoming.entra.tenantId,
-    clientId: incoming.entra.clientId,
-    clientSecret:
-      incoming.entra.clientSecret && incoming.entra.clientSecret.length > 0
-        ? incoming.entra.clientSecret
-        : stored.entra.clientSecret,
-  },
-});
-
 const bedrockState = (value: BedrockCredentials | null) => ({
   region: value?.region ?? null,
   accessKeyId: apiKeyState(value?.accessKeyId ?? null),
@@ -372,6 +338,14 @@ export const settingsRouter = router({
         clientId: config.entra.clientId,
         clientSecret: apiKeyState(config.entra.clientSecret),
       },
+      pkiEnabled: config.pkiEnabled,
+      pki: {
+        sessionTtlHours: config.pki.sessionTtlHours,
+        // The boolean only. An admin-scoped response is still a network
+        // payload, and the client has no business knowing which addresses the
+        // trust anchor names (ADR-042 §1).
+        envConfigured: ctx.container.runtimeConfig.isPkiEnvConfigured(),
+      },
       redirectUri: `${ctx.container.env.BETTER_AUTH_URL}/api/auth/callback/microsoft`,
     };
   }),
@@ -381,10 +355,22 @@ export const settingsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const current = await ctx.container.runtimeConfig.getAuthConfig();
       const merged = mergeAuthConfig(input, current);
-      if (!isAtLeastOneMethodEnabled(merged)) {
+      const envHasTrustedProxies = ctx.container.runtimeConfig.isPkiEnvConfigured();
+
+      // A disabled checkbox is a UI affordance, not an authorisation check.
+      if (merged.pkiEnabled && !envHasTrustedProxies) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "At least one sign-in method must stay enabled.",
+          message:
+            "Certificate sign-in cannot be enabled until PKI_TRUSTED_PROXY_IPS is set in the environment.",
+        });
+      }
+
+      if (!isAtLeastOneMethodEnabled(merged, envHasTrustedProxies)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "At least one usable sign-in method must stay enabled. Certificate sign-in does not count while PKI_TRUSTED_PROXY_IPS is unset.",
         });
       }
       const result = await ctx.container.repos.systemSettings.set(
@@ -402,6 +388,7 @@ export const settingsRouter = router({
     return {
       emailPassword: config.emailPasswordEnabled,
       entra: config.entraEnabled && isEntraConfigured(config.entra),
+      pki: isPkiUsable(config, ctx.container.runtimeConfig.isPkiEnvConfigured()),
     };
   }),
 
@@ -764,7 +751,20 @@ export const settingsRouter = router({
       },
       storage: { configured: isStorageConfigured(storage) },
       ai: { configured: isAiConfigured(ai) },
-      auth: { configured: isAtLeastOneMethodEnabled(auth) },
+      auth: {
+        configured: isAtLeastOneMethodEnabled(
+          auth,
+          ctx.container.runtimeConfig.isPkiEnvConfigured(),
+        ),
+        // Which methods the wizard must gate on: only enabled ones are tested
+        // (ADR-042 §5), so turning one off is the escape hatch when its probe
+        // fails for a transient reason.
+        enabledMethods: {
+          emailPassword: auth.emailPasswordEnabled,
+          entra: auth.entraEnabled,
+          pki: auth.pkiEnabled,
+        },
+      },
       email: { configured: isEmailConfigured(email) },
       n8n: { configured: isN8nConfigured(n8n) },
     };

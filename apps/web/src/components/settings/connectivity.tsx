@@ -13,6 +13,11 @@ export const ALL_CONNECTIVITY_TARGETS: ConnectivityTarget[] = [
   "storage",
   "email",
   "entra",
+  // Sign-in methods. A disabled one reports skipped and its card renders no
+  // badge, so "Test all" covers authentication without inventing noise.
+  "auth-email-password",
+  "auth-entra",
+  "auth-pki",
 ];
 
 export type BadgeState =

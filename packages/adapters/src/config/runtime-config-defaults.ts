@@ -102,6 +102,20 @@ export interface EnvDefaults {
   embeddingsProvider: EmbeddingsProvider;
   n8n?: N8nConfig;
   entra?: EntraCredentials;
+  // The only route by which the PKI environment enters config resolution.
+  // Booleans, never the trusted-proxy addresses: the trust anchor is read where
+  // it is enforced and nowhere else (ADR-042 §1). Optional so a process with no
+  // sign-in surface — the API worker — need not supply it; absent means ungated,
+  // which is the fail-closed answer.
+  pki?: PkiEnvDefaults;
+}
+
+export interface PkiEnvDefaults {
+  // AUTH_METHOD names PKI: seeds the initial pkiEnabled, and nothing more.
+  authMethodNamesPki: boolean;
+  // PKI_TRUSTED_PROXY_IPS parsed to at least one address.
+  hasTrustedProxies: boolean;
+  sessionTtlHours: number;
 }
 
 export const DEFAULT_N8N_CONFIG: N8nConfig = { baseUrl: "", apiKey: "" };
@@ -388,6 +402,11 @@ export const buildEnvAuthConfig = (env: EnvDefaults): AuthConfig => {
     // credentials are present, so the DB row stays optional.
     entraEnabled: isEntraConfigured(entra),
     entra,
+    // AUTH_METHOD and PKI_SESSION_TTL_HOURS are legacy seeds: they set the
+    // initial value so an existing PKI install upgrades unchanged, and decide
+    // nothing once the row exists (ADR-042 §3).
+    pkiEnabled: env.pki?.authMethodNamesPki ?? defaults.pkiEnabled,
+    pki: { sessionTtlHours: env.pki?.sessionTtlHours ?? defaults.pki.sessionTtlHours },
   };
 };
 
@@ -411,8 +430,18 @@ export const parseAuthConfig = (raw: string, fallback: AuthConfig): AuthConfig =
         clientId: stringOr(rawEntra.clientId, fallback.entra.clientId),
         clientSecret: stringOr(rawEntra.clientSecret, fallback.entra.clientSecret),
       },
+      // Rows written before the PKI fields existed carry neither key, so both
+      // fall back rather than reading as undefined.
+      pkiEnabled: typeof parsed.pkiEnabled === "boolean" ? parsed.pkiEnabled : fallback.pkiEnabled,
+      pki: { sessionTtlHours: parsePkiSessionTtlHours(parsed.pki, fallback.pki.sessionTtlHours) },
     };
   } catch {
     return fallback;
   }
+};
+
+const parsePkiSessionTtlHours = (raw: unknown, fallback: number): number => {
+  if (!isObject(raw)) return fallback;
+  const hours = raw.sessionTtlHours;
+  return typeof hours === "number" && Number.isFinite(hours) && hours > 0 ? hours : fallback;
 };
