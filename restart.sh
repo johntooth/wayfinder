@@ -9,9 +9,11 @@
 #                           identity provider at :4001/entra. To add a new mock,
 #                           follow the instructions at the top of
 #                           mocks/server.mjs and pick a new path (not a new port).
-#                           This flag also exports ENTRA_* fallbacks so Entra
-#                           sign-in points at the mock; you still have to enable
-#                           Entra ID in /admin/settings.
+#                           This flag also points Entra sign-in at the mock via
+#                           ENTRA_AUTHORITY. It does not enable Entra or fill in
+#                           credentials — it prints the values to paste into
+#                           /admin/settings, so a mocked install starts with the
+#                           same auth methods as any other.
 
 set -euo pipefail
 
@@ -31,7 +33,7 @@ for arg in "$@"; do
       WITH_MOCKS=1
       ;;
     -h|--help)
-      sed -n '2,14p' "$0"
+      sed -n '2,16p' "$0"
       exit 0
       ;;
     *)
@@ -252,14 +254,21 @@ if [ "$WITH_MOCKS" -eq 1 ]; then
   (cd "$ROOT/mocks" && MOCKS_PORT="$MOCKS_PORT" node server.mjs) >"$log" 2>&1 &
   echo "  mocks server pid $! (logs: .mocks-logs/server.log)"
 
-  # Point Entra sign-in at the mock identity provider. These are fallbacks only:
-  # an auth_config row in admin_system_settings still overrides them (ADR-025),
-  # and enabling Entra remains an explicit admin action.
+  # Point Entra sign-in at the mock identity provider, and *only* that. The
+  # credentials are deliberately not exported: a full set of ENTRA_* env vars
+  # switches Entra on by itself (ADR-025 §1 — env-only deployments keep the DB
+  # row optional), so exporting them here would silently enable Entra on every
+  # mocked install. The mock exists to give a real deployment something to test
+  # against, not to turn the feature on, so the values are printed to paste in.
   export ENTRA_AUTHORITY="http://localhost:$MOCKS_PORT/entra"
-  export ENTRA_TENANT_ID="${ENTRA_TENANT_ID:-mock-tenant}"
-  export ENTRA_CLIENT_ID="${ENTRA_CLIENT_ID:-mock-client}"
-  export ENTRA_CLIENT_SECRET="${ENTRA_CLIENT_SECRET:-mock-secret}"
-  echo "  mock Entra at $ENTRA_AUTHORITY — switch Entra ID on in /admin/settings to use it"
+  cat <<EOF
+  mock Entra at $ENTRA_AUTHORITY
+  To use it, open /admin/settings → Authentication, switch Microsoft Entra ID on
+  and paste these (the mock accepts any values; these just have to be non-empty):
+    Tenant ID      mock-tenant
+    Client ID      mock-client
+    Client secret  mock-secret
+EOF
 fi
 
 echo "→ starting dev servers (Ctrl-C to stop)"
