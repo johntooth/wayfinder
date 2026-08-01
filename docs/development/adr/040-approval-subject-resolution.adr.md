@@ -2,6 +2,9 @@
 
 - **Status**: Proposed (scoped by `approval-subject.prd.md`)
 - **Date**: 2026-07-19
+- **Extended**: 2026-08-01 — §5 (step-prefixed record metadata)
+- **See also**: ADR-043 (approval signature tag, slot selection, attestation
+  block), which consumes the record this ADR locks
 
 ## Context
 
@@ -69,6 +72,52 @@ guarantee the feature exists for.
 `approvalSubject` rides `app_flow_nodes.config`; the locked subject rides the
 existing `record_snapshot` jsonb. No columns, no schema change.
 
+### 5. Record metadata is namespaced by step
+
+A flow may contain several approval steps, and a report needs to tell them
+apart — "approved on the 3rd" is useless when a flow has a manager approval and
+a finance approval. Every key written into `recordSnapshot` is therefore
+prefixed with the **step key**:
+
+```
+{
+  "manager_review.decision":            "approved",
+  "manager_review.approver_name":       "Jane Doe",
+  "manager_review.approver_email":      "jane.doe@example.com",
+  "manager_review.decided_at":          "2026-08-01T14:32:11.204Z",
+  "manager_review.comment":             "Within delegated authority.",
+  "manager_review.subject_description": "Draft delegation instrument produced by 'Prepare instrument'",
+  "manager_review.subject_node_id":     "b1f2…",
+  "manager_review.signature_field_key": "delegate_signature",
+  "manager_review.verification_code":   "3F9A2C1E7B04",
+
+  "finance_review.decision":            "approved",
+  "finance_review.approver_name":       "Sam Patel",
+  …
+}
+```
+
+The five keys `decision`, `approver_name`, `approver_email`, `decided_at` and
+`comment` are the **guaranteed minimum** — present on every decided approval,
+whatever the flow looks like.
+
+- **The prefix is `deriveFieldKey(node label)`** — the existing helper in
+  `template-field.ts`, already how every field key in the product is derived.
+  Reusing it keeps one snake_casing rule instead of two. Two steps sharing a
+  label collide, so the second gets a `_2` suffix, resolved when the flow is
+  saved rather than at decision time — a report must not be the thing that
+  discovers a name clash.
+- **Flat and dot-separated, not nested.** A reporting read (the
+  `field-report-pivot` precedent) can flatten the jsonb straight into columns
+  without first knowing the flow's shape. Nesting would force every consumer to
+  walk the graph to learn the key names.
+- **Approver name and email are copied in, never joined at read time.** A later
+  rename, an email change or a deleted user must not alter what the record says
+  was true at decision time. This is the same immutability rule as the subject,
+  applied to identity.
+
+Still no migration — this is the shape of data inside the existing jsonb column.
+
 ## Alternatives considered
 
 - **A new `FieldValueSource` variant / new columns for the subject.** Dedicated
@@ -87,6 +136,13 @@ existing `record_snapshot` jsonb. No columns, no schema change.
 - **Default to the first step / no default.** The last completed step is the one
   the approver almost always means; defaulting there matches intent and keeps
   older nodes working.
+- **Unprefixed record keys, disambiguated by the approval row's `nodeId`.** The
+  data is all present either way, but every reporting consumer would have to
+  resolve node IDs to step names before it could label a column. Rejected: the
+  prefix costs nothing to write and removes a join from every reader.
+- **Nested per-step objects (`{ manager_review: { decision: … } }`).** Tidier to
+  read by eye, but a flat dotted key set pivots into a report row directly.
+  Rejected for the consumer's sake, not the writer's.
 
 ## Consequences
 
@@ -97,6 +153,8 @@ existing `record_snapshot` jsonb. No columns, no schema change.
 - Reuses `FieldValueSource`/`PriorStepField` and `recordSnapshot`; no new plumbing,
   no migration.
 - Back-compatible: pre-feature approvals default to the last completed step.
+- A multi-approval flow yields one flat, self-describing record that a report can
+  read without knowing the flow's shape (§5).
 
 **Negative**
 
@@ -106,3 +164,7 @@ existing `record_snapshot` jsonb. No columns, no schema change.
   whose output most recently preceded the approval on the taken path).
 - Subject data in jsonb is not directly indexable; acceptable until subject-level
   reporting is required.
+- Step keys are derived from node **labels**, so renaming a step changes the
+  prefix for approvals recorded afterwards. Existing records keep their original
+  prefix — correct for audit, but a report spanning a rename sees two key sets.
+  Callers that aggregate over time must tolerate that.
