@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull, or } from "drizzle-orm";
+import { and, desc, eq, isNotNull, ne, or } from "drizzle-orm";
 import {
   domainError,
   err,
@@ -11,6 +11,17 @@ import {
 } from "@rbrasier/domain";
 import type { Database } from "../db/client";
 import { app_session_approvals } from "../db/schema/wayfinder";
+
+// The governed record exists once an approval has been *decided*. A pending row
+// also carries a `record_snapshot` — the resolved subject is cached there so the
+// gate, the request and the email read one sentence (ADR-040 §2) — and that
+// cache must not be mistaken for a decision that locks the document.
+export const recordedSnapshotWhere = (sessionId: string) =>
+  and(
+    eq(app_session_approvals.session_id, sessionId),
+    ne(app_session_approvals.status, "pending"),
+    isNotNull(app_session_approvals.record_snapshot),
+  );
 
 const toEntity = (row: typeof app_session_approvals.$inferSelect): Approval => ({
   id: row.id,
@@ -133,12 +144,7 @@ export class DrizzleApprovalRepository implements IApprovalRepository {
       const [row] = await this.db
         .select({ id: app_session_approvals.id })
         .from(app_session_approvals)
-        .where(
-          and(
-            eq(app_session_approvals.session_id, sessionId),
-            isNotNull(app_session_approvals.record_snapshot),
-          ),
-        )
+        .where(recordedSnapshotWhere(sessionId))
         .limit(1);
       return ok(Boolean(row));
     } catch (cause) {

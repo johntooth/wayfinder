@@ -47,6 +47,7 @@ import { ConfirmAndSend } from "./confirm-and-send";
 import { DecideApproval } from "./decide-approval";
 import { ListPendingApprovals } from "./list-pending-approvals";
 import { ListPendingApprovalsWithContext } from "./list-pending-approvals-with-context";
+import { ResolveApprovalSubject } from "./resolve-approval-subject";
 import type {
   IApprovalDecidedNotifier,
   NotifyOnApprovalDecidedInput,
@@ -1284,15 +1285,23 @@ describe("ListPendingApprovalsWithContext", () => {
     messages?: InMemoryMessages;
     stepOutputs?: InMemoryStepOutputs;
     nodes?: InMemoryFlowNodes;
-  }) =>
-    new ListPendingApprovalsWithContext(
+  }) => {
+    const messages = parts.messages ?? new InMemoryMessages();
+    const stepOutputs = parts.stepOutputs ?? new InMemoryStepOutputs();
+    const nodes = parts.nodes ?? new InMemoryFlowNodes();
+    // The real resolver, not a stub — the context and the gate must resolve the
+    // subject the same way, and a stub here would hide it if they stopped.
+    const subject = new ResolveApprovalSubject(parts.approvals, nodes, stepOutputs, messages);
+    return new ListPendingApprovalsWithContext(
       parts.approvals,
       parts.sessions ?? new InMemorySessions(),
       parts.users ?? new InMemoryUsers(),
-      parts.messages ?? new InMemoryMessages(),
-      parts.stepOutputs ?? new InMemoryStepOutputs(),
-      parts.nodes ?? new InMemoryFlowNodes(),
+      messages,
+      stepOutputs,
+      nodes,
+      subject,
     );
+  };
 
   it("enriches a pending approval with chat name and originator", async () => {
     const approvals = new InMemoryApprovals();
@@ -1376,7 +1385,7 @@ describe("ListPendingApprovalsWithContext", () => {
     expect(previous?.fields?.[0]?.value).toBe("$1,200");
   });
 
-  it("returns a null previous step when the session has no checkpoint", async () => {
+  it("returns a null previous step when nothing has completed yet", async () => {
     const approvals = new InMemoryApprovals();
     await seedPending(approvals);
     const sessions = new InMemorySessions();
@@ -1386,5 +1395,78 @@ describe("ListPendingApprovalsWithContext", () => {
     const result = await sut.execute({ approverUserId: "manager-1", approverEmail: null });
 
     expect(result.data?.[0]?.previousStep).toBeNull();
+  });
+
+  it("carries the statement of what is being approved", async () => {
+    const approvals = new InMemoryApprovals();
+    await seedPending(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(checkpointed());
+    const nodes = new InMemoryFlowNodes();
+    nodes.add(previousNode());
+    const stepOutputs = new InMemoryStepOutputs();
+    await stepOutputs.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-prev",
+      fields: [{ key: "amount", label: "Amount", type: "text", value: "$1,200" }],
+    });
+
+    const sut = build({ approvals, sessions, stepOutputs, nodes });
+    const result = await sut.execute({ approverUserId: "manager-1", approverEmail: null });
+
+    expect(result.data?.[0]?.subjectDescription).toContain("Draft the memo");
+  });
+
+  // The defect ADR-040 §2 exists to close: `advancedFrom` names approval A when
+  // the session advances from it, so B used to be shown A's decision fields.
+  it("shows a second approver the document, not the first approval's decision fields", async () => {
+    const approvals = new InMemoryApprovals();
+    await approvals.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-appr-b",
+      requestedByUserId: "operator-1",
+      approverSource: "first_level_supervisor",
+      approverUserId: "manager-1",
+    });
+    const sessions = new InMemorySessions();
+    sessions.add(
+      session({ graphCheckpoint: { currentNodeId: "node-appr-b", advancedFrom: "node-appr-a" } }),
+    );
+    const nodes = new InMemoryFlowNodes();
+    nodes.add(previousNode());
+    nodes.add(approvalNode({ id: "node-appr-a", name: "Manager review" }));
+    nodes.add(approvalNode({ id: "node-appr-b", name: "Finance review" }));
+
+    const messages = new InMemoryMessages();
+    await messages.create({
+      sessionId: "session-1",
+      role: "assistant",
+      content: "Here is the draft.",
+      stepNodeId: "node-prev",
+      document: {
+        filename: "memo.docx",
+        storagePath: "s/memo-r2.docx",
+        summary: "A memo",
+        generatedAt: new Date().toISOString(),
+      },
+    });
+    // Approval A's projected decision output — the thing B must not be shown.
+    const stepOutputs = new InMemoryStepOutputs();
+    await stepOutputs.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-appr-a",
+      fields: [{ key: "outcome", label: "Outcome", type: "text", value: "approved" }],
+    });
+
+    const sut = build({ approvals, sessions, messages, stepOutputs, nodes });
+    const result = await sut.execute({ approverUserId: "manager-1", approverEmail: null });
+
+    const previous = result.data?.[0]?.previousStep;
+    expect(previous?.nodeId).toBe("node-prev");
+    expect(previous?.document?.document.storagePath).toBe("s/memo-r2.docx");
+    expect(previous?.fields).toBeNull();
   });
 });

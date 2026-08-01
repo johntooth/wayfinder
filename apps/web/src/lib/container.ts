@@ -107,6 +107,7 @@ import {
   SetColumnMapping,
   SetFeatureFlagRoles,
   StartSession,
+  ResolveApprovalSubject,
   SuggestApprover,
   TrackUsage,
   UpdateErrorStatus,
@@ -594,6 +595,16 @@ const build = () => {
     seedEmail: env.ADMIN_SEED_EMAIL ?? null,
   });
 
+  // Shared, not constructed twice: the approval gate and the approver's context
+  // must resolve the subject the same way or they drift apart (ADR-040 §2).
+  const resolveApprovalSubject = new ResolveApprovalSubject(
+    approvals,
+    flowNodes,
+    sessionStepOutputs,
+    sessionMessages,
+    llm,
+  );
+
   return {
     env,
     db,
@@ -745,6 +756,7 @@ const build = () => {
         documentChunks,
         llm,
       ),
+      resolveApprovalSubject,
       confirmAndSend: new ConfirmAndSend(approvals, auditLogger, notifyOnApprovalRequested),
       decideApproval: new DecideApproval(
         unitOfWork,
@@ -765,6 +777,7 @@ const build = () => {
         sessionMessages,
         sessionStepOutputs,
         flowNodes,
+        resolveApprovalSubject,
       ),
       searchPeople: new SearchPeople([graphPeopleDirectory, hrPeopleDirectory]),
       importHrDataset: new ImportHrDataset(
