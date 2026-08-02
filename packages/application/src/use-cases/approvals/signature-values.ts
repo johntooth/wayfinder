@@ -1,4 +1,4 @@
-import type { IApprovalRepository, TemplateField } from "@rbrasier/domain";
+import type { Approval, IApprovalRepository, TemplateField } from "@rbrasier/domain";
 import { ATTESTATION_TEXT_KEY, SIGNATURE_FIELD_KEY, SUBJECT_NODE_ID_KEY } from "./approval-record-keys";
 
 // Every signature slot on a step's template, mapped to the attestation block
@@ -27,17 +27,33 @@ export const signatureValuesForStep = async (
   const sessionApprovals = await approvals.listBySession(sessionId);
   if (sessionApprovals.error) return values;
 
-  for (const approval of sessionApprovals.data) {
+  // A step can be decided more than once: rejected, amended, returned and
+  // approved. Every decision keeps its own row and its own frozen record, so the
+  // slot must show the *latest* — a superseded block would leave a document that
+  // was approved reading "Rejected by" on its face. Sorted here rather than
+  // trusting the repository's order, so the rule survives a change to the query.
+  const latestFirst = [...sessionApprovals.data].sort(
+    (first, second) => decidedOrder(second) - decidedOrder(first),
+  );
+
+  for (const approval of latestFirst) {
     if (approval.status === "pending") continue;
     if (readString(approval.recordSnapshot, SUBJECT_NODE_ID_KEY) !== subjectNodeId) continue;
 
     const slot = readString(approval.recordSnapshot, SIGNATURE_FIELD_KEY);
     const text = readString(approval.recordSnapshot, ATTESTATION_TEXT_KEY);
-    if (slot && text && slot in values) values[slot] = text;
+    if (!slot || !text || !(slot in values)) continue;
+    if (values[slot]) continue;
+    values[slot] = text;
   }
 
   return values;
 };
+
+// Falls back to creation for a row decided before the column carried a value, so
+// an undated record sorts by when it was raised rather than to the front.
+const decidedOrder = (approval: Approval): number =>
+  (approval.decidedAt ?? approval.createdAt).getTime();
 
 const readString = (snapshot: Record<string, unknown> | null, key: string): string | null => {
   const value = snapshot?.[key];

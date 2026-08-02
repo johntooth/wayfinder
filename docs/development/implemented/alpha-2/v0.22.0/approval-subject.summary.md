@@ -72,6 +72,14 @@ timestamp, comment and a 12-hex verification code taken over the record with
 ADR-024 revision path and repoints the message's `storagePath`, so the next
 approver reading by pointer sees the signed revision with their own slot empty.
 
+A step can be decided more than once — rejected, amended, returned and approved.
+`SuggestApprover` reuses only a *pending* row, so the second pass raises a second
+approval with its own frozen record, and the first is retained: two rows, two
+records, two audit entries and two projected step outputs. The document shows one
+block per slot, and `signatureValuesForStep` picks the latest decision by
+`decidedAt` (falling back to `createdAt`) rather than trusting the repository's
+order. The superseded block stays in its own record as history and never renders.
+
 The block is an **advanced** electronic signature, not a qualified one. Nothing
 in the code or the UI copy says otherwise.
 
