@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { CERT_SIGN_IN_ERROR_PARAM, certSignInErrorMessage } from "@/lib/cert-sign-in-errors";
 import { trpc } from "@/trpc/client";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -16,6 +17,9 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isExpired = searchParams.get("expired") === "true";
+  // A failed certificate sign-in redirects back here with a code rather than
+  // dead-ending on a JSON body the person who clicked cannot act on.
+  const certError = certSignInErrorMessage(searchParams.get(CERT_SIGN_IN_ERROR_PARAM));
 
   // First-run: an install with no admin has nothing to sign in to yet, so route
   // the very first visitor to the bootstrap screen instead (ADR-041 §0).
@@ -29,6 +33,14 @@ function LoginForm() {
   const methodsQuery = trpc.settings.enabledAuthMethods.useQuery();
   const emailPasswordEnabled = methodsQuery.data?.emailPassword ?? true;
   const entraEnabled = methodsQuery.data?.entra ?? false;
+  // Defaults to off until the query resolves, so an install that does not offer
+  // certificates never flashes a control the user cannot use.
+  const pkiEnabled = methodsQuery.data?.pki ?? false;
+
+  // Middleware sends the path the visitor was denied; certificate sign-in hands
+  // it back to the cert route so the deep link survives the trip through /login.
+  const redirectTo = searchParams.get("redirect") ?? "/chats";
+  const certificateHref = `/api/auth/cert?redirect=${encodeURIComponent(redirectTo)}`;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -102,6 +114,14 @@ function LoginForm() {
               Your session has expired, please sign in again.
             </p>
           )}
+          {certError && (
+            <p
+              data-testid="login-certificate-error"
+              className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-900"
+            >
+              {certError}
+            </p>
+          )}
           {emailPasswordEnabled && (
             <form onSubmit={onSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -170,6 +190,24 @@ function LoginForm() {
                 disabled={submitting}
               >
                 Sign in with Microsoft
+              </Button>
+            </div>
+          )}
+          {pkiEnabled && (
+            <div className="space-y-4">
+              {(emailPasswordEnabled || entraEnabled) && (
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="h-px flex-1 bg-border" />
+                  or
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+              )}
+              {/* A plain navigation, not a fetch: the mTLS proxy attaches the
+                  x-ssl-client-* headers to the browser's own request. */}
+              <Button asChild type="button" variant="outline" className="w-full">
+                <a href={certificateHref} data-testid="login-certificate">
+                  Sign in with your certificate
+                </a>
               </Button>
             </div>
           )}

@@ -73,9 +73,14 @@ unsatisfied.
 ### 2. Middleware stops reading auth config
 
 `middleware.ts` drops its `AUTH_METHOD` branch and always redirects
-unauthenticated page requests to `/login`. The login page — a server component
-that *can* read the database — renders "Sign in with your certificate" when PKI
-is enabled.
+unauthenticated page requests to `/login`. The login page then renders "Sign in
+with your certificate" when PKI is enabled, reading the flag from the existing
+public `settings.enabledAuthMethods` tRPC query — the same way it already
+decides whether to show the Microsoft button. (`/login` is a client component;
+what matters is that it runs where config is reachable, which middleware is
+not.) The unauthenticated first paint defaults `pki` to false, matching how
+`entra` is already handled: the certificate button appears once the query
+resolves rather than flashing on an install that does not offer it.
 
 Next.js middleware runs in the Edge runtime, so it cannot query Postgres, and it
 runs on every matched request, so a config read there would be undesirable even
@@ -91,8 +96,23 @@ PKI + password deployment that is impossible today.
 ### 3. `AUTH_METHOD` degrades to a legacy fallback
 
 `RuntimeConfigStore.getAuthConfig()` seeds `pkiEnabled` from `AUTH_METHOD`
-naming PKI, so an existing deployment upgrades with no env change and no admin
-action. Beyond seeding that default, `AUTH_METHOD` no longer decides anything.
+naming PKI, and `pki.sessionTtlHours` from `PKI_SESSION_TTL_HOURS`, so an
+existing deployment upgrades with no env change, no admin action and its
+configured TTL intact. Beyond seeding those defaults, neither variable decides
+anything.
+
+"No longer decides anything" is enforced, not asserted. The `AuthMethod` union
+in `better-auth.ts` loses its `pki` and `pki-and-email-password` arms, which
+`createAuth` never reads and which only `AUTH_METHOD` could produce; the
+environment gate reaches config resolution through a single `EnvDefaults.pki`
+group, and every consumer downstream — router, PKI probe, lockout guard — reads
+it back through one `RuntimeConfigStore.isPkiEnvConfigured()` accessor rather
+than parsing `process.env` for itself. That group carries a **boolean**: the
+trusted-proxy addresses never enter config resolution at all.
+
+Where the two sources can still disagree — `AUTH_METHOD` naming PKI while the
+stored row says disabled — boot logs a warning. A silent contradiction between
+an environment variable and the database is harder to debug than a log line.
 
 ### 4. The lockout guard counts PKI only when usable
 
@@ -168,12 +188,19 @@ less than the operator thinks is worse than no tick.
 **Negative**
 
 - Existing PKI deployments gain a login-page click (§2). Release-note material.
-- `AUTH_METHOD` may now contradict the DB (names PKI while the DB says off).
-  Build should decide whether to log a boot warning; a silent contradiction is
-  harder to debug than a log line.
+- `AUTH_METHOD` may now contradict the DB (names PKI while the DB says off),
+  mitigated by the boot warning in §3 rather than left silent.
 - Three new probes to maintain, one of which (`auth-pki`) verifies configuration
   rather than end-to-end behaviour and must be described honestly wherever its
   result is surfaced.
 - `PkiCertAdapter` no longer fails fast at construction on an empty proxy list;
-  the error moves to a per-request Result, which must be covered by tests so the
-  misconfiguration stays loud.
+  the error moves to a per-request `INFRA_FAILURE` Result — an existing code, so
+  no `DomainErrorCode` is added for one call site, and it maps to a 500-class
+  answer rather than blaming the caller. `/api/auth/cert` answers 403 on a
+  not-**usable** configuration before the adapter is reached, so that Result is
+  a backstop; both paths need tests, or the misconfiguration stops being loud.
+- `isAtLeastOneMethodEnabled` takes the environment gate as a required second
+  parameter. Every existing caller must be updated — deliberately, since a
+  defaulted parameter would let a forgetful caller silently receive the
+  fail-closed answer instead of a compile error, and that caller is the lockout
+  bug this guard exists to prevent.

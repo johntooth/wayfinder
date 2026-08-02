@@ -180,6 +180,7 @@ import {
   PkiCertAdapter,
   QuotaEnforcer,
   RuntimeConfigStore,
+  createCredentialAccountProbe,
   SystemClock,
   sha256Hex,
   TtlCache,
@@ -202,6 +203,12 @@ import { buildExtractionModule } from "./container-extraction";
 import { buildPeopleDirectory } from "./container-people-directory";
 import { buildSmtpEnvConfig } from "./container-smtp";
 import { createCachedPermissionResolver } from "./cached-permission-resolver";
+import {
+  resolveAuthMethod,
+  resolvePkiEnv,
+  warnOnLegacyAuthMethodContradiction,
+  warnOnRejectedProxyEntries,
+} from "./container-auth";
 import {
   createCachedAdminSettings,
   type ResolvedAdminSettings,
@@ -302,6 +309,8 @@ const build = () => {
         }
       : null;
 
+  const pkiEnv = resolvePkiEnv(env);
+
   const runtimeConfig = new RuntimeConfigStore(systemSettings, {
     provider: env.AI_DEFAULT_PROVIDER,
     apiKeys: {
@@ -329,7 +338,12 @@ const build = () => {
             clientSecret: env.ENTRA_CLIENT_SECRET,
           }
         : undefined,
+    // Booleans only — the addresses stay out of config resolution entirely.
+    pki: pkiEnv.envDefaults,
   });
+
+  warnOnLegacyAuthMethodContradiction(runtimeConfig, logger, pkiEnv.authMethodNamesPki);
+  warnOnRejectedProxyEntries(logger, pkiEnv.rejectedProxyEntries);
 
   // Near-static admin settings cache (scaling wall #4): the chat stream route
   // reads org name, global instructions, and upload config every turn; front
@@ -501,6 +515,8 @@ const build = () => {
     graphClient,
     embeddingsProvider: embeddings,
     openaiApiKey: env.OPENAI_API_KEY ?? null,
+    entraAuthority: env.ENTRA_AUTHORITY,
+    credentialAccounts: createCredentialAccountProbe(db),
   });
   objectStorage.initialise().catch((error: unknown) => {
     logger.warn("MinIO initialisation failed — object storage unavailable until the server restarts", { error });
@@ -515,33 +531,16 @@ const build = () => {
     logger.warn("Role/admin seeding failed — will retry on next server start", { error });
   });
 
-  const pkiConfig = {
-    trustedProxyIps: (env.PKI_TRUSTED_PROXY_IPS ?? "")
-      .split(",")
-      .map((ip) => ip.trim())
-      .filter(Boolean),
-    sessionTtlHours: env.PKI_SESSION_TTL_HOURS,
-  };
+  const authMethod: AuthMethod = resolveAuthMethod(env.AUTH_METHOD);
 
-  const authMethod: AuthMethod = (() => {
-    switch (env.AUTH_METHOD) {
-      case "pki":
-        return { type: "pki" as const, pkiConfig };
-      case "pki-and-email-password":
-        return { type: "pki-and-email-password" as const, pkiConfig };
-      case "google-oauth":
-        return { type: "google-oauth" as const };
-      case "other":
-        return { type: "other" as const };
-      default:
-        return { type: "email-password" as const };
-    }
-  })();
-
-  const pkiCertAdapter =
-    env.AUTH_METHOD === "pki" || env.AUTH_METHOD === "pki-and-email-password"
-      ? new PkiCertAdapter(db, users, pkiConfig)
-      : null;
+  // Built unconditionally: configuration decides whether certificate sign-in
+  // answers, not wiring, so an admin can turn it on with no redeploy.
+  const pkiCertAdapter = new PkiCertAdapter(
+    db,
+    users,
+    { trustedProxyIps: pkiEnv.trustedProxyIps },
+    runtimeConfig,
+  );
 
   // The Better Auth instance reflects the runtime auth config, so it is built
   // lazily and rebuilt whenever the config is invalidated (ADR-025). The auth

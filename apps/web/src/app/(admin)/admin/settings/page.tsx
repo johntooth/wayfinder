@@ -73,7 +73,7 @@ export default function AppSettingsPage() {
                   used, so the single global name is only relevant when off. */}
               {organisationsEnabledQuery.data !== true && <OrganisationNameCard />}
               <RegistrationToggleCard />
-              <AuthMethodsCard />
+              <AuthMethodsCard connectivity={connectivity} />
               <AboutLinksCard />
             </CollapsibleSection>
 

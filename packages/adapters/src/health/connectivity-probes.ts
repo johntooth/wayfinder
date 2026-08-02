@@ -1,9 +1,12 @@
 import { Client as MinioClient } from "minio";
+import { isEntraConfigured } from "@rbrasier/domain";
 import { minioClientOptions } from "../storage/minio-client-options";
 import type {
   AiConfig,
+  AuthConfig,
   ConnectivityResult,
   EmbeddingsConfig,
+  EntraCredentials,
   IEmbeddingsProvider,
   N8nConfig,
   Result,
@@ -260,6 +263,169 @@ export const probeEntraConnectivity = async (
     return result.error
       ? { target, ok: false, latencyMs, message: result.error.message }
       : { target, ok: true, latencyMs };
+  } catch (cause) {
+    return { target, ok: false, latencyMs: Date.now() - start, message: sanitizeCause(cause) };
+  }
+};
+
+// ── per-method sign-in probes ────────────────────────────────────────────────
+//
+// One target per method rather than one aggregate: an operator needs to know
+// which sign-in method is broken, not that "authentication" is (ADR-042 §5).
+// None of these may put credential material in `message`.
+
+const DEFAULT_ENTRA_AUTHORITY = "https://login.microsoftonline.com";
+
+// The scope a client-credentials token is requested for. Any resource would
+// prove the credentials are valid; Graph's default scope needs no application
+// permission granted, which is the point — sign-in does not use User.Read.All.
+const CLIENT_CREDENTIALS_SCOPE = "https://graph.microsoft.com/.default";
+
+interface EntraProbeDeps extends HttpProbeDeps {
+  // Overrides the login.microsoftonline.com host, for sovereign clouds and the
+  // local mock. Env-only, exactly as the sign-in provider treats it.
+  authority?: string;
+}
+
+export const probeAuthEntra = async (
+  config: AuthConfig,
+  deps: EntraProbeDeps = {},
+): Promise<ConnectivityResult> => {
+  const target = "auth-entra" as const;
+  if (!config.entraEnabled) {
+    return { target, ok: false, skipped: true, message: "Entra ID sign-in is not enabled" };
+  }
+  if (!isEntraConfigured(config.entra)) {
+    return { target, ok: false, skipped: true, message: "Entra ID credentials are incomplete" };
+  }
+
+  const fetchFn = deps.fetchFn ?? fetch;
+  const timeoutMs = deps.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
+  const authority = deps.authority ?? DEFAULT_ENTRA_AUTHORITY;
+  const start = Date.now();
+
+  const discovery = await fetchDiscoveryDocument(
+    `${authority}/${config.entra.tenantId}/v2.0/.well-known/openid-configuration`,
+    { fetchFn, timeoutMs },
+  );
+  if (!discovery.ok) {
+    return { target, ok: false, latencyMs: Date.now() - start, message: discovery.message };
+  }
+
+  const token = await requestClientCredentialsToken(discovery.tokenEndpoint, config.entra, {
+    fetchFn,
+    timeoutMs,
+  });
+  const latencyMs = Date.now() - start;
+  return token.error
+    ? { target, ok: false, latencyMs, message: token.error }
+    : { target, ok: true, latencyMs, message: "Authority reachable and credentials accepted" };
+};
+
+type DiscoveryOutcome = { ok: true; tokenEndpoint: string } | { ok: false; message: string };
+
+const fetchDiscoveryDocument = async (
+  url: string,
+  deps: { fetchFn: typeof fetch; timeoutMs: number },
+): Promise<DiscoveryOutcome> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), deps.timeoutMs);
+  try {
+    const response = await deps.fetchFn(url, { method: "GET", signal: controller.signal });
+    if (!response.ok) return { ok: false, message: `HTTP ${response.status}` };
+    const document = (await response.json()) as { token_endpoint?: unknown };
+    if (typeof document.token_endpoint !== "string") {
+      return { ok: false, message: "Discovery document has no token endpoint" };
+    }
+    return { ok: true, tokenEndpoint: document.token_endpoint };
+  } catch (cause) {
+    if (controller.signal.aborted) return { ok: false, message: `Timed out after ${deps.timeoutMs}ms` };
+    return { ok: false, message: sanitizeCause(cause) };
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const requestClientCredentialsToken = async (
+  tokenEndpoint: string,
+  entra: EntraCredentials,
+  deps: { fetchFn: typeof fetch; timeoutMs: number },
+): Promise<{ error?: string }> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), deps.timeoutMs);
+  try {
+    const response = await deps.fetchFn(tokenEndpoint, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: entra.clientId,
+        client_secret: entra.clientSecret,
+        grant_type: "client_credentials",
+        scope: CLIENT_CREDENTIALS_SCOPE,
+      }).toString(),
+      signal: controller.signal,
+    });
+    // Status only. The error body echoes the request context back, so it is
+    // never read into a message an admin will see.
+    return response.ok ? {} : { error: `HTTP ${response.status}` };
+  } catch (cause) {
+    if (controller.signal.aborted) return { error: `Timed out after ${deps.timeoutMs}ms` };
+    return { error: sanitizeCause(cause) };
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+// Configuration only, and it says so. The application sits behind the mTLS
+// proxy and cannot originate a client-certificate handshake, so there is no
+// honest way to prove sign-in works from here (ADR-042 §5).
+export const probeAuthPki = async (
+  config: AuthConfig,
+  envHasTrustedProxies: boolean,
+): Promise<ConnectivityResult> => {
+  const target = "auth-pki" as const;
+  if (!config.pkiEnabled) {
+    return { target, ok: false, skipped: true, message: "Certificate sign-in is not enabled" };
+  }
+  if (!envHasTrustedProxies) {
+    return {
+      target,
+      ok: false,
+      message: "PKI_TRUSTED_PROXY_IPS is not set to a valid address in the environment",
+    };
+  }
+  return {
+    target,
+    ok: true,
+    message: "Configuration verified — a trusted proxy is set and certificate sign-in is on",
+  };
+};
+
+export interface CredentialAccountProbe {
+  countAccountsWithPassword(): Promise<number>;
+}
+
+export const probeAuthEmailPassword = async (
+  config: AuthConfig,
+  deps: CredentialAccountProbe,
+): Promise<ConnectivityResult> => {
+  const target = "auth-email-password" as const;
+  if (!config.emailPasswordEnabled) {
+    return { target, ok: false, skipped: true, message: "Email + password sign-in is not enabled" };
+  }
+
+  const start = Date.now();
+  try {
+    const withPassword = await deps.countAccountsWithPassword();
+    const latencyMs = Date.now() - start;
+    return withPassword > 0
+      ? { target, ok: true, latencyMs, message: "Credential sign-in is on and an account can use it" }
+      : {
+          target,
+          ok: false,
+          latencyMs,
+          message: "Enabled, but no account has a password set — nobody can sign in this way",
+        };
   } catch (cause) {
     return { target, ok: false, latencyMs: Date.now() - start, message: sanitizeCause(cause) };
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, type AiConfig, type EmbeddingsConfig, type N8nConfig, type StorageConfig } from "@rbrasier/domain";
+import { ok, type AiConfig, type AuthConfig, type EmbeddingsConfig, type N8nConfig, type StorageConfig } from "@rbrasier/domain";
 import { CompositeConnectivityTester, type ConnectivityTesterDeps } from "./composite-connectivity-tester";
 
 const buildDeps = (overrides: Partial<ConnectivityTesterDeps> = {}): ConnectivityTesterDeps => ({
@@ -19,11 +19,20 @@ const buildDeps = (overrides: Partial<ConnectivityTesterDeps> = {}): Connectivit
     }),
     getN8nConfig: async (): Promise<N8nConfig> => ({ baseUrl: "", apiKey: "" }),
     getEmbeddingsConfig: async (): Promise<EmbeddingsConfig> => ({ provider: "local", model: "m" }),
+    getAuthConfig: async (): Promise<AuthConfig> => ({
+      emailPasswordEnabled: true,
+      entraEnabled: false,
+      entra: { tenantId: "", clientId: "", clientSecret: "" },
+      pkiEnabled: false,
+      pki: { sessionTtlHours: 8 },
+    }),
+    isPkiEnvConfigured: () => false,
   },
   emailSender: { isConfigured: async () => false, testConnectivity: async () => ok(true as const) },
   graphClient: { isConfigured: () => false, get: vi.fn() },
   embeddingsProvider: { embed: async () => ok([0.1]) },
   openaiApiKey: null,
+  credentialAccounts: { countAccountsWithPassword: async () => 1 },
   fetchFn: vi.fn().mockResolvedValue({ ok: true, status: 200 } as unknown as Response),
   minioClientFactory: () => ({ bucketExists: async () => true }),
   timeoutMs: 50,
@@ -55,7 +64,17 @@ describe("CompositeConnectivityTester", () => {
 
     expect(result.error).toBeUndefined();
     const targets = result.data!.map((entry) => entry.target);
-    expect(targets).toEqual(["ai", "storage", "email", "n8n", "embeddings", "entra"]);
+    expect(targets).toEqual([
+      "ai",
+      "storage",
+      "email",
+      "n8n",
+      "embeddings",
+      "entra",
+      "auth-entra",
+      "auth-pki",
+      "auth-email-password",
+    ]);
   });
 
   it("maps a thrown config lookup into a DomainError instead of throwing", async () => {

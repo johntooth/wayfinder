@@ -82,7 +82,7 @@ import {
 } from "./runtime-config-defaults";
 
 // Re-exported so existing importers of the store keep working.
-export { DEFAULT_DOCUMENT_GENERATION_CONFIG, DEFAULT_EXTRACTION_CONFIG, DEFAULT_MODELS_FOR, MODEL_CONTEXT_WINDOWS, resolveContextWindow, type ContextWindowResolution, type EnvDefaults } from "./runtime-config-defaults";
+export { DEFAULT_DOCUMENT_GENERATION_CONFIG, DEFAULT_EXTRACTION_CONFIG, DEFAULT_MODELS_FOR, MODEL_CONTEXT_WINDOWS, resolveContextWindow, type ContextWindowResolution, type EnvDefaults, type PkiEnvDefaults } from "./runtime-config-defaults";
 
 export class RuntimeConfigStore {
   private aiCache: AiConfig | null = null;
@@ -294,6 +294,14 @@ export class RuntimeConfigStore {
     return this.authPending;
   }
 
+  // The single accessor for PKI's environment precondition. Every consumer —
+  // the settings router, the auth-pki probe, the lockout guard — reads the gate
+  // through here rather than parsing PKI_TRUSTED_PROXY_IPS for itself, so the
+  // trust anchor has exactly one reader per process (ADR-042 §3).
+  isPkiEnvConfigured(): boolean {
+    return this.envDefaults.pki?.hasTrustedProxies ?? false;
+  }
+
   // Master switch for usage-limit enforcement (ADR-031). Cached like the other
   // configs and read on the enforcement hot path; a missing/malformed row falls
   // back to the default (on), so a read blip never silently disables limits.
@@ -475,6 +483,8 @@ export class RuntimeConfigStore {
     emailPasswordEnabled: boolean;
     entraEnabled: boolean;
     entra: { tenantId: string; clientId: string; clientSecret: "set" | "unset" };
+    pkiEnabled: boolean;
+    pki: { sessionTtlHours: number };
   } {
     return {
       emailPasswordEnabled: config.emailPasswordEnabled,
@@ -484,6 +494,10 @@ export class RuntimeConfigStore {
         clientId: config.entra.clientId,
         clientSecret: config.entra.clientSecret ? "set" : "unset",
       },
+      // Nothing to redact: the switch and the TTL are the whole of what the
+      // database owns. The trusted-proxy list is never in this object to leak.
+      pkiEnabled: config.pkiEnabled,
+      pki: { sessionTtlHours: config.pki.sessionTtlHours },
     };
   }
 }

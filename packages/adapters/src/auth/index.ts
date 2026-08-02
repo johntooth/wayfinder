@@ -2,6 +2,7 @@ export * from "./admin-account-creator";
 export * from "./admin-lookup";
 export * from "./admin-recovery";
 export * from "./better-auth";
+export * from "./credential-accounts";
 export * from "./pki-cert-adapter";
 export * from "./seed-admin";
 export * from "./seed-roles";

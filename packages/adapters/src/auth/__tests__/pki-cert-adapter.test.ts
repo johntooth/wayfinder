@@ -3,6 +3,7 @@ import {
   domainError,
   err,
   ok,
+  type AuthConfig,
   type IUserRepository,
   type NewUser,
   type Result,
@@ -92,7 +93,25 @@ const makeDbMock = () => {
 
 const DEFAULT_CONFIG: PkiConfig = {
   trustedProxyIps: ["10.0.0.1"],
-  sessionTtlHours: 8,
+};
+
+// Stands in for RuntimeConfigStore: the adapter reads the switch and the TTL
+// from it on every request, so a settings change applies with no restart.
+const makeAuthConfigSource = (overrides: Partial<AuthConfig> = {}) => {
+  let config: AuthConfig = {
+    emailPasswordEnabled: true,
+    entraEnabled: false,
+    entra: { tenantId: "", clientId: "", clientSecret: "" },
+    pkiEnabled: true,
+    pki: { sessionTtlHours: 8 },
+    ...overrides,
+  };
+  return {
+    getAuthConfig: async (): Promise<AuthConfig> => config,
+    set: (next: Partial<AuthConfig>): void => {
+      config = { ...config, ...next };
+    },
+  };
 };
 
 const validHeaders = (overrides: Record<string, string | null> = {}): Headers => {
@@ -109,22 +128,73 @@ const validHeaders = (overrides: Record<string, string | null> = {}): Headers =>
   return headers;
 };
 
-const makePkiAdapter = (config = DEFAULT_CONFIG, db?: ReturnType<typeof makeDbMock>) => {
+const makePkiAdapter = (
+  config = DEFAULT_CONFIG,
+  db?: ReturnType<typeof makeDbMock>,
+  authConfig = makeAuthConfigSource(),
+) => {
   const users = new InMemoryUsers();
   const resolvedDb = db ?? makeDbMock();
-  const adapter = new PkiCertAdapter(resolvedDb as never, users, config);
-  return { adapter, users, db: resolvedDb };
+  const adapter = new PkiCertAdapter(resolvedDb as never, users, config, authConfig);
+  return { adapter, users, db: resolvedDb, authConfig };
 };
 
 // ── tests ────────────────────────────────────────────────────────────────────
 
 describe("PkiCertAdapter", () => {
   describe("constructor", () => {
-    it("throws when trustedProxyIps is empty", () => {
+    // The adapter is built unconditionally now; an empty list is a runtime
+    // state to report, not a reason to refuse to boot.
+    it("constructs with an empty trusted-proxy list instead of throwing", () => {
       const users = new InMemoryUsers();
       expect(
-        () => new PkiCertAdapter(makeDbMock() as never, users, { trustedProxyIps: [], sessionTtlHours: 8 }),
-      ).toThrow("PKI_TRUSTED_PROXY_IPS must not be empty");
+        () =>
+          new PkiCertAdapter(
+            makeDbMock() as never,
+            users,
+            { trustedProxyIps: [] },
+            makeAuthConfigSource(),
+          ),
+      ).not.toThrow();
+    });
+  });
+
+  describe("authenticate — configuration gates", () => {
+    it("returns INFRA_FAILURE and mints no session when the trusted-proxy list is empty", async () => {
+      const { adapter, db } = makePkiAdapter({ trustedProxyIps: [] });
+
+      const result = await adapter.authenticate(validHeaders(), "10.0.0.1");
+
+      expect(result.error?.code).toBe("INFRA_FAILURE");
+      expect(result.error?.message).toMatch(/PKI_TRUSTED_PROXY_IPS/);
+      expect((db as never as { _insertedSessions: unknown[] })._insertedSessions).toHaveLength(0);
+    });
+
+    it("refuses when PKI is disabled in config, whatever the caller", async () => {
+      const authConfig = makeAuthConfigSource({ pkiEnabled: false });
+      const { adapter, db } = makePkiAdapter(DEFAULT_CONFIG, undefined, authConfig);
+
+      const result = await adapter.authenticate(validHeaders(), "10.0.0.1");
+
+      expect(result.error?.code).toBe("UNAUTHORIZED");
+      expect((db as never as { _insertedSessions: unknown[] })._insertedSessions).toHaveLength(0);
+    });
+  });
+
+  describe("authenticate — session TTL", () => {
+    it("resolves the TTL from config on each request, with no restart", async () => {
+      const authConfig = makeAuthConfigSource({ pki: { sessionTtlHours: 8 } });
+      const { adapter, db } = makePkiAdapter(DEFAULT_CONFIG, undefined, authConfig);
+      const sessions = (db as never as { _insertedSessions: Array<{ expires_at: Date }> })
+        ._insertedSessions;
+
+      await adapter.authenticate(validHeaders(), "10.0.0.1");
+      authConfig.set({ pki: { sessionTtlHours: 24 } });
+      await adapter.authenticate(validHeaders(), "10.0.0.1");
+
+      const hoursFromNow = (date: Date) => Math.round((date.getTime() - Date.now()) / 3_600_000);
+      expect(hoursFromNow(sessions[0]!.expires_at)).toBe(8);
+      expect(hoursFromNow(sessions[1]!.expires_at)).toBe(24);
     });
   });
 
