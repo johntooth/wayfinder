@@ -91,7 +91,21 @@ export default defineConfig({
         storageState: 'playwright/.auth/admin.json',
       },
       dependencies: ['setup', 'seed'],
-      testIgnore: /auth\.setup\.ts/,
+      testIgnore: [/auth\.setup\.ts/, /enhance-mock-pki-login\.spec\.ts/],
+    },
+
+    // 4. PKI sign-in — its own project because it drives the certificate flow
+    //    from a signed-out browser and needs no seed fixtures, which lets CI
+    //    run it against a second app booted in PKI mode without standing up
+    //    object storage. It skips itself when PKI auth is off.
+    {
+      name: 'pki',
+      testMatch: /enhance-mock-pki-login\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: undefined,
+      },
+      dependencies: ['setup'],
     },
   ],
 

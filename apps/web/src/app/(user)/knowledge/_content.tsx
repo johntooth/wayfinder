@@ -333,7 +333,7 @@ export function KnowledgeContent() {
             <CardTitle>Pending corrections</CardTitle>
           </CardHeader>
           <CardContent>
-            {feedbackQuery.isLoading ? (
+            {feedbackQuery.isPending ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : (feedbackQuery.data ?? []).length === 0 ? (
               <p className="text-sm text-muted-foreground">No corrections waiting for review.</p>

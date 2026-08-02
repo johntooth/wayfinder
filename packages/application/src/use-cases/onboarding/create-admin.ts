@@ -86,7 +86,7 @@ export class CreateFirstAdmin {
     const created = await this.adminCreator.createFirstAdmin({
       email: input.email,
       password: input.password,
-      name: input.name?.trim() || input.email,
+      name: input.name?.trim() ?? "",
     });
     if (created.error) return created;
 

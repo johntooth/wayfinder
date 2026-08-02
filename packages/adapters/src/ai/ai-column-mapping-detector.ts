@@ -44,7 +44,6 @@ export class AiColumnMappingDetector implements IColumnMappingDetector {
       system: SYSTEM_PROMPT,
       prompt,
       schema: mappingSchema,
-      temperature: 0,
     });
     if (result.error) return result;
 

@@ -1,5 +1,6 @@
-import { and, desc, eq, isNotNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, or } from "drizzle-orm";
 import {
+  APPROVED_STATUSES,
   domainError,
   err,
   ok,
@@ -11,6 +12,18 @@ import {
 } from "@rbrasier/domain";
 import type { Database } from "../db/client";
 import { app_session_approvals } from "../db/schema/wayfinder";
+
+// The governed record exists once an approval has *approved* something. Two
+// other states carry a `record_snapshot` and must not lock the document: a
+// pending row caches the resolved subject there (ADR-040 §2), and a
+// `changes_requested` row records its decision — locking on that one would stop
+// the operator making the very changes they were asked for (ADR-044 §3).
+export const recordedSnapshotWhere = (sessionId: string) =>
+  and(
+    eq(app_session_approvals.session_id, sessionId),
+    inArray(app_session_approvals.status, [...APPROVED_STATUSES]),
+    isNotNull(app_session_approvals.record_snapshot),
+  );
 
 const toEntity = (row: typeof app_session_approvals.$inferSelect): Approval => ({
   id: row.id,
@@ -133,12 +146,7 @@ export class DrizzleApprovalRepository implements IApprovalRepository {
       const [row] = await this.db
         .select({ id: app_session_approvals.id })
         .from(app_session_approvals)
-        .where(
-          and(
-            eq(app_session_approvals.session_id, sessionId),
-            isNotNull(app_session_approvals.record_snapshot),
-          ),
-        )
+        .where(recordedSnapshotWhere(sessionId))
         .limit(1);
       return ok(Boolean(row));
     } catch (cause) {
@@ -177,7 +185,16 @@ export class DrizzleApprovalRepository implements IApprovalRepository {
   }
 
   private patchToColumns(patch: ApprovalUpdate): Record<string, unknown> {
-    return {
+    return approvalPatchToColumns(patch);
+  }
+}
+
+// The column mapping, pure and exported so the jsonb round-trip can be asserted
+// without a database. `record_snapshot` is written whole: the step-prefixed
+// report keys, the resolved subject and the frozen attestation all ride the
+// existing column, so extending the record needs no migration (ADR-040 §4).
+export const approvalPatchToColumns = (patch: ApprovalUpdate): Record<string, unknown> => {
+  return {
       ...(patch.approverUserId !== undefined ? { approver_user_id: patch.approverUserId } : {}),
       ...(patch.approverEmail !== undefined ? { approver_email: patch.approverEmail } : {}),
       ...(patch.isOverride !== undefined ? { is_override: patch.isOverride } : {}),
@@ -189,6 +206,5 @@ export class DrizzleApprovalRepository implements IApprovalRepository {
       ...(patch.comment !== undefined ? { comment: patch.comment } : {}),
       ...(patch.recordSnapshot !== undefined ? { record_snapshot: patch.recordSnapshot } : {}),
       updated_at: new Date(),
-    };
-  }
-}
+  };
+};

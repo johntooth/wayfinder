@@ -3,6 +3,7 @@ import {
   DEFAULT_ITEM_CAP,
   domainError,
   err,
+  type ApprovalChangeRequest,
   type FlowContextDoc,
   type ILanguageModel,
   type Result,
@@ -66,6 +67,11 @@ export interface ExtractStructuredFieldsInput {
   // so document generation keeps its existing prompt byte-for-byte.
   priorStepOutputs?: SessionStepOutput[];
   insights?: { key: string; value: string }[];
+  // Approver corrections that have not yet been signed off. Ranked above every
+  // other section because they are the one input that *contradicts* the rest:
+  // the transcript and the captured step data both still state the value the
+  // approver rejected.
+  changeRequests?: ApprovalChangeRequest[];
   // Admin-configurable budgets (ADR-027). When omitted, the v1.49.0 module
   // constants apply so existing callers behave identically.
   contextBudgetChars?: number;
@@ -80,6 +86,16 @@ const buildStepOutputsSection = (outputs: SessionStepOutput[]): string => {
   );
   if (lines.length === 0) return "";
   return `\nData captured by earlier steps (most reliable):\n${lines.join("\n")}`;
+};
+
+// An approver sent this work back and said what was wrong with it. Left in the
+// transcript alone it reads as one more turn, competing with the originator's
+// earlier and more explicit statement of the value being corrected — so it is
+// lifted out, attributed to the step that raised it, and marked as overriding.
+const buildChangeRequestsSection = (requests: ApprovalChangeRequest[]): string => {
+  if (requests.length === 0) return "";
+  const lines = requests.map((request) => `- ${request.stepName}: ${request.comment}`);
+  return `\nOutstanding change requests from approvers (highest priority). These were raised after the session context below and have not yet been signed off — apply them, and where one contradicts anything else here, the change request wins:\n${lines.join("\n")}`;
 };
 
 const buildInsightsSection = (insights: { key: string; value: string }[]): string => {
@@ -128,6 +144,7 @@ export const extractStructuredFields = async (
   const generationGuidance = buildGenerationGuidance(input.fields);
   const stepOutputsSection = buildStepOutputsSection(input.priorStepOutputs ?? []);
   const insightsSection = buildInsightsSection(input.insights ?? []);
+  const changeRequestsSection = buildChangeRequestsSection(input.changeRequests ?? []);
 
   const prompt = [
     `Return a JSON object with exactly these keys: ${JSON.stringify(keys)}.`,
@@ -135,6 +152,7 @@ export const extractStructuredFields = async (
     `\nEach field has a required format. Reformat the information the user provided into the required format whenever you reasonably can — for example, parse a written date into DD-MM-YYYY, or format an amount as currency. Only leave a value blank when its field is marked optional and the information is genuinely missing.`,
     `\n<field_constraints>\n${buildFieldConstraintsText(input.fields)}\n</field_constraints>`,
     generationGuidance,
+    changeRequestsSection,
     stepOutputsSection,
     insightsSection,
     contextDocsSection,
@@ -164,7 +182,6 @@ export const extractStructuredFields = async (
     system: input.instruction,
     prompt,
     schema: documentDataSchema,
-    temperature: 0.3,
   });
   if (result.error) return result;
 

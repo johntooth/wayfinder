@@ -5,7 +5,7 @@ import {
   normaliseOutputType,
   validateStructuredFieldSet,
 } from "./node-output";
-import type { TemplateField } from "./template-field";
+import { buildFieldConstraintsText, type TemplateField } from "./template-field";
 
 const field = (key: string, type: TemplateField["type"] = "text"): TemplateField => ({
   key,
@@ -82,6 +82,32 @@ describe("nodeFieldSet", () => {
     expect(nodeFieldSet(config({ outputType: "structured" }))).toEqual([]);
     expect(nodeFieldSet(config({ outputType: "generate_document" }))).toEqual([]);
   });
+
+  it("filters a signature field out of a document step's set", () => {
+    const result = nodeFieldSet(
+      config({
+        outputType: "generate_document",
+        documentTemplateFields: [
+          field("amount"),
+          field("delegate_signature", "signature"),
+          field("vendor"),
+        ],
+      }),
+    );
+
+    expect(result).toEqual([field("amount"), field("vendor")]);
+  });
+
+  it("keeps a signature out of the AI's field constraints entirely", () => {
+    const fields = nodeFieldSet(
+      config({
+        outputType: "generate_document",
+        documentTemplateFields: [field("amount"), field("delegate_signature", "signature")],
+      }),
+    );
+
+    expect(buildFieldConstraintsText(fields)).not.toContain("delegate_signature");
+  });
 });
 
 describe("validateStructuredFieldSet", () => {
@@ -98,6 +124,14 @@ describe("validateStructuredFieldSet", () => {
     expect(result.data).toBeUndefined();
     expect(result.error?.code).toBe("VALIDATION_FAILED");
     expect(result.error?.message).toContain("Optional Clause");
+  });
+
+  it("rejects a set containing a signature field", () => {
+    const fields = [field("decision"), field("Delegate Signature", "signature")];
+    const result = validateStructuredFieldSet(fields);
+    expect(result.data).toBeUndefined();
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toContain("Delegate Signature");
   });
 
   it("accepts an empty set", () => {

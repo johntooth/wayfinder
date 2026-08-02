@@ -188,24 +188,52 @@ export interface EntraCredentials {
   clientSecret: string;
 }
 
+// Named distinctly from the adapters' PkiConfig, which additionally carries the
+// trusted-proxy list; this one holds only what the database is allowed to own.
+export interface PkiSessionConfig {
+  sessionTtlHours: number;
+}
+
 export interface AuthConfig {
   emailPasswordEnabled: boolean;
   entraEnabled: boolean;
   entra: EntraCredentials;
+  // The operator switch only. The trust anchor — which proxy IPs may assert
+  // x-ssl-client-* headers — stays in the environment, because an admin who
+  // could edit it could add a host they control and impersonate anyone
+  // (ADR-042 §1).
+  pkiEnabled: boolean;
+  pki: PkiSessionConfig;
 }
+
+export const DEFAULT_PKI_SESSION_TTL_HOURS = 8;
 
 export const createDefaultAuthConfig = (): AuthConfig => ({
   emailPasswordEnabled: true,
   entraEnabled: false,
   entra: { tenantId: "", clientId: "", clientSecret: "" },
+  pkiEnabled: false,
+  pki: { sessionTtlHours: DEFAULT_PKI_SESSION_TTL_HOURS },
 });
 
 export const isEntraConfigured = (entra: EntraCredentials): boolean =>
   entra.tenantId.length > 0 && entra.clientId.length > 0 && entra.clientSecret.length > 0;
 
+// PKI needs both halves: the database switch and the environment precondition.
+// Fail-closed — an enabled PKI with no trusted-proxy list cannot authenticate
+// anyone, so it is not a usable method.
+export const isPkiUsable = (config: AuthConfig, envHasTrustedProxies: boolean): boolean =>
+  config.pkiEnabled && envHasTrustedProxies;
+
 // Guards the lockout invariant: an admin must never disable every method.
-export const isAtLeastOneMethodEnabled = (config: AuthConfig): boolean =>
-  config.emailPasswordEnabled || config.entraEnabled;
+// envHasTrustedProxies is required rather than defaulted on purpose — a caller
+// that forgets it should be a compile error, because that caller is precisely
+// the lockout bug this guard prevents (ADR-042 §4).
+export const isAtLeastOneMethodEnabled = (
+  config: AuthConfig,
+  envHasTrustedProxies: boolean,
+): boolean =>
+  config.emailPasswordEnabled || config.entraEnabled || isPkiUsable(config, envHasTrustedProxies);
 
 // Master switch for usage-limit enforcement (ADR-031). Stored as one JSON row in
 // admin_system_settings. Fresh installs default to enabled: nothing is enforced

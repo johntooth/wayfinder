@@ -5,15 +5,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { trpc } from "@/trpc/client";
-import { isProcessing, shouldAnimateProgress, shouldDriveTick } from "./run-tick-state";
+import { isLiveRun, isProcessing, shouldAnimateProgress, shouldDriveTick } from "./run-tick-state";
 
 // The run screen (phase §8). Polls COUNT(*) GROUP BY status while the run is
 // live and renders `x of y` on a bar with a marker at the preview breakpoint,
 // live cost, and failure count. Controls — cancel, retry-failed, continue — map
 // to the run-control procedures. All gating is server-side; the buttons only
 // reflect what the run's status allows.
-const LIVE_STATUSES = new Set(["running", "paused_preview", "paused_cap"]);
-const POLL_INTERVAL_MS = 2000;
+export const RUN_POLL_INTERVAL_MS = 2000;
 
 export interface RunProgressProps {
   runId: string;
@@ -24,10 +23,8 @@ export function RunProgress({ runId }: RunProgressProps) {
   const statusQuery = trpc.extraction.runStatus.useQuery(
     { runId },
     {
-      refetchInterval: (query) => {
-        const status = query.state.data?.run.status;
-        return status && LIVE_STATUSES.has(status) ? POLL_INTERVAL_MS : false;
-      },
+      refetchInterval: (query) =>
+        isLiveRun(query.state.data?.run.status) ? RUN_POLL_INTERVAL_MS : false,
     },
   );
 

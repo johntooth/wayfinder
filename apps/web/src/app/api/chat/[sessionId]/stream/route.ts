@@ -9,6 +9,7 @@ import { getContainer } from "@/lib/container";
 import { tooManyRequestsResponse } from "@/lib/rate-limit";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
 import { executeTurn } from "./execute-turn";
+import { toModelMessages } from "./model-messages";
 import { DataStreamTurnWriter } from "./turn-stream-writer";
 import {
   buildAttachmentAnnotation,
@@ -224,10 +225,9 @@ export async function POST(
   // Server-side context window: the model sees only the most recent turns, the
   // same 20 the client already slices to (scaling wall #1). `dbMessages` is
   // already the bounded tail (see GetSessionForTurn), so no further slicing.
-  const coreMessages = dbMessages.map((m) => ({
-    role: m.role as "user" | "assistant" | "system",
-    content: m.content,
-  }));
+  // Mapped through `toModelMessages` so a stored system row never reaches the
+  // SDK as a mid-conversation system message.
+  const coreMessages = toModelMessages(dbMessages);
 
   // The model sees the attachment marker; the persisted user message stays the
   // raw text the user typed (persistUserMessage uses lastUserMessage).

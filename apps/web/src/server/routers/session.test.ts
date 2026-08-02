@@ -71,6 +71,46 @@ describe("buildSessionListEntry", () => {
     expect(entry.stepInfo?.completedSteps).toBe(3);
     expect(entry.stepInfo?.currentConfidence).toBe(0);
   });
+
+  // A never-done step has no completion to measure, so the card drops its
+  // progress bar and percentage and keeps only "Step X/Y" plus the badge.
+  it("flags the current step as never done when the graph says so", () => {
+    const entry = buildSessionListEntry(
+      baseSession,
+      { ...graph, neverDoneNodeIds: ["node-2"] },
+      undefined,
+    );
+
+    expect(entry.stepInfo?.currentStepNeverDone).toBe(true);
+  });
+
+  it("does not flag a normal current step as never done", () => {
+    const entry = buildSessionListEntry(
+      baseSession,
+      { ...graph, neverDoneNodeIds: ["node-3"] },
+      undefined,
+    );
+
+    expect(entry.stepInfo?.currentStepNeverDone).toBe(false);
+  });
+
+  it("treats a graph with no never-done ids as all steps completable", () => {
+    const entry = buildSessionListEntry(baseSession, graph, undefined);
+
+    expect(entry.stepInfo?.currentStepNeverDone).toBe(false);
+  });
+
+  // Finishing the flow means the step was left behind — the bar returns so a
+  // completed chat still reads as 100%.
+  it("clears the never-done flag once the session is complete", () => {
+    const entry = buildSessionListEntry(
+      { ...baseSession, status: "complete" },
+      { ...graph, neverDoneNodeIds: ["node-2"] },
+      undefined,
+    );
+
+    expect(entry.stepInfo?.currentStepNeverDone).toBe(false);
+  });
 });
 
 describe("sessionListPageInputSchema", () => {

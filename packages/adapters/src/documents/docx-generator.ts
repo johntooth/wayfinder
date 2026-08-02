@@ -2,7 +2,7 @@ import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import InspectModule from "docxtemplater/js/inspect-module.js";
 import { domainError, err, ok, parseTemplateFields, templateFieldKey } from "@rbrasier/domain";
-import type { IDocumentGenerator, ExtractTagsInput, ExtractTagsOutput, ExtractFieldsInput, ExtractFieldsOutput, ExtractFullTextInput, ExtractFullTextOutput, GenerateInput, GenerateOutput } from "@rbrasier/domain";
+import type { IDocumentGenerator, ExtractTagsInput, ExtractTagsOutput, ExtractFieldsInput, ExtractFieldsOutput, ExtractFullTextInput, ExtractFullTextOutput, GenerateInput, GenerateOutput, AnnotateInput, AnnotateOutput, TemplateAnnotationEdit } from "@rbrasier/domain";
 import type { Result } from "@rbrasier/domain";
 
 interface RunInfo {
@@ -13,6 +13,14 @@ interface RunInfo {
   endIndex: number;
   xmlStart: number;
   xmlEnd: number;
+}
+
+// A resolved substitution within one paragraph's reconstructed text.
+interface SpanReplacement {
+  start: number;
+  end: number;
+  text: string;
+  rPrXml: string;
 }
 
 export class DocxGenerator implements IDocumentGenerator {
@@ -80,6 +88,135 @@ export class DocxGenerator implements IDocumentGenerator {
     }
   }
 
+  annotate(input: AnnotateInput): Result<AnnotateOutput> {
+    if (input.edits.length === 0) {
+      return ok({ bytes: input.templateBytes, appliedCount: 0, unmatched: [] });
+    }
+
+    try {
+      const zip = new PizZip(input.templateBytes);
+      // Occurrence indices are assigned in reading order, and the caller derived
+      // them from the body text, so the body must be walked before headers and
+      // footers or the same index would address a different span.
+      const filenames = this.annotatableParts(zip);
+
+      const seenCounts = new Map<string, number>();
+      const applied = new Set<TemplateAnnotationEdit>();
+
+      for (const filename of filenames) {
+        const file = zip.file(filename);
+        if (!file) continue;
+        const rewritten = this.annotateXml(file.asText(), input.edits, seenCounts, applied);
+        if (rewritten !== null) zip.file(filename, rewritten);
+      }
+
+      const bytes = zip.generate({ type: "nodebuffer", compression: "DEFLATE" }) as Buffer;
+      return ok({
+        bytes,
+        appliedCount: applied.size,
+        unmatched: input.edits.filter((edit) => !applied.has(edit)),
+      });
+    } catch (cause) {
+      return err(
+        domainError("INFRA_FAILURE", "Failed to write annotations into the DOCX template.", cause),
+      );
+    }
+  }
+
+  private annotatableParts(zip: PizZip): string[] {
+    const names = Object.keys(zip.files);
+    const body = names.filter((name) => name === "word/document.xml");
+    const chrome = names
+      .filter((name) => /^word\/(header|footer)\d*\.xml$/.test(name))
+      .sort((a, b) => a.localeCompare(b));
+    return [...body, ...chrome];
+  }
+
+  // Rewrites one XML part, returning null when nothing in it matched so the
+  // original bytes are left byte-for-byte intact.
+  private annotateXml(
+    xml: string,
+    edits: TemplateAnnotationEdit[],
+    seenCounts: Map<string, number>,
+    applied: Set<TemplateAnnotationEdit>,
+  ): string | null {
+    let changed = false;
+
+    const rewritten = xml.replace(/<w:p[ >][\s\S]*?<\/w:p>/g, (paragraph) => {
+      const runs = this.extractRuns(paragraph);
+      if (runs.length === 0) return paragraph;
+
+      const fullText = runs.map((run) => run.text).join("");
+      const replacements = this.resolveReplacements(fullText, runs, edits, seenCounts, applied);
+      if (replacements.length === 0) return paragraph;
+
+      changed = true;
+      const newRuns = this.buildNewRuns(runs, replacements, fullText);
+      return this.replaceParagraphRuns(paragraph, runs, newRuns);
+    });
+
+    return changed ? rewritten : null;
+  }
+
+  // Walks every occurrence of every edit's `find` text in this paragraph,
+  // advancing the document-wide occurrence counter for each one — including
+  // occurrences no edit targets, since skipping them would shift later indices.
+  private resolveReplacements(
+    fullText: string,
+    runs: RunInfo[],
+    edits: TemplateAnnotationEdit[],
+    seenCounts: Map<string, number>,
+    applied: Set<TemplateAnnotationEdit>,
+  ): SpanReplacement[] {
+    const candidates: SpanReplacement[] = [];
+    const pending: TemplateAnnotationEdit[] = [];
+    const distinctFinds = [...new Set(edits.map((edit) => edit.find))];
+
+    for (const find of distinctFinds) {
+      if (!find) continue;
+      let searchFrom = 0;
+      for (;;) {
+        const start = fullText.indexOf(find, searchFrom);
+        if (start < 0) break;
+        const index = seenCounts.get(find) ?? 0;
+        seenCounts.set(find, index + 1);
+        searchFrom = start + find.length;
+
+        const edit = edits.find(
+          (candidate) =>
+            candidate.find === find && candidate.occurrence === index && !applied.has(candidate),
+        );
+        if (!edit) continue;
+
+        candidates.push({
+          start,
+          end: start + find.length,
+          text: edit.replacement,
+          rPrXml: this.rPrXmlForPosition(runs, start),
+        });
+        pending.push(edit);
+      }
+    }
+
+    // buildNewRuns walks left to right and assumes replacements never overlap;
+    // two edits claiming the same characters would corrupt the paragraph, so the
+    // later one is left unapplied and reported as unmatched.
+    const ordered = candidates
+      .map((replacement, index) => ({ replacement, edit: pending[index] }))
+      .sort((a, b) => a.replacement.start - b.replacement.start);
+
+    const accepted: SpanReplacement[] = [];
+    let lastEnd = 0;
+    for (const { replacement, edit } of ordered) {
+      if (replacement.start < lastEnd) continue;
+      accepted.push(replacement);
+      lastEnd = replacement.end;
+      if (edit) applied.add(edit);
+    }
+
+    return accepted;
+  }
+
   private preprocessTemplate(docxBytes: Buffer): Buffer {
     const zip = new PizZip(docxBytes);
 
@@ -144,7 +281,7 @@ export class DocxGenerator implements IDocumentGenerator {
       return {
         start: matchStart,
         end: matchStart + match[0].length,
-        normalizedTag: `{{${this.normalizeTagName(match[1] ?? "")}}}`,
+        text: `{{${this.normalizeTagName(match[1] ?? "")}}}`,
         rPrXml: this.rPrXmlForPosition(runs, matchStart),
       };
     });
@@ -191,7 +328,7 @@ export class DocxGenerator implements IDocumentGenerator {
 
   private buildNewRuns(
     runs: RunInfo[],
-    replacements: Array<{ start: number; end: number; normalizedTag: string; rPrXml: string }>,
+    replacements: SpanReplacement[],
     fullText: string,
   ): string[] {
     const newRuns: string[] = [];
@@ -210,7 +347,7 @@ export class DocxGenerator implements IDocumentGenerator {
         }
       }
 
-      newRuns.push(this.buildRun(replacement.rPrXml, replacement.normalizedTag));
+      newRuns.push(this.buildRun(replacement.rPrXml, replacement.text));
       position = replacement.end;
     }
 

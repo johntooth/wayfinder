@@ -4,10 +4,17 @@ import {
   fieldColumnKeys,
   fieldValue,
   pairFields,
+  pendingDocuments,
+  recordExceptionReasons,
   toggleExpanded,
   visibleRecords,
 } from "./result-grid-model";
-import type { ResultFieldValue, ResultRecord, SampleResult } from "./result-grid-model";
+import type {
+  ResultDocument,
+  ResultFieldValue,
+  ResultRecord,
+  SampleResult,
+} from "./result-grid-model";
 
 const field = (key: string, value: string, confidence = 0.9): ResultFieldValue => ({
   key,
@@ -145,5 +152,135 @@ describe("visibleRecords", () => {
 
   it("applies the query and the exceptions filter together", () => {
     expect(visibleRecords(source, { query: "globex", exceptionsOnly: true })).toEqual([]);
+  });
+});
+
+// A run in progress has documents that have produced no record yet. Without a
+// row of their own the grid looks like a finished run with records missing.
+describe("pendingDocuments", () => {
+  const document = (
+    id: string,
+    filename: string,
+    status: ResultDocument["status"],
+  ): ResultDocument => ({ id, filename, treePath: `/inbox/${filename}`, readable: true, status });
+
+  const run = (documents: ResultDocument[]): SampleResult => ({
+    documents,
+    records: [],
+    exceptionFileIds: [],
+  });
+
+  it("returns the documents still queued or in the model's hands", () => {
+    const source = run([
+      document("d1", "a.pdf", "complete"),
+      document("d2", "b.pdf", "pending"),
+      document("d3", "c.pdf", "extracting"),
+    ]);
+
+    expect(
+      pendingDocuments(source, { query: "", exceptionsOnly: false }).map((entry) => entry.id),
+    ).toEqual(["d2", "d3"]);
+  });
+
+  it("leaves out documents that have settled, however they settled", () => {
+    const source = run([
+      document("d1", "a.pdf", "complete"),
+      document("d2", "b.pdf", "failed"),
+      document("d3", "c.pdf", "unreadable"),
+    ]);
+
+    expect(pendingDocuments(source, { query: "", exceptionsOnly: false })).toEqual([]);
+  });
+
+  it("matches the query against the filename and the tree path", () => {
+    const source = run([document("d1", "tender.pdf", "pending"), document("d2", "quote.pdf", "pending")]);
+
+    expect(
+      pendingDocuments(source, { query: "tend", exceptionsOnly: false }).map((entry) => entry.id),
+    ).toEqual(["d1"]);
+    expect(
+      pendingDocuments(source, { query: "inbox", exceptionsOnly: false }).map((entry) => entry.id),
+    ).toEqual(["d1", "d2"]);
+  });
+
+  // An unprocessed document has not failed at anything yet, so it is not part of
+  // the exceptions triage.
+  it("returns nothing under the exceptions filter", () => {
+    const source = run([document("d1", "a.pdf", "pending")]);
+
+    expect(pendingDocuments(source, { query: "", exceptionsOnly: true })).toEqual([]);
+  });
+});
+
+// An "Exception" badge on its own does not tell the operator what to fix, so the
+// expanded record spells out why the row was flagged.
+describe("recordExceptionReasons", () => {
+  const document = (id: string, filename: string, readable = true): ResultDocument => ({
+    id,
+    filename,
+    treePath: `/${filename}`,
+    readable,
+    status: readable ? "complete" : "unreadable",
+  });
+
+  it("returns no reasons for a healthy record", () => {
+    const subject = record("r1", "Acme", [field("supplier", "Acme")], ["d1"]);
+
+    expect(
+      recordExceptionReasons(subject, { exceptionFileIds: [], documents: [document("d1", "a.pdf")] }),
+    ).toEqual([]);
+  });
+
+  it("explains a record with nothing extracted", () => {
+    const subject = record("r1", "Acme", [field("supplier", ""), field("price", "  ")]);
+
+    expect(recordExceptionReasons(subject, { exceptionFileIds: [], documents: [] })).toEqual([
+      "No values were extracted for this record.",
+    ]);
+  });
+
+  it("names a source file that produced no record", () => {
+    const subject = record("r1", "Acme", [field("supplier", "Acme")], ["d1"]);
+
+    expect(
+      recordExceptionReasons(subject, {
+        exceptionFileIds: ["d1"],
+        documents: [document("d1", "tender.pdf")],
+      }),
+    ).toEqual(["tender.pdf produced no record."]);
+  });
+
+  it("names a source file that could not be read", () => {
+    const subject = record("r1", "Acme", [field("supplier", "Acme")], ["d1"]);
+
+    expect(
+      recordExceptionReasons(subject, {
+        exceptionFileIds: [],
+        documents: [document("d1", "scan.pdf", false)],
+      }),
+    ).toEqual(["scan.pdf could not be read."]);
+  });
+
+  it("reports every reason that applies", () => {
+    const subject = record("r1", "Acme", [field("supplier", "")], ["d1", "d2"]);
+
+    expect(
+      recordExceptionReasons(subject, {
+        exceptionFileIds: ["d2"],
+        documents: [document("d1", "scan.pdf", false), document("d2", "tender.pdf")],
+      }),
+    ).toEqual([
+      "No values were extracted for this record.",
+      "scan.pdf could not be read.",
+      "tender.pdf produced no record.",
+    ]);
+  });
+
+  it("falls back to the id when the source document is unknown", () => {
+    const subject = record("r1", "Acme", [field("supplier", "Acme")], ["missing"]);
+
+    expect(
+      recordExceptionReasons(subject, { exceptionFileIds: ["missing"], documents: [] }),
+    ).toEqual(["missing produced no record."]);
   });
 });

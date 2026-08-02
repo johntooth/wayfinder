@@ -6,6 +6,7 @@ import {
   normaliseAdvanceConfidenceThreshold,
   normaliseOutputType,
   ok,
+  type ApprovalChangeRequest,
   type ConversationalNodeConfig,
   type Flow,
   type FlowNode,
@@ -35,6 +36,10 @@ export interface EvaluateStepReadinessInput {
   // Admin-configurable budget (ADR-027); shared with document generation so the
   // gate's extraction matches what generation would do.
   budget?: ResolvedDocumentGenerationBudget;
+  // Shared with generation for the same reason: on a pass the gate's values are
+  // threaded straight into the document, so a gate blind to a change request
+  // would reinstate the rejected content the moment the step advanced.
+  changeRequests?: ApprovalChangeRequest[];
 }
 
 export interface EvaluateStepReadinessOutput {
@@ -80,6 +85,7 @@ export class EvaluateStepReadiness {
         contextDocs: input.flow.contextDocs,
         instruction: config.aiInstruction,
         purpose: "documentGeneration",
+        changeRequests: input.changeRequests,
         contextBudgetChars: input.budget?.contextBudgetChars,
         maxPromptTokens: input.budget?.maxPromptTokens,
       });

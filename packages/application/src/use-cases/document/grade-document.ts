@@ -40,7 +40,6 @@ export const gradeDocumentFields = async (
       .filter(Boolean)
       .join("\n"),
     schema: preGenerationEvaluationSchema,
-    temperature: 0.2,
   });
   if (result.error) return result;
 

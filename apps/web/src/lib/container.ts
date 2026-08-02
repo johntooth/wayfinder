@@ -7,7 +7,6 @@ import {
   CreateFlow,
   CreateFlowEdge,
   CreateFlowNode,
-  ConfirmAndSend,
   CreateGroup,
   UpdateGroup,
   DeleteGroup,
@@ -19,7 +18,6 @@ import {
   RemoveGroupMember,
   ResolveGroupAuthorization,
   CreateUser,
-  DecideApproval,
   DeleteFlow,
   DeleteFlowEdge,
   DeleteFlowNode,
@@ -60,8 +58,6 @@ import {
   RenameRole,
   DeleteRole,
   ListScheduleRuns,
-  ListPendingApprovals,
-  ListPendingApprovalsWithContext,
   ListSessions,
   ListSessionsPage,
   ListUsers,
@@ -107,7 +103,6 @@ import {
   SetColumnMapping,
   SetFeatureFlagRoles,
   StartSession,
-  SuggestApprover,
   TrackUsage,
   UpdateErrorStatus,
   UpdateFlow,
@@ -117,6 +112,7 @@ import {
   UpdateUser,
   UpsertFeatureFlag,
 } from "@rbrasier/application";
+import { buildApprovalUseCases } from "./container-approval-use-cases";
 import { buildDocumentUseCases } from "./container-document-use-cases";
 import { buildOnboarding } from "./container-onboarding";
 import {
@@ -184,7 +180,9 @@ import {
   PkiCertAdapter,
   QuotaEnforcer,
   RuntimeConfigStore,
+  createCredentialAccountProbe,
   SystemClock,
+  sha256Hex,
   TtlCache,
   createAuth,
   createCachedSessionResolver,
@@ -203,7 +201,14 @@ import type { FlowVersion, PermissionKey } from "@rbrasier/domain";
 import { buildSkillsAndMcp } from "./container-skills-mcp";
 import { buildExtractionModule } from "./container-extraction";
 import { buildPeopleDirectory } from "./container-people-directory";
+import { buildSmtpEnvConfig } from "./container-smtp";
 import { createCachedPermissionResolver } from "./cached-permission-resolver";
+import {
+  resolveAuthMethod,
+  resolvePkiEnv,
+  warnOnLegacyAuthMethodContradiction,
+  warnOnRejectedProxyEntries,
+} from "./container-auth";
 import {
   createCachedAdminSettings,
   type ResolvedAdminSettings,
@@ -304,6 +309,8 @@ const build = () => {
         }
       : null;
 
+  const pkiEnv = resolvePkiEnv(env);
+
   const runtimeConfig = new RuntimeConfigStore(systemSettings, {
     provider: env.AI_DEFAULT_PROVIDER,
     apiKeys: {
@@ -331,7 +338,12 @@ const build = () => {
             clientSecret: env.ENTRA_CLIENT_SECRET,
           }
         : undefined,
+    // Booleans only — the addresses stay out of config resolution entirely.
+    pki: pkiEnv.envDefaults,
   });
+
+  warnOnLegacyAuthMethodContradiction(runtimeConfig, logger, pkiEnv.authMethodNamesPki);
+  warnOnRejectedProxyEntries(logger, pkiEnv.rejectedProxyEntries);
 
   // Near-static admin settings cache (scaling wall #4): the chat stream route
   // reads org name, global instructions, and upload config every turn; front
@@ -360,7 +372,12 @@ const build = () => {
     maxConcurrent: env.LLM_MAX_CONCURRENCY,
     maxAttempts: env.LLM_MAX_ATTEMPTS,
   });
-  const baseLlm = new LanguageModelAdapter(env.AI_DEFAULT_PROVIDER, runtimeConfig, llmGovernor);
+  const baseLlm = new LanguageModelAdapter(
+    env.AI_DEFAULT_PROVIDER,
+    runtimeConfig,
+    llmGovernor,
+    errorLogger,
+  );
   // Decorator order (ADR-026 §3): quota enforcement is outermost so it blocks
   // before the inner usage-tracking + provider call runs. The same enforcer is
   // shared with the chat stream route, which calls the SDK outside the port.
@@ -384,20 +401,7 @@ const build = () => {
   const documentExtractor = new DocumentExtractorService(docxGenerator);
   const nodeExecutors = createNodeExecutors(llm, env.N8N_WEBHOOK_SECRET);
   const n8nWorkflowDirectory = new N8nHttpWorkflowDirectory(() => runtimeConfig.getN8nConfig());
-  const smtpEnvConfig = env.SMTP_TRANSPORT_MODE
-    ? {
-        mode: env.SMTP_TRANSPORT_MODE,
-        host: env.SMTP_HOST ?? null,
-        port: env.SMTP_PORT ?? null,
-        secure: env.SMTP_SECURE,
-        user: env.SMTP_USER ?? null,
-        pass: env.SMTP_PASS ?? null,
-        from: env.SMTP_FROM ?? null,
-        m365TenantId: env.M365_TENANT_ID ?? null,
-        m365ClientId: env.M365_CLIENT_ID ?? null,
-        m365ClientSecret: env.M365_CLIENT_SECRET ?? null,
-      }
-    : null;
+  const smtpEnvConfig = buildSmtpEnvConfig(env);
   const emailSender = new NodemailerEmailSender(systemSettings, smtpEnvConfig);
   const notificationLog = new DrizzleNotificationLogRepository(db);
   // Admins toggle per-trigger notifications at runtime (no restart): read the
@@ -511,6 +515,8 @@ const build = () => {
     graphClient,
     embeddingsProvider: embeddings,
     openaiApiKey: env.OPENAI_API_KEY ?? null,
+    entraAuthority: env.ENTRA_AUTHORITY,
+    credentialAccounts: createCredentialAccountProbe(db),
   });
   objectStorage.initialise().catch((error: unknown) => {
     logger.warn("MinIO initialisation failed — object storage unavailable until the server restarts", { error });
@@ -525,33 +531,16 @@ const build = () => {
     logger.warn("Role/admin seeding failed — will retry on next server start", { error });
   });
 
-  const pkiConfig = {
-    trustedProxyIps: (env.PKI_TRUSTED_PROXY_IPS ?? "")
-      .split(",")
-      .map((ip) => ip.trim())
-      .filter(Boolean),
-    sessionTtlHours: env.PKI_SESSION_TTL_HOURS,
-  };
+  const authMethod: AuthMethod = resolveAuthMethod(env.AUTH_METHOD);
 
-  const authMethod: AuthMethod = (() => {
-    switch (env.AUTH_METHOD) {
-      case "pki":
-        return { type: "pki" as const, pkiConfig };
-      case "pki-and-email-password":
-        return { type: "pki-and-email-password" as const, pkiConfig };
-      case "google-oauth":
-        return { type: "google-oauth" as const };
-      case "other":
-        return { type: "other" as const };
-      default:
-        return { type: "email-password" as const };
-    }
-  })();
-
-  const pkiCertAdapter =
-    env.AUTH_METHOD === "pki" || env.AUTH_METHOD === "pki-and-email-password"
-      ? new PkiCertAdapter(db, users, pkiConfig)
-      : null;
+  // Built unconditionally: configuration decides whether certificate sign-in
+  // answers, not wiring, so an admin can turn it on with no redeploy.
+  const pkiCertAdapter = new PkiCertAdapter(
+    db,
+    users,
+    { trustedProxyIps: pkiEnv.trustedProxyIps },
+    runtimeConfig,
+  );
 
   // The Better Auth instance reflects the runtime auth config, so it is built
   // lazily and rebuilt whenever the config is invalidated (ADR-025). The auth
@@ -568,6 +557,7 @@ const build = () => {
       adminSeedEmail: env.ADMIN_SEED_EMAIL,
       authMethod,
       authConfig,
+      entraAuthority: env.ENTRA_AUTHORITY,
     });
   };
 
@@ -600,6 +590,41 @@ const build = () => {
     seedEmail: env.ADMIN_SEED_EMAIL ?? null,
   });
 
+  // Shared, not constructed twice: the approval gate and the approver's context
+  // must resolve the subject the same way or they drift apart (ADR-040 §2).
+  const documentUseCases = buildDocumentUseCases({
+    documentGenerator,
+    objectStorage,
+    languageModel: llm,
+    sessionMessages,
+    sessionStepOutputs,
+    sessions,
+    flowNodes,
+    approvals,
+    auditLogger,
+  });
+  const approvalUseCases = buildApprovalUseCases({
+    unitOfWork,
+    approvals,
+    sessions,
+    sessionMessages,
+    sessionStepOutputs,
+    flowNodes,
+    flowEdges,
+    users,
+    auditLogger,
+    languageModel: llm,
+    documentGenerator,
+    objectStorage,
+    reportingLineResolver,
+    embeddings,
+    documentChunks,
+    sha256Hex,
+    updateDocumentFields: documentUseCases.updateDocumentFields,
+    notifyOnApprovalRequested,
+    notifyOnApprovalDecided,
+  });
+
   return {
     env,
     db,
@@ -615,17 +640,7 @@ const build = () => {
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter, ...skillsAndMcp.services },
     repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds, extractionRuns: extraction.repository, extractionDrafts: extraction.draftRepository, ...skillsAndMcp.repos },
     useCases: {
-      ...buildDocumentUseCases({
-        documentGenerator,
-        objectStorage,
-        languageModel: llm,
-        sessionMessages,
-        sessionStepOutputs,
-        sessions,
-        flowNodes,
-        approvals,
-        auditLogger,
-      }),
+      ...documentUseCases,
       evaluateStepReadiness: new EvaluateStepReadiness(llm, documentGenerator, objectStorage),
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
@@ -742,36 +757,7 @@ const build = () => {
       getUsageLimitsEnabled: new GetUsageLimitsEnabled(systemSettings),
       setUsageLimitsEnabled: new SetUsageLimitsEnabled(systemSettings),
       getFlowDeepDive: new GetFlowDeepDive(flows, flowNodes, analyticsRepo, sessionStepOutputs, flowEdges),
-      suggestApprover: new SuggestApprover(
-        approvals,
-        flowNodes,
-        reportingLineResolver,
-        users,
-        embeddings,
-        documentChunks,
-        llm,
-      ),
-      confirmAndSend: new ConfirmAndSend(approvals, auditLogger, notifyOnApprovalRequested),
-      decideApproval: new DecideApproval(
-        unitOfWork,
-        approvals,
-        sessions,
-        flowEdges,
-        sessionStepOutputs,
-        auditLogger,
-        notifyOnApprovalDecided,
-        sessionMessages,
-        users,
-      ),
-      listPendingApprovals: new ListPendingApprovals(approvals),
-      listPendingApprovalsWithContext: new ListPendingApprovalsWithContext(
-        approvals,
-        sessions,
-        users,
-        sessionMessages,
-        sessionStepOutputs,
-        flowNodes,
-      ),
+      ...approvalUseCases,
       searchPeople: new SearchPeople([graphPeopleDirectory, hrPeopleDirectory]),
       importHrDataset: new ImportHrDataset(
         spreadsheetParser,

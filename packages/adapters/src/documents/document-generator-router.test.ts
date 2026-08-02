@@ -15,6 +15,7 @@ const fakeGenerator = (label: string): IDocumentGenerator => ({
   extractFields: vi.fn().mockReturnValue(ok({ fields: [] })),
   extractFullText: vi.fn().mockReturnValue(ok({ text: label })),
   generate: vi.fn().mockReturnValue(ok({ bytes: Buffer.from(label) })),
+  annotate: vi.fn().mockReturnValue(ok({ bytes: Buffer.from("annotated"), appliedCount: 0, unmatched: [] })),
 });
 
 describe("DocumentGeneratorRouter", () => {

@@ -1,8 +1,11 @@
+import type { ExtractionDocumentStatus } from "@rbrasier/domain";
+
 export interface ResultDocument {
   id: string;
   filename: string;
   treePath: string;
   readable: boolean;
+  status: ExtractionDocumentStatus;
 }
 
 export interface ResultFieldValue {
@@ -81,10 +84,60 @@ export const exceptionRecordIds = (result: SampleResult): Set<string> => {
   return ids;
 };
 
+export interface ExceptionContext {
+  exceptionFileIds: readonly string[];
+  documents: readonly ResultDocument[];
+}
+
+// The "Exception" badge says a row needs triage but not what went wrong, so the
+// expanded record spells the reasons out. Ordered widest-first: the record-level
+// problem, then the file-level ones in source order.
+export const recordExceptionReasons = (
+  record: ResultRecord,
+  context: ExceptionContext,
+): string[] => {
+  const reasons: string[] = [];
+  const allBlank = record.fields.every((field) => field.value.trim().length === 0);
+  if (allBlank) reasons.push("No values were extracted for this record.");
+
+  const documentsById = new Map(context.documents.map((document) => [document.id, document]));
+  const exceptionFiles = new Set(context.exceptionFileIds);
+
+  for (const id of record.sourceDocumentIds) {
+    const document = documentsById.get(id);
+    // A source that vanished from the run still deserves a line — naming the id
+    // beats silently dropping the only clue the operator has.
+    const label = document?.filename ?? id;
+    if (document && !document.readable) reasons.push(`${label} could not be read.`);
+    if (exceptionFiles.has(id)) reasons.push(`${label} produced no record.`);
+  }
+
+  return reasons;
+};
+
 export interface RecordFilter {
   query: string;
   exceptionsOnly: boolean;
 }
+
+// The documents the run has not settled yet. They have produced no record to
+// show, so the grid lists them under the records it does have — otherwise a run
+// halfway through reads as a finished run with rows missing.
+export const pendingDocuments = (result: SampleResult, filter: RecordFilter): ResultDocument[] => {
+  // Nothing has gone wrong with a document still waiting its turn, so it is not
+  // part of the exceptions triage.
+  if (filter.exceptionsOnly) return [];
+
+  const needle = filter.query.trim().toLowerCase();
+  return result.documents.filter((document) => {
+    if (document.status !== "pending" && document.status !== "extracting") return false;
+    if (needle.length === 0) return true;
+    return (
+      document.filename.toLowerCase().includes(needle) ||
+      document.treePath.toLowerCase().includes(needle)
+    );
+  });
+};
 
 export const visibleRecords = (result: SampleResult, filter: RecordFilter): ResultRecord[] => {
   const exceptions = exceptionRecordIds(result);

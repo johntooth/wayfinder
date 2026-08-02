@@ -31,14 +31,8 @@ async function createFlowAndOpenCanvas(page: Page, name: string): Promise<void> 
   await page.locator('#flow-name').fill(name);
   await page.locator('#flow-expert-role').fill('E2E Fix Expert');
   await page.getByRole('button', { name: /create flow/i }).click();
-  await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10_000 });
-
-  const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
-  await expect(editLink).toBeVisible({ timeout: 5_000 });
-  await editLink.click();
-  // The flow editor lives at the single canonical /flows/[id]/config route; the
-  // admin path redirects there.
-  await page.waitForURL(/\/flows\/[^/]+/, { timeout: 30_000 }).catch(() => undefined);
+  // Creating a flow lands on the canvas editor directly (v0.21.0).
+  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 }).catch(() => undefined);
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(1_200);
 }
@@ -48,14 +42,18 @@ test.describe('fix: template upload preserves output type and pre-filled fields'
     const flowName = `Fix Output Type ${Date.now()}`;
     await createFlowAndOpenCanvas(page, flowName);
 
-    // 1. Empty canvas shows the large "+ Add step" overlay button (the toolbar
-    //    button plus the overlay make two — the overlay is the last one).
-    const addStepButtons = page.getByRole('button', { name: '+ Add step' });
-    await expect(addStepButtons).toHaveCount(2, { timeout: 10_000 });
+    // 1. Empty canvas shows the large first-step overlay button alongside the
+    //    toolbar's "+ Add step" (v0.21.2 renamed the overlay to name the goal
+    //    rather than the mechanic).
+    const firstStepButton = page.getByRole('button', {
+      name: '+ Create your first step in your workflow',
+    });
+    await expect(firstStepButton).toHaveCount(1, { timeout: 10_000 });
+    await expect(page.getByRole('button', { name: '+ Add step' })).toHaveCount(1);
     await page.screenshot({ path: 'screenshots/fix-output-type-empty-canvas.png', fullPage: true });
 
     // Adding the first step via the overlay opens the node-type picker.
-    await addStepButtons.last().click();
+    await firstStepButton.click();
     await page.getByRole('button', { name: 'Conversational' }).click();
     await expect(page.locator('#node-name')).toBeVisible({ timeout: 5_000 });
 
@@ -66,6 +64,29 @@ test.describe('fix: template upload preserves output type and pre-filled fields'
     // 2. Selecting "Generate document" defaults "Done when…" to "Template complete".
     await page.locator('label', { hasText: 'Generate document' }).click();
     await expect(page.locator('#done-when-mode')).toHaveValue('template');
+
+    // Since v0.21.3 an upload opens the guided annotation modal before anything
+    // is persisted, so the detection step is mocked alongside the save.
+    await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template\/analyse$/, async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          filename: 'mock-template.docx',
+          format: 'docx',
+          classification: 'annotated',
+          documentText: 'Hello {{Client Name}}.',
+          rows: [
+            {
+              key: 'client_name',
+              line: 'Client Name',
+              occurrences: [{ sourceText: '{{Client Name}}', occurrence: 0 }],
+              locked: false,
+            },
+          ],
+        }),
+      });
+    });
 
     // Intercept the template upload endpoint and return mock fields.
     await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template$/, async (route: Route) => {
@@ -98,7 +119,13 @@ test.describe('fix: template upload preserves output type and pre-filled fields'
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       buffer: fakeDocx,
     });
-    await expect(page.locator('text=mock-template.docx').first()).toBeVisible({ timeout: 8_000 });
+
+    // Walk the guided modal: the mocked document already carries a placeholder,
+    // so it is listed and accepted as it is.
+    await expect(page.getByText('1 data field found')).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: 'Accept these fields' }).click();
+
+    await expect(page.locator('text=mock-template.docx').first()).toBeVisible({ timeout: 10_000 });
 
     // 3. The core regression: output type stays "Generate document" and the
     //    pre-filled fields are preserved after the upload.
@@ -114,8 +141,11 @@ test.describe('fix: template upload preserves output type and pre-filled fields'
     await page.getByRole('button', { name: /^Save$/i }).click();
     await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10_000 });
 
-    // After the first step exists, the empty-canvas overlay is gone — only the
-    // toolbar "+ Add step" button remains.
-    await expect(page.getByRole('button', { name: '+ Add step' })).toHaveCount(1, { timeout: 5_000 });
+    // After the first step exists, the empty-canvas overlay is gone; the toolbar
+    // "+ Add step" button remains and the canvas now offers the next step.
+    await expect(
+      page.getByRole('button', { name: '+ Create your first step in your workflow' }),
+    ).toHaveCount(0, { timeout: 5_000 });
+    await expect(page.getByRole('button', { name: '+ Add step' })).toHaveCount(1);
   });
 });

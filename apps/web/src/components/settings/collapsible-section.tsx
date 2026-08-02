@@ -4,12 +4,14 @@ import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 
 // A titled, collapsible group of setting cards. The Configuration page has many
-// cards; grouping them keeps the page scannable. Sections are open by default so
-// no setting is hidden on first load, but can be collapsed to focus.
+// cards, so sections start collapsed and the page opens as a scannable index of
+// what can be configured. The header is styled as an obvious control — hover
+// state, pointer cursor and a boxed chevron — because a plain heading gave no
+// hint that it opened anything.
 export function CollapsibleSection({
   title,
   description,
-  defaultOpen = true,
+  defaultOpen = false,
   testId,
   children,
 }: {
@@ -26,16 +28,23 @@ export function CollapsibleSection({
       <button
         type="button"
         aria-expanded={open}
-        onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+        onClick={() => setOpen((previous) => !previous)}
+        className={`flex w-full cursor-pointer items-center justify-between gap-3 rounded-[12px] px-4 py-3 text-left transition-colors hover:bg-[#efede8] ${
+          open ? "rounded-b-none" : ""
+        }`}
       >
         <div className="space-y-0.5">
           <h2 className="text-sm font-semibold tracking-tight text-[#1a1814]">{title}</h2>
           {description && <p className="text-xs text-muted-foreground">{description}</p>}
         </div>
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 text-[#6d6a65] transition-transform ${open ? "" : "-rotate-90"}`}
-        />
+        <span className="flex items-center gap-2 text-xs font-medium text-[#6d6a65]">
+          <span className="hidden sm:inline">{open ? "Hide" : "Show"}</span>
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] border border-[#dedad2] bg-white">
+            <ChevronDown
+              className={`h-4 w-4 shrink-0 text-[#6d6a65] transition-transform ${open ? "" : "-rotate-90"}`}
+            />
+          </span>
+        </span>
       </button>
       {open && <div className="space-y-4 border-t border-[#e4e1db] px-4 py-4">{children}</div>}
     </section>

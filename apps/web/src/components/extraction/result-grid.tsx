@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Download, Pencil } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Download, Pencil } from "lucide-react";
 import { aggregateConfidence, confidenceBand, type ConfidenceBand } from "@rbrasier/domain";
 import {
   Dialog,
@@ -13,11 +13,14 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import {
   exceptionRecordIds,
   fieldColumnKeys,
   fieldValue,
   pairFields,
+  pendingDocuments,
+  recordExceptionReasons,
   toggleExpanded,
   visibleRecords,
 } from "./result-grid-model";
@@ -136,6 +139,10 @@ export function ResultGrid({
     () => visibleRecords(result, { query, exceptionsOnly }),
     [result, query, exceptionsOnly],
   );
+  const awaiting = useMemo(
+    () => pendingDocuments(result, { query, exceptionsOnly }),
+    [result, query, exceptionsOnly],
+  );
   const columnKeys = useMemo(() => fieldColumnKeys(result.records), [result.records]);
   const documentsById = useMemo(
     () => new Map(result.documents.map((document) => [document.id, document])),
@@ -247,7 +254,10 @@ export function ResultGrid({
                 />
               );
             })}
-            {rows.length === 0 ? (
+            {awaiting.map((document) => (
+              <PendingRow key={document.id} document={document} columnCount={columnCount} />
+            ))}
+            {rows.length === 0 && awaiting.length === 0 ? (
               <tr>
                 <td colSpan={columnCount} className="px-[12px] py-[16px] text-[#8a857c]">
                   No records match the current filter.
@@ -305,6 +315,32 @@ export function ResultGrid({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// A document the run has not reached yet. It has no values to show, so the row
+// carries the filename and where it is in the queue — the operator can tell an
+// outstanding document from one that produced nothing.
+function PendingRow({ document, columnCount }: { document: ResultDocument; columnCount: number }) {
+  const extracting = document.status === "extracting";
+  return (
+    <tr className="border-b border-[#e5e1d8] bg-[#fbfaf7]" data-testid="pending-row">
+      <td className="px-[8px] py-[6px] align-middle">
+        <Spinner className="h-[13px] w-[13px] text-[#8a857c]" />
+      </td>
+      {/* The field columns are empty until this document is read, so the name
+          spans them rather than trailing a row of em-dashes. */}
+      <td colSpan={columnCount - 1} className="px-[12px] py-[6px] align-top text-[#6d6a65]">
+        <div className="flex min-w-0 items-start gap-[6px]">
+          <span className="line-clamp-3 min-w-0 break-words" title={document.treePath}>
+            {document.filename}
+          </span>
+          <span className="mt-[2px] inline-block shrink-0 rounded-[4px] bg-[#eef1fc] px-[5px] py-[1px] text-[10px] font-semibold text-[#3a5fd9]">
+            {extracting ? "Processing" : "Queued"}
+          </span>
+        </div>
+      </td>
+    </tr>
   );
 }
 
@@ -415,6 +451,11 @@ function RecordDetail({
     .map((id) => documentsById.get(id))
     .filter((document): document is ResultDocument => document !== undefined);
 
+  const exceptionReasons = recordExceptionReasons(record, {
+    exceptionFileIds,
+    documents: [...documentsById.values()],
+  });
+
   return (
     <div className="flex flex-col gap-[14px]">
       <div className="flex flex-wrap items-baseline gap-x-[10px] gap-y-[2px]">
@@ -425,6 +466,23 @@ function RecordDetail({
           {Math.round(aggregateConfidence(record) * 100)}% overall confidence
         </span>
       </div>
+
+      {exceptionReasons.length > 0 ? (
+        <div
+          data-testid="record-exception-detail"
+          className="rounded-[8px] border border-[#f0d9ae] bg-[#fdf8ee] px-[12px] py-[10px]"
+        >
+          <h5 className="flex items-center gap-[6px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#9b6215]">
+            <AlertTriangle className="h-[12px] w-[12px] shrink-0" />
+            Why this is an exception
+          </h5>
+          <ul className="mt-[6px] flex list-disc flex-col gap-[3px] pl-[16px] text-[12px] text-[#7a5312]">
+            {exceptionReasons.map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div>
         <h5 className="mb-[6px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#8a857c]">

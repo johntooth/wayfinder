@@ -127,6 +127,12 @@ remain managed in-app (ADR-021); no Entra group/claim mapping in this phase.
 
 ### 5. PKI stays as-is
 
+> **Superseded by [ADR-042](042-pki-under-runtime-auth-config.adr.md).** PKI is
+> now configured from the admin Authentication card, with
+> `PKI_TRUSTED_PROXY_IPS` deliberately left in the environment as the trust
+> anchor. The decision below is retained as the record of why the deferral was
+> correct at the time; it is no longer current guidance.
+
 The PKI / client-certificate path remains env-configured and outside the admin
 card this phase. The admin UI governs Email + Password and Entra ID only; the
 env `AUTH_METHOD` continues to select PKI for deployments that need it. Bringing

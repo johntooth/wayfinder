@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@rbrasier/domain";
 import type { Container } from "@/lib/container";
 import { createCallerFactory, router, type TrpcContext } from "../trpc";
 import { documentRouter } from "./document";
@@ -40,7 +40,9 @@ const node = {
   },
 };
 
-const session = { id: "sess-1", status: "active" };
+const session = { id: "sess-1", status: "active", userId: "user-1" };
+
+const flow = { id: "flow-1", ownerUserId: "user-1", visibility: { kind: "private" } };
 
 const makeContainer = (overrides: Record<string, unknown> = {}): Container =>
   ({
@@ -50,15 +52,39 @@ const makeContainer = (overrides: Record<string, unknown> = {}): Container =>
       sessions: { findById: vi.fn().mockResolvedValue(ok(session)) },
       flowNodes: { findById: vi.fn().mockResolvedValue(ok(node)) },
       sessionStepOutputs: { findByMessageId: vi.fn().mockResolvedValue(ok(stepOutput)) },
-      approvals: { hasRecordedSnapshot: vi.fn().mockResolvedValue(ok(false)) },
+      approvals: {
+        hasRecordedSnapshot: vi.fn().mockResolvedValue(ok(false)),
+        listBySession: vi.fn().mockResolvedValue(ok([])),
+      },
+      users: { findById: vi.fn().mockResolvedValue(ok({ id: "user-1", email: "a@b.c" })) },
     },
     useCases: {
+      getSession: { execute: vi.fn().mockResolvedValue(ok({ session, flow, messages: [] })) },
+      resolveSessionAccess: {
+        execute: vi.fn().mockResolvedValue(ok({ role: "owner", canSend: true, readOnly: false })),
+      },
       updateDocumentFields: {
+        execute: vi.fn().mockResolvedValue(ok({ document: message.document })),
+      },
+      approverEditSubjectFields: {
         execute: vi.fn().mockResolvedValue(ok({ document: message.document })),
       },
     },
     ...overrides,
   }) as unknown as Container;
+
+// Simulates a caller the session does not admit at all: no participant access,
+// and no pending approval to give them the scoped approver edit right either.
+const denyAccess = (container: Container): void => {
+  (container.useCases.resolveSessionAccess.execute as ReturnType<typeof vi.fn>).mockResolvedValue(
+    err(domainError("FORBIDDEN", "You do not have access to this session.")),
+  );
+  (
+    container.useCases.approverEditSubjectFields.execute as ReturnType<typeof vi.fn>
+  ).mockResolvedValue(
+    err(domainError("FORBIDDEN", "You may only edit the step your own pending approval is about.")),
+  );
+};
 
 const contextWith = (container: Container): TrpcContext => ({
   container,
@@ -69,38 +95,125 @@ const contextWith = (container: Container): TrpcContext => ({
 });
 
 describe("documentEditability", () => {
+  const editable = {
+    sessionStatus: "active" as const,
+    allowManualEdit: true,
+    hasSnapshot: false,
+    hasPendingApproval: false,
+    sessionIsOnStep: false,
+  };
+
   it("is editable on an active session, edit allowed, no snapshot", () => {
-    expect(
-      documentEditability({ sessionStatus: "active", allowManualEdit: true, hasSnapshot: false }),
-    ).toEqual({ editable: true, reason: null });
+    expect(documentEditability(editable)).toEqual({ editable: true, reason: null });
   });
 
   it("blocks a non-active session", () => {
-    const result = documentEditability({
-      sessionStatus: "complete",
-      allowManualEdit: true,
-      hasSnapshot: false,
-    });
+    const result = documentEditability({ ...editable, sessionStatus: "complete" });
     expect(result.editable).toBe(false);
     expect(result.reason).toBeTruthy();
   });
 
   it("blocks when the node disables manual editing", () => {
-    const result = documentEditability({
-      sessionStatus: "active",
-      allowManualEdit: false,
-      hasSnapshot: false,
-    });
+    const result = documentEditability({ ...editable, allowManualEdit: false });
     expect(result.editable).toBe(false);
   });
 
-  it("blocks once an approval snapshot exists", () => {
-    const result = documentEditability({
-      sessionStatus: "active",
-      allowManualEdit: true,
-      hasSnapshot: true,
-    });
+  it("blocks once the approval chain has settled", () => {
+    const result = documentEditability({ ...editable, hasSnapshot: true });
     expect(result.editable).toBe(false);
+  });
+
+  // The affordance and the server guard have to agree. They did not: the server
+  // let a pending approver edit their own subject step while this reported the
+  // document locked, so the dialog refused an edit that would have succeeded.
+  it("stays editable while an approval is still pending", () => {
+    const result = documentEditability({
+      ...editable,
+      hasSnapshot: true,
+      hasPendingApproval: true,
+    });
+    expect(result).toEqual({ editable: true, reason: null });
+  });
+
+  it("stays editable on the step the session has been routed back to", () => {
+    const result = documentEditability({ ...editable, hasSnapshot: true, sessionIsOnStep: true });
+    expect(result).toEqual({ editable: true, reason: null });
+  });
+});
+
+describe("document field authorisation", () => {
+  it("rejects getFields for a caller with no access to the message's session", async () => {
+    const container = makeContainer();
+    denyAccess(container);
+    const caller = createCaller(contextWith(container));
+
+    await expect(
+      caller.document.getFields({ messageId: "11111111-1111-1111-1111-111111111111" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("rejects updateFields for a caller with no access to the message's session", async () => {
+    const container = makeContainer();
+    denyAccess(container);
+    const caller = createCaller(contextWith(container));
+
+    await expect(
+      caller.document.updateFields({
+        messageId: "11111111-1111-1111-1111-111111111111",
+        values: { supplier_name: "New Co" },
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(container.useCases.updateDocumentFields.execute).not.toHaveBeenCalled();
+  });
+
+  it("allows getFields for a read-only participant", async () => {
+    const container = makeContainer();
+    (container.useCases.resolveSessionAccess.execute as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok({ role: "viewer", canSend: false, readOnly: true }),
+    );
+    const caller = createCaller(contextWith(container));
+
+    const result = await caller.document.getFields({
+      messageId: "11111111-1111-1111-1111-111111111111",
+    });
+
+    expect(result.fields).toHaveLength(2);
+  });
+
+  it("routes a read-only caller's edit through the scoped approver path", async () => {
+    const container = makeContainer();
+    (container.useCases.resolveSessionAccess.execute as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok({ role: "viewer", canSend: false, readOnly: true }),
+    );
+    const caller = createCaller(contextWith(container));
+
+    await caller.document.updateFields({
+      messageId: "11111111-1111-1111-1111-111111111111",
+      values: { supplier_name: "New Co" },
+    });
+
+    // The scoped path checks the caller holds a pending approval whose subject
+    // is this step; the ordinary edit path must not run for a read-only caller.
+    expect(container.useCases.approverEditSubjectFields.execute).toHaveBeenCalled();
+    expect(container.useCases.updateDocumentFields.execute).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the approver path's refusal when the step is not their subject", async () => {
+    const container = makeContainer();
+    (container.useCases.resolveSessionAccess.execute as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok({ role: "viewer", canSend: false, readOnly: true }),
+    );
+    (
+      container.useCases.approverEditSubjectFields.execute as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(err(domainError("FORBIDDEN", "Not your subject step.")));
+    const caller = createCaller(contextWith(container));
+
+    await expect(
+      caller.document.updateFields({
+        messageId: "11111111-1111-1111-1111-111111111111",
+        values: { supplier_name: "New Co" },
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });
 
@@ -117,7 +230,7 @@ describe("document.getFields", () => {
     ]);
   });
 
-  it("reports editable=false with a reason when a snapshot exists", async () => {
+  it("reports editable=false with a reason once the approval chain has settled", async () => {
     const container = makeContainer();
     (container.repos.approvals.hasRecordedSnapshot as ReturnType<typeof vi.fn>).mockResolvedValue(
       ok(true),
@@ -128,6 +241,37 @@ describe("document.getFields", () => {
 
     expect(result.editable).toBe(false);
     expect(result.reason).toBeTruthy();
+  });
+
+  it("reports editable=true for an approver whose approval is still pending", async () => {
+    const container = makeContainer();
+    (container.repos.approvals.hasRecordedSnapshot as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(true),
+    );
+    (container.repos.approvals.listBySession as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok([{ id: "appr-2", status: "pending" }]),
+    );
+    const caller = createCaller(contextWith(container));
+
+    const result = await caller.document.getFields({ messageId: "11111111-1111-1111-1111-111111111111" });
+
+    expect(result.editable).toBe(true);
+    expect(result.reason).toBeNull();
+  });
+
+  it("reports editable=true once a change request has routed the session back to the step", async () => {
+    const container = makeContainer();
+    (container.repos.approvals.hasRecordedSnapshot as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(true),
+    );
+    (container.repos.sessions.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok({ ...session, currentNodeId: "node-1" }),
+    );
+    const caller = createCaller(contextWith(container));
+
+    const result = await caller.document.getFields({ messageId: "11111111-1111-1111-1111-111111111111" });
+
+    expect(result.editable).toBe(true);
   });
 
   it("attaches a group field's current items so the editor can seed them", async () => {
@@ -177,6 +321,96 @@ describe("document.getFields", () => {
     await expect(caller.document.getFields({ messageId: "11111111-1111-1111-1111-111111111111" })).rejects.toMatchObject({
       code: "NOT_FOUND",
     });
+  });
+});
+
+describe("document.getFields edit summary", () => {
+  const editedMessage = {
+    ...message,
+    document: {
+      ...message.document,
+      editedAt: "2026-06-02T09:00:00.000Z",
+      editedByUserId: "user-9",
+      editHistory: [
+        {
+          editedAt: "2026-06-02T09:00:00.000Z",
+          editedByUserId: "user-9",
+          storagePath: "generated/sess-1/rft-r1.docx",
+          changes: [{ key: "amount", previousValue: "$1,000.00", newValue: "$1,200.00" }],
+        },
+      ],
+    },
+  };
+
+  it("reports no edits for a document nobody has changed", async () => {
+    const caller = createCaller(contextWith(makeContainer()));
+
+    const result = await caller.document.getFields({ messageId: "11111111-1111-1111-1111-111111111111" });
+
+    expect(result.editSummary.edits).toEqual([]);
+    expect(result.editSummary.untouched.map((field) => field.key)).toEqual([
+      "supplier_name",
+      "amount",
+    ]);
+  });
+
+  it("returns each edit with its before and after values and the editor's name", async () => {
+    const container = makeContainer();
+    (container.repos.sessionMessages.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(editedMessage),
+    );
+    (container.repos.users.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok({ id: "user-9", name: "Priya Raman", email: "priya@example.com" }),
+    );
+    const caller = createCaller(contextWith(container));
+
+    const result = await caller.document.getFields({ messageId: "11111111-1111-1111-1111-111111111111" });
+
+    expect(result.editSummary.edits).toEqual([
+      {
+        editedAt: "2026-06-02T09:00:00.000Z",
+        editedBy: "Priya Raman",
+        changes: [
+          {
+            key: "amount",
+            label: "Amount",
+            previousValue: "$1,000.00",
+            newValue: "$1,200.00",
+          },
+        ],
+      },
+    ]);
+    expect(result.editSummary.untouched.map((field) => field.key)).toEqual(["supplier_name"]);
+  });
+
+  it("falls back to the editor's email when they have no name", async () => {
+    const container = makeContainer();
+    (container.repos.sessionMessages.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(editedMessage),
+    );
+    (container.repos.users.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok({ id: "user-9", name: null, email: "priya@example.com" }),
+    );
+    const caller = createCaller(contextWith(container));
+
+    const result = await caller.document.getFields({ messageId: "11111111-1111-1111-1111-111111111111" });
+
+    expect(result.editSummary.edits[0]!.editedBy).toBe("priya@example.com");
+  });
+
+  // A deleted account must not cost the originator the record of what changed.
+  it("still returns the changes when the editor can no longer be resolved", async () => {
+    const container = makeContainer();
+    (container.repos.sessionMessages.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(editedMessage),
+    );
+    (container.repos.users.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(null));
+    const caller = createCaller(contextWith(container));
+
+    const result = await caller.document.getFields({ messageId: "11111111-1111-1111-1111-111111111111" });
+
+    expect(result.editSummary.edits[0]!.editedBy).toBeNull();
+    expect(result.editSummary.edits[0]!.changes).toHaveLength(1);
   });
 });
 

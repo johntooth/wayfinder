@@ -1,12 +1,28 @@
 import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
-import { domainError, err, ok, type IUserRepository, type Result } from "@rbrasier/domain";
+import {
+  domainError,
+  err,
+  normaliseEmail,
+  ok,
+  type AuthConfig,
+  type IUserRepository,
+  type Result,
+} from "@rbrasier/domain";
 import type { Database } from "../db/client";
 import { core_sessions, core_users } from "../db/schema/core";
 
 export interface PkiConfig {
+  // The trust anchor, read from PKI_TRUSTED_PROXY_IPS and enforced here — the
+  // one place in the codebase that needs the addresses themselves. The session
+  // TTL is not here: it lives in the database and is resolved per request, so a
+  // change applies without a redeploy (ADR-042 §1).
   readonly trustedProxyIps: readonly string[];
-  readonly sessionTtlHours: number;
+}
+
+// The narrow slice of the runtime config store this adapter needs.
+export interface PkiAuthConfigSource {
+  getAuthConfig(): Promise<AuthConfig>;
 }
 
 interface CertIdentity {
@@ -17,20 +33,37 @@ interface CertIdentity {
 }
 
 export class PkiCertAdapter {
+  // Constructed unconditionally: configuration decides whether PKI answers, not
+  // wiring. An empty trusted-proxy list is therefore an ordinary runtime state
+  // here, reported per request rather than thrown at boot (ADR-042 §1).
   constructor(
     private readonly db: Database,
     private readonly userRepository: IUserRepository,
     private readonly config: PkiConfig,
-  ) {
-    if (config.trustedProxyIps.length === 0) {
-      throw new Error("PKI_TRUSTED_PROXY_IPS must not be empty when PKI auth is enabled");
-    }
-  }
+    private readonly runtimeConfig: PkiAuthConfigSource,
+  ) {}
 
   async authenticate(
     headers: Headers,
     sourceIp: string,
   ): Promise<Result<{ token: string; userId: string }>> {
+    const authConfig = await this.runtimeConfig.getAuthConfig();
+
+    // Defence in depth behind the route's own 403: whatever calls this, a
+    // disabled or ungated PKI must never mint a session.
+    if (!authConfig.pkiEnabled) {
+      return err(domainError("UNAUTHORIZED", "PKI sign-in is disabled."));
+    }
+
+    if (this.config.trustedProxyIps.length === 0) {
+      return err(
+        domainError(
+          "INFRA_FAILURE",
+          "PKI sign-in is enabled but PKI_TRUSTED_PROXY_IPS is not set, so no request can be trusted.",
+        ),
+      );
+    }
+
     if (!this.config.trustedProxyIps.includes(sourceIp)) {
       return err(domainError("UNAUTHORIZED", "Request did not originate from a trusted proxy."));
     }
@@ -51,7 +84,7 @@ export class PkiCertAdapter {
     const updateResult = await this.updateCertFields(user.id, identity);
     if (updateResult.error) return updateResult;
 
-    return this.createSession(user.id);
+    return this.createSession(user.id, authConfig.pki.sessionTtlHours);
   }
 
   private extractIdentity(headers: Headers): Result<CertIdentity> {
@@ -74,7 +107,9 @@ export class PkiCertAdapter {
     }
 
     const name = this.extractCnFromDn(subjectDn) ?? email;
-    return ok({ email, name, fingerprint, subjectDn });
+    // Certificate subject names carry whatever case the CA issued; the account
+    // key must not depend on it, or the same person gets a second user row.
+    return ok({ email: normaliseEmail(email), name, fingerprint, subjectDn });
   }
 
   private extractEmailFromDn(dn: string): string | null {
@@ -122,10 +157,13 @@ export class PkiCertAdapter {
     }
   }
 
-  private async createSession(userId: string): Promise<Result<{ token: string; userId: string }>> {
+  private async createSession(
+    userId: string,
+    sessionTtlHours: number,
+  ): Promise<Result<{ token: string; userId: string }>> {
     try {
       const token = randomUUID();
-      const expiresAt = new Date(Date.now() + this.config.sessionTtlHours * 60 * 60 * 1000);
+      const expiresAt = new Date(Date.now() + sessionTtlHours * 60 * 60 * 1000);
       await this.db.insert(core_sessions).values({
         user_id: userId,
         token,

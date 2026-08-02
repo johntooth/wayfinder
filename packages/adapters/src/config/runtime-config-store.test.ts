@@ -453,11 +453,121 @@ describe("RuntimeConfigStore — getAuthConfig", () => {
       emailPasswordEnabled: true,
       entraEnabled: true,
       entra: { tenantId: "t", clientId: "c", clientSecret: "super-secret" },
+      pkiEnabled: false,
+      pki: { sessionTtlHours: 8 },
     });
 
     expect(redacted.entra.tenantId).toBe("t");
     expect(redacted.entra.clientId).toBe("c");
     expect(redacted.entra.clientSecret).toBe("set");
+  });
+
+  it("reports the PKI switch and TTL in the redacted view", () => {
+    const redacted = RuntimeConfigStore.redactAuth({
+      emailPasswordEnabled: true,
+      entraEnabled: false,
+      entra: { tenantId: "", clientId: "", clientSecret: "" },
+      pkiEnabled: true,
+      pki: { sessionTtlHours: 12 },
+    });
+
+    expect(redacted.pkiEnabled).toBe(true);
+    expect(redacted.pki).toEqual({ sessionTtlHours: 12 });
+  });
+});
+
+describe("RuntimeConfigStore — PKI config", () => {
+  const pkiEnv = (overrides: Partial<EnvDefaults["pki"]> = {}) => ({
+    pki: {
+      authMethodNamesPki: false,
+      hasTrustedProxies: false,
+      sessionTtlHours: 8,
+      ...overrides,
+    },
+  });
+
+  it("leaves PKI off when the environment does not name it", async () => {
+    const store = new RuntimeConfigStore(makeRepo(null), makeEnv(pkiEnv()));
+
+    const config = await store.getAuthConfig();
+
+    expect(config.pkiEnabled).toBe(false);
+    expect(config.pki.sessionTtlHours).toBe(8);
+  });
+
+  // An install running AUTH_METHOD=pki today must come up with PKI still on
+  // after the upgrade, with no env change and no admin action (ADR-042 §3).
+  it("seeds pkiEnabled from AUTH_METHOD naming PKI", async () => {
+    const store = new RuntimeConfigStore(
+      makeRepo(null),
+      makeEnv(pkiEnv({ authMethodNamesPki: true, hasTrustedProxies: true })),
+    );
+
+    const config = await store.getAuthConfig();
+
+    expect(config.pkiEnabled).toBe(true);
+  });
+
+  it("seeds the session TTL from PKI_SESSION_TTL_HOURS", async () => {
+    const store = new RuntimeConfigStore(
+      makeRepo(null),
+      makeEnv(pkiEnv({ authMethodNamesPki: true, sessionTtlHours: 24 })),
+    );
+
+    const config = await store.getAuthConfig();
+
+    expect(config.pki.sessionTtlHours).toBe(24);
+  });
+
+  // Rows written before this phase carry no PKI keys at all.
+  it("defaults the new fields when the stored row predates them", async () => {
+    const stored = JSON.stringify({
+      emailPasswordEnabled: true,
+      entraEnabled: false,
+      entra: { tenantId: "", clientId: "", clientSecret: "" },
+    });
+    const store = new RuntimeConfigStore(
+      makeRepo(stored),
+      makeEnv(pkiEnv({ authMethodNamesPki: true, sessionTtlHours: 24 })),
+    );
+
+    const config = await store.getAuthConfig();
+
+    expect(config.pkiEnabled).toBe(true);
+    expect(config.pki.sessionTtlHours).toBe(24);
+  });
+
+  it("lets a stored row turn PKI off even when the environment still names it", async () => {
+    const stored = JSON.stringify({
+      emailPasswordEnabled: true,
+      entraEnabled: false,
+      entra: { tenantId: "", clientId: "", clientSecret: "" },
+      pkiEnabled: false,
+      pki: { sessionTtlHours: 4 },
+    });
+    const store = new RuntimeConfigStore(
+      makeRepo(stored),
+      makeEnv(pkiEnv({ authMethodNamesPki: true })),
+    );
+
+    const config = await store.getAuthConfig();
+
+    expect(config.pkiEnabled).toBe(false);
+    expect(config.pki.sessionTtlHours).toBe(4);
+  });
+
+  it("reports the environment gate as a boolean, never the addresses", () => {
+    const gated = new RuntimeConfigStore(makeRepo(null), makeEnv(pkiEnv({ hasTrustedProxies: true })));
+    const ungated = new RuntimeConfigStore(makeRepo(null), makeEnv(pkiEnv()));
+
+    expect(gated.isPkiEnvConfigured()).toBe(true);
+    expect(ungated.isPkiEnvConfigured()).toBe(false);
+  });
+
+  it("treats a missing pki env group as ungated", () => {
+    const store = new RuntimeConfigStore(makeRepo(null), makeEnv());
+
+    expect(store.isPkiEnvConfigured()).toBe(false);
   });
 });
 

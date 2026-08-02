@@ -31,15 +31,11 @@ async function createFlowAndOpenCanvas(page: Page, name: string): Promise<void> 
   await page.locator('#flow-name').fill(name);
   await page.locator('#flow-expert-role').fill('E2E Test Expert');
   await page.getByRole('button', { name: /create flow/i }).click();
-  await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10_000 });
 
-  const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
-  await expect(editLink).toBeVisible({ timeout: 5_000 });
-  await editLink.click();
-
-  // The canvas route is heavy (ReactFlow). In dev mode the first navigation
-  // also triggers on-demand compilation, so allow the full navigation timeout.
-  // "Configure Flow" links to the single canonical editor at /flows/[id]/config.
+  // Creating a flow lands on the canvas editor directly (v0.21.0) — there is no
+  // longer a trip back to the list to click "Configure Flow". The canvas route
+  // is heavy (ReactFlow) and in dev mode the first navigation also triggers
+  // on-demand compilation, so allow the full navigation timeout.
   await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 });
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(1_200);
@@ -68,11 +64,19 @@ async function addAndConfigureStep(
 
   await page.locator('#node-name').fill(options.name);
   await page.locator('#ai-instruction').fill(options.instruction);
-  await page.locator('#done-when').fill(options.doneWhen);
 
-  if (options.outputType === 'generate_document') {
-    await page.locator('label', { hasText: 'Generate document' }).click();
-  }
+  // The default output type is "generate document" (v0.21.0), so a step is
+  // selected explicitly rather than left to whatever the default happens to be.
+  const outputTypeLabel =
+    options.outputType === 'generate_document'
+      ? 'Generate document (from template)'
+      : 'Unstructured conversation';
+  await page.locator('label', { hasText: outputTypeLabel }).click();
+
+  // "Generate document" pairs with "all fields captured", which replaces the
+  // free-text condition with an explainer — switch back before typing one.
+  await page.locator('#done-when-mode').selectOption('condition');
+  await page.locator('#done-when').fill(options.doneWhen);
 
   await page.getByRole('button', { name: /^Save$/i }).click();
   await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10_000 });

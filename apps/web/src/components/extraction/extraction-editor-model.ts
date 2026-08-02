@@ -148,6 +148,17 @@ export type OutputMode = "structured" | "template";
 export const deriveOutputMode = (schema: ExtractionSchema | null): OutputMode =>
   schema?.output.outputTemplate ? "template" : "structured";
 
+// The editor seeds every control from the schema once, when it mounts, so it
+// must not be mounted against a schema query that has not settled — it would
+// stay on the empty defaults and the next Save would write those over the stored
+// schema. This key identifies the seed a mount was built from: it changes when
+// the query settles (forcing a remount against the real schema) and is stable
+// afterwards, so a background refetch never resets the author's edits.
+export const schemaSeedKey = (schema: ExtractionSchema | null, isPending: boolean): string => {
+  if (isPending) return "pending";
+  return schema ? "schema" : "empty";
+};
+
 // Re-parses an annotation line into a TemplateField, used when merging a stored
 // instruction onto a freshly derived template field set.
 export const annotationToField = (line: string): TemplateField | null => {

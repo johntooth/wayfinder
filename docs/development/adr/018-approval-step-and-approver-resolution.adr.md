@@ -2,6 +2,9 @@
 
 - **Status**: Accepted (implemented v1.37.0)
 - **Date**: 2026-06-03
+- **Extended**: 2026-08-02 — "Resolution always ends in human confirmation": the
+  confirming human may be the preceding approver on a chained approval, not only
+  the operator (v0.22.2)
 - **Relates to**: ADR-010 (`INodeExecutor` / `pending_approval`), ADR-016 /
   ADR-017 (pgvector RAG over the knowledge base), ADR-023 Email Notification
   Transport (`IEmailSender` + `app_notification_log` outbox, M365 app registration)
@@ -57,11 +60,29 @@ interface ApprovalNodeConfig {
 ### Resolution always ends in human confirmation
 
 For **every** mode — including `first_level_supervisor` — the resolver only ever
-produces a **suggested** approver. The operator must confirm before the request
+produces a **suggested** approver. A human must confirm before the request
 is sent, because the structurally-correct manager may be on leave, acting, or
 simply wrong for this matter. The confirmation UI always offers **"Someone
 else"** with type-ahead auto-suggest. Only the confirmed identity is written as
 the approver; the suggestion and any override are both recorded for audit.
+
+**Who that human is depends on where the approval sits in the flow.** For the
+first approval it is the operator, at the chat gate. For a *subsequent* approval
+in a chain it may be the approver who just decided the previous one, confirming
+from the decision modal in `/approvals` (v0.22.2).
+
+That is a widening of "the operator", added deliberately rather than by
+accident, and every guarantee above is untouched: a human still confirms, the
+resolver still only suggests, "Someone else" is still offered, and the
+suggestion and any override are still both recorded. What changes is only
+*which* human, and the reason is that leaving it to the operator meant a chained
+approval sat idle until they happened to reopen the session — with the one
+person actually looking at the request unable to move it on. The approver who
+has just signed is better placed to say who signs next than someone who is not
+in the room.
+
+The rule is therefore: **a human who is party to the approval confirms it**,
+never the system.
 
 ### Org data: three federated sources behind one search
 

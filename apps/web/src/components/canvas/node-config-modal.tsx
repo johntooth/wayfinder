@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { deriveFieldKey } from "@rbrasier/domain";
-import type { FieldValueSource, McpToolRef, PriorStepField, TemplateField } from "@rbrasier/domain";
+import type { FieldValueSource, PriorStepField, TemplateField } from "@rbrasier/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";
@@ -22,16 +22,26 @@ import { parseFieldLines } from "./template-field-editor";
 import { N8nExtractionInfoDialog } from "./n8n-extraction-info-dialog";
 import { SkillPickerModal } from "./skill-picker-modal";
 import { McpPickerModal } from "./mcp-picker-modal";
-import { TEMPLATE_COMPLETE_SENTINEL, doneWhenForOutputType, type OutputType } from "./output-type";
-import type {
-  ScheduleModifier,
-  ScheduleUnit,
-  ScheduleWhen,
-} from "./scheduled-node-config";
+import { TEMPLATE_COMPLETE_SENTINEL, doneWhenForOutputType } from "./output-type";
 import { NodeConfigModalConversational } from "./node-config-modal-conversational";
+import {
+  TemplateAnnotationHost,
+  templateValuesFrom,
+  useTemplateUpload,
+} from "./template-upload-controller";
 import { NodeConfigModalAuto } from "./node-config-modal-auto";
 import { NodeConfigModalScheduled } from "./node-config-modal-scheduled";
 import { NodeConfigModalApproval } from "./node-config-modal-approval";
+import type { PriorStep } from "./approval-node-config";
+import { DEFAULT_VALUES, type NodeConfigValues } from "./node-config-values";
+
+// Re-exported so the many call sites that import these from the modal keep
+// working; the definitions now live in node-config-values.ts.
+export type {
+  ApproverSourceMode,
+  NodeConfigType,
+  NodeConfigValues,
+} from "./node-config-values";
 import { NodeConfigModalMcp } from "./node-config-modal-mcp";
 import {
   CopyButton,
@@ -41,63 +51,22 @@ import {
   type CustomRequestField,
 } from "./node-config-modal-helpers";
 
-export type NodeConfigType = "conversational" | "auto" | "scheduled" | "approval" | "mcp";
-
-export type ApproverSourceMode =
-  | "first_level_supervisor"
-  | "second_level_supervisor"
-  | "dynamic";
-
-export interface NodeConfigValues {
-  name: string;
-  colour: string;
-  type: NodeConfigType;
-  aiInstruction: string;
-  doneWhen: string;
-  neverDone: boolean;
-  outputType: OutputType;
-  // Author-declared fields for a structured conversation (ADR-038).
-  structuredFields: TemplateField[];
-  documentTemplatePath?: string | null;
-  documentTemplateFilename?: string | null;
-  documentTemplateContent?: string | null;
-  // Uploaded template format and (xlsx only) detected authoring mode, surfaced so
-  // the picker can show "Tag mode"/"Header mode" (ADR-039). Persisted by the
-  // upload endpoint; the modal only displays them.
-  documentTemplateFormat?: "docx" | "xlsx" | null;
-  spreadsheetTemplateMode?: "tags" | "header" | null;
-  allowManualEdit: boolean;
-  requireConfirmation: boolean;
-  // Ids of library skills (app_skills) attached to this conversational step.
-  skillRefs: string[];
-  // MCP tools this conversational step may call mid-conversation (ADR-032).
-  allowedMcpToolRefs: McpToolRef[];
-  instruction: string;
-  executor: "n8n" | "mock";
-  workflowId: string | null;
-  webhookUrl: string;
-  mcpServerId: string;
-  mcpToolName: string;
-  requestFields: TemplateField[];
-  requestFieldValues: Record<string, FieldValueSource>;
-  responseFields: TemplateField[];
-  // Keys of author-added request fields (removable); workflow inputs are not.
-  customRequestFieldKeys: string[];
-  scheduleWhen: ScheduleWhen;
-  scheduleNumber: string;
-  scheduleUnit: ScheduleUnit;
-  scheduleModifier: ScheduleModifier;
-  scheduleAnchorChoice: string;
-  scheduleDescribeText: string;
-  approverSource: ApproverSourceMode;
-  roleHint: string;
-  approvalInstructions: string;
-  notifyOnComplete: boolean;
-}
 
 interface NodeConfigModalProps {
   open: boolean;
   flowId: string;
+  // The node being configured, once it exists. Null before the step's first
+  // save, which is when template upload is unavailable anyway.
+  nodeId?: string | null;
+  // Applies a template result to the canvas state, so the guided annotation
+  // modal's save reaches the same place a direct upload does.
+  onTemplateApplied?: (result: {
+    path?: string;
+    filename?: string;
+    documentTemplateContent?: string | null;
+    documentTemplateFormat?: "docx" | "xlsx";
+    spreadsheetTemplateMode?: "tags" | "header" | null;
+  }) => void;
   initialValues?: Partial<NodeConfigValues>;
   onSave: (values: NodeConfigValues) => void;
   onDelete?: () => void;
@@ -105,6 +74,13 @@ interface NodeConfigModalProps {
   isSaving?: boolean;
   // Fields declared by steps earlier in the flow, offered as value sources.
   priorStepFields?: PriorStepField[];
+  // Steps earlier in the flow, with their type — the approval subject and
+  // return-target dropdowns list steps, not fields, so a conversational step
+  // that declares nothing still has to appear.
+  priorSteps?: PriorStep[];
+  // Signature slots other approval steps already claim, so two nodes cannot
+  // target one slot (ADR-043 §5).
+  takenSignatureFieldKeys?: string[];
   // Power-user feature flags (ADR-022). When off, the conversational Skills and
   // MCP-tools sections are hidden — a step never offers a capability the author's
   // organisation has not enabled.
@@ -113,55 +89,20 @@ interface NodeConfigModalProps {
   onUploadTemplate?: (file: File, currentValues: NodeConfigValues) => Promise<{ path: string; filename: string; documentTemplateContent: string | null; documentTemplateFormat?: "docx" | "xlsx"; spreadsheetTemplateMode?: "tags" | "header" | null } | { error: string; code?: string }>;
 }
 
-const DEFAULT_VALUES: NodeConfigValues = {
-  name: "",
-  colour: "#3a5fd9",
-  type: "conversational",
-  aiInstruction: "",
-  doneWhen: "",
-  neverDone: false,
-  outputType: "unstructured",
-  structuredFields: [],
-  documentTemplatePath: null,
-  documentTemplateFilename: null,
-  documentTemplateContent: null,
-  documentTemplateFormat: null,
-  spreadsheetTemplateMode: null,
-  allowManualEdit: true,
-  requireConfirmation: false,
-  skillRefs: [],
-  allowedMcpToolRefs: [],
-  instruction: "",
-  executor: "n8n",
-  workflowId: null,
-  webhookUrl: "",
-  mcpServerId: "",
-  mcpToolName: "",
-  requestFields: [],
-  requestFieldValues: {},
-  responseFields: [],
-  customRequestFieldKeys: [],
-  scheduleWhen: "specific",
-  scheduleNumber: "1",
-  scheduleUnit: "d",
-  scheduleModifier: "after",
-  scheduleAnchorChoice: "node_reached",
-  scheduleDescribeText: "",
-  approverSource: "first_level_supervisor",
-  roleHint: "",
-  approvalInstructions: "",
-  notifyOnComplete: false,
-};
 
 export function NodeConfigModal({
   open,
   flowId,
+  nodeId = null,
+  onTemplateApplied,
   initialValues,
   onSave,
   onDelete,
   onClose,
   isSaving = false,
   priorStepFields = [],
+  priorSteps = [],
+  takenSignatureFieldKeys = [],
   skillsEnabled = false,
   mcpEnabled = false,
   onUploadTemplate,
@@ -192,7 +133,6 @@ export function NodeConfigModal({
   }, [open, initialValues]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const [view, setView] = useState<"edit" | "preview">("edit");
   const [previewPrompt, setPreviewPrompt] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -203,6 +143,13 @@ export function NodeConfigModal({
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const [mcpPickerOpen, setMcpPickerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const templateUpload = useTemplateUpload(fileInputRef, (result) => {
+    setValues((current) => ({ ...current, ...templateValuesFrom(result) }));
+    onTemplateApplied?.(result);
+  });
+  // The template controls stay disabled while the guided modal owns the file —
+  // uploading itself now happens inside that modal, not here.
+  const isUploading = templateUpload.isOpen;
 
   const set = <K extends keyof NodeConfigValues>(key: K, value: NodeConfigValues[K]) =>
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -491,29 +438,13 @@ export function NodeConfigModal({
     }
   };
 
-  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !onUploadTemplate) return;
+  // The picked file is handed to the guided annotation modal rather than
+  // uploaded straight away: reading its placeholders and reviewing them both
+  // happen before anything is persisted.
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (!onUploadTemplate) return;
     setUploadError(null);
-    setIsUploading(true);
-    try {
-      const result = await onUploadTemplate(file, values);
-      if ("error" in result) {
-        setUploadError(result.error);
-        if (result.code === "NO_TEMPLATE_TAGS") {
-          setHelpDialogOpen(true);
-        }
-      } else {
-        set("documentTemplatePath", result.path);
-        set("documentTemplateFilename", result.filename);
-        set("documentTemplateContent", result.documentTemplateContent ?? null);
-        set("documentTemplateFormat", result.documentTemplateFormat ?? "docx");
-        set("spreadsheetTemplateMode", result.spreadsheetTemplateMode ?? null);
-      }
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
+    templateUpload.handleFileChange(e);
   };
 
   return (
@@ -613,6 +544,12 @@ export function NodeConfigModal({
                       fileInputRef={fileInputRef}
                       handleFileChange={handleFileChange}
                       isUploading={isUploading}
+                      onEditTemplateFields={templateUpload.editFields}
+                      templateDownloadUrl={
+                        nodeId && values.documentTemplatePath
+                          ? `/api/flows/${flowId}/nodes/${nodeId}/template`
+                          : null
+                      }
                       uploadError={uploadError}
                       setUploadError={setUploadError}
                       onOpenHelpDialog={() => setHelpDialogOpen(true)}
@@ -665,7 +602,15 @@ export function NodeConfigModal({
                     />
                   )}
 
-                  {isApproval && <NodeConfigModalApproval values={values} set={set} />}
+                  {isApproval && (
+                    <NodeConfigModalApproval
+                      values={values}
+                      set={set}
+                      priorSteps={priorSteps}
+                      priorStepFields={priorStepFields}
+                      takenSignatureFieldKeys={takenSignatureFieldKeys}
+                    />
+                  )}
 
                   {isMcp && (
                     <NodeConfigModalMcp
@@ -734,6 +679,12 @@ export function NodeConfigModal({
           </>
         )}
       </DialogContent>
+      <TemplateAnnotationHost
+        controller={templateUpload}
+        flowId={flowId}
+        nodeId={nodeId}
+        documentTemplateContent={values.documentTemplateContent}
+      />
       <TemplateTagsHelpDialog
         open={helpDialogOpen}
         onClose={() => setHelpDialogOpen(false)}

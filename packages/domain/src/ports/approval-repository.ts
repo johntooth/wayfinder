@@ -22,7 +22,9 @@ export interface IApprovalRepository {
   // when it was already decided. The atomic guard against a double-decide race:
   // two approvers acting at once must not both run the decision side effects.
   updateIfPending(id: string, patch: ApprovalUpdate): Promise<Result<Approval | null>>;
-  // True once any approval in the session has recorded a snapshot — the point
-  // after which the snapshot, not the live document, is the governed record.
+  // True once any *decided* approval in the session has recorded a snapshot —
+  // the point after which the snapshot, not the live document, is the governed
+  // record. A pending row's `recordSnapshot` holds the resolved subject cache
+  // (ADR-040 §2) and is deliberately not counted.
   hasRecordedSnapshot(sessionId: string): Promise<Result<boolean>>;
 }

@@ -89,7 +89,7 @@ export function AdminSkillsContent() {
             <CardTitle>Skill library</CardTitle>
           </CardHeader>
           <CardContent>
-            {skillsQuery.isLoading ? (
+            {skillsQuery.isPending ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : skillsQuery.data && skillsQuery.data.length > 0 ? (
               <Table>

@@ -101,6 +101,7 @@ const makeDocumentGenerator = (): IDocumentGenerator => ({
   extractFields: vi.fn().mockReturnValue(ok({ fields: FIELDS })),
   extractFullText: vi.fn().mockReturnValue(ok({ text: "" })),
   generate: vi.fn().mockReturnValue(ok({ bytes: Buffer.from("edited-docx") })),
+  annotate: vi.fn().mockReturnValue(ok({ bytes: Buffer.from("annotated"), appliedCount: 0, unmatched: [] })),
 });
 
 const makeObjectStorage = (): IObjectStorage => ({
@@ -165,11 +166,18 @@ const makeApprovals = (hasSnapshot = false): IApprovalRepository => ({
   findById: vi.fn(),
   findPendingByNode: vi.fn(),
   listPendingForApprover: vi.fn(),
-  listBySession: vi.fn(),
+  listBySession: vi.fn().mockResolvedValue(ok([])),
   update: vi.fn(),
   updateIfPending: vi.fn(),
   hasRecordedSnapshot: vi.fn().mockResolvedValue(ok(hasSnapshot)),
 });
+
+// The session sitting on the step it is editing is itself a thaw condition
+// (a change request routes work back there), so a lock test has to move it off.
+const sessionsElsewhere = (): ISessionRepository =>
+  makeSessions(makeSession({ currentNodeId: "node-later" }));
+
+const pendingApproval = { id: "appr-2", status: "pending", recordSnapshot: null };
 
 const makeAuditLogger = (): IAuditLogger => ({ log: vi.fn().mockResolvedValue(ok(true as const)) });
 
@@ -419,8 +427,11 @@ describe("UpdateDocumentFields", () => {
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
 
-  it("blocks editing once an approval snapshot has been recorded", async () => {
-    const { useCase, deps } = build({ approvals: makeApprovals(true) });
+  it("blocks editing once the approval chain has settled", async () => {
+    const { useCase, deps } = build({
+      approvals: makeApprovals(true),
+      sessions: sessionsElsewhere(),
+    });
 
     const result = await useCase.execute({
       messageId: "msg-1",
@@ -430,6 +441,38 @@ describe("UpdateDocumentFields", () => {
 
     expect(result.error?.code).toBe("FORBIDDEN");
     expect(deps.objectStorage.put).not.toHaveBeenCalled();
+  });
+
+  // ADR-045 §5/§6: a second approver must be able to fix what they are about to
+  // sign, even though an earlier approval in the chain has frozen its own record.
+  it("allows editing while another approval is still pending", async () => {
+    const approvals = makeApprovals(true);
+    (approvals.listBySession as ReturnType<typeof vi.fn>).mockResolvedValue(ok([pendingApproval]));
+    const { useCase, deps } = build({ approvals, sessions: sessionsElsewhere() });
+
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      editedByUserId: "user-1",
+      values: validValues,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(deps.objectStorage.put).toHaveBeenCalled();
+  });
+
+  // ADR-044 §1: a change request routes the session back to a step the operator
+  // is expected to change. Arriving somewhere you may not edit is not a return.
+  it("allows editing the step the session has been routed back to", async () => {
+    const { useCase, deps } = build({ approvals: makeApprovals(true) });
+
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      editedByUserId: "user-1",
+      values: validValues,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(deps.objectStorage.put).toHaveBeenCalled();
   });
 
   it("blocks editing when the node disables manual editing", async () => {
@@ -590,5 +633,79 @@ describe("UpdateDocumentFields", () => {
     );
     expect(deps.objectStorage.put).not.toHaveBeenCalled();
     expect(deps.sessionStepOutputs.updateFields).not.toHaveBeenCalled();
+  });
+});
+
+describe("UpdateDocumentFields — signature slots", () => {
+  const SIGNED_FIELDS = [
+    ...FIELDS,
+    {
+      key: "delegate_signature",
+      label: "Delegate Signature",
+      type: "signature",
+      optional: true,
+      raw: "Delegate Signature (approval)",
+    },
+  ] as const;
+
+  const withSignatureSlot = (approvalRows: unknown[]) => {
+    const approvals = makeApprovals();
+    (approvals.listBySession as ReturnType<typeof vi.fn>).mockResolvedValue(ok(approvalRows));
+    return build({
+      flowNodes: makeFlowNodes(makeNode({ documentTemplateFields: SIGNED_FIELDS })),
+      approvals,
+    });
+  };
+
+  const decidedApproval = {
+    id: "appr-1",
+    status: "approved",
+    recordSnapshot: {
+      subjectNodeId: "node-1",
+      signatureFieldKey: "delegate_signature",
+      attestationText: "Approved by:   Jane Doe\nDecision:      Approved",
+    },
+  };
+
+  it("keeps an approver's signature on the document when a later edit re-renders it", async () => {
+    const { useCase, deps } = withSignatureSlot([decidedApproval]);
+
+    await useCase.execute({
+      messageId: "msg-1",
+      editedByUserId: "user-1",
+      values: validValues,
+    });
+
+    const rendered = (deps.documentGenerator.generate as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(rendered.data.delegate_signature).toContain("Jane Doe");
+  });
+
+  it("leaves an undecided slot empty", async () => {
+    const { useCase, deps } = withSignatureSlot([]);
+
+    await useCase.execute({
+      messageId: "msg-1",
+      editedByUserId: "user-1",
+      values: validValues,
+    });
+
+    const rendered = (deps.documentGenerator.generate as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(rendered.data.delegate_signature).toBe("");
+  });
+
+  it("never writes a signature into the step output", async () => {
+    const { useCase, deps } = withSignatureSlot([decidedApproval]);
+
+    await useCase.execute({
+      messageId: "msg-1",
+      editedByUserId: "user-1",
+      values: validValues,
+    });
+
+    const [, fields] = (deps.sessionStepOutputs.updateFields as ReturnType<typeof vi.fn>).mock
+      .calls[0]!;
+    expect((fields as StepOutputField[]).map((field) => field.key)).not.toContain(
+      "delegate_signature",
+    );
   });
 });
