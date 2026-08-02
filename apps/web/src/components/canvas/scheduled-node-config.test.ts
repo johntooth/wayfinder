@@ -89,6 +89,11 @@ describe("scheduledConfigFromValues", () => {
     approverSource: "first_level_supervisor",
     roleHint: "",
     approvalInstructions: "",
+    approvalSubjectKind: "step",
+    approvalSubjectNodeId: "",
+    approvalSubjectInstruction: "",
+    signatureFieldKey: "",
+    changesRequestedTargetNodeId: "",
     notifyOnComplete: true,
   };
 

@@ -2,7 +2,9 @@
 
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { Stamp } from "lucide-react";
+import type { ApprovalSubject } from "@rbrasier/domain";
 import { cn } from "@/lib/utils";
+import { describeApprovalSubject } from "./approval-node-config";
 import { NodeTypeBadge } from "./node-styles";
 
 export interface ApprovalNodeData {
@@ -30,6 +32,12 @@ export function ApprovalNode({ data, selected }: NodeProps) {
   const name = nodeData.name.trim() || "Untitled step";
   const displayName = nodeData.stepNumber ? `${nodeData.stepNumber}. ${name}` : name;
 
+  const config = (nodeData.config ?? {}) as {
+    approvalSubject?: ApprovalSubject;
+    signatureFieldKey?: string;
+  };
+  const subjectLine = describeApprovalSubject(config);
+
   return (
     <div
       className={cn(
@@ -54,6 +62,7 @@ export function ApprovalNode({ data, selected }: NodeProps) {
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-gray-900">{displayName}</p>
           <p className="mt-0.5 text-xs text-gray-500 leading-snug line-clamp-2">{subtitle}</p>
+          <p className="mt-0.5 text-[11px] text-gray-400 leading-snug line-clamp-1">{subjectLine}</p>
         </div>
       </div>
 

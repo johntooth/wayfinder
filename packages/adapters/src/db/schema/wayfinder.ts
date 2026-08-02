@@ -423,8 +423,11 @@ export const app_session_approvals = pgTable(
     }),
     approver_email: text("approver_email"),
     is_override: boolean("is_override").notNull().default(false),
+    // A plain text column with a TypeScript-level refinement — there is no CHECK
+    // constraint in `drizzle/`, so `approved_with_edits` is additive at the
+    // database and needs no migration (ADR-045 §4).
     status: text("status", {
-      enum: ["pending", "approved", "rejected", "changes_requested"],
+      enum: ["pending", "approved", "approved_with_edits", "rejected", "changes_requested"],
     })
       .notNull()
       .default("pending"),

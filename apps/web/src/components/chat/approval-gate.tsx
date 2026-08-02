@@ -192,6 +192,15 @@ export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions
           <Stamp className="h-5 w-5 text-[#a65b05]" />
           <p className="text-[14px] font-semibold text-[#1a1814]">Confirm the approver</p>
         </div>
+        {/* The subject the approver will see and the record will lock, shown
+            here first so the operator can catch a wrong one before it is sent. */}
+        {suggest.data?.subject?.description && (
+          <p className="text-[13px] text-[#1a1814]" data-approval-subject>
+            <span className="font-semibold">You are requesting approval of:</span>{" "}
+            {suggest.data.subject.description}
+          </p>
+        )}
+
         {instructions && <p className="text-[13px] text-[#5a5650]">{instructions}</p>}
 
         {roleHint && (

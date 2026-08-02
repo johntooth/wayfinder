@@ -7,7 +7,6 @@ import {
   CreateFlow,
   CreateFlowEdge,
   CreateFlowNode,
-  ConfirmAndSend,
   CreateGroup,
   UpdateGroup,
   DeleteGroup,
@@ -19,7 +18,6 @@ import {
   RemoveGroupMember,
   ResolveGroupAuthorization,
   CreateUser,
-  DecideApproval,
   DeleteFlow,
   DeleteFlowEdge,
   DeleteFlowNode,
@@ -60,8 +58,6 @@ import {
   RenameRole,
   DeleteRole,
   ListScheduleRuns,
-  ListPendingApprovals,
-  ListPendingApprovalsWithContext,
   ListSessions,
   ListSessionsPage,
   ListUsers,
@@ -107,7 +103,6 @@ import {
   SetColumnMapping,
   SetFeatureFlagRoles,
   StartSession,
-  SuggestApprover,
   TrackUsage,
   UpdateErrorStatus,
   UpdateFlow,
@@ -117,6 +112,7 @@ import {
   UpdateUser,
   UpsertFeatureFlag,
 } from "@rbrasier/application";
+import { buildApprovalUseCases } from "./container-approval-use-cases";
 import { buildDocumentUseCases } from "./container-document-use-cases";
 import { buildOnboarding } from "./container-onboarding";
 import {
@@ -185,6 +181,7 @@ import {
   QuotaEnforcer,
   RuntimeConfigStore,
   SystemClock,
+  sha256Hex,
   TtlCache,
   createAuth,
   createCachedSessionResolver,
@@ -594,6 +591,41 @@ const build = () => {
     seedEmail: env.ADMIN_SEED_EMAIL ?? null,
   });
 
+  // Shared, not constructed twice: the approval gate and the approver's context
+  // must resolve the subject the same way or they drift apart (ADR-040 §2).
+  const documentUseCases = buildDocumentUseCases({
+    documentGenerator,
+    objectStorage,
+    languageModel: llm,
+    sessionMessages,
+    sessionStepOutputs,
+    sessions,
+    flowNodes,
+    approvals,
+    auditLogger,
+  });
+  const approvalUseCases = buildApprovalUseCases({
+    unitOfWork,
+    approvals,
+    sessions,
+    sessionMessages,
+    sessionStepOutputs,
+    flowNodes,
+    flowEdges,
+    users,
+    auditLogger,
+    languageModel: llm,
+    documentGenerator,
+    objectStorage,
+    reportingLineResolver,
+    embeddings,
+    documentChunks,
+    sha256Hex,
+    updateDocumentFields: documentUseCases.updateDocumentFields,
+    notifyOnApprovalRequested,
+    notifyOnApprovalDecided,
+  });
+
   return {
     env,
     db,
@@ -609,17 +641,7 @@ const build = () => {
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter, ...skillsAndMcp.services },
     repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds, extractionRuns: extraction.repository, extractionDrafts: extraction.draftRepository, ...skillsAndMcp.repos },
     useCases: {
-      ...buildDocumentUseCases({
-        documentGenerator,
-        objectStorage,
-        languageModel: llm,
-        sessionMessages,
-        sessionStepOutputs,
-        sessions,
-        flowNodes,
-        approvals,
-        auditLogger,
-      }),
+      ...documentUseCases,
       evaluateStepReadiness: new EvaluateStepReadiness(llm, documentGenerator, objectStorage),
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
@@ -736,36 +758,7 @@ const build = () => {
       getUsageLimitsEnabled: new GetUsageLimitsEnabled(systemSettings),
       setUsageLimitsEnabled: new SetUsageLimitsEnabled(systemSettings),
       getFlowDeepDive: new GetFlowDeepDive(flows, flowNodes, analyticsRepo, sessionStepOutputs, flowEdges),
-      suggestApprover: new SuggestApprover(
-        approvals,
-        flowNodes,
-        reportingLineResolver,
-        users,
-        embeddings,
-        documentChunks,
-        llm,
-      ),
-      confirmAndSend: new ConfirmAndSend(approvals, auditLogger, notifyOnApprovalRequested),
-      decideApproval: new DecideApproval(
-        unitOfWork,
-        approvals,
-        sessions,
-        flowEdges,
-        sessionStepOutputs,
-        auditLogger,
-        notifyOnApprovalDecided,
-        sessionMessages,
-        users,
-      ),
-      listPendingApprovals: new ListPendingApprovals(approvals),
-      listPendingApprovalsWithContext: new ListPendingApprovalsWithContext(
-        approvals,
-        sessions,
-        users,
-        sessionMessages,
-        sessionStepOutputs,
-        flowNodes,
-      ),
+      ...approvalUseCases,
       searchPeople: new SearchPeople([graphPeopleDirectory, hrPeopleDirectory]),
       importHrDataset: new ImportHrDataset(
         spreadsheetParser,
