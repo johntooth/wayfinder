@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Copy, Mail, Stamp } from "lucide-react";
+import { Copy, Mail, PencilLine, Stamp } from "lucide-react";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/router";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DocumentCard } from "@/components/chat/document-card";
+import { DocumentEditDialog } from "@/components/chat/document-edit-dialog";
 import { trpc } from "@/trpc/client";
 
 type Decision = "approved" | "rejected" | "changes_requested";
@@ -47,7 +48,24 @@ function StepFields({ fields }: { fields: StepField[] }) {
   );
 }
 
+// What the approver is being asked to sign off, resolved from the node's
+// configured subject and locked into the record when they decide (ADR-040).
+function ApprovalSubject({ description }: { description: string | null }) {
+  if (!description) return null;
+
+  return (
+    <p className="text-[13px] text-[#1a1814]">
+      <span className="font-semibold">You are approving:</span> {description}
+    </p>
+  );
+}
+
 function PreviousStep({ previousStep }: { previousStep: PendingApproval["previousStep"] }) {
+  // An approver may fix their own subject step before deciding, rather than
+  // sending the whole thing back over a typo. The edit commits first and is
+  // visible in the document they are looking at when they decide, so what they
+  // sign is what they left behind (ADR-045 §5).
+  const [editing, setEditing] = useState(false);
   if (!previousStep) return null;
   const { document, fields, stepName } = previousStep;
 
@@ -67,6 +85,27 @@ function PreviousStep({ previousStep }: { previousStep: PendingApproval["previou
         <StepFields fields={fields} />
       ) : (
         <p className="text-[12.5px] text-[#6d6a65]">No preview available for this step.</p>
+      )}
+
+      {document && (
+        <>
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-2"
+            onClick={() => setEditing(true)}
+          >
+            <PencilLine className="h-4 w-4" />
+            Edit before deciding
+          </Button>
+          <DocumentEditDialog
+            open={editing}
+            messageId={document.messageId}
+            title="Edit before deciding"
+            onClose={() => setEditing(false)}
+            onSaved={() => setEditing(false)}
+          />
+        </>
       )}
     </div>
   );
@@ -276,6 +315,8 @@ function ApprovalRow({
           </p>
         </div>
       </div>
+
+      <ApprovalSubject description={approval.subjectDescription} />
 
       <PreviousStep previousStep={approval.previousStep} />
 
