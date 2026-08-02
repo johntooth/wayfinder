@@ -20,6 +20,7 @@
 
 import type { Page } from '@playwright/test';
 import { test, expect } from './helpers/base';
+import { openSettingsSection } from './helpers/settings';
 
 const FLAG_KEY = 'auto_node';
 
@@ -58,12 +59,8 @@ async function createFlowReturningId(page: Page, name: string): Promise<string |
   await page.locator('#flow-name').fill(name);
   await page.locator('#flow-expert-role').fill('E2E n8n Expert');
   await page.getByRole('button', { name: /create flow/i }).click();
-  await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10_000 });
-
-  const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
-  if (!(await editLink.isVisible().catch(() => false))) return null;
-  await editLink.click();
-  await page.waitForURL(/\/flows\/[^/]+/, { timeout: 10_000 }).catch(() => undefined);
+  // Creating a flow lands on the canvas editor directly (v0.21.0).
+  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 }).catch(() => undefined);
 
   const match = /\/flows\/([0-9a-f-]{36})/.exec(page.url());
   return match?.[1] ?? null;
@@ -73,6 +70,7 @@ test.describe('n8n workflow directory + step-context field values', () => {
   test('admin settings exposes an n8n Integration card', async ({ page, consoleLogs }) => {
     await page.goto('/admin/settings');
     await page.waitForLoadState('networkidle');
+    await openSettingsSection(page, 'Integrations');
 
     const card = page.getByText(/n8n Integration/i).first();
     test.skip(!(await card.isVisible().catch(() => false)), 'Admin settings surface not available');

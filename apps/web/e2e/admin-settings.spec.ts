@@ -16,6 +16,7 @@
  */
 
 import { test, expect } from './helpers/base';
+import { openSettingsSection } from './helpers/settings';
 
 test.describe('Admin: Settings', () => {
   test('settings page loads without errors', async ({ page, consoleLogs }) => {
@@ -29,6 +30,7 @@ test.describe('Admin: Settings', () => {
 
   test('General card shows organisation name', async ({ page }) => {
     await page.goto('/admin/settings');
+    await openSettingsSection(page, 'General');
     await page.waitForLoadState('networkidle');
 
     // The org-name input is the editable General-card field. Match by label
@@ -48,6 +50,7 @@ test.describe('Admin: Settings', () => {
 test.describe('Admin: AI Provider modal', () => {
   test('AI Provider modal offers Bedrock alongside the other providers', async ({ page }) => {
     await page.goto('/admin/settings');
+    await openSettingsSection(page, 'AI');
     await page.waitForLoadState('networkidle');
 
     // Open the AI configuration modal. The AI Provider card has an "Edit" button.

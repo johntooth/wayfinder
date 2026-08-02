@@ -632,12 +632,14 @@ export const extractionRouter = router({
         recordId: document.recordId,
         readable: document.status !== "unreadable",
       })),
+      // A document with no record is an exception only once it has settled —
+      // while the run is live that would otherwise flag its whole backlog.
       exceptionFileIds: documents.data
         .filter(
           (document) =>
-            document.recordId === null ||
             document.status === "failed" ||
-            document.status === "unreadable",
+            document.status === "unreadable" ||
+            (document.recordId === null && document.status === "complete"),
         )
         .map((document) => document.id),
     };

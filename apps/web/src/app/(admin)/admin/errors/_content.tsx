@@ -76,7 +76,7 @@ export function AdminErrorsContent() {
         </Button>
       </CardHeader>
       <CardContent>
-        {groupsQuery.isLoading ? (
+        {groupsQuery.isPending ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
           <Table>

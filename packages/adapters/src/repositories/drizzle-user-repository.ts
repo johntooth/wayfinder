@@ -1,6 +1,7 @@
 import {
   domainError,
   err,
+  normaliseEmail,
   ok,
   type IUserRepository,
   type NewUser,
@@ -19,10 +20,15 @@ export const buildFindByIdsStatement = (ids: readonly string[]): SQL => sql`
   WHERE ${inArray(core_users.id, [...ids])}
 `;
 
+// Better Auth writes `name` directly through its own Drizzle adapter, so a
+// sign-up that left the field empty lands here as "" rather than null. Collapse
+// blank to null on the way out so callers only ever see a real name or nothing.
+export const normaliseName = (name: string | null): string | null => name?.trim() || null;
+
 const toEntity = (row: typeof core_users.$inferSelect): User => ({
   id: row.id,
   email: row.email,
-  name: row.name,
+  name: normaliseName(row.name),
   role: row.role,
   team: row.team,
   organisationId: row.organisation_id,
@@ -40,7 +46,7 @@ export class DrizzleUserRepository implements IUserRepository {
       const [row] = await this.db
         .insert(core_users)
         .values({
-          email: input.email,
+          email: normaliseEmail(input.email),
           name: input.name ?? null,
           role: input.role ?? null,
           team: input.team ?? null,
@@ -78,7 +84,10 @@ export class DrizzleUserRepository implements IUserRepository {
 
   async findByEmail(email: string): Promise<Result<User | null>> {
     try {
-      const [row] = await this.db.select().from(core_users).where(eq(core_users.email, email));
+      const [row] = await this.db
+        .select()
+        .from(core_users)
+        .where(eq(core_users.email, normaliseEmail(email)));
       return ok(row ? toEntity(row) : null);
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to find user.", cause));
@@ -103,7 +112,7 @@ export class DrizzleUserRepository implements IUserRepository {
       const [row] = await this.db
         .update(core_users)
         .set({
-          ...(patch.email !== undefined ? { email: patch.email } : {}),
+          ...(patch.email !== undefined ? { email: normaliseEmail(patch.email) } : {}),
           ...(patch.name !== undefined ? { name: patch.name } : {}),
           ...(patch.role !== undefined ? { role: patch.role } : {}),
           ...(patch.team !== undefined ? { team: patch.team } : {}),

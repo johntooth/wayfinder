@@ -62,7 +62,7 @@ export function ChatsContent() {
 
       <div className="flex-1 overflow-auto">
         <div className="container py-6">
-          {sessionsQuery.isLoading ? (
+          {sessionsQuery.isPending ? (
             <CardSkeletonGrid count={3} />
           ) : filtered.length === 0 ? (
             <EmptyState

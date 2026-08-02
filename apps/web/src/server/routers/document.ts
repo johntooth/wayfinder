@@ -1,11 +1,21 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { domainError, nodeFieldSet, normaliseOutputType } from "@rbrasier/domain";
+import {
+  domainError,
+  isRecordLocked,
+  nodeFieldSet,
+  normaliseOutputType,
+  summariseDocumentEdits,
+} from "@rbrasier/domain";
 import type {
   ConversationalNodeConfig,
+  DocumentEdit,
   SessionStatus,
   StepOutputField,
   TemplateField,
 } from "@rbrasier/domain";
+import { accessError, authorizeSessionAccess } from "@/lib/session-access";
+import type { Container } from "@/lib/container";
 import { authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
@@ -19,10 +29,18 @@ export interface DocumentFieldWithValue extends TemplateField {
 // Pure gate for whether a generated document may be manually edited. The server
 // re-enforces these same conditions in UpdateDocumentFields — this only drives
 // the UI affordance and an explanatory reason.
+//
+// The lock question is delegated to the domain rule rather than answered here,
+// because the two answering it separately is what produced the defect: the guard
+// let a pending approver edit their own subject step while this still reported
+// the document locked, so the dialog refused an edit the server would have
+// allowed.
 export const documentEditability = (input: {
   sessionStatus: SessionStatus;
   allowManualEdit: boolean;
   hasSnapshot: boolean;
+  hasPendingApproval: boolean;
+  sessionIsOnStep: boolean;
 }): { editable: boolean; reason: string | null } => {
   if (input.sessionStatus !== "active") {
     return { editable: false, reason: "This session is no longer active." };
@@ -30,7 +48,12 @@ export const documentEditability = (input: {
   if (!input.allowManualEdit) {
     return { editable: false, reason: "Editing is disabled for this step." };
   }
-  if (input.hasSnapshot) {
+  const locked = isRecordLocked({
+    hasRecordedSnapshot: input.hasSnapshot,
+    hasPendingApproval: input.hasPendingApproval,
+    sessionIsOnStep: input.sessionIsOnStep,
+  });
+  if (locked) {
     return { editable: false, reason: "The document is locked after approval." };
   }
   return { editable: true, reason: null };
@@ -60,6 +83,79 @@ const resolveDisplayFields = (
   }));
 };
 
+// Who made each edit, as the reader should see them. Resolved once per distinct
+// editor rather than per edit, and never allowed to fail the query: a deleted
+// account costs the name, not the record of what changed.
+const resolveEditorNames = async (
+  container: Container,
+  editHistory: readonly DocumentEdit[],
+): Promise<Map<string, string>> => {
+  const userIds = [
+    ...new Set(
+      editHistory
+        .map((entry) => entry.editedByUserId)
+        .filter((userId): userId is string => userId !== null),
+    ),
+  ];
+
+  const names = new Map<string, string>();
+  await Promise.all(
+    userIds.map(async (userId) => {
+      const result = await container.repos.users.findById(userId);
+      if (result.error || !result.data) return;
+      const name = result.data.name?.trim();
+      names.set(userId, name && name.length > 0 ? name : result.data.email);
+    }),
+  );
+  return names;
+};
+
+const ACCESS_CODE = {
+  403: "FORBIDDEN",
+  404: "NOT_FOUND",
+  500: "INTERNAL_SERVER_ERROR",
+} as const;
+
+// Holding a message UUID is not authorisation (ADR-045 §1). Both procedures
+// resolve the message's session and test the caller against its participant
+// membership — the same check the REST document routes already apply.
+const authoriseSession = async (
+  container: Container,
+  sessionId: string,
+  userId: string,
+  isAdmin: boolean,
+  requireSend: boolean,
+): Promise<void> => {
+  const outcome = await authorizeSessionAccess(container, sessionId, userId, isAdmin, {
+    requireSend,
+    // The approver grant (ADR-018) is read-only, so it opens the field view but
+    // never the edit. An approver's *scoped* edit right is a different check —
+    // see `canSend` below.
+    allowApprover: !requireSend,
+  });
+  if (outcome.authorized) return;
+  throw new TRPCError({
+    code: ACCESS_CODE[outcome.status],
+    message: accessError(outcome.status),
+  });
+};
+
+// Whether the caller has ordinary send access to the session. False for an
+// approver, who is a read-only viewer — their edit goes through the scoped
+// approver path instead, which checks that the step is their own subject.
+const hasSendAccess = async (
+  container: Container,
+  sessionId: string,
+  userId: string,
+  isAdmin: boolean,
+): Promise<boolean> => {
+  const outcome = await authorizeSessionAccess(container, sessionId, userId, isAdmin, {
+    requireSend: true,
+    allowApprover: false,
+  });
+  return outcome.authorized;
+};
+
 export const documentRouter = router({
   getFields: authenticatedProcedure
     .input(z.object({ messageId: z.string().uuid() }))
@@ -68,6 +164,7 @@ export const documentRouter = router({
       if (messageResult.error) throw toTrpcError(messageResult.error);
       const message = messageResult.data;
       if (!message) throw toTrpcError(domainError("NOT_FOUND", "Record not found."));
+      await authoriseSession(ctx.container, message.sessionId, ctx.userId, ctx.isAdmin, false);
 
       const [sessionResult, nodeResult, stepOutputResult] = await Promise.all([
         ctx.container.repos.sessions.findById(message.sessionId),
@@ -92,10 +189,12 @@ export const documentRouter = router({
         throw toTrpcError(domainError("NOT_FOUND", "Document not found."));
       }
 
-      const snapshotResult = await ctx.container.repos.approvals.hasRecordedSnapshot(
-        message.sessionId,
-      );
+      const [snapshotResult, approvalsResult] = await Promise.all([
+        ctx.container.repos.approvals.hasRecordedSnapshot(message.sessionId),
+        ctx.container.repos.approvals.listBySession(message.sessionId),
+      ]);
       if (snapshotResult.error) throw toTrpcError(snapshotResult.error);
+      if (approvalsResult.error) throw toTrpcError(approvalsResult.error);
 
       const stepFields =
         stepOutputResult.error || !stepOutputResult.data ? [] : stepOutputResult.data.fields;
@@ -115,6 +214,27 @@ export const documentRouter = router({
         sessionStatus: session.status,
         allowManualEdit: config.allowManualEdit !== false,
         hasSnapshot: snapshotResult.data,
+        hasPendingApproval: approvalsResult.data.some((approval) => approval.status === "pending"),
+        sessionIsOnStep:
+          message.stepNodeId !== null && session.currentNodeId === message.stepNodeId,
+      });
+
+      // What each approver actually changed. The history has always been
+      // recorded and has always survived regeneration; nothing read it back, so
+      // an originator could see *that* their document was edited and never what
+      // the new values were.
+      const editHistory = message.document?.editHistory ?? [];
+      const editorNames = await resolveEditorNames(ctx.container, editHistory);
+      const summary = summariseDocumentEdits({
+        editHistory,
+        fields: fields.map((field) => ({
+          key: field.key,
+          label: field.label,
+          type: field.type,
+          // A group's value lives in its items; hand the summariser the same
+          // JSON shape the edit diff stores, so both render identically.
+          value: field.type === "group" ? JSON.stringify(field.items ?? []) : field.value,
+        })),
       });
 
       return {
@@ -124,6 +244,16 @@ export const documentRouter = router({
         editedAt: message.document?.editedAt ?? null,
         editedByUserId: message.document?.editedByUserId ?? null,
         fields,
+        editSummary: {
+          edits: summary.edits.map((entry) => ({
+            editedAt: entry.editedAt,
+            editedBy: entry.editedByUserId
+              ? editorNames.get(entry.editedByUserId) ?? null
+              : null,
+            changes: entry.changes,
+          })),
+          untouched: summary.untouched,
+        },
       };
     }),
 
@@ -140,6 +270,30 @@ export const documentRouter = router({
       if (messageResult.error) throw toTrpcError(messageResult.error);
       const message = messageResult.data;
       if (!message) throw toTrpcError(domainError("NOT_FOUND", "Record not found."));
+
+      // Two ways in: ordinary send access, or a pending approver editing the one
+      // step their approval is about (ADR-045 §2). The approver path re-checks
+      // that scope itself, so a caller with neither is rejected by the first
+      // check below.
+      const canSend = await hasSendAccess(
+        ctx.container,
+        message.sessionId,
+        ctx.userId,
+        ctx.isAdmin,
+      );
+      if (!canSend) {
+        const approverEdit = await ctx.container.useCases.approverEditSubjectFields.execute({
+          messageId: input.messageId,
+          editedByUserId: ctx.userId,
+          values: input.values,
+          groupItems: input.groupItems,
+        });
+        if (approverEdit.error) throw toTrpcError(approverEdit.error);
+        if (approverEdit.data.fieldErrors) {
+          return { ok: false as const, fieldErrors: approverEdit.data.fieldErrors };
+        }
+        return { ok: true as const, document: approverEdit.data.document };
+      }
 
       const nodeResult = message.stepNodeId
         ? await ctx.container.repos.flowNodes.findById(message.stepNodeId)

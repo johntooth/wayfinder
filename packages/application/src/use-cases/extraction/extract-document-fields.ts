@@ -86,7 +86,6 @@ export const extractDocumentFields = async (
     // An explicit keyed schema (every field required) forces a complete result —
     // a free-form record let the model silently drop fields it was unsure of.
     schema: buildExtractionResultSchema(keys),
-    temperature: 0.2,
   });
   if (result.error) return result;
 

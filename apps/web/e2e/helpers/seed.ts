@@ -24,6 +24,9 @@ export interface SeedFixtures {
   approvalSessionId?: string;
   structuredSessionId?: string;
   structuredFlowId?: string;
+  approvalSubjectSessionId?: string;
+  approvalSubjectFlowId?: string;
+  approvalFirstFlowId?: string;
 }
 
 export function writeSeedFixtures(fixtures: SeedFixtures): void {

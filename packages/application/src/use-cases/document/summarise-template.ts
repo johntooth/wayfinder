@@ -47,7 +47,6 @@ export class SummariseTemplate {
       purpose: "template-summarisation",
       prompt: buildPrompt(input.fullExtractedText, input.tags),
       schema: templateStructureSchema,
-      temperature: 0.1,
     });
 
     if (aiResult.error) {

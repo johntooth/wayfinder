@@ -11,10 +11,16 @@ import {
 } from "@rbrasier/domain";
 import type { NotificationConfig } from "./notify-on-session-complete";
 import { buildApprovalRequestedEmail } from "./approval-templates";
+import { SUBJECT_DESCRIPTION_KEY } from "../approvals/approval-record-keys";
 
 export interface NotifyOnApprovalRequestedInput {
   approval: Approval;
 }
+
+const readSubjectDescription = (approval: Approval): string | null => {
+  const value = approval.recordSnapshot?.[SUBJECT_DESCRIPTION_KEY];
+  return typeof value === "string" && value.length > 0 ? value : null;
+};
 
 // Narrow view injected into ConfirmAndSend, so it depends on "an approval-request
 // notifier" rather than this concrete class.
@@ -55,6 +61,9 @@ export class NotifyOnApprovalRequested implements IApprovalRequestedNotifier {
       flowName,
       requesterName,
       instructions: null,
+      // Cached on the pending approval by the gate resolution, so the email
+      // reads the same sentence the operator saw before sending.
+      subjectDescription: readSubjectDescription(approval),
       approvalUrl: `${this.config.baseUrl}/approvals`,
     });
 

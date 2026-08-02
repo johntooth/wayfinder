@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Copy, Mail, Stamp } from "lucide-react";
+import { Copy, Mail, PencilLine, Stamp } from "lucide-react";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/router";
 import { Button } from "@/components/ui/button";
@@ -17,12 +17,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { approverStageLabel } from "@/components/chat/approver-label";
+import { ApproverPicker } from "@/components/chat/approver-picker";
 import { DocumentCard } from "@/components/chat/document-card";
+import { DocumentEditDialog } from "@/components/chat/document-edit-dialog";
 import { trpc } from "@/trpc/client";
 
 type Decision = "approved" | "rejected" | "changes_requested";
 type PendingApproval = inferRouterOutputs<AppRouter>["approval"]["listPending"][number];
 type StepField = NonNullable<NonNullable<PendingApproval["previousStep"]>["fields"]>[number];
+type NextApproval = inferRouterOutputs<AppRouter>["approval"]["decide"]["nextApproval"];
 
 const DECISION_TITLE: Record<Decision, string> = {
   approved: "Approve request",
@@ -47,7 +51,24 @@ function StepFields({ fields }: { fields: StepField[] }) {
   );
 }
 
+// What the approver is being asked to sign off, resolved from the node's
+// configured subject and locked into the record when they decide (ADR-040).
+function ApprovalSubject({ description }: { description: string | null }) {
+  if (!description) return null;
+
+  return (
+    <p className="text-[13px] text-[#1a1814]">
+      <span className="font-semibold">You are approving:</span> {description}
+    </p>
+  );
+}
+
 function PreviousStep({ previousStep }: { previousStep: PendingApproval["previousStep"] }) {
+  // An approver may fix their own subject step before deciding, rather than
+  // sending the whole thing back over a typo. The edit commits first and is
+  // visible in the document they are looking at when they decide, so what they
+  // sign is what they left behind (ADR-045 §5).
+  const [editing, setEditing] = useState(false);
   if (!previousStep) return null;
   const { document, fields, stepName } = previousStep;
 
@@ -68,7 +89,46 @@ function PreviousStep({ previousStep }: { previousStep: PendingApproval["previou
       ) : (
         <p className="text-[12.5px] text-[#6d6a65]">No preview available for this step.</p>
       )}
+
+      {document && (
+        <>
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-2"
+            onClick={() => setEditing(true)}
+          >
+            <PencilLine className="h-4 w-4" />
+            Edit before deciding
+          </Button>
+          <DocumentEditDialog
+            open={editing}
+            messageId={document.messageId}
+            title="Edit before deciding"
+            onClose={() => setEditing(false)}
+            onSaved={() => setEditing(false)}
+          />
+        </>
+      )}
     </div>
+  );
+}
+
+// Which signature this is. Always rendered, never conditional on a role hint —
+// "first supervisor" and "second supervisor" are different jobs, and an approver
+// deciding without knowing which one they are is deciding half-informed.
+function ApproverStage({ approval }: { approval: PendingApproval }) {
+  return (
+    <p className="text-[13px] text-[#5a5650]" data-approver-stage>
+      You are the{" "}
+      <span className="font-medium text-[#1a1814]">
+        {approverStageLabel({
+          approverSource: approval.approval.approverSource,
+          roleHint: approval.roleHint,
+        })}
+      </span>{" "}
+      on <span className="font-medium text-[#1a1814]">{approval.approvalStepName}</span>.
+    </p>
   );
 }
 
@@ -89,6 +149,10 @@ function DecisionModal({
   // Set once a decision is recorded but email could not deliver it, so the
   // approver can notify the originator by hand before the row clears.
   const [manualNotify, setManualNotify] = useState(false);
+  // Set when the decision advanced the session onto another approval step. The
+  // approver nominates who signs next without leaving the page — a chained
+  // approval otherwise sits idle until the originator reopens the session.
+  const [nextApproval, setNextApproval] = useState<NextApproval>(null);
 
   const sessionUrl =
     typeof window !== "undefined"
@@ -96,7 +160,15 @@ function DecisionModal({
       : `/chats/${approval.sessionId}`;
 
   const decide = trpc.approval.decide.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (data) => {
+      // Handing the next approval straight back to the approver takes priority
+      // over closing: they are the one person currently looking at this
+      // request, and nobody else can move it forward until it is routed.
+      if (data.nextApproval) {
+        toast.success("Decision recorded");
+        setNextApproval(data.nextApproval);
+        return;
+      }
       if (emailConfigured) {
         await utils.approval.listPending.invalidate();
         toast.success("Decision recorded");
@@ -119,7 +191,7 @@ function DecisionModal({
     });
 
   const close = async () => {
-    if (manualNotify) await utils.approval.listPending.invalidate();
+    if (manualNotify || nextApproval) await utils.approval.listPending.invalidate();
     onClose();
   };
 
@@ -168,17 +240,33 @@ function DecisionModal({
         }}
       >
         <DialogHeader>
-          <DialogTitle>{DECISION_TITLE[decision]}</DialogTitle>
+          <DialogTitle>{nextApproval ? "Choose the next approver" : DECISION_TITLE[decision]}</DialogTitle>
           <DialogDescription>
-            {manualNotify
-              ? "Email isn't configured, so let the originator know manually."
-              : `For "${approval.chatName}"${
-                  approval.originatorName ? ` from ${approval.originatorName}` : ""
-                }.`}
+            {nextApproval
+              ? `Your decision is recorded. "${approval.chatName}" now needs ${nextApproval.nodeName}.`
+              : manualNotify
+                ? "Email isn't configured, so let the originator know manually."
+                : `For "${approval.chatName}"${
+                    approval.originatorName ? ` from ${approval.originatorName}` : ""
+                  }.`}
           </DialogDescription>
         </DialogHeader>
 
-        {manualNotify ? (
+        {nextApproval ? (
+          <DialogBody>
+            <ApproverPicker
+              sessionId={approval.sessionId}
+              flowId={approval.approval.flowId}
+              flowName={approval.chatName}
+              nodeId={nextApproval.nodeId}
+              nodeName={nextApproval.nodeName}
+              approverSource={nextApproval.approverSource}
+              instructions={nextApproval.instructions}
+              roleHint={nextApproval.roleHint}
+              emailConfigured={emailConfigured}
+            />
+          </DialogBody>
+        ) : manualNotify ? (
           <DialogBody>
             <p className="text-[13px] text-[#5a5650]">
               The decision was recorded and is shown in the session. Notify{" "}
@@ -202,6 +290,13 @@ function DecisionModal({
           </DialogBody>
         ) : (
           <DialogBody>
+            {/* The same three things the chat gate shows before a request is
+                sent: which signature this is, what is being signed, and the
+                artefact itself. Deciding from a bare comment box meant scrolling
+                back to the row behind the modal to recall any of it. */}
+            <ApproverStage approval={approval} />
+            <ApprovalSubject description={approval.subjectDescription} />
+            <PreviousStep previousStep={approval.previousStep} />
             <Textarea
               ref={commentRef}
               aria-label="Decision comment"
@@ -218,7 +313,11 @@ function DecisionModal({
         )}
 
         <DialogFooter>
-          {manualNotify ? (
+          {nextApproval ? (
+            <Button size="sm" variant="outline" onClick={() => void close()}>
+              Done
+            </Button>
+          ) : manualNotify ? (
             <Button size="sm" onClick={() => void close()}>
               Done
             </Button>
@@ -277,6 +376,10 @@ function ApprovalRow({
         </div>
       </div>
 
+      <ApproverStage approval={approval} />
+
+      <ApprovalSubject description={approval.subjectDescription} />
+
       <PreviousStep previousStep={approval.previousStep} />
 
       <div className="flex flex-wrap gap-2">
@@ -319,7 +422,7 @@ export function ApprovalsContent() {
 
       <div className="flex-1 overflow-auto">
         <div className="container py-6">
-          {approvalsQuery.isLoading ? (
+          {approvalsQuery.isPending ? (
             <p className="text-[13px] text-[#6d6a65]">Loading…</p>
           ) : approvals.length === 0 ? (
             <div className="rounded-[14px] border border-dashed border-[#dedad2] bg-white p-8 text-center">

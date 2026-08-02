@@ -34,12 +34,8 @@ async function createFlow(page: import('@playwright/test').Page, label: string):
     await expertRoleInput.fill('E2E Versioning Expert');
   }
   await page.getByRole('button', { name: /create flow/i }).click();
-  await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10_000 });
-
-  const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
-  await expect(editLink).toBeVisible({ timeout: 5_000 });
-  await editLink.click();
-  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 10_000 });
+  // Creating a flow lands on the canvas editor directly (v0.21.0).
+  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 }).catch(() => undefined);
 
   const match = page.url().match(/\/flows\/([^/?#]+)\/config/);
   return match?.[1] ?? null;

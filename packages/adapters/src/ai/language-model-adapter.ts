@@ -6,6 +6,7 @@ import {
   type AiPurpose,
   type GenerateObjectInput,
   type GenerateTextInput,
+  type IErrorLogger,
   type ILanguageModel,
   type ProviderName,
   type Result,
@@ -61,26 +62,58 @@ export class LanguageModelAdapter implements ILanguageModel {
     // Optional so existing single-instance/test wiring stays a plain provider
     // call; when supplied it bounds concurrency and retries transient failures.
     private readonly governor?: LlmCallGovernor,
+    // Optional so existing wiring/tests are unaffected; when supplied, a call
+    // that genuinely fails (returns AI_PROVIDER_FAILED, including when a
+    // temperature refusal survives the retry in withTemperatureFallback) is
+    // recorded to admin_errors. A call that recovers is not logged — only
+    // failures the caller actually sees.
+    private readonly errorLogger?: IErrorLogger,
   ) {}
 
   private runGoverned<R>(call: () => Promise<R>): Promise<R> {
     return this.governor ? this.governor.run(call) : call();
   }
 
+  // Fire-and-forget: logging a failure must never throw into the Result it is
+  // reporting on. IErrorLogger.log() never rejects on its own (it swallows its
+  // own persistence failures to console), but the .catch stays as a backstop —
+  // this runs from a catch block, so a rejection here would be unhandled.
+  private logAiCallFailure(
+    method: "generateObject" | "generateText" | "streamText" | "streamObject",
+    provider: ProviderName | undefined,
+    model: string | undefined,
+    cause: unknown,
+  ): void {
+    if (!this.errorLogger) return;
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    void this.errorLogger
+      .log({
+        level: "error",
+        message: `LLM ${method} call failed${provider && model ? ` (${provider}:${model})` : ""}: ${detail}`,
+        stack: cause instanceof Error ? (cause.stack ?? null) : null,
+        page: "ai/language-model-adapter",
+        metadata: { method, provider: provider ?? null, model: model ?? null },
+      })
+      .catch(() => {});
+  }
+
   async generateObject<T>(
     input: GenerateObjectInput,
   ): Promise<Result<{ object: T; usage: TokenUsage }>> {
+    let provider: ProviderName | undefined;
+    let model: string | undefined;
     try {
       const config = await this.runtimeConfig.getAiConfig();
-      const { provider, model, credentials } = resolveForCall(config, input.model, input.purpose);
+      const resolved = resolveForCall(config, input.model, input.purpose);
+      provider = resolved.provider;
+      model = resolved.model;
       const result = await this.runGoverned(() =>
         generateObject({
-          model: resolveModel(provider, model, credentials),
+          model: resolveModel(resolved.provider, resolved.model, resolved.credentials),
           schema: input.schema as never,
           system: input.system,
           prompt: input.prompt,
           messages: input.messages as never,
-          temperature: input.temperature,
           maxTokens: input.maxTokens,
         }),
       );
@@ -97,6 +130,7 @@ export class LanguageModelAdapter implements ILanguageModel {
         },
       });
     } catch (cause) {
+      this.logAiCallFailure("generateObject", provider, model, cause);
       return err(domainError("AI_PROVIDER_FAILED", "generateObject failed.", cause));
     }
   }
@@ -104,16 +138,19 @@ export class LanguageModelAdapter implements ILanguageModel {
   async generateText(
     input: GenerateTextInput,
   ): Promise<Result<{ text: string; usage: TokenUsage }>> {
+    let provider: ProviderName | undefined;
+    let model: string | undefined;
     try {
       const config = await this.runtimeConfig.getAiConfig();
-      const { provider, model, credentials } = resolveForCall(config, input.model, input.purpose);
+      const resolved = resolveForCall(config, input.model, input.purpose);
+      provider = resolved.provider;
+      model = resolved.model;
       const result = await this.runGoverned(() =>
         generateText({
-          model: resolveModel(provider, model, credentials),
+          model: resolveModel(resolved.provider, resolved.model, resolved.credentials),
           system: input.system,
           prompt: input.prompt,
           messages: input.messages as never,
-          temperature: input.temperature,
           maxTokens: input.maxTokens,
         }),
       );
@@ -130,6 +167,7 @@ export class LanguageModelAdapter implements ILanguageModel {
         },
       });
     } catch (cause) {
+      this.logAiCallFailure("generateText", provider, model, cause);
       return err(domainError("AI_PROVIDER_FAILED", "generateText failed.", cause));
     }
   }
@@ -137,15 +175,18 @@ export class LanguageModelAdapter implements ILanguageModel {
   async streamText(
     input: StreamTextInput,
   ): Promise<Result<{ textStream: AsyncIterable<string>; usage: Promise<TokenUsage> }>> {
+    let provider: ProviderName | undefined;
+    let model: string | undefined;
     try {
       const config = await this.runtimeConfig.getAiConfig();
-      const { provider, model, credentials } = resolveForCall(config, input.model, input.purpose);
+      const resolved = resolveForCall(config, input.model, input.purpose);
+      provider = resolved.provider;
+      model = resolved.model;
       const result = streamText({
-        model: resolveModel(provider, model, credentials),
+        model: resolveModel(resolved.provider, resolved.model, resolved.credentials),
         system: input.system,
         prompt: input.prompt,
         messages: input.messages as never,
-        temperature: input.temperature,
         maxTokens: input.maxTokens,
       });
       const usage = result.usage.then((u) => ({
@@ -157,6 +198,7 @@ export class LanguageModelAdapter implements ILanguageModel {
       }));
       return ok({ textStream: result.textStream, usage });
     } catch (cause) {
+      this.logAiCallFailure("streamText", provider, model, cause);
       return err(domainError("AI_PROVIDER_FAILED", "streamText failed.", cause));
     }
   }
@@ -170,17 +212,24 @@ export class LanguageModelAdapter implements ILanguageModel {
       usage: Promise<TokenUsage>;
     }>
   > {
+    let provider: ProviderName | undefined;
+    let model: string | undefined;
     try {
       const config = await this.runtimeConfig.getAiConfig();
-      const { provider, model, credentials } = resolveForCall(config, input.model, input.purpose);
+      const resolved = resolveForCall(config, input.model, input.purpose);
+      provider = resolved.provider;
+      model = resolved.model;
       const result = streamObject({
-        model: resolveModel(provider, model, credentials),
+        model: resolveModel(resolved.provider, resolved.model, resolved.credentials),
         schema: input.schema as never,
         system: input.system,
         prompt: input.prompt,
         messages: input.messages as never,
-        temperature: input.temperature,
         maxTokens: input.maxTokens,
+        // A mid-stream failure is not logged here: the Result has already
+        // resolved to ok(), and the primary chat path logs a broken stream
+        // itself (route.ts's onError), so logging it again would duplicate the
+        // row. The caller's handler is simply passed straight through.
         onError: input.onError,
       });
       // Await providerMetadata alongside usage so cache tokens survive the port
@@ -201,6 +250,7 @@ export class LanguageModelAdapter implements ILanguageModel {
         usage,
       });
     } catch (cause) {
+      this.logAiCallFailure("streamObject", provider, model, cause);
       return err(domainError("AI_PROVIDER_FAILED", "streamObject failed.", cause));
     }
   }

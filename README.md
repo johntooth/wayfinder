@@ -99,6 +99,12 @@ See [`docs/guides/setup-local.md`](docs/guides/setup-local.md).
 
 See [`docs/guides/setup-railway.md`](docs/guides/setup-railway.md).
 
+## Locked out of admin
+
+If a Microsoft Entra ID failure has left nobody able to sign in as an
+administrator, see
+[`docs/guides/recovering-admin-access.md`](docs/guides/recovering-admin-access.md).
+
 ---
 
 ## Stack

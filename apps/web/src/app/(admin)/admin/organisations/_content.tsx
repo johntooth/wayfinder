@@ -70,7 +70,7 @@ function OrganisationsManagementCard() {
           An organisation is an internal sharing scope: a flow published to an organisation is
           discoverable by its members. It carries no data isolation.
         </p>
-        {organisationsQuery.isLoading ? (
+        {organisationsQuery.isPending ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : organisations.length === 0 ? (
           <p className="text-sm text-muted-foreground">No organisations yet.</p>

@@ -38,7 +38,7 @@ export class NotifyOnApprovalDecided implements IApprovalDecidedNotifier {
   ) {}
 
   async execute(input: NotifyOnApprovalDecidedInput): Promise<Result<NotificationLog | null>> {
-    const { approval, decision, routedBack } = input;
+    const { approval, routedBack } = input;
 
     const requesterResult = await this.users.findById(approval.requestedByUserId);
     if (requesterResult.error) return requesterResult;
@@ -58,7 +58,9 @@ export class NotifyOnApprovalDecided implements IApprovalDecidedNotifier {
 
     const email = buildApprovalDecidedEmail({
       flowName,
-      decision,
+      // The recorded status, not the button pressed: an approval its own
+      // approver edited tells the originator so.
+      status: approval.status,
       routedBack,
       comment: approval.comment,
       sessionUrl: `${this.config.baseUrl}/chats/${approval.sessionId}`,

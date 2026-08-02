@@ -52,7 +52,7 @@ export function AdminSessionsContent() {
         <CardTitle>All Chats</CardTitle>
       </CardHeader>
       <CardContent>
-        {sessionsQuery.isLoading ? (
+        {sessionsQuery.isPending ? (
           <TableSkeletonRows count={4} />
         ) : sessions.length === 0 ? (
           <EmptyState

@@ -45,8 +45,17 @@ export type SessionListEntry = Session & {
     totalSteps: number;
     completedSteps: number;
     currentConfidence: number;
+    // A never-done step has no completion to measure, so the list card renders
+    // the step counter and status badge without a progress bar or percentage.
+    currentStepNeverDone: boolean;
   } | null;
 };
+
+// The ordered step ids of a flow, plus the subset that never complete.
+export interface SessionListGraph {
+  nodeIds: string[];
+  neverDoneNodeIds?: readonly string[];
+}
 
 // Pure list-row shaping shared by `list` and `listPage`: given a session, its
 // flow's ordered node ids, and the pre-aggregated message summary, derive the
@@ -54,7 +63,7 @@ export type SessionListEntry = Session & {
 // and paginated procedures produce identical rows.
 export function buildSessionListEntry(
   session: Session,
-  graph: { nodeIds: string[] } | undefined,
+  graph: SessionListGraph | undefined,
   summary: SessionListSummary | undefined,
 ): SessionListEntry {
   if (!graph || graph.nodeIds.length === 0) {
@@ -82,6 +91,11 @@ export function buildSessionListEntry(
         ? bestConfidenceByStep[session.currentNodeId] ?? 0
         : 0;
 
+  const currentStepNeverDone =
+    session.status !== "complete" &&
+    session.currentNodeId !== null &&
+    (graph.neverDoneNodeIds ?? []).includes(session.currentNodeId);
+
   return {
     ...session,
     lastMessage,
@@ -90,6 +104,7 @@ export function buildSessionListEntry(
       totalSteps,
       completedSteps,
       currentConfidence,
+      currentStepNeverDone,
     },
   };
 }
@@ -103,7 +118,7 @@ async function enrichSessions(
 ): Promise<SessionListEntry[]> {
   const flowIds = Array.from(new Set(sessions.map((session) => session.flowId)));
 
-  const flowGraphs = new Map<string, { nodeIds: string[] }>();
+  const flowGraphs = new Map<string, SessionListGraph>();
   await Promise.all(
     flowIds.map(async (flowId) => {
       const [nodesResult, edgesResult] = await Promise.all([
@@ -119,7 +134,10 @@ async function enrichSessions(
         fromNodeId: edge.fromNodeId,
         toNodeId: edge.toNodeId,
       }));
-      flowGraphs.set(flowId, { nodeIds: orderStepIds(nodes, edges) });
+      const neverDoneNodeIds = nodesResult.data
+        .filter((node) => (node.config as Record<string, unknown> | null)?.["neverDone"] === true)
+        .map((node) => node.id);
+      flowGraphs.set(flowId, { nodeIds: orderStepIds(nodes, edges), neverDoneNodeIds });
     }),
   );
 
