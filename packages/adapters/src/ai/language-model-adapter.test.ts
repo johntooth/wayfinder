@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AiConfig } from "@rbrasier/domain";
 import { LanguageModelAdapter } from "./language-model-adapter";
-import { noteTemperatureUnsupported, resetTemperatureSupportCache } from "./sampling-params";
 import type { RuntimeConfigStore } from "../config/runtime-config-store";
 
 vi.mock("ai", () => ({
@@ -333,8 +332,6 @@ describe("LanguageModelAdapter (openai) — streamObject", () => {
     });
   });
 
-  // The adapter wraps onError so it can notice a model refusing `temperature`,
-  // so assert the caller's handler still fires rather than comparing identity.
   it("forwards SDK errors to the caller's onError", async () => {
     async function* partials() { yield {}; }
     vi.mocked(streamObject).mockReturnValue({
@@ -473,121 +470,9 @@ describe("LanguageModelAdapter (bedrock) — credential plumbing", () => {
   });
 });
 
-// Regression: Claude 5 rejects `temperature` outright ("`temperature` is
-// deprecated for this model"), which used to fail the whole call.
-describe("LanguageModelAdapter — temperature handling across model families", () => {
-  const anthropicConfig: AiConfig = {
-    provider: "anthropic",
-    apiKeys: { anthropic: "sk-ant-test", openai: null, mistral: null, bedrock: null },
-    models: { chat: "claude-sonnet-5", documentGeneration: "claude-sonnet-5", branching: "claude-sonnet-5" },
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    resetTemperatureSupportCache();
-  });
-
-  it("withholds temperature from a model family known to reject it", async () => {
-    vi.mocked(generateText).mockResolvedValue({
-      text: "hi",
-      usage: { promptTokens: 1, completionTokens: 1 },
-      experimental_providerMetadata: undefined,
-    } as never);
-    const adapter = new LanguageModelAdapter("anthropic", makeConfigStore(anthropicConfig));
-
-    await adapter.generateText({ purpose: "chat", prompt: "hello", temperature: 0.4 });
-
-    const call = vi.mocked(generateText).mock.calls[0]![0] as { temperature?: number };
-    expect(call.temperature).toBeUndefined();
-  });
-
-  it("still sends temperature to a model that accepts it", async () => {
-    vi.mocked(generateText).mockResolvedValue({
-      text: "hi",
-      usage: { promptTokens: 1, completionTokens: 1 },
-      experimental_providerMetadata: undefined,
-    } as never);
-    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
-
-    await adapter.generateText({ purpose: "chat", prompt: "hello", temperature: 0.4 });
-
-    const call = vi.mocked(generateText).mock.calls[0]![0] as { temperature?: number };
-    expect(call.temperature).toBe(0.4);
-  });
-
-  it("replays without temperature when an unknown model refuses it", async () => {
-    vi.mocked(generateText)
-      .mockRejectedValueOnce(new Error("`temperature` is deprecated for this model."))
-      .mockResolvedValueOnce({
-        text: "recovered",
-        usage: { promptTokens: 1, completionTokens: 1 },
-        experimental_providerMetadata: undefined,
-      } as never);
-    const futureConfig: AiConfig = {
-      ...openaiConfig,
-      models: { chat: "gpt-6-turbo", documentGeneration: "gpt-6-turbo", branching: "gpt-6-turbo" },
-    };
-    const adapter = new LanguageModelAdapter("openai", makeConfigStore(futureConfig));
-
-    const result = await adapter.generateText({ purpose: "chat", prompt: "x", temperature: 0.4 });
-
-    expect(result.data?.text).toBe("recovered");
-    expect(vi.mocked(generateText).mock.calls).toHaveLength(2);
-    expect((vi.mocked(generateText).mock.calls[1]![0] as { temperature?: number }).temperature)
-      .toBeUndefined();
-  });
-
-  it("remembers the refusal so the next call skips temperature outright", async () => {
-    noteTemperatureUnsupported("openai", "gpt-6-turbo");
-    vi.mocked(generateText).mockResolvedValue({
-      text: "hi",
-      usage: { promptTokens: 1, completionTokens: 1 },
-      experimental_providerMetadata: undefined,
-    } as never);
-    const futureConfig: AiConfig = {
-      ...openaiConfig,
-      models: { chat: "gpt-6-turbo", documentGeneration: "gpt-6-turbo", branching: "gpt-6-turbo" },
-    };
-    const adapter = new LanguageModelAdapter("openai", makeConfigStore(futureConfig));
-
-    await adapter.generateText({ purpose: "chat", prompt: "x", temperature: 0.4 });
-
-    expect(vi.mocked(generateText).mock.calls).toHaveLength(1);
-    expect((vi.mocked(generateText).mock.calls[0]![0] as { temperature?: number }).temperature)
-      .toBeUndefined();
-  });
-
-  it("does not replay an unrelated provider failure", async () => {
-    vi.mocked(generateText).mockRejectedValue(new Error("overloaded_error"));
-    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
-
-    const result = await adapter.generateText({ purpose: "chat", prompt: "x", temperature: 0.4 });
-
-    expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
-    expect(vi.mocked(generateText).mock.calls).toHaveLength(1);
-  });
-
-  it("withholds temperature from a streamed chat on a refusing model", async () => {
-    vi.mocked(streamObject).mockReturnValue({
-      partialObjectStream: (async function* () { yield {}; })(),
-      object: Promise.resolve({}),
-      usage: Promise.resolve({ promptTokens: 0, completionTokens: 0 }),
-      providerMetadata: Promise.resolve(undefined),
-    } as never);
-    const adapter = new LanguageModelAdapter("anthropic", makeConfigStore(anthropicConfig));
-
-    await adapter.streamObject({ purpose: "chat", schema, temperature: 0.3 });
-
-    const call = vi.mocked(streamObject).mock.calls[0]![0] as { temperature?: number };
-    expect(call.temperature).toBeUndefined();
-  });
-});
-
-// An AI call that genuinely fails — including one where a temperature refusal
-// survives the retry in withTemperatureFallback — is logged to admin_errors.
-// A call that recovers is not a failure and is not logged; nor is a mid-stream
-// break, which the primary chat path already logs itself (route.ts's onError)
-// — logging it here too would duplicate that row.
+// An AI call that genuinely fails is logged to admin_errors. A mid-stream break
+// is not: the primary chat path already logs it itself (route.ts's onError), so
+// logging it here too would duplicate that row.
 describe("LanguageModelAdapter — logging genuine AI call failures", () => {
   const futureConfig: AiConfig = {
     ...openaiConfig,
@@ -598,7 +483,6 @@ describe("LanguageModelAdapter — logging genuine AI call failures", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    resetTemperatureSupportCache();
   });
 
   it("does not log when the call succeeds outright", async () => {
@@ -615,19 +499,13 @@ describe("LanguageModelAdapter — logging genuine AI call failures", () => {
       errorLogger,
     );
 
-    await adapter.generateText({ purpose: "chat", prompt: "x", temperature: 0.4 });
+    await adapter.generateText({ purpose: "chat", prompt: "x" });
 
     expect(errorLogger.log).not.toHaveBeenCalled();
   });
 
-  it("does not log when a temperature refusal recovers on retry", async () => {
-    vi.mocked(generateText)
-      .mockRejectedValueOnce(new Error("`temperature` is deprecated for this model."))
-      .mockResolvedValueOnce({
-        text: "recovered",
-        usage: { promptTokens: 1, completionTokens: 1 },
-        experimental_providerMetadata: undefined,
-      } as never);
+  it("logs a provider failure once, with the provider and model that failed", async () => {
+    vi.mocked(generateText).mockRejectedValue(new Error("overloaded_error"));
     const errorLogger = makeErrorLogger();
     const adapter = new LanguageModelAdapter(
       "openai",
@@ -636,25 +514,7 @@ describe("LanguageModelAdapter — logging genuine AI call failures", () => {
       errorLogger,
     );
 
-    const result = await adapter.generateText({ purpose: "chat", prompt: "x", temperature: 0.4 });
-
-    expect(result.data?.text).toBe("recovered");
-    expect(errorLogger.log).not.toHaveBeenCalled();
-  });
-
-  it("logs when a temperature refusal survives the retry", async () => {
-    vi.mocked(generateText)
-      .mockRejectedValueOnce(new Error("`temperature` is deprecated for this model."))
-      .mockRejectedValueOnce(new Error("`temperature` is deprecated for this model."));
-    const errorLogger = makeErrorLogger();
-    const adapter = new LanguageModelAdapter(
-      "openai",
-      makeConfigStore(futureConfig),
-      undefined,
-      errorLogger,
-    );
-
-    const result = await adapter.generateText({ purpose: "chat", prompt: "x", temperature: 0.4 });
+    const result = await adapter.generateText({ purpose: "chat", prompt: "x" });
 
     expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
     expect(errorLogger.log).toHaveBeenCalledTimes(1);
@@ -671,7 +531,16 @@ describe("LanguageModelAdapter — logging genuine AI call failures", () => {
     );
   });
 
-  it("logs any other genuine provider failure, unrelated to temperature", async () => {
+  it("does not retry a failed call — one attempt, one logged failure", async () => {
+    vi.mocked(generateText).mockRejectedValue(new Error("overloaded_error"));
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(futureConfig));
+
+    await adapter.generateText({ purpose: "chat", prompt: "x" });
+
+    expect(vi.mocked(generateText).mock.calls).toHaveLength(1);
+  });
+
+  it("logs a generateObject provider failure", async () => {
     vi.mocked(generateObject).mockRejectedValue(new Error("overloaded_error"));
     const errorLogger = makeErrorLogger();
     const adapter = new LanguageModelAdapter(
@@ -729,11 +598,11 @@ describe("LanguageModelAdapter — logging genuine AI call failures", () => {
       errorLogger,
     );
 
-    await adapter.streamObject({ purpose: "chat", schema, temperature: 0.3 });
+    await adapter.streamObject({ purpose: "chat", schema });
     const onError = vi.mocked(streamObject).mock.calls[0]![0]!.onError as
       | ((event: { error: unknown }) => void)
       | undefined;
-    onError?.({ error: new Error("`temperature` is deprecated for this model.") });
+    onError?.({ error: new Error("stream broke mid-flight") });
 
     expect(errorLogger.log).not.toHaveBeenCalled();
   });

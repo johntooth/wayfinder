@@ -60,6 +60,8 @@ export * from "./about-links";
 export * from "./notification-log";
 export * from "./retention-policy";
 export * from "./approval";
+export * from "./approval-decision-message";
+export * from "./approval-lock";
 export * from "./approval-record";
 export * from "./taken-path";
 export * from "./attestation-block";

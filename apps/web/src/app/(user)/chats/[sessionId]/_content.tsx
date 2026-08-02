@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { toast } from "sonner";
-import type { FlowEdge, FlowNode } from "@rbrasier/domain";
+import type { ApproverSource, FlowEdge, FlowNode } from "@rbrasier/domain";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChatActionsMenu } from "@/components/chat/chat-actions-menu";
@@ -504,6 +504,11 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
           flowId={session.flowId}
           flowName={flow.name}
           nodeId={currentNode.id}
+          nodeName={currentNode.name}
+          approverSource={
+            (currentNode.config as { approverSource?: ApproverSource }).approverSource ??
+            "first_level_supervisor"
+          }
           instructions={(currentNode.config as { instructions?: string }).instructions ?? null}
           roleHint={(currentNode.config as { roleHint?: string }).roleHint ?? null}
         />

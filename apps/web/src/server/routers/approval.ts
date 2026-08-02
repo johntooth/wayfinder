@@ -1,6 +1,43 @@
 import { z } from "zod";
+import type { ApprovalNodeConfig, ApproverSource } from "@rbrasier/domain";
+import type { Container } from "@/lib/container";
 import { authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
+
+export interface NextApprovalStep {
+  nodeId: string;
+  nodeName: string;
+  approverSource: ApproverSource;
+  roleHint: string | null;
+  instructions: string | null;
+}
+
+// Where a decision left the session, when it left it on another approval. It
+// lets the approver who just decided nominate the next approver from the same
+// modal, instead of the request stalling until the originator reopens the chat.
+// Best-effort: failing to describe the next step must not fail the decision that
+// has already committed.
+const resolveNextApproval = async (
+  container: Container,
+  newNodeId: string | null,
+): Promise<NextApprovalStep | null> => {
+  if (!newNodeId) return null;
+
+  const nodeResult = await container.repos.flowNodes.findById(newNodeId);
+  if (nodeResult.error || !nodeResult.data) return null;
+
+  const node = nodeResult.data;
+  if (node.type !== "approval") return null;
+
+  const config = node.config as unknown as ApprovalNodeConfig;
+  return {
+    nodeId: node.id,
+    nodeName: node.name?.trim() || "Approval",
+    approverSource: config.approverSource,
+    roleHint: config.roleHint?.trim() || null,
+    instructions: config.instructions?.trim() || null,
+  };
+};
 
 export const approvalRouter = router({
   // Reaching an approval node: compute the suggestion and write/return the
@@ -75,7 +112,9 @@ export const approvalRouter = router({
         isAdmin: ctx.isAdmin,
       });
       if (result.error) throw toTrpcError(result.error);
-      return result.data;
+
+      const nextApproval = await resolveNextApproval(ctx.container, result.data.newNodeId);
+      return { ...result.data, nextApproval };
     }),
 
   // Enriched with the context the approver needs to decide: chat name, who

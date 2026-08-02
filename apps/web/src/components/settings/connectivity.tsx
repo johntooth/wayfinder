@@ -122,11 +122,18 @@ export function ConnectivityBadge({ target, state }: { target: ConnectivityTarge
 export function ConnectivityTest({
   target,
   controller,
+  label,
 }: {
   target: ConnectivityTarget;
   controller: ConnectivityController;
+  // What this button tests, when the card holds more than one. A card with a
+  // single dependency is unambiguous already, so the label is optional — but
+  // three identical "Test connectivity" buttons stacked under Authentication
+  // tell an operator nothing about which one just failed.
+  label?: string;
 }) {
   const state = controller.states[target];
+  const idle = label ? `Test ${label}` : "Test connectivity";
   return (
     <div className="flex items-center gap-2 border-t border-[#ece9e3] pt-3">
       <Button
@@ -136,7 +143,7 @@ export function ConnectivityTest({
         onClick={() => void controller.runTest(target)}
         disabled={state?.status === "testing"}
       >
-        {state?.status === "testing" ? "Testing…" : "Test connectivity"}
+        {state?.status === "testing" ? "Testing…" : idle}
       </Button>
       <ConnectivityBadge target={target} state={state} />
     </div>

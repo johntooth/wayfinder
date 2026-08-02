@@ -65,7 +65,7 @@ export function AdminUsageContent() {
           <CardTitle>Usage by model</CardTitle>
         </CardHeader>
         <CardContent>
-          {summaryQuery.isLoading ? (
+          {summaryQuery.isPending ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : (
             <Table>

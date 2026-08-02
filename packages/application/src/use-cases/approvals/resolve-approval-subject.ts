@@ -176,7 +176,6 @@ export class ResolveApprovalSubject {
         "Information gathered in this session so far:",
         gathered || "(nothing has been captured yet)",
       ].join("\n\n"),
-      temperature: 0.2,
     });
     if (result.error) return fallback;
 

@@ -79,50 +79,100 @@ describe("/api/auth/cert", () => {
       expect(headers.get("x-ssl-client-san-email")).toBe("jane@acme.com");
     });
 
-    it("returns 401 rather than a session when the proxy is not trusted", async () => {
+    // A person who clicked "Sign in with your certificate" gets a page they can
+    // read, not a JSON body — but still no session.
+    it("sends a rejected certificate back to /login with a reason code", async () => {
       authenticate.mockResolvedValue(
         err(domainError("UNAUTHORIZED", "Request did not originate from a trusted proxy.")),
       );
 
       const response = await GET(certRequest("GET"));
 
-      expect(response.status).toBe(401);
+      expect(response.status).toBe(302);
+      const location = new URL(response.headers.get("location") ?? "");
+      expect(location.pathname).toBe("/login");
+      expect(location.searchParams.get("certError")).toBe("rejected");
       expect(response.cookies.get("better-auth.session_token")).toBeUndefined();
     });
 
-    it("returns 403 when certificate sign-in is disabled in config", async () => {
+    // The localhost case: a browser pointed straight at the app carries no
+    // x-ssl-client-* headers, and "not from a trusted proxy" reads like a bad
+    // IP list when the real answer is that there is no proxy at all.
+    it("distinguishes no-certificate-at-all from a rejected one", async () => {
+      authenticate.mockResolvedValue(
+        err(domainError("UNAUTHORIZED", "Request did not originate from a trusted proxy.")),
+      );
+      const bare = new Request("http://localhost:3000/api/auth/cert?redirect=%2Fchats");
+
+      const response = await GET(bare);
+
+      const location = new URL(response.headers.get("location") ?? "");
+      expect(location.searchParams.get("certError")).toBe("no_certificate");
+    });
+
+    it("never reflects the server's own message into the redirect", async () => {
+      authenticate.mockResolvedValue(
+        err(domainError("UNAUTHORIZED", "Request did not originate from a trusted proxy.")),
+      );
+
+      const response = await GET(certRequest("GET"));
+
+      expect(response.headers.get("location")).not.toContain("trusted proxy");
+    });
+
+    it("sends a disabled deployment back to /login rather than showing JSON", async () => {
       setPkiState(false, true);
 
       const response = await GET(certRequest("GET"));
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(302);
+      expect(new URL(response.headers.get("location") ?? "").searchParams.get("certError")).toBe(
+        "disabled",
+      );
       expect(authenticate).not.toHaveBeenCalled();
     });
 
     // The switch is on but a later deploy dropped PKI_TRUSTED_PROXY_IPS: just as
     // unable to authenticate anyone, and answered the same way.
-    it("returns 403 when enabled but the environment gate is unsatisfied", async () => {
+    it("treats an enabled but ungated deployment as disabled", async () => {
       setPkiState(true, false);
 
       const response = await GET(certRequest("GET"));
 
-      expect(response.status).toBe(403);
+      expect(new URL(response.headers.get("location") ?? "").searchParams.get("certError")).toBe(
+        "disabled",
+      );
       expect(authenticate).not.toHaveBeenCalled();
     });
 
-    it("returns 500, not 400, when the adapter reports a misconfiguration", async () => {
+    it("reports a misconfiguration as its own reason, not as a rejection", async () => {
       authenticate.mockResolvedValue(
         err(domainError("INFRA_FAILURE", "PKI_TRUSTED_PROXY_IPS is not set.")),
       );
 
       const response = await GET(certRequest("GET"));
 
-      expect(response.status).toBe(500);
+      expect(new URL(response.headers.get("location") ?? "").searchParams.get("certError")).toBe(
+        "misconfigured",
+      );
       expect(response.cookies.get("better-auth.session_token")).toBeUndefined();
     });
   });
 
   describe("POST — the method the mock proxy and direct callers use", () => {
+    // The mock proxy reads the status and the reason; only the browser flow
+    // trades JSON for a page.
+    it("keeps answering failures with JSON and a status", async () => {
+      authenticate.mockResolvedValue(
+        err(domainError("UNAUTHORIZED", "Request did not originate from a trusted proxy.")),
+      );
+
+      const response = await POST(certRequest("POST"));
+
+      expect(response.status).toBe(401);
+      expect(response.headers.get("location")).toBeNull();
+    });
+
     it("still signs in, so both entry points share one implementation", async () => {
       authenticate.mockResolvedValue(ok({ token: "session-token", userId: "user-1" }));
 

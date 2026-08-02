@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { PriorStepField } from "@rbrasier/domain";
 import {
+  approvalSubjectChoice,
+  approvalSubjectFromChoice,
+  CUSTOM_SUBJECT_CHOICE,
   decodeApprovalSubject,
   describeApprovalSubject,
   decodeChangesRequestedTarget,
@@ -66,6 +69,52 @@ describe("approval subject encoding", () => {
     expect(
       decodeApprovalSubject({ kind: "custom", nodeId: "", instruction: "   " }),
     ).toBeUndefined();
+  });
+});
+
+// The modal asks one question, not two: the subject select's options are the
+// default, every earlier step, and "something I'll describe". These map that
+// single string to the kind/nodeId pair the config mapping already stores.
+describe("approval subject as a single choice", () => {
+  it("reads the default as the empty choice", () => {
+    expect(approvalSubjectChoice({ kind: "step", nodeId: "" })).toBe("");
+  });
+
+  it("reads a named step as that step's node id", () => {
+    expect(approvalSubjectChoice({ kind: "step", nodeId: "node-draft" })).toBe("node-draft");
+  });
+
+  it("reads a described subject as the custom sentinel", () => {
+    expect(approvalSubjectChoice({ kind: "custom", nodeId: "" })).toBe(CUSTOM_SUBJECT_CHOICE);
+  });
+
+  it("turns the empty choice back into the default", () => {
+    expect(approvalSubjectFromChoice("")).toEqual({ kind: "step", nodeId: "" });
+  });
+
+  it("turns a node id back into that named step", () => {
+    expect(approvalSubjectFromChoice("node-draft")).toEqual({ kind: "step", nodeId: "node-draft" });
+  });
+
+  it("turns the custom sentinel back into a described subject with no step", () => {
+    expect(approvalSubjectFromChoice(CUSTOM_SUBJECT_CHOICE)).toEqual({
+      kind: "custom",
+      nodeId: "",
+    });
+  });
+
+  it("round-trips every choice the select can offer", () => {
+    const choices = ["", "node-draft", CUSTOM_SUBJECT_CHOICE];
+
+    for (const choice of choices) {
+      expect(approvalSubjectChoice(approvalSubjectFromChoice(choice))).toBe(choice);
+    }
+  });
+
+  // A step cannot be named "__describe__", but the sentinel must not be
+  // mistakable for one if a node id ever looked like it.
+  it("keeps the sentinel out of the node id space", () => {
+    expect(CUSTOM_SUBJECT_CHOICE).not.toMatch(/^[0-9a-f-]{36}$/);
   });
 });
 

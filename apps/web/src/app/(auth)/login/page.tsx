@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { CERT_SIGN_IN_ERROR_PARAM, certSignInErrorMessage } from "@/lib/cert-sign-in-errors";
 import { trpc } from "@/trpc/client";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -16,6 +17,9 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isExpired = searchParams.get("expired") === "true";
+  // A failed certificate sign-in redirects back here with a code rather than
+  // dead-ending on a JSON body the person who clicked cannot act on.
+  const certError = certSignInErrorMessage(searchParams.get(CERT_SIGN_IN_ERROR_PARAM));
 
   // First-run: an install with no admin has nothing to sign in to yet, so route
   // the very first visitor to the bootstrap screen instead (ADR-041 §0).
@@ -108,6 +112,14 @@ function LoginForm() {
           {isExpired && (
             <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
               Your session has expired, please sign in again.
+            </p>
+          )}
+          {certError && (
+            <p
+              data-testid="login-certificate-error"
+              className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-900"
+            >
+              {certError}
             </p>
           )}
           {emailPasswordEnabled && (

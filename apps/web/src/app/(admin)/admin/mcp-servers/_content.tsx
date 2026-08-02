@@ -159,7 +159,7 @@ export function AdminMcpServersContent() {
             <CardTitle>Registered servers</CardTitle>
           </CardHeader>
           <CardContent>
-            {serversQuery.isLoading ? (
+            {serversQuery.isPending ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : serversQuery.data && serversQuery.data.length > 0 ? (
               <Table>

@@ -24,6 +24,7 @@ import { documentSummarySchema, type DocumentData, type GroupItems } from "@rbra
 import { DOCUMENT_MIME, templateFormat } from "./document-format";
 import { buildRenderData } from "./render-data";
 import { validateGroupItems } from "./group-edit";
+import { resolveRecordLock } from "../approvals/resolve-record-lock";
 import { signatureValuesForStep } from "../approvals/signature-values";
 
 export interface UpdateDocumentFieldsInput {
@@ -34,11 +35,6 @@ export interface UpdateDocumentFieldsInput {
   // here keeps the items extracted at generation (a scalar-only edit); a group
   // present replaces them wholesale after validation.
   groupItems?: Record<string, Array<Record<string, string>>>;
-  // Set only by the approver-edit path, which has already established that the
-  // caller holds a pending approval whose subject is this step. It lifts the
-  // post-approval lock, because the thing that lock protects — the record — is
-  // frozen independently and is not what an approver is changing (ADR-045 §6).
-  editedAsPendingApprover?: boolean;
 }
 
 export interface DocumentFieldError {
@@ -93,11 +89,7 @@ export class UpdateDocumentFields {
     }
     const currentDocument = message.document;
 
-    const guard = await this.guard(
-      message.sessionId,
-      message.stepNodeId,
-      input.editedAsPendingApprover === true,
-    );
+    const guard = await this.guard(message.sessionId, message.stepNodeId);
     if (guard.error) return guard;
     const { config, templateBytes } = guard.data;
 
@@ -230,7 +222,6 @@ export class UpdateDocumentFields {
   private async guard(
     sessionId: string,
     stepNodeId: string | null,
-    isPendingApprover: boolean,
   ): Promise<Result<{ config: ConversationalNodeConfig; templateBytes: Buffer }>> {
     const sessionResult = await this.sessions.findById(sessionId);
     if (sessionResult.error) return sessionResult;
@@ -251,14 +242,10 @@ export class UpdateDocumentFields {
       return err(domainError("FORBIDDEN", "Manual editing is disabled for this step."));
     }
 
-    if (!isPendingApprover) {
-      const snapshotResult = await this.approvals.hasRecordedSnapshot(sessionId);
-      if (snapshotResult.error) return snapshotResult;
-      if (snapshotResult.data) {
-        return err(
-          domainError("FORBIDDEN", "This document is locked after an approval snapshot."),
-        );
-      }
+    const lockResult = await resolveRecordLock(this.approvals, sessionResult.data, stepNodeId);
+    if (lockResult.error) return lockResult;
+    if (lockResult.data) {
+      return err(domainError("FORBIDDEN", "This document is locked after an approval snapshot."));
     }
 
     if (!config.documentTemplatePath) {
@@ -362,7 +349,6 @@ export class UpdateDocumentFields {
       purpose: "chat",
       prompt: `Write a 2-sentence summary of a document with these values: ${JSON.stringify(values).slice(0, 2000)}`,
       schema: documentSummarySchema,
-      temperature: 0.2,
     });
     return summaryResult.error ? fallback : summaryResult.data.object.summary;
   }

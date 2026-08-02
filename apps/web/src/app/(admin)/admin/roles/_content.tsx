@@ -60,7 +60,7 @@ export function AdminRolesContent() {
             <CardTitle>Permissions</CardTitle>
           </CardHeader>
           <CardContent>
-            {rolesQuery.isLoading ? (
+            {rolesQuery.isPending ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : (
               <Table>
@@ -191,7 +191,7 @@ function RolesManagementCard() {
         </div>
       </CardHeader>
       <CardContent>
-        {rolesQuery.isLoading ? (
+        {rolesQuery.isPending ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
           <ul className="divide-y divide-[#ece9e3]">
@@ -323,7 +323,7 @@ function FeatureAccessCard() {
           everyone. Admins always have access. Enable or create features under{" "}
           <span className="font-medium">Advanced → Flags</span>.
         </p>
-        {flagsQuery.isLoading ? (
+        {flagsQuery.isPending ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : flags.length === 0 ? (
           <p className="text-sm text-muted-foreground">No features defined yet.</p>

@@ -47,7 +47,6 @@ export class MockNodeExecutor implements INodeExecutor {
         `\nRequest fields sent to the step:\n${JSON.stringify(input.fields)}`,
       ].join("\n"),
       schema: documentDataSchema,
-      temperature: 0.4,
     });
     if (generated.error) return generated;
 

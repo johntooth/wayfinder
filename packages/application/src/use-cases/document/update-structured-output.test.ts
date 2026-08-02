@@ -23,6 +23,8 @@ interface Fakes {
   hasSnapshot?: boolean;
   hasMessage?: boolean;
   hasStepOutput?: boolean;
+  hasPendingApproval?: boolean;
+  currentNodeId?: string;
 }
 
 const makeUseCase = (fakes: Fakes = {}) => {
@@ -32,6 +34,8 @@ const makeUseCase = (fakes: Fakes = {}) => {
     hasSnapshot = false,
     hasMessage = true,
     hasStepOutput = true,
+    hasPendingApproval = false,
+    currentNodeId = "node-later",
   } = fakes;
 
   const updatedFields: StepOutputField[][] = [];
@@ -67,7 +71,9 @@ const makeUseCase = (fakes: Fakes = {}) => {
   };
 
   const sessions: ISessionRepository = {
-    findById: vi.fn().mockResolvedValue(ok({ id: "session-1", status: sessionStatus })),
+    findById: vi
+      .fn()
+      .mockResolvedValue(ok({ id: "session-1", status: sessionStatus, currentNodeId })),
   } as unknown as ISessionRepository;
 
   const flowNodes: IFlowNodeRepository = {
@@ -81,6 +87,9 @@ const makeUseCase = (fakes: Fakes = {}) => {
 
   const approvals: IApprovalRepository = {
     hasRecordedSnapshot: vi.fn().mockResolvedValue(ok(hasSnapshot)),
+    listBySession: vi
+      .fn()
+      .mockResolvedValue(ok(hasPendingApproval ? [{ id: "appr-1", status: "pending" }] : [])),
   } as unknown as IApprovalRepository;
 
   const auditLogger: IAuditLogger = {
@@ -148,7 +157,7 @@ describe("UpdateStructuredStepOutput", () => {
     expect(result.error?.code).toBe("FORBIDDEN");
   });
 
-  it("rejects editing after an approval snapshot", async () => {
+  it("rejects editing once the approval chain has settled", async () => {
     const { useCase } = makeUseCase({ hasSnapshot: true });
     const result = await useCase.execute({
       messageId: "message-1",
@@ -156,6 +165,28 @@ describe("UpdateStructuredStepOutput", () => {
       values: { decision: "Rejected", amount: "$1.00" },
     });
     expect(result.error?.code).toBe("FORBIDDEN");
+  });
+
+  // ADR-045 §5: an approver still deciding must be able to fix their own subject.
+  it("allows editing while another approval is still pending", async () => {
+    const { useCase } = makeUseCase({ hasSnapshot: true, hasPendingApproval: true });
+    const result = await useCase.execute({
+      messageId: "message-1",
+      editedByUserId: "user-1",
+      values: { decision: "Rejected", amount: "$1.00" },
+    });
+    expect(result.error).toBeUndefined();
+  });
+
+  // ADR-044 §1: a change request routes work back to a step meant to be changed.
+  it("allows editing the step the session has been routed back to", async () => {
+    const { useCase } = makeUseCase({ hasSnapshot: true, currentNodeId: "node-1" });
+    const result = await useCase.execute({
+      messageId: "message-1",
+      editedByUserId: "user-1",
+      values: { decision: "Rejected", amount: "$1.00" },
+    });
+    expect(result.error).toBeUndefined();
   });
 
   it("rejects editing on an inactive session", async () => {

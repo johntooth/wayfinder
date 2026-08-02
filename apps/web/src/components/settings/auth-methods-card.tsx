@@ -131,12 +131,26 @@ export function AuthMethodsCard({ connectivity }: { connectivity?: ConnectivityC
             {connectivity && (
               <div className="space-y-2 pt-1">
                 {config.emailPasswordEnabled && (
-                  <ConnectivityTest target="auth-email-password" controller={connectivity} />
+                  <ConnectivityTest
+                    target="auth-email-password"
+                    controller={connectivity}
+                    label={AUTH_METHOD_LABELS.emailPassword}
+                  />
                 )}
                 {config.entraEnabled && (
-                  <ConnectivityTest target="auth-entra" controller={connectivity} />
+                  <ConnectivityTest
+                    target="auth-entra"
+                    controller={connectivity}
+                    label={AUTH_METHOD_LABELS.entra}
+                  />
                 )}
-                {config.pkiEnabled && <ConnectivityTest target="auth-pki" controller={connectivity} />}
+                {config.pkiEnabled && (
+                  <ConnectivityTest
+                    target="auth-pki"
+                    controller={connectivity}
+                    label={AUTH_METHOD_LABELS.pki}
+                  />
+                )}
               </div>
             )}
           </>

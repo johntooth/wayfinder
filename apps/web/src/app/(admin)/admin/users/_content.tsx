@@ -96,7 +96,7 @@ export function AdminUsersContent() {
         <Button onClick={() => setEditing({ ...empty })}>Add user</Button>
       </CardHeader>
       <CardContent>
-        {usersQuery.isLoading ? (
+        {usersQuery.isPending ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
           <Table>

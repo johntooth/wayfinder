@@ -90,6 +90,35 @@ additive. **No migration was generated or run.**
   `authenticate()` also refuses when PKI is disabled. It is the last line before
   a session is minted, and the route is not guaranteed to stay its only caller.
 
+## Follow-up fixes after first operator use
+
+Three defects surfaced when the phase was first driven by hand, all fixed on this
+branch:
+
+1. **The Test buttons were unlabelled.** `ConnectivityTest` said "Test
+   connectivity" for every target, so three stacked under Authentication said
+   nothing about which method was being tested or which one had just failed. It
+   now takes an optional `label`, and the auth card passes the method name.
+2. **A failed certificate sign-in dead-ended on JSON.** `/api/auth/cert` returned
+   `{"error":"Request did not originate from a trusted proxy."}` in the browser.
+   GET — the method a person reaches — now redirects to `/login?certError=<code>`
+   and the login page renders a message. POST keeps returning JSON, because the
+   mock proxy and any direct caller read the status and reason. Codes, not the
+   server's own message, so nothing server-side is reflected into the page.
+3. **`PKI_TRUSTED_PROXY_IPS=127.0.0.1,localhost` failed silently.** `localhost`
+   is not an address, and the check compares against the request's source IP, so
+   it could never match — but it was dropped without a word, leaving the variable
+   looking correctly set. Boot now names every entry it ignored and says to use
+   the proxy's address instead.
+
+**Certificate sign-in cannot work by opening the app directly**, on localhost or
+anywhere else. Without an mTLS proxy in front there are no `x-ssl-client-*`
+headers and no source IP to match, so there is nothing to authenticate. That is
+the contract, not a bug — the local path is `./restart.sh --with-pki` and the
+mock proxy at `:4001/pki/connect`. The new `no_certificate` message says this in
+the UI, because "not from a trusted proxy" reads like a bad IP list when the real
+answer is that there is no proxy at all.
+
 ## Known limitations
 
 - **`auth-pki` verifies configuration, not sign-in.** The app sits behind the

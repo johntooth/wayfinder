@@ -207,6 +207,7 @@ import {
   resolveAuthMethod,
   resolvePkiEnv,
   warnOnLegacyAuthMethodContradiction,
+  warnOnRejectedProxyEntries,
 } from "./container-auth";
 import {
   createCachedAdminSettings,
@@ -342,6 +343,7 @@ const build = () => {
   });
 
   warnOnLegacyAuthMethodContradiction(runtimeConfig, logger, pkiEnv.authMethodNamesPki);
+  warnOnRejectedProxyEntries(logger, pkiEnv.rejectedProxyEntries);
 
   // Near-static admin settings cache (scaling wall #4): the chat stream route
   // reads org name, global instructions, and upload config every turn; front

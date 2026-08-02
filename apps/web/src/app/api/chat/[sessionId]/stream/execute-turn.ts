@@ -16,15 +16,18 @@ import { branchChoiceSchema, turnResponseSchema, type BranchChoice } from "@rbra
 import type { Container } from "@/lib/container";
 import { shouldComputeBranchChoice } from "./branch-gate";
 import { countGateHoldsOnNode } from "./gate-holds";
+import type { ModelMessage } from "./model-messages";
 import { shouldEvaluateStepReadiness } from "./readiness-gate";
 import { streamTurn } from "./stream-turn";
 import {
   appendShortcomingsToContext,
   applyAdvanceSideEffects,
   maybeUpdateSessionTitle,
+  persistCrossCheckGapNote,
   persistCrossCheckPassNote,
   persistHeldReply,
   streamGapFollowup,
+  writeCrossCheckGapNote,
   writeCrossCheckPassNote,
 } from "./turn-helpers";
 
@@ -52,8 +55,10 @@ export interface ExecuteTurnInput {
   dbMessages: SessionMessage[];
   // The current node's full assistant-message history, for the gate-hold count.
   currentNodeAssistantMessages: SessionMessage[];
-  // The tail plus the new (attachment-annotated) user message.
-  messagesWithNew: { role: "user" | "assistant" | "system"; content: string }[];
+  // The tail plus the new (attachment-annotated) user message. No system role:
+  // stored system rows are folded into user notes by `toModelMessages`, because
+  // the SDK rejects a system message that appears mid-conversation.
+  messagesWithNew: ModelMessage[];
   systemPrompt: string;
   gatheredContext: string;
   branchNodes: { id: string; name: string; purpose: string | undefined }[];
@@ -261,12 +266,24 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<void> {
   // Gate failed: hold the step open and ask the user about the gaps. The
   // reply the gate overruled is persisted first — the user has already
   // watched it stream, and dropping it made the chat appear to rewrite a
-  // message once the persisted view took over. The corrective follow-up is
-  // then streamed and stored as its own message, and the outstanding items
-  // are attached to it (which also records this hold so the gate can bound
-  // itself on the next turn).
+  // message once the persisted view took over. The outstanding items are then
+  // named outright, before the corrective follow-up is streamed and stored as
+  // its own message, and are attached to it (which also records this hold so
+  // the gate can bound itself on the next turn).
+  //
+  // The explicit note is not redundant with the follow-up. The follow-up is
+  // model-written and may soften or omit what the review found; the user is
+  // then held on a step with no statement of why. The pass path has said so
+  // plainly since it shipped — the fail path, where it matters more, did not.
   if (evaluation && !evaluation.passed) {
     await persistHeldReply(container, session, aiPayload);
+    writeCrossCheckGapNote(writer, evaluation.missingInformation);
+    await persistCrossCheckGapNote(
+      container,
+      session.id,
+      session.currentNodeId,
+      evaluation.missingInformation,
+    );
     const followup = await streamGapFollowup({
       container,
       writer,

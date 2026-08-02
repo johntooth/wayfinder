@@ -91,7 +91,9 @@ test.describe('PKI under the admin Authentication card', () => {
     const envConfigured = await pkiEnvConfigured(page);
     const enabled = await page.getByTestId('auth-pki-checkbox').isChecked();
 
-    const response = await page.request.get(`${baseURL}/api/auth/cert`, { maxRedirects: 0 });
+    // POST is the programmatic entry point, so it still answers with a status
+    // and JSON rather than a page.
+    const response = await page.request.post(`${baseURL}/api/auth/cert`, { maxRedirects: 0 });
 
     if (envConfigured && enabled) {
       // Usable: the request reaches the adapter, which rejects a caller with no
@@ -102,6 +104,28 @@ test.describe('PKI under the admin Authentication card', () => {
     // Not usable — disabled, or enabled with the environment gate unsatisfied.
     // Either way 403, and never the old container-presence 404.
     expect(response.status()).toBe(403);
+  });
+
+  // Opening the cert URL directly is the first thing an operator tries, and it
+  // cannot work: no proxy in front means no x-ssl-client-* headers. It must say
+  // so on a page rather than dead-ending on a JSON body.
+  test('a failed certificate sign-in lands on /login with a readable reason', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ storageState: undefined });
+    try {
+      const page = await context.newPage();
+      await page.goto('/api/auth/cert?redirect=%2Fchats');
+
+      await expect(page).toHaveURL(/\/login\?certError=/, { timeout: 15000 });
+      const banner = page.getByTestId('login-certificate-error');
+      await expect(banner).toBeVisible();
+      // Never the raw JSON the route used to return.
+      await expect(banner).not.toContainText('{"error"');
+      await page.screenshot({ path: 'screenshots/pki-cert-error.png', fullPage: true });
+    } finally {
+      await context.close();
+    }
   });
 
   test('refuses to enable PKI server-side when the environment gate is unsatisfied', async ({

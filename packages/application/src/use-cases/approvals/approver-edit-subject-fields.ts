@@ -57,16 +57,13 @@ export class ApproverEditSubjectFields {
       );
     }
 
+    // No lock override to pass: a pending approval is itself what keeps the
+    // record editable (ADR-045 §6), and `isRecordLocked` reads that directly.
     const result = await this.updateDocumentFields.execute({
       messageId: input.messageId,
       editedByUserId: input.editedByUserId,
       values: input.values,
       groupItems: input.groupItems,
-      // A decided approval's record is frozen, but the document is not
-      // (ADR-045 §6) — an approver still deciding must be able to change what
-      // they are about to sign, even where an earlier approval has locked its
-      // own record.
-      editedAsPendingApprover: true,
     });
     if (result.error) return result;
     if (result.data.fieldErrors) return result;
