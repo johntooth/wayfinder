@@ -3,7 +3,7 @@
 - **Status**: Draft
 - **Date**: 2026-08-01
 - **Author**: richy.brasier
-- **Target version**: 0.22.0 (bump: MINOR — new runtime settings and UI, no schema or breaking change)
+- **Target version**: 0.23.0 (bump: MINOR — new runtime settings and UI, no schema or breaking change)
 - **Supersedes**: `entra-login-and-auth-methods.prd.md` §4 (PKI as a non-goal)
   and §11 ("Bringing PKI … under the same admin card"). Those deferred this work
   deliberately; this PRD picks it up.
@@ -242,7 +242,7 @@ of the older ADR is not misled. ADR-042 records:
       not passed, and the Finish control stays blocked.
 - [ ] Each method's failure surfaces its own name and reason, distinguishable
       from the other methods' results.
-- [ ] `./validate.sh` passes; version is `0.22.0` in both `VERSION` and root
+- [ ] `./validate.sh` passes; version is `0.23.0` in both `VERSION` and root
       `package.json`.
 
 ## 11. Out of scope / future work

@@ -1,7 +1,9 @@
 # Phase — PKI under the admin Authentication card
 
 - **Status**: Draft (run `/doc-review` before building)
-- **Target version**: 0.22.0 — **MINOR** (new config surface + UI; no DDL)
+- **Target version**: 0.23.0 — **MINOR** (new config surface + UI; no DDL)
+  (0.22.0 while this was in flight; the approval-subject phase landed on that
+  number first, and MINOR keeps counting up across a line rather than colliding.)
 - **Base branch**: `release/alpha-2` — chosen by the maintainer. See §9 for the
   risk this carries; `/doc-review` should weigh it rather than assume it.
 - **PRD**: `docs/development/prd/pki-admin-config.prd.md`

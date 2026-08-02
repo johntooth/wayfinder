@@ -33,6 +33,7 @@ import {
 import {
   DEFAULT_SIEM_CONFIG,
   SIEM_CONFIG_SETTING_KEY,
+  createDefaultAuthConfig,
   parseSiemConfig,
   type SiemConfig,
 } from "@rbrasier/domain";
@@ -132,11 +133,10 @@ const main = async (): Promise<number> => {
           baseURL: process.env.BETTER_AUTH_URL ?? env.WEB_BASE_URL,
           adminSeedEmail: undefined,
           authMethod: { type: "email-password" },
-          authConfig: {
-            emailPasswordEnabled: true,
-            entraEnabled: false,
-            entra: { tenantId: "", clientId: "", clientSecret: "" },
-          },
+          // The defaults already say "email + password on, nothing else", which
+          // is all this instance needs; taking them from the domain means a
+          // future field on AuthConfig cannot silently break recovery.
+          authConfig: createDefaultAuthConfig(),
         }),
     });
 

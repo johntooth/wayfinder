@@ -1,4 +1,4 @@
-# Implementation summary — PKI under the admin Authentication card (v0.22.0)
+# Implementation summary — PKI under the admin Authentication card (v0.23.0)
 
 ## What shipped
 
@@ -15,7 +15,7 @@ tested nor gate, which is the escape hatch when a probe fails transiently.
 
 ## Version
 
-**MINOR → 0.22.0.** New configuration surface and UI. No DDL: `auth_config` is a
+**MINOR → 0.23.0.** New configuration surface and UI. No DDL: `auth_config` is a
 JSON value in the existing `admin_system_settings` key/value table, already in
 `SENSITIVE_SETTING_KEYS` and so encrypted at rest, and the new fields are
 additive. **No migration was generated or run.**
