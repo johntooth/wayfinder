@@ -9,7 +9,7 @@
 // append-only audit log (ADR-033). Nothing here may be described to users as a
 // qualified or PKI signature.
 
-import { isApproved, type ApprovalStatus } from "./approval";
+import type { ApprovalStatus } from "./approval";
 import { canonicalAuditString, type Sha256Hex } from "./audit-hash";
 
 export interface AttestationInput {
@@ -31,6 +31,19 @@ export interface AttestationBlock {
   // security primitive — any verification surface must resolve on the full hash.
   readonly verificationCode: string;
 }
+
+// The outcome belongs on the line a reader takes in first. A neutral opener
+// ("Decided by") reads as a signature at a glance, so a rejection would pass for
+// an approval until the reader reached the decision line. `approved_with_edits`
+// opens as an approval because it is one — the edits are carried on the decision
+// line rather than lengthening the outcome label (ADR-043 §3).
+const BY_LABEL: Record<ApprovalStatus, string> = {
+  pending: "Decided by:",
+  approved: "Approved by:",
+  approved_with_edits: "Approved by:",
+  rejected: "Rejected by:",
+  changes_requested: "Changes requested by:",
+};
 
 const DECISION_LABEL: Record<ApprovalStatus, string> = {
   pending: "Pending",
@@ -86,16 +99,17 @@ export const buildAttestationBlock = (
     ? `${input.approverName}${input.approverEmail ? ` (${input.approverEmail})` : ""}`
     : (input.approverEmail ?? "Unknown approver");
 
-  // "Approved by" is only true of an approval. A rejection carrying that label
-  // would misread at a glance, which is the one thing an attestation must not do.
-  const byLabel = isApproved(input.decision) ? "Approved by:  " : "Decided by:   ";
+  const rows: [string, string][] = [[BY_LABEL[input.decision], identity]];
+  if (input.approverRole) rows.push(["Role:", input.approverRole]);
+  rows.push(["Decision:", decisionLabel(input.decision)]);
+  rows.push(["Date:", formatDecidedAt(input.decidedAt)]);
+  if (input.comment) rows.push(["Comment:", input.comment]);
+  rows.push(["Verification:", `WF-${verificationCode}`]);
 
-  const lines = [`${byLabel} ${identity}`];
-  if (input.approverRole) lines.push(`Role:          ${input.approverRole}`);
-  lines.push(`Decision:      ${decisionLabel(input.decision)}`);
-  lines.push(`Date:          ${formatDecidedAt(input.decidedAt)}`);
-  if (input.comment) lines.push(`Comment:       ${input.comment}`);
-  lines.push(`Verification:  WF-${verificationCode}`);
+  // Padded to the widest label rather than a hard-coded column, so a long outcome
+  // label ("Changes requested by:") widens the block instead of breaking it.
+  const column = Math.max(...rows.map(([label]) => label.length)) + 2;
+  const text = rows.map(([label, value]) => `${label.padEnd(column)}${value}`).join("\n");
 
-  return { text: lines.join("\n"), verificationCode };
+  return { text, verificationCode };
 };

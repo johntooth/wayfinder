@@ -196,10 +196,15 @@ database. Verified by grep before changing it.
 
 The phase doc left both open.
 
-**The attestation block's first line is decision-dependent.** ADR-043 §3 shows
-`Approved by:` literally, but the same block renders a rejection, where that
-label misreads at a glance — the one thing an attestation must not do. An
-approval keeps the ADR's wording; anything else reads `Decided by:`.
+**The attestation block's first line names the outcome.** ADR-043 §3 shows
+`Approved by:` literally, but the same block renders a rejection, and a reader
+skimming a signed page takes in the first line and moves on. A neutral opener
+would read as a signature until they reached the decision line — the one thing
+an attestation must not permit. So the outcome is the label: `Approved by:`,
+`Rejected by:`, `Changes requested by:`. An approval keeps the ADR's wording,
+and `approved_with_edits` opens as an approval because it is one, with the edits
+carried on the decision line. Labels are padded to the widest of them, so a long
+outcome widens the block rather than breaking its column.
 
 **"Last completed step" skips every approval node, not just the one asking.** An
 approval's output is a decision, not a subject, so resolving to one is exactly

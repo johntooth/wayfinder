@@ -52,6 +52,46 @@ describe("buildAttestationBlock", () => {
     expect(block.text).toContain("Changes requested");
   });
 
+  // A reader skimming a signed page takes in the first line and moves on. If that
+  // line is neutral, a rejection reads as a signature until they reach the
+  // decision line — the one misreading an attestation must never permit.
+  describe("the first line names the outcome", () => {
+    const firstLine = (decision: AttestationInput["decision"]): string =>
+      buildAttestationBlock(input({ decision }), sha256Hex).text.split("\n")[0] ?? "";
+
+    it("says rejected on a rejection", () => {
+      expect(firstLine("rejected")).toBe("Rejected by:   Jane Doe (jane.doe@example.com)");
+    });
+
+    it("says changes requested on a change request", () => {
+      expect(firstLine("changes_requested")).toContain("Changes requested by:");
+      expect(firstLine("changes_requested")).not.toContain("Approved");
+    });
+
+    it("says approved on an approval, keeping the ADR-043 wording", () => {
+      expect(firstLine("approved")).toBe("Approved by:   Jane Doe (jane.doe@example.com)");
+    });
+
+    // It was approved. The Decision line carries the edits, so the outcome line
+    // stays short and the block keeps its column.
+    it("says approved when the approver also edited", () => {
+      expect(firstLine("approved_with_edits")).toBe(
+        "Approved by:   Jane Doe (jane.doe@example.com)",
+      );
+      expect(buildAttestationBlock(input({ decision: "approved_with_edits" }), sha256Hex).text)
+        .toContain("Decision:      Approved with edits");
+    });
+  });
+
+  it("keeps its values in one column when the outcome label is the longest", () => {
+    const block = buildAttestationBlock(input({ decision: "changes_requested" }), sha256Hex);
+    const columns = block.text
+      .split("\n")
+      .map((line) => line.length - line.replace(/^\S+(?: \S+)*?:\s+/, "").length);
+
+    expect(new Set(columns).size).toBe(1);
+  });
+
   it("omits the role and comment lines when there are none", () => {
     const block = buildAttestationBlock(
       input({ approverRole: null, comment: null }),
