@@ -1,6 +1,7 @@
 import {
   nodeFieldSet,
   ok,
+  type ApprovalChangeRequest,
   type ConversationalNodeConfig,
   type FlowContextDoc,
   type FlowNode,
@@ -30,6 +31,10 @@ export interface CaptureStructuredStepOutputInput {
   // Values already extracted by the pre-generation gate. When present, capture
   // persists them directly rather than re-running the (expensive) extraction.
   fieldValues?: DocumentData;
+  // Approver corrections still awaiting sign-off. A structured step routed back
+  // by a change request has to re-capture against it, exactly as a document step
+  // has to re-render against it.
+  changeRequests?: ApprovalChangeRequest[];
 }
 
 // Records a structured conversation's captured field values as a SessionStepOutput
@@ -72,6 +77,7 @@ export class CaptureStructuredStepOutput {
         contextDocs: input.contextDocs,
         instruction: config.aiInstruction,
         purpose: "documentGeneration",
+        changeRequests: input.changeRequests,
         contextBudgetChars: input.budget?.contextBudgetChars,
         maxPromptTokens: input.budget?.maxPromptTokens,
       });

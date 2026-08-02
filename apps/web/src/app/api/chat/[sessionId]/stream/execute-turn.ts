@@ -1,4 +1,4 @@
-import type { EvaluateStepReadinessOutput } from "@rbrasier/application";
+import { resolveChangeRequests, type EvaluateStepReadinessOutput } from "@rbrasier/application";
 import { nodeFieldSet } from "@rbrasier/domain";
 import type {
   AiTurnPayload,
@@ -245,12 +245,21 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<void> {
       } catch {
         budget = undefined;
       }
+      // The gate's values are threaded straight into generation on a pass, so a
+      // gate blind to an approver's outstanding correction would reinstate the
+      // rejected content the moment the step advanced.
+      const changeRequests = await resolveChangeRequests(
+        container.repos.approvals,
+        container.repos.flowNodes,
+        { sessionId: session.id, flowId: flow.id },
+      );
       const evalResult = await container.useCases.evaluateStepReadiness
         .execute({
           messages: [...messagesWithNew, { role: "assistant" as const, content: aiPayload.response }],
           flow,
           node: currentNode,
           budget,
+          changeRequests,
         })
         .catch(() => null);
       if (evalResult && !evalResult.error) {

@@ -324,6 +324,96 @@ describe("document.getFields", () => {
   });
 });
 
+describe("document.getFields edit summary", () => {
+  const editedMessage = {
+    ...message,
+    document: {
+      ...message.document,
+      editedAt: "2026-06-02T09:00:00.000Z",
+      editedByUserId: "user-9",
+      editHistory: [
+        {
+          editedAt: "2026-06-02T09:00:00.000Z",
+          editedByUserId: "user-9",
+          storagePath: "generated/sess-1/rft-r1.docx",
+          changes: [{ key: "amount", previousValue: "$1,000.00", newValue: "$1,200.00" }],
+        },
+      ],
+    },
+  };
+
+  it("reports no edits for a document nobody has changed", async () => {
+    const caller = createCaller(contextWith(makeContainer()));
+
+    const result = await caller.document.getFields({ messageId: "11111111-1111-1111-1111-111111111111" });
+
+    expect(result.editSummary.edits).toEqual([]);
+    expect(result.editSummary.untouched.map((field) => field.key)).toEqual([
+      "supplier_name",
+      "amount",
+    ]);
+  });
+
+  it("returns each edit with its before and after values and the editor's name", async () => {
+    const container = makeContainer();
+    (container.repos.sessionMessages.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(editedMessage),
+    );
+    (container.repos.users.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok({ id: "user-9", name: "Priya Raman", email: "priya@example.com" }),
+    );
+    const caller = createCaller(contextWith(container));
+
+    const result = await caller.document.getFields({ messageId: "11111111-1111-1111-1111-111111111111" });
+
+    expect(result.editSummary.edits).toEqual([
+      {
+        editedAt: "2026-06-02T09:00:00.000Z",
+        editedBy: "Priya Raman",
+        changes: [
+          {
+            key: "amount",
+            label: "Amount",
+            previousValue: "$1,000.00",
+            newValue: "$1,200.00",
+          },
+        ],
+      },
+    ]);
+    expect(result.editSummary.untouched.map((field) => field.key)).toEqual(["supplier_name"]);
+  });
+
+  it("falls back to the editor's email when they have no name", async () => {
+    const container = makeContainer();
+    (container.repos.sessionMessages.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(editedMessage),
+    );
+    (container.repos.users.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok({ id: "user-9", name: null, email: "priya@example.com" }),
+    );
+    const caller = createCaller(contextWith(container));
+
+    const result = await caller.document.getFields({ messageId: "11111111-1111-1111-1111-111111111111" });
+
+    expect(result.editSummary.edits[0]!.editedBy).toBe("priya@example.com");
+  });
+
+  // A deleted account must not cost the originator the record of what changed.
+  it("still returns the changes when the editor can no longer be resolved", async () => {
+    const container = makeContainer();
+    (container.repos.sessionMessages.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(editedMessage),
+    );
+    (container.repos.users.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(null));
+    const caller = createCaller(contextWith(container));
+
+    const result = await caller.document.getFields({ messageId: "11111111-1111-1111-1111-111111111111" });
+
+    expect(result.editSummary.edits[0]!.editedBy).toBeNull();
+    expect(result.editSummary.edits[0]!.changes).toHaveLength(1);
+  });
+});
+
 describe("document.updateFields", () => {
   it("returns the updated document on success", async () => {
     const caller = createCaller(contextWith(makeContainer()));
