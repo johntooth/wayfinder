@@ -48,7 +48,12 @@ and continue only once they approve. The `pending_approval` status exists in the
 
 ## 4. Non-goals
 
-- Multi-stage / parallel approval chains or quorum (single approver per node).
+- ~~Multi-stage / parallel approval chains or quorum (single approver per node).~~
+  **Superseded in part.** *Sequential* chains — two or more approval nodes one
+  after another, each with its own approver — are supported as of
+  `approval-subject.prd.md` (ADR-040 §2, ADR-043 §6, ADR-044) and v0.22.2. Still
+  out of scope: **parallel** approvals, and **quorum** (several approvers on one
+  node); a node still resolves to exactly one approver.
 - Delegation / out-of-office routing.
 - Building the org chart; we sync hierarchy from Entra and accept an HR upload,
   but do not provide org-management CRUD.
@@ -157,7 +162,8 @@ hierarchy comes from Entra/HR and every route is operator-confirmed (ADR-018).
 
 ## 11. Out of scope / future work
 
-- Multi-stage chains, quorum, delegation.
+- Parallel approvals, quorum, delegation. (Sequential multi-stage chains are no
+  longer out of scope — see §4.)
 - Auto-detecting HR column mappings (manual mapping for v1).
 - Auto-inviting / provisioning a free-typed approver who has no account (see §12).
 - Scheduled HR re-import / live HR sync.
