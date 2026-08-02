@@ -18,11 +18,6 @@ import { generateObject, generateText, streamObject, streamText } from "ai";
 import { resolveModel, type ProviderCredentials } from "./providers";
 import { RuntimeConfigStore } from "../config/runtime-config-store";
 import { LlmCallGovernor } from "./llm-concurrency";
-import {
-  isUnsupportedParameterError,
-  noteTemperatureUnsupported,
-  supportsTemperature,
-} from "./sampling-params";
 
 interface AnthropicMeta {
   cacheCreationInputTokens?: number;
@@ -59,53 +54,6 @@ const resolveForCall = (
   const model = inputModel ?? config.models[purpose];
   return { provider, model, credentials };
 };
-
-// Runs a call with `temperature`, and — when the provider answers that the model
-// does not accept it — records that and replays the call once without it. This
-// is what keeps a model released after this code was written working instead of
-// failing outright (`temperature` is deprecated on the Claude 5 family). A
-// recovered call is not a failure — nothing is logged here; if the retry itself
-// throws, that propagates to the caller's own catch block like any other error.
-const withTemperatureFallback = async <R>(
-  provider: ProviderName,
-  model: string,
-  temperature: number | undefined,
-  call: (temperature: number | undefined) => Promise<R>,
-): Promise<R> => {
-  const initial = supportsTemperature(provider, model) ? temperature : undefined;
-  try {
-    return await call(initial);
-  } catch (cause) {
-    if (initial === undefined || !isUnsupportedParameterError(cause, "temperature")) throw cause;
-    noteTemperatureUnsupported(provider, model);
-    return await call(undefined);
-  }
-};
-
-// Streaming calls cannot be replayed transparently — the result object is handed
-// to decorators (usage tracking, tracing) the moment it is created. Instead the
-// refusal is recorded as it goes past, so the next call on that model omits the
-// parameter and succeeds.
-const recordTemperatureRefusal = (
-  provider: ProviderName,
-  model: string,
-  error: unknown,
-): void => {
-  if (!isUnsupportedParameterError(error, "temperature")) return;
-  noteTemperatureUnsupported(provider, model);
-};
-
-async function* observingTextStream(
-  stream: AsyncIterable<string>,
-  onError: (error: unknown) => void,
-): AsyncIterable<string> {
-  try {
-    for await (const chunk of stream) yield chunk;
-  } catch (error) {
-    onError(error);
-    throw error;
-  }
-}
 
 export class LanguageModelAdapter implements ILanguageModel {
   constructor(
@@ -159,22 +107,15 @@ export class LanguageModelAdapter implements ILanguageModel {
       const resolved = resolveForCall(config, input.model, input.purpose);
       provider = resolved.provider;
       model = resolved.model;
-      const result = await withTemperatureFallback(
-        resolved.provider,
-        resolved.model,
-        input.temperature,
-        (temperature) =>
-          this.runGoverned(() =>
-            generateObject({
-              model: resolveModel(resolved.provider, resolved.model, resolved.credentials),
-              schema: input.schema as never,
-              system: input.system,
-              prompt: input.prompt,
-              messages: input.messages as never,
-              temperature,
-              maxTokens: input.maxTokens,
-            }),
-          ),
+      const result = await this.runGoverned(() =>
+        generateObject({
+          model: resolveModel(resolved.provider, resolved.model, resolved.credentials),
+          schema: input.schema as never,
+          system: input.system,
+          prompt: input.prompt,
+          messages: input.messages as never,
+          maxTokens: input.maxTokens,
+        }),
       );
       const meta = extractMeta(
         result.experimental_providerMetadata as Record<string, unknown> | undefined,
@@ -204,21 +145,14 @@ export class LanguageModelAdapter implements ILanguageModel {
       const resolved = resolveForCall(config, input.model, input.purpose);
       provider = resolved.provider;
       model = resolved.model;
-      const result = await withTemperatureFallback(
-        resolved.provider,
-        resolved.model,
-        input.temperature,
-        (temperature) =>
-          this.runGoverned(() =>
-            generateText({
-              model: resolveModel(resolved.provider, resolved.model, resolved.credentials),
-              system: input.system,
-              prompt: input.prompt,
-              messages: input.messages as never,
-              temperature,
-              maxTokens: input.maxTokens,
-            }),
-          ),
+      const result = await this.runGoverned(() =>
+        generateText({
+          model: resolveModel(resolved.provider, resolved.model, resolved.credentials),
+          system: input.system,
+          prompt: input.prompt,
+          messages: input.messages as never,
+          maxTokens: input.maxTokens,
+        }),
       );
       const meta = extractMeta(
         result.experimental_providerMetadata as Record<string, unknown> | undefined,
@@ -253,9 +187,6 @@ export class LanguageModelAdapter implements ILanguageModel {
         system: input.system,
         prompt: input.prompt,
         messages: input.messages as never,
-        temperature: supportsTemperature(resolved.provider, resolved.model)
-          ? input.temperature
-          : undefined,
         maxTokens: input.maxTokens,
       });
       const usage = result.usage.then((u) => ({
@@ -265,17 +196,7 @@ export class LanguageModelAdapter implements ILanguageModel {
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
       }));
-      return ok({
-        // A mid-stream failure here is not logged: the Result has already
-        // resolved to ok(), so this is not the port reporting a genuine
-        // failure — it is a broken stream the caller is already reading and,
-        // for the chat path, already logs itself (route.ts's onError).
-        // Logging it again here would duplicate that row.
-        textStream: observingTextStream(result.textStream, (error) =>
-          recordTemperatureRefusal(resolved.provider, resolved.model, error),
-        ),
-        usage,
-      });
+      return ok({ textStream: result.textStream, usage });
     } catch (cause) {
       this.logAiCallFailure("streamText", provider, model, cause);
       return err(domainError("AI_PROVIDER_FAILED", "streamText failed.", cause));
@@ -304,17 +225,12 @@ export class LanguageModelAdapter implements ILanguageModel {
         system: input.system,
         prompt: input.prompt,
         messages: input.messages as never,
-        temperature: supportsTemperature(resolved.provider, resolved.model)
-          ? input.temperature
-          : undefined,
         maxTokens: input.maxTokens,
-        // Same reasoning as streamText's onError: a mid-stream failure here is
-        // not logged — the Result already resolved to ok(), and callers of the
-        // primary chat path already log this onError themselves (route.ts).
-        onError: (event) => {
-          recordTemperatureRefusal(resolved.provider, resolved.model, event.error);
-          input.onError?.(event);
-        },
+        // A mid-stream failure is not logged here: the Result has already
+        // resolved to ok(), and the primary chat path logs a broken stream
+        // itself (route.ts's onError), so logging it again would duplicate the
+        // row. The caller's handler is simply passed straight through.
+        onError: input.onError,
       });
       // Await providerMetadata alongside usage so cache tokens survive the port
       // hop: without this the Anthropic prompt-cache readings are lost and every

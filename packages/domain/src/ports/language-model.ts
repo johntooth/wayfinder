@@ -32,7 +32,6 @@ export interface GenerateObjectInput<TSchema = unknown> {
   readonly prompt?: string;
   readonly messages?: ChatMessage[];
   readonly schema: TSchema;
-  readonly temperature?: number;
   readonly maxTokens?: number;
 }
 
@@ -45,7 +44,6 @@ export interface GenerateTextInput {
   readonly system?: string;
   readonly prompt?: string;
   readonly messages?: ChatMessage[];
-  readonly temperature?: number;
   readonly maxTokens?: number;
 }
 
@@ -58,7 +56,6 @@ export interface StreamTextInput {
   readonly system?: string;
   readonly prompt?: string;
   readonly messages?: ChatMessage[];
-  readonly temperature?: number;
   readonly maxTokens?: number;
 }
 
@@ -72,7 +69,6 @@ export interface StreamObjectInput<TSchema = unknown> {
   readonly prompt?: string;
   readonly messages?: ChatMessage[];
   readonly schema: TSchema;
-  readonly temperature?: number;
   readonly maxTokens?: number;
   // partialObjectStream silently swallows error chunks and `object` never
   // resolves on failure, so a streaming caller has no way to see model/schema

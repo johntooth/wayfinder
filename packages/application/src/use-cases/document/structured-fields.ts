@@ -164,7 +164,6 @@ export const extractStructuredFields = async (
     system: input.instruction,
     prompt,
     schema: documentDataSchema,
-    temperature: 0.3,
   });
   if (result.error) return result;
 

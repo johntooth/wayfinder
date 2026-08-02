@@ -362,7 +362,6 @@ export class UpdateDocumentFields {
       purpose: "chat",
       prompt: `Write a 2-sentence summary of a document with these values: ${JSON.stringify(values).slice(0, 2000)}`,
       schema: documentSummarySchema,
-      temperature: 0.2,
     });
     return summaryResult.error ? fallback : summaryResult.data.object.summary;
   }
