@@ -22,6 +22,14 @@ import {
 } from "./turn-helpers";
 import type { Session, TurnStreamWriter } from "@rbrasier/domain";
 
+// The approval reads every extracting generation makes, to pick up an
+// approver's outstanding change requests. Stubbed empty so these tests stay
+// about generation; the change-request path has its own tests below.
+const noChangeRequests = () => ({
+  approvals: { listBySession: vi.fn().mockResolvedValue({ data: [], error: null }) },
+  flowNodes: { listByFlow: vi.fn().mockResolvedValue({ data: [], error: null }) },
+});
+
 // A TurnStreamWriter that records the ordered sequence of semantic operations
 // ("boundary" for endBubble, "text:<t>" for writeText) plus the text payloads,
 // so a test can assert both the bubble boundaries and the streamed content.
@@ -273,7 +281,7 @@ describe("generateDocument wrapper", () => {
 
     const container = {
       useCases: { generateDocument: { execute } },
-      repos: { sessionMessages: { updateDocumentStatus } },
+      repos: { ...noChangeRequests(), sessionMessages: { updateDocumentStatus } },
       services: { errorLogger: { log: errorLog } },
     } as unknown as Parameters<typeof generateDocument>[0];
 
@@ -300,7 +308,7 @@ describe("generateDocument wrapper", () => {
 
     const container = {
       useCases: { generateDocument: { execute } },
-      repos: { sessionMessages: { updateDocumentStatus } },
+      repos: { ...noChangeRequests(), sessionMessages: { updateDocumentStatus } },
       services: { errorLogger: { log: errorLog } },
     } as unknown as Parameters<typeof generateDocument>[0];
 
@@ -328,7 +336,7 @@ describe("generateDocument wrapper", () => {
     const container = {
       useCases: { generateDocument: { execute } },
       runtimeConfig: { resolveDocumentGenerationBudget: vi.fn().mockResolvedValue(budget) },
-      repos: { sessionMessages: { updateDocumentStatus: vi.fn() } },
+      repos: { ...noChangeRequests(), sessionMessages: { updateDocumentStatus: vi.fn() } },
       services: { errorLogger: { log: vi.fn() } },
     } as unknown as Parameters<typeof generateDocument>[0];
 
@@ -345,6 +353,94 @@ describe("generateDocument wrapper", () => {
     expect(execute).toHaveBeenCalledWith(expect.objectContaining({ budget }));
   });
 
+  // The reported defect: an approver sent the work back asking for a change and
+  // regeneration here rebuilt the document from the conversation alone.
+  it("threads an approver's outstanding change request into the use case", async () => {
+    const execute = vi.fn().mockResolvedValue({
+      data: { document: { filename: "f", storagePath: "p", summary: null, generatedAt: "now" } },
+      error: null,
+    });
+
+    const container = {
+      useCases: { generateDocument: { execute } },
+      runtimeConfig: { resolveDocumentGenerationBudget: vi.fn().mockResolvedValue(undefined) },
+      repos: {
+        approvals: {
+          listBySession: vi.fn().mockResolvedValue({
+            data: [
+              {
+                nodeId: "node-approval-2",
+                status: "changes_requested",
+                comment: "The start date must be 03-03-2026.",
+                decidedAt: new Date("2026-03-01T09:00:00.000Z"),
+              },
+            ],
+            error: null,
+          }),
+        },
+        flowNodes: {
+          listByFlow: vi.fn().mockResolvedValue({
+            data: [{ id: "node-approval-2", name: "Finance sign-off" }],
+            error: null,
+          }),
+        },
+        sessionMessages: { updateDocumentStatus: vi.fn() },
+      },
+      services: { errorLogger: { log: vi.fn() } },
+    } as unknown as Parameters<typeof generateDocument>[0];
+
+    await generateDocument(
+      container,
+      "msg-cr",
+      "sess-1",
+      makeFlow(),
+      [],
+      [],
+      makeNode({ config: { outputType: "generate_document", documentTemplatePath: "x" } as unknown as FlowNode["config"] }),
+    );
+
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        changeRequests: [
+          {
+            nodeId: "node-approval-2",
+            stepName: "Finance sign-off",
+            comment: "The start date must be 03-03-2026.",
+          },
+        ],
+      }),
+    );
+  });
+
+  it("skips the approval read when the gate already extracted the values", async () => {
+    const execute = vi.fn().mockResolvedValue({
+      data: { document: { filename: "f", storagePath: "p", summary: null, generatedAt: "now" } },
+      error: null,
+    });
+    const repos = { ...noChangeRequests(), sessionMessages: { updateDocumentStatus: vi.fn() } };
+
+    const container = {
+      useCases: { generateDocument: { execute } },
+      runtimeConfig: { resolveDocumentGenerationBudget: vi.fn().mockResolvedValue(undefined) },
+      repos,
+      services: { errorLogger: { log: vi.fn() } },
+    } as unknown as Parameters<typeof generateDocument>[0];
+
+    await generateDocument(
+      container,
+      "msg-precomputed",
+      "sess-1",
+      makeFlow(),
+      [],
+      [],
+      makeNode({ config: { outputType: "generate_document", documentTemplatePath: "x" } as unknown as FlowNode["config"] }),
+      { fieldValues: { project_title: "Reused" } },
+    );
+
+    expect(repos.approvals.listBySession).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledWith(expect.objectContaining({ changeRequests: undefined }));
+  });
+
   it("does not touch status when use case succeeds (updateDocument already set complete)", async () => {
     const updateDocumentStatus = vi.fn();
     const errorLog = vi.fn();
@@ -355,7 +451,7 @@ describe("generateDocument wrapper", () => {
 
     const container = {
       useCases: { generateDocument: { execute } },
-      repos: { sessionMessages: { updateDocumentStatus } },
+      repos: { ...noChangeRequests(), sessionMessages: { updateDocumentStatus } },
       services: { errorLogger: { log: errorLog } },
     } as unknown as Parameters<typeof generateDocument>[0];
 
@@ -382,7 +478,7 @@ describe("generateDocument return value", () => {
     });
     const container = {
       useCases: { generateDocument: { execute } },
-      repos: { sessionMessages: { updateDocumentStatus: vi.fn().mockResolvedValue({ data: {}, error: null }) } },
+      repos: { ...noChangeRequests(), sessionMessages: { updateDocumentStatus: vi.fn().mockResolvedValue({ data: {}, error: null }) } },
       services: { errorLogger: { log: vi.fn().mockResolvedValue({ data: undefined, error: null }) } },
     } as unknown as Parameters<typeof generateDocument>[0];
 
@@ -403,7 +499,7 @@ describe("generateDocument return value", () => {
     const execute = vi.fn().mockRejectedValue(new Error("network down"));
     const container = {
       useCases: { generateDocument: { execute } },
-      repos: { sessionMessages: { updateDocumentStatus: vi.fn().mockResolvedValue({ data: {}, error: null }) } },
+      repos: { ...noChangeRequests(), sessionMessages: { updateDocumentStatus: vi.fn().mockResolvedValue({ data: {}, error: null }) } },
       services: { errorLogger: { log: vi.fn().mockResolvedValue({ data: undefined, error: null }) } },
     } as unknown as Parameters<typeof generateDocument>[0];
 
@@ -427,7 +523,7 @@ describe("generateDocument return value", () => {
     });
     const container = {
       useCases: { generateDocument: { execute } },
-      repos: { sessionMessages: { updateDocumentStatus: vi.fn() } },
+      repos: { ...noChangeRequests(), sessionMessages: { updateDocumentStatus: vi.fn() } },
       services: { errorLogger: { log: vi.fn() } },
     } as unknown as Parameters<typeof generateDocument>[0];
 
@@ -496,6 +592,7 @@ describe("applyAdvanceSideEffects", () => {
 
     const container = {
       repos: {
+        ...noChangeRequests(),
         sessionMessages: { listBySession, updateDocumentStatus },
         usageRepo: {},
       },
@@ -518,7 +615,7 @@ describe("applyAdvanceSideEffects", () => {
     });
 
     const container = {
-      repos: { sessionMessages: { listBySession, updateDocumentStatus }, usageRepo: {} },
+      repos: { ...noChangeRequests(), sessionMessages: { listBySession, updateDocumentStatus }, usageRepo: {} },
       runtimeConfig: { resolveDocumentGenerationBudget: vi.fn().mockResolvedValue(undefined) },
       useCases: { generateDocument: { execute: generateDocumentExecute } },
       services: { errorLogger: { log: vi.fn().mockResolvedValue({ error: null }) } },
@@ -549,7 +646,7 @@ describe("applyAdvanceSideEffects", () => {
     (approvalNode as { type: string }).type = "approval";
 
     const container = {
-      repos: { sessionMessages: { listBySession, updateDocumentStatus: vi.fn() }, usageRepo: {} },
+      repos: { ...noChangeRequests(), sessionMessages: { listBySession, updateDocumentStatus: vi.fn() }, usageRepo: {} },
       useCases: {
         generateDocument: { execute: vi.fn() },
         retrieveDocumentChunks: { execute: retrieveExecute },
@@ -590,6 +687,7 @@ describe("applyAdvanceSideEffects", () => {
 
     const container = {
       repos: {
+        ...noChangeRequests(),
         sessionMessages: { listBySession, updateDocumentStatus: vi.fn(), create },
         sessionUploads: { listBySession: vi.fn().mockResolvedValue({ data: [], error: null }) },
         usageRepo: {},
@@ -642,6 +740,7 @@ describe("applyAdvanceSideEffects", () => {
 
     const container = {
       repos: {
+        ...noChangeRequests(),
         sessionMessages: {
           listBySession,
           updateDocumentStatus: vi.fn().mockResolvedValue({ data: {}, error: null }),
@@ -692,6 +791,7 @@ describe("applyAdvanceSideEffects", () => {
 
     const container = {
       repos: {
+        ...noChangeRequests(),
         sessionMessages: { listBySession, updateDocumentStatus: vi.fn().mockResolvedValue({ data: {}, error: null }) },
         usageRepo: {},
       },

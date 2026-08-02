@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { resolveChangeRequests } from "@rbrasier/application";
 import type { ConversationalNodeConfig } from "@rbrasier/domain";
 import { getContainer } from "@/lib/container";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
@@ -120,12 +121,21 @@ export async function POST(
     .updateDocumentStatus(documentId, "pending")
     .catch(() => undefined);
 
+  // The reported defect: work routed back here by a change request regenerated
+  // from the conversation alone, reproducing exactly what the approver rejected.
+  const changeRequests = await resolveChangeRequests(
+    container.repos.approvals,
+    container.repos.flowNodes,
+    { sessionId: session.id, flowId: flow.id },
+  );
+
   const result = await container.useCases.generateDocument.execute({
     messageId: documentId,
     sessionId: session.id,
     messages,
     flow,
     node,
+    changeRequests,
   });
 
   if (result.error) {

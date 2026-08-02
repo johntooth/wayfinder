@@ -5,6 +5,7 @@ import type {
   Session,
   SessionMessage,
 } from "@rbrasier/domain";
+import { resolveChangeRequests } from "@rbrasier/application";
 import type { DocumentData } from "@rbrasier/shared";
 import type { getContainer } from "@/lib/container";
 
@@ -35,6 +36,15 @@ export async function captureStructuredRecord(input: CaptureStructuredRecordInpu
       budget = undefined;
     }
 
+    // Only when this call will actually extract — with the gate's values
+    // threaded through, the extraction has already run against these.
+    const changeRequests = precomputedFieldValues
+      ? undefined
+      : await resolveChangeRequests(container.repos.approvals, container.repos.flowNodes, {
+          sessionId: session.id,
+          flowId: flow.id,
+        });
+
     const result = await container.useCases.captureStructuredStepOutput.execute({
       sessionId: session.id,
       flowId: flow.id,
@@ -44,6 +54,7 @@ export async function captureStructuredRecord(input: CaptureStructuredRecordInpu
       messages,
       budget,
       fieldValues: precomputedFieldValues,
+      changeRequests,
     });
     if (result.error) {
       await container.services.errorLogger.log({

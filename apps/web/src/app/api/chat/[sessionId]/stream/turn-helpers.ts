@@ -14,6 +14,7 @@ import {
   type SessionUpload,
   type TurnStreamWriter,
 } from "@rbrasier/domain";
+import { resolveChangeRequests } from "@rbrasier/application";
 import { turnResponseSchema, type DocumentData } from "@rbrasier/shared";
 import type { getContainer } from "@/lib/container";
 import { OUTSTANDING_CONTEXT_KEY } from "./gate-holds";
@@ -234,6 +235,16 @@ export async function generateDocument(
       budget = undefined;
     }
 
+    // Only when this call will actually extract. With the gate's values threaded
+    // through, the extraction that would consume them has already happened —
+    // against the same change requests, resolved at the gate.
+    const changeRequests = precomputed?.fieldValues
+      ? undefined
+      : await resolveChangeRequests(container.repos.approvals, container.repos.flowNodes, {
+          sessionId,
+          flowId: flow.id,
+        });
+
     const result = await container.useCases.generateDocument.execute({
       messageId,
       sessionId,
@@ -243,6 +254,7 @@ export async function generateDocument(
       budget,
       fieldValues: precomputed?.fieldValues,
       grade: precomputed?.grade,
+      changeRequests,
     });
     if (result.error) {
       const status = await container.repos.sessionMessages.updateDocumentStatus(messageId, "failed");

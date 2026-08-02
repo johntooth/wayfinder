@@ -1,8 +1,15 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { domainError, isRecordLocked, nodeFieldSet, normaliseOutputType } from "@rbrasier/domain";
+import {
+  domainError,
+  isRecordLocked,
+  nodeFieldSet,
+  normaliseOutputType,
+  summariseDocumentEdits,
+} from "@rbrasier/domain";
 import type {
   ConversationalNodeConfig,
+  DocumentEdit,
   SessionStatus,
   StepOutputField,
   TemplateField,
@@ -74,6 +81,33 @@ const resolveDisplayFields = (
     optional: false,
     raw: field.label,
   }));
+};
+
+// Who made each edit, as the reader should see them. Resolved once per distinct
+// editor rather than per edit, and never allowed to fail the query: a deleted
+// account costs the name, not the record of what changed.
+const resolveEditorNames = async (
+  container: Container,
+  editHistory: readonly DocumentEdit[],
+): Promise<Map<string, string>> => {
+  const userIds = [
+    ...new Set(
+      editHistory
+        .map((entry) => entry.editedByUserId)
+        .filter((userId): userId is string => userId !== null),
+    ),
+  ];
+
+  const names = new Map<string, string>();
+  await Promise.all(
+    userIds.map(async (userId) => {
+      const result = await container.repos.users.findById(userId);
+      if (result.error || !result.data) return;
+      const name = result.data.name?.trim();
+      names.set(userId, name && name.length > 0 ? name : result.data.email);
+    }),
+  );
+  return names;
 };
 
 const ACCESS_CODE = {
@@ -185,6 +219,24 @@ export const documentRouter = router({
           message.stepNodeId !== null && session.currentNodeId === message.stepNodeId,
       });
 
+      // What each approver actually changed. The history has always been
+      // recorded and has always survived regeneration; nothing read it back, so
+      // an originator could see *that* their document was edited and never what
+      // the new values were.
+      const editHistory = message.document?.editHistory ?? [];
+      const editorNames = await resolveEditorNames(ctx.container, editHistory);
+      const summary = summariseDocumentEdits({
+        editHistory,
+        fields: fields.map((field) => ({
+          key: field.key,
+          label: field.label,
+          type: field.type,
+          // A group's value lives in its items; hand the summariser the same
+          // JSON shape the edit diff stores, so both render identically.
+          value: field.type === "group" ? JSON.stringify(field.items ?? []) : field.value,
+        })),
+      });
+
       return {
         filename: message.document?.filename ?? null,
         editable,
@@ -192,6 +244,16 @@ export const documentRouter = router({
         editedAt: message.document?.editedAt ?? null,
         editedByUserId: message.document?.editedByUserId ?? null,
         fields,
+        editSummary: {
+          edits: summary.edits.map((entry) => ({
+            editedAt: entry.editedAt,
+            editedBy: entry.editedByUserId
+              ? editorNames.get(entry.editedByUserId) ?? null
+              : null,
+            changes: entry.changes,
+          })),
+          untouched: summary.untouched,
+        },
       };
     }),
 

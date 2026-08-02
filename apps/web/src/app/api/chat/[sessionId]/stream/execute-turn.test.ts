@@ -157,6 +157,9 @@ const buildScenario = (options: {
         updateAiPayload: vi.fn(async () => ({ data: {}, error: null })),
         listBySession: vi.fn(async () => ({ data: [], error: null })),
       },
+      // Read by the gate to pick up an approver's outstanding change requests.
+      approvals: { listBySession: vi.fn(async () => ({ data: [], error: null })) },
+      flowNodes: { listByFlow: vi.fn(async () => ({ data: [], error: null })) },
     },
     runtimeConfig: { resolveDocumentGenerationBudget: vi.fn(async () => undefined) },
   } as unknown as ExecuteTurnInput["container"];

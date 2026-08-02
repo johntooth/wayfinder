@@ -593,4 +593,70 @@ describe("GenerateDocument", () => {
     expect(result.error).toBeUndefined();
     expect(sessionMessages.updateAiPayload).not.toHaveBeenCalled();
   });
+
+  // The reported defect: a second approver rejected the document, work routed
+  // back to this step, and regenerating here reproduced exactly what had been
+  // rejected — the approver's instruction never reached the extraction prompt.
+  it("puts an outstanding change request into the extraction prompt", async () => {
+    const languageModel = makeLanguageModel();
+
+    const useCase = new GenerateDocument(
+      makeDocumentGenerator(),
+      makeObjectStorage(),
+      languageModel,
+      makeSessionMessages(),
+      makeStepOutputs(),
+    );
+
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      sessionId: "sess-1",
+      messages: [makeMessage({ role: "user", content: "The start date is 01-03-2026" })],
+      flow: makeFlow(),
+      node: makeNode(),
+      changeRequests: [
+        {
+          nodeId: "node-approval-2",
+          stepName: "Finance sign-off",
+          comment: "The start date must be 03-03-2026.",
+        },
+      ],
+    });
+
+    expect(result.error).toBeUndefined();
+    const extraction = (languageModel.generateObject as ReturnType<typeof vi.fn>).mock.calls
+      .map((call) => call[0])
+      .find((call) => call.purpose === "documentGeneration");
+    expect(extraction.prompt).toContain("Finance sign-off: The start date must be 03-03-2026.");
+  });
+
+  // The gate already extracted the values on the advance path, so generation
+  // reuses them; re-extracting here would spend a second model call to reach
+  // the same answer the gate reached with the same change requests.
+  it("skips extraction entirely when the gate threaded values through", async () => {
+    const languageModel = makeLanguageModel();
+
+    const useCase = new GenerateDocument(
+      makeDocumentGenerator(),
+      makeObjectStorage(),
+      languageModel,
+      makeSessionMessages(),
+      makeStepOutputs(),
+    );
+
+    await useCase.execute({
+      messageId: "msg-1",
+      sessionId: "sess-1",
+      messages: [makeMessage()],
+      flow: makeFlow(),
+      node: makeNode(),
+      fieldValues: { project_title: "Cloud Migration RFT", background: "Agency background" },
+      changeRequests: [{ nodeId: "node-a", stepName: "Finance sign-off", comment: "Change it." }],
+    });
+
+    const extractionCalls = (languageModel.generateObject as ReturnType<typeof vi.fn>).mock.calls
+      .map((call) => call[0])
+      .filter((call) => call.purpose === "documentGeneration");
+    expect(extractionCalls).toHaveLength(0);
+  });
 });

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import type { DocumentGenerationConfidence, SessionDocument } from "@rbrasier/domain";
 import { DocumentInfoModal } from "./document-info-modal";
 import { DocumentEditDialog } from "./document-edit-dialog";
+import { DocumentEditHistoryModal } from "./document-edit-history-modal";
 
 interface DocumentCardProps {
   messageId: string;
@@ -87,9 +88,12 @@ export function DocumentCard({
               Generated {new Date(document.generatedAt).toLocaleDateString()}
             </p>
             {document.editedAt && (
-              <p className="mt-0.5 text-[10px] font-medium text-[#9b6215]">
-                Edited {new Date(document.editedAt).toLocaleDateString()}
-              </p>
+              <div className="mt-0.5 flex items-center gap-1">
+                <p className="text-[10px] font-medium text-[#9b6215]">
+                  Edited {new Date(document.editedAt).toLocaleDateString()}
+                </p>
+                <DocumentEditHistoryModal messageId={messageId} />
+              </div>
             )}
           </div>
         </div>

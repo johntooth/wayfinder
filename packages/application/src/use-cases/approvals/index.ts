@@ -6,5 +6,6 @@ export * from "./list-pending-approvals-with-context";
 export * from "./resolve-approval-subject";
 export * from "./apply-approval-signature";
 export * from "./approver-edit-subject-fields";
+export * from "./resolve-change-requests";
 export * from "./signature-values";
 export * from "./approval-record-keys";
