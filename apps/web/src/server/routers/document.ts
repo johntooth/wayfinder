@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { domainError, nodeFieldSet, normaliseOutputType } from "@rbrasier/domain";
+import { domainError, isRecordLocked, nodeFieldSet, normaliseOutputType } from "@rbrasier/domain";
 import type {
   ConversationalNodeConfig,
   SessionStatus,
@@ -22,10 +22,18 @@ export interface DocumentFieldWithValue extends TemplateField {
 // Pure gate for whether a generated document may be manually edited. The server
 // re-enforces these same conditions in UpdateDocumentFields — this only drives
 // the UI affordance and an explanatory reason.
+//
+// The lock question is delegated to the domain rule rather than answered here,
+// because the two answering it separately is what produced the defect: the guard
+// let a pending approver edit their own subject step while this still reported
+// the document locked, so the dialog refused an edit the server would have
+// allowed.
 export const documentEditability = (input: {
   sessionStatus: SessionStatus;
   allowManualEdit: boolean;
   hasSnapshot: boolean;
+  hasPendingApproval: boolean;
+  sessionIsOnStep: boolean;
 }): { editable: boolean; reason: string | null } => {
   if (input.sessionStatus !== "active") {
     return { editable: false, reason: "This session is no longer active." };
@@ -33,7 +41,12 @@ export const documentEditability = (input: {
   if (!input.allowManualEdit) {
     return { editable: false, reason: "Editing is disabled for this step." };
   }
-  if (input.hasSnapshot) {
+  const locked = isRecordLocked({
+    hasRecordedSnapshot: input.hasSnapshot,
+    hasPendingApproval: input.hasPendingApproval,
+    sessionIsOnStep: input.sessionIsOnStep,
+  });
+  if (locked) {
     return { editable: false, reason: "The document is locked after approval." };
   }
   return { editable: true, reason: null };
@@ -142,10 +155,12 @@ export const documentRouter = router({
         throw toTrpcError(domainError("NOT_FOUND", "Document not found."));
       }
 
-      const snapshotResult = await ctx.container.repos.approvals.hasRecordedSnapshot(
-        message.sessionId,
-      );
+      const [snapshotResult, approvalsResult] = await Promise.all([
+        ctx.container.repos.approvals.hasRecordedSnapshot(message.sessionId),
+        ctx.container.repos.approvals.listBySession(message.sessionId),
+      ]);
       if (snapshotResult.error) throw toTrpcError(snapshotResult.error);
+      if (approvalsResult.error) throw toTrpcError(approvalsResult.error);
 
       const stepFields =
         stepOutputResult.error || !stepOutputResult.data ? [] : stepOutputResult.data.fields;
@@ -165,6 +180,9 @@ export const documentRouter = router({
         sessionStatus: session.status,
         allowManualEdit: config.allowManualEdit !== false,
         hasSnapshot: snapshotResult.data,
+        hasPendingApproval: approvalsResult.data.some((approval) => approval.status === "pending"),
+        sessionIsOnStep:
+          message.stepNodeId !== null && session.currentNodeId === message.stepNodeId,
       });
 
       return {

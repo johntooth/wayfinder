@@ -6,7 +6,7 @@ import type {
   TokenUsage,
   TurnStreamWriter,
 } from "@rbrasier/domain";
-import { CROSS_CHECK_PASS_NOTE } from "./turn-helpers";
+import { buildCrossCheckGapNote, CROSS_CHECK_PASS_NOTE } from "./turn-helpers";
 import { executeTurn, type ExecuteTurnInput } from "./execute-turn";
 
 const okUsage: TokenUsage = {
@@ -263,5 +263,45 @@ describe("executeTurn", () => {
       expect.objectContaining({ content: CROSS_CHECK_PASS_NOTE }),
     );
     expect(scenario.persistAssistantTurn).not.toHaveBeenCalled();
+  });
+
+  // The whole point of the hold is to tell the user what is still needed. The
+  // model-written follow-up may say it well or barely at all, so the note is
+  // what guarantees they are told, and it has to arrive before the follow-up.
+  it("on a cross-check HOLD, names the outstanding items before the follow-up streams", async () => {
+    const holdEvaluation: Evaluation = {
+      ...passEvaluation,
+      passed: false,
+      missingInformation: ["the end date", "the reporting line"],
+    };
+    const scenario = buildScenario({ confidence: 95, evaluation: holdEvaluation });
+
+    await executeTurn(scenario.input);
+
+    const note = buildCrossCheckGapNote(holdEvaluation.missingInformation);
+    expect(scenario.texts).toContain(note);
+    expect(scenario.create).toHaveBeenCalledWith(
+      expect.objectContaining({ role: "system", content: note }),
+    );
+    // The note precedes whatever the follow-up streamed.
+    const noteIndex = scenario.ops.indexOf(`text:${note}`);
+    const followupIndex = scenario.ops.findIndex(
+      (op, index) => index > noteIndex && op.startsWith("text:"),
+    );
+    expect(noteIndex).toBeGreaterThan(-1);
+    expect(followupIndex).toBeGreaterThan(noteIndex);
+  });
+
+  it("on a cross-check HOLD that named nothing specific, still says the step is held", async () => {
+    const holdEvaluation: Evaluation = {
+      ...passEvaluation,
+      passed: false,
+      missingInformation: [],
+    };
+    const scenario = buildScenario({ confidence: 95, evaluation: holdEvaluation });
+
+    await executeTurn(scenario.input);
+
+    expect(scenario.texts).toContain(buildCrossCheckGapNote([]));
   });
 });

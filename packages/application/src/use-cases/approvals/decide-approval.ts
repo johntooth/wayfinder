@@ -1,4 +1,5 @@
 import {
+  buildApprovalDecisionMessage,
   buildApprovalRecord,
   buildAttestationBlock,
   changesRequestedTargetOf,
@@ -86,6 +87,14 @@ const approvalStepKey = (nodes: FlowNode[], nodeId: string): string => {
   return index >= 0 ? keys[index]! : "approval";
 };
 
+// The approver as the record will remember them. Resolved once per decision and
+// shared by the frozen record and the thread message.
+interface ApproverIdentity {
+  name: string | null;
+  email: string | null;
+  role: string | null;
+}
+
 // What the approval is about, resolved once per decision.
 interface ResolvedSubject {
   description: string | null;
@@ -149,6 +158,9 @@ export class DecideApproval {
     // need the same subject, and a second resolution could disagree with the
     // first if the session moved between them.
     const subject = await this.resolveSubject(approval);
+    // Likewise resolved once and threaded through, so the frozen record and the
+    // message in the thread can never name the approver differently.
+    const approver = await this.approverIdentity(input.decidedByUserId);
     const edits = await this.approverEdits(approval, input, subject.nodeId);
     const status = derivedStatus(input.decision, edits.length > 0);
     const recordSnapshot = await this.buildRecord({
@@ -158,6 +170,7 @@ export class DecideApproval {
       status,
       editedFieldKeys: edits,
       subject,
+      approver,
     });
 
     // The concurrency-gated approval update and the session advance/route commit
@@ -181,7 +194,7 @@ export class DecideApproval {
       resourceId: approval.id,
       metadata: { decision: input.decision, comment: input.comment ?? null },
     });
-    await this.recordDecisionMessage(decided, routedBack, routingError);
+    await this.recordDecisionMessage(decided, approver, decidedAt, routedBack, routingError);
     await this.writeSignature(decided);
     this.notify(decided, input.decision, routedBack);
 
@@ -212,15 +225,15 @@ export class DecideApproval {
     status: ApprovalStatus;
     editedFieldKeys: string[];
     subject: ResolvedSubject;
+    approver: ApproverIdentity;
   }): Promise<Record<string, unknown> | null> {
-    const { approval, input, decidedAt, status, editedFieldKeys, subject } = parts;
+    const { approval, input, decidedAt, status, editedFieldKeys, subject, approver } = parts;
     const existing = approval.recordSnapshot ?? {};
     const stepOutputs =
       input.decision === "approved" ? await this.snapshot(approval.sessionId) : null;
 
     const nodes = await this.flowNodesOfFlow(approval.flowId);
     const stepKey = approvalStepKey(nodes, approval.nodeId);
-    const approver = await this.approverIdentity(input.decidedByUserId);
 
     const record: Record<string, unknown> = {
       ...existing,
@@ -310,9 +323,7 @@ export class DecideApproval {
 
   // Copied in, never joined at read time: a later rename, an email change or a
   // deleted account must not alter what the record says was true (ADR-040 §5).
-  private async approverIdentity(
-    userId: string,
-  ): Promise<{ name: string | null; email: string | null; role: string | null }> {
+  private async approverIdentity(userId: string): Promise<ApproverIdentity> {
     if (!this.users) return { name: null, email: null, role: null };
     const result = await this.users.findById(userId);
     if (result.error || !result.data) return { name: null, email: null, role: null };
@@ -408,42 +419,41 @@ export class DecideApproval {
   // Surfaces the decision and its reason in the chat thread so everyone with the
   // session open sees the outcome. Best-effort — a message-write failure must not
   // fail the decision, mirroring the projection above.
+  //
+  // Written as the approver's own message, not a system aside. Two things follow
+  // from that, and both are the point: the thread shows it as theirs rather than
+  // the assistant's, and their comment joins the transcript the next turn reasons
+  // over — so "start on Monday the 3rd" reaches the step that has to act on it
+  // instead of being narrated past. It also means a decision leaves no system
+  // row mid-conversation, which is what several providers reject outright.
   private async recordDecisionMessage(
     approval: Approval,
+    approver: ApproverIdentity,
+    decidedAt: Date,
     routedBack: boolean,
     routingError?: string,
   ): Promise<void> {
     if (!this.messages) return;
-    const summary = this.decisionSummary(approval.status, routedBack);
-    const parts = [summary];
-    if (approval.comment) parts.push(`Comment: ${approval.comment}`);
-    if (routingError) parts.push(routingError);
-    const content = parts.join("\n\n");
+    const content = buildApprovalDecisionMessage({
+      status: approval.status,
+      approverName: approver.name,
+      approverEmail: approver.email,
+      decidedAt: approval.decidedAt ?? decidedAt,
+      comment: approval.comment,
+      routedBack,
+      routingError: routingError ?? null,
+    });
     try {
       await this.messages.create({
         sessionId: approval.sessionId,
-        role: "system",
+        role: "user",
         content,
+        senderUserId: approval.decidedByUserId,
         stepNodeId: approval.nodeId,
       });
     } catch {
       // Ignore — the approval row remains the source of truth.
     }
-  }
-
-  // Reads the recorded status rather than the button pressed, so an approval the
-  // approver also edited says so in the thread the originator is watching.
-  private decisionSummary(status: ApprovalStatus, routedBack: boolean): string {
-    const summary: Record<ApprovalStatus, string> = {
-      pending: "Approval is still awaiting a decision.",
-      approved: "Approval granted.",
-      approved_with_edits: "Approval granted, with edits made by the approver.",
-      changes_requested: "Changes requested by the approver.",
-      rejected: routedBack
-        ? "Approval rejected — routed back to the originator."
-        : "Approval rejected — the request was closed.",
-    };
-    return summary[status];
   }
 
   // `changes_requested` always routes back; `rejected` routes back only when the

@@ -55,7 +55,7 @@ export function SynthesiseContent() {
 
       <div className="flex-1 overflow-auto">
         <div className="container py-6">
-          {flowsQuery.isLoading ? (
+          {flowsQuery.isPending ? (
             <p className="text-[13px] text-[#8a857c]">Loading…</p>
           ) : flowsQuery.error ? (
             <EmptyState

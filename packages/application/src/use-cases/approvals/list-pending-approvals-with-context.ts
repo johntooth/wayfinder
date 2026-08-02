@@ -1,7 +1,9 @@
 import {
   ok,
   type Approval,
+  type ApprovalNodeConfig,
   type DocumentGenerationConfidence,
+  type FlowNode,
   type IApprovalRepository,
   type IFlowNodeRepository,
   type ISessionMessageRepository,
@@ -42,6 +44,11 @@ export interface PendingApprovalContext {
   // The statement of what is being approved, resolved from `approvalSubject`
   // (ADR-040 §2). Null only when the resolution itself failed.
   subjectDescription: string | null;
+  // Which stage of the chain this is — the approval node's own name, and the
+  // author's role steer where one was given. The queue shows both so an approver
+  // knows whether they are the first or the second signature on this document.
+  approvalStepName: string;
+  roleHint: string | null;
 }
 
 export interface ListPendingApprovalsWithContextInput {
@@ -84,6 +91,8 @@ export class ListPendingApprovalsWithContext {
     const subject = await this.approvalSubject.execute({ approvalId: approval.id });
     const subjectNodeId = subject.error ? null : subject.data.subjectNodeId;
     const previousStep = subjectNodeId ? await this.resolveSubjectStep(approval, subjectNodeId) : null;
+    const approvalNode = await this.findNode(approval.nodeId);
+    const config = (approvalNode?.config ?? {}) as unknown as ApprovalNodeConfig;
 
     return {
       approval,
@@ -93,7 +102,14 @@ export class ListPendingApprovalsWithContext {
       originatorEmail: originator?.email ?? null,
       previousStep,
       subjectDescription: subject.error ? null : subject.data.description,
+      approvalStepName: approvalNode?.name?.trim() || "Approval",
+      roleHint: config.roleHint?.trim() || null,
     };
+  }
+
+  private async findNode(nodeId: string): Promise<FlowNode | null> {
+    const result = await this.flowNodes.findById(nodeId);
+    return result.error ? null : result.data;
   }
 
   private async findSession(sessionId: string): Promise<Session | null> {

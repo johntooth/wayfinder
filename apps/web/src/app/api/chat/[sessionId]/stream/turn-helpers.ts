@@ -17,6 +17,7 @@ import {
 import { turnResponseSchema, type DocumentData } from "@rbrasier/shared";
 import type { getContainer } from "@/lib/container";
 import { OUTSTANDING_CONTEXT_KEY } from "./gate-holds";
+import type { ModelMessage } from "./model-messages";
 import { dispatchMcpNode } from "./mcp-turn-helpers";
 import { captureStructuredRecord } from "./structured-capture";
 import { streamTurn } from "./stream-turn";
@@ -24,6 +25,18 @@ import { streamTurn } from "./stream-turn";
 // Re-exported from its lightweight home so existing importers keep working while
 // the gate-hold counter can depend on the constant without pulling this module.
 export { OUTSTANDING_CONTEXT_KEY };
+
+// The readiness gate's user-facing notes live in their own module (turn-helpers
+// stays under the file-size budget); re-exported here so existing import sites
+// are unaffected.
+export {
+  buildCrossCheckGapNote,
+  CROSS_CHECK_PASS_NOTE,
+  persistCrossCheckGapNote,
+  persistCrossCheckPassNote,
+  writeCrossCheckGapNote,
+  writeCrossCheckPassNote,
+} from "./cross-check-notes";
 
 type Container = ReturnType<typeof getContainer>;
 
@@ -125,37 +138,13 @@ export async function persistHeldReply(
     .catch(() => undefined);
 }
 
-export const CROSS_CHECK_PASS_NOTE =
-  "Cross-check complete — everything is in alignment with the reference documents.";
-
-// Streamed the moment the cross-check passes, so the user gets explicit
-// feedback before the (slow) branch choice and document generation run. Opens a
-// new bubble first so the note never merges into the reply above it.
-export function writeCrossCheckPassNote(writer: TurnStreamWriter): void {
-  writer.endBubble();
-  writer.writeText(CROSS_CHECK_PASS_NOTE);
-}
-
-// Persisted separately from the streamed note (and after the assistant turn)
-// so the stored order matches what streamed: reply first, then the note.
-// Best-effort: a failure here must not block the advance.
-export async function persistCrossCheckPassNote(
-  container: Container,
-  sessionId: string,
-  stepNodeId: string | null,
-): Promise<void> {
-  await container.repos.sessionMessages
-    .create({ sessionId, role: "system", content: CROSS_CHECK_PASS_NOTE, stepNodeId })
-    .catch(() => undefined);
-}
-
 export interface StreamGapFollowupInput {
   container: Container;
   writer: TurnStreamWriter;
   session: Session;
   flowId: string;
   system: string;
-  messages: { role: "user" | "assistant" | "system"; content: string }[];
+  messages: ModelMessage[];
   missingInformation: string[];
   modelName: string;
   userId: string;

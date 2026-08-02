@@ -119,7 +119,7 @@ export function AdminFlowsContent() {
         <div className="container py-8">
         <Card>
           <CardContent className="pt-6">
-            {flowsQuery.isLoading ? (
+            {flowsQuery.isPending ? (
               <TableSkeletonRows count={4} />
             ) : !flowsQuery.data?.length ? (
               <EmptyState

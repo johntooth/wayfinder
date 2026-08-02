@@ -95,38 +95,49 @@ const contextWith = (container: Container): TrpcContext => ({
 });
 
 describe("documentEditability", () => {
+  const editable = {
+    sessionStatus: "active" as const,
+    allowManualEdit: true,
+    hasSnapshot: false,
+    hasPendingApproval: false,
+    sessionIsOnStep: false,
+  };
+
   it("is editable on an active session, edit allowed, no snapshot", () => {
-    expect(
-      documentEditability({ sessionStatus: "active", allowManualEdit: true, hasSnapshot: false }),
-    ).toEqual({ editable: true, reason: null });
+    expect(documentEditability(editable)).toEqual({ editable: true, reason: null });
   });
 
   it("blocks a non-active session", () => {
-    const result = documentEditability({
-      sessionStatus: "complete",
-      allowManualEdit: true,
-      hasSnapshot: false,
-    });
+    const result = documentEditability({ ...editable, sessionStatus: "complete" });
     expect(result.editable).toBe(false);
     expect(result.reason).toBeTruthy();
   });
 
   it("blocks when the node disables manual editing", () => {
-    const result = documentEditability({
-      sessionStatus: "active",
-      allowManualEdit: false,
-      hasSnapshot: false,
-    });
+    const result = documentEditability({ ...editable, allowManualEdit: false });
     expect(result.editable).toBe(false);
   });
 
-  it("blocks once an approval snapshot exists", () => {
-    const result = documentEditability({
-      sessionStatus: "active",
-      allowManualEdit: true,
-      hasSnapshot: true,
-    });
+  it("blocks once the approval chain has settled", () => {
+    const result = documentEditability({ ...editable, hasSnapshot: true });
     expect(result.editable).toBe(false);
+  });
+
+  // The affordance and the server guard have to agree. They did not: the server
+  // let a pending approver edit their own subject step while this reported the
+  // document locked, so the dialog refused an edit that would have succeeded.
+  it("stays editable while an approval is still pending", () => {
+    const result = documentEditability({
+      ...editable,
+      hasSnapshot: true,
+      hasPendingApproval: true,
+    });
+    expect(result).toEqual({ editable: true, reason: null });
+  });
+
+  it("stays editable on the step the session has been routed back to", () => {
+    const result = documentEditability({ ...editable, hasSnapshot: true, sessionIsOnStep: true });
+    expect(result).toEqual({ editable: true, reason: null });
   });
 });
 
@@ -219,7 +230,7 @@ describe("document.getFields", () => {
     ]);
   });
 
-  it("reports editable=false with a reason when a snapshot exists", async () => {
+  it("reports editable=false with a reason once the approval chain has settled", async () => {
     const container = makeContainer();
     (container.repos.approvals.hasRecordedSnapshot as ReturnType<typeof vi.fn>).mockResolvedValue(
       ok(true),
@@ -230,6 +241,37 @@ describe("document.getFields", () => {
 
     expect(result.editable).toBe(false);
     expect(result.reason).toBeTruthy();
+  });
+
+  it("reports editable=true for an approver whose approval is still pending", async () => {
+    const container = makeContainer();
+    (container.repos.approvals.hasRecordedSnapshot as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(true),
+    );
+    (container.repos.approvals.listBySession as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok([{ id: "appr-2", status: "pending" }]),
+    );
+    const caller = createCaller(contextWith(container));
+
+    const result = await caller.document.getFields({ messageId: "11111111-1111-1111-1111-111111111111" });
+
+    expect(result.editable).toBe(true);
+    expect(result.reason).toBeNull();
+  });
+
+  it("reports editable=true once a change request has routed the session back to the step", async () => {
+    const container = makeContainer();
+    (container.repos.approvals.hasRecordedSnapshot as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(true),
+    );
+    (container.repos.sessions.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok({ ...session, currentNodeId: "node-1" }),
+    );
+    const caller = createCaller(contextWith(container));
+
+    const result = await caller.document.getFields({ messageId: "11111111-1111-1111-1111-111111111111" });
+
+    expect(result.editable).toBe(true);
   });
 
   it("attaches a group field's current items so the editor can seed them", async () => {
