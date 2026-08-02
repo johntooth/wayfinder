@@ -145,13 +145,16 @@ test.describe('Mock PKI: client-certificate login', () => {
     }
   });
 
-  // middleware.ts redirects unauthenticated page requests to /api/auth/cert with
-  // a plain navigation when AUTH_METHOD names PKI. The route used to export only
-  // POST, so that redirect dead-ended on 405 and certificate sign-in could never
-  // complete in a real deployment. Without cert headers the request is refused —
-  // 401, from the trusted-proxy check — and it is that 401 rather than a 405
-  // which proves the method is routed at all.
-  test('the cert route answers the GET that middleware redirects with', async ({
+  // The certificate control on /login is a plain navigation to this route, so
+  // GET has to be routed. It used to export only POST, which dead-ended that
+  // navigation on 405 and meant certificate sign-in could never complete in a
+  // real deployment — this test exists to keep 405 from coming back.
+  //
+  // What a certificate-less GET answers with changed in v0.23.0: it used to be
+  // a 401 carrying a JSON body, which is unreadable to the person who clicked.
+  // It now redirects to /login with a reason code. Either way the point holds —
+  // the method is routed, and no session is minted.
+  test('the cert route answers the GET that /login navigates with', async ({
     request,
     baseURL,
   }) => {
@@ -161,7 +164,14 @@ test.describe('Mock PKI: client-certificate login', () => {
     });
 
     expect(response.status()).not.toBe(405);
-    expect(response.status()).toBe(401);
+    expect(response.status()).toBe(302);
+
+    const location = new URL(response.headers()['location'] ?? '', baseURL);
+    expect(location.pathname).toBe('/login');
+    // No certificate reached the app, which is a different diagnosis from one
+    // that was presented and rejected.
+    expect(location.searchParams.get('certError')).toBe('no_certificate');
+    expect(response.headers()['set-cookie'] ?? '').not.toContain('session_token');
   });
 
   test('a certificate that fails chain verification mints no session', async ({ browser }) => {

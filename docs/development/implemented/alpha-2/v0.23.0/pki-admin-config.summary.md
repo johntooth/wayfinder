@@ -174,8 +174,11 @@ greyed-out state is covered by the default run rather than skipped):
    blocks Continue until tested, and resolves to an explicit `ok`/`failed`
    rather than the "unsupported" state that would silently count as satisfied.
 
-`apps/web/e2e/enhance-mock-pki-login.spec.ts` was updated: its skip guard keyed
-on the old 404, which this phase replaced with 403.
+`apps/web/e2e/enhance-mock-pki-login.spec.ts` was updated twice: its skip guard
+keyed on the old 404, which this phase replaced with 403; and its GET test
+asserted the 401 that a certificate-less request used to return, which is now a
+302 to `/login?certError=no_certificate`. Its original point is preserved — the
+method is routed rather than 405, and no session is minted.
 
 **Not run locally.** The E2E suite runs in CI on the pull request, against a
 full stack.
