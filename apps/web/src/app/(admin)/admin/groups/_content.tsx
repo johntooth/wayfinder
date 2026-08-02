@@ -67,7 +67,7 @@ function GroupsManagementCard() {
           <Button onClick={() => setEditing("new")}>New group</Button>
         </CardHeader>
         <CardContent>
-          {groupsQuery.isLoading ? (
+          {groupsQuery.isPending ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : groups.length === 0 ? (
             <p className="text-sm text-muted-foreground">No groups yet.</p>

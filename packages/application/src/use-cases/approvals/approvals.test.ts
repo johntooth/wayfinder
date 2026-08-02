@@ -987,8 +987,8 @@ describe("DecideApproval", () => {
       expect(result.data?.advanced).toBe(false);
       expect(sessions.rows.get("session-1")?.status).toBe("active");
       expect(sessions.rows.get("session-1")?.currentNodeId).toBe("node-appr");
-      const systemMessage = messages.rows.find((row) => row.role === "system");
-      expect(systemMessage?.content).toContain("no step to return to");
+      const decisionMessage = messages.rows.find((row) => row.role === "user");
+      expect(decisionMessage?.content).toContain("no step to return to");
     });
 
     it("holds rather than cancels when a rejection asks to route back and cannot", async () => {
@@ -1362,7 +1362,7 @@ describe("DecideApproval", () => {
     expect(sessions.rows.get("session-1")?.currentNodeId).toBe("node-appr");
   });
 
-  it("writes a system chat message recording the decision and comment", async () => {
+  it("writes a chat message recording the decision and comment", async () => {
     const approvals = new InMemoryApprovals();
     const approval = await seedConfirmed(approvals);
     const sessions = new InMemorySessions();
@@ -1386,10 +1386,73 @@ describe("DecideApproval", () => {
       comment: "Looks good",
     });
 
-    const decisionMessage = messages.rows.find((row) => row.role === "system");
+    const decisionMessage = messages.rows.find((row) => row.role === "user");
     expect(decisionMessage?.content).toContain("Approval granted.");
     expect(decisionMessage?.content).toContain("Looks good");
     expect(decisionMessage?.stepNodeId).toBe("node-appr");
+  });
+
+  // The decision is the approver's, so the thread records it as theirs: it reads
+  // as their message rather than the assistant's, and it joins the transcript the
+  // model reasons over instead of sitting outside it as a system aside.
+  it("attributes the decision message to the approver who made it", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedConfirmed(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const messages = new InMemoryMessages();
+    const users = new InMemoryUsers();
+    users.add({ ...user("manager-1", "rosa.okafor@example.com"), name: "Rosa Okafor" });
+    const sut = new DecideApproval(
+      unitOfWorkFor(approvals, sessions),
+      approvals,
+      sessions,
+      new InMemoryFlowEdges(),
+      new InMemoryStepOutputs(),
+      new RecordingAuditLogger(),
+      undefined,
+      messages,
+      users,
+    );
+
+    await sut.execute({
+      approvalId: approval.id,
+      decidedByUserId: "manager-1",
+      decision: "approved",
+    });
+
+    const decisionMessage = messages.rows.find((row) => row.role === "user");
+    expect(decisionMessage?.senderUserId).toBe("manager-1");
+    expect(decisionMessage?.content).toContain("Rosa Okafor");
+    expect(decisionMessage?.content).toContain("rosa.okafor@example.com");
+  });
+
+  // No system-role row is written at all, so a decision can never leave a
+  // mid-conversation system message for the next turn to hand to the model.
+  it("writes no system-role message for a decision", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedConfirmed(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const messages = new InMemoryMessages();
+    const sut = new DecideApproval(
+      unitOfWorkFor(approvals, sessions),
+      approvals,
+      sessions,
+      new InMemoryFlowEdges(),
+      new InMemoryStepOutputs(),
+      new RecordingAuditLogger(),
+      undefined,
+      messages,
+    );
+
+    await sut.execute({
+      approvalId: approval.id,
+      decidedByUserId: "manager-1",
+      decision: "approved",
+    });
+
+    expect(messages.rows.filter((row) => row.role === "system")).toHaveLength(0);
   });
 
   it("records a routed-back message when a rejection routes back to the originator", async () => {
@@ -1417,7 +1480,7 @@ describe("DecideApproval", () => {
       comment: "Not yet",
     });
 
-    const decisionMessage = messages.rows.find((row) => row.role === "system");
+    const decisionMessage = messages.rows.find((row) => row.role === "user");
     expect(decisionMessage?.content).toContain("routed back to the originator");
   });
 
@@ -1773,10 +1836,10 @@ describe("DecideApproval", () => {
           decision: "approved",
         });
 
-        const systemMessage = messages.rows.find(
-          (row) => row.role === "system" && row.content.includes("Approval granted"),
+        const decisionMessage = messages.rows.find(
+          (row) => row.role === "user" && row.content.includes("Approval granted"),
         );
-        expect(systemMessage?.content).toContain("edits made by the approver");
+        expect(decisionMessage?.content).toContain("edits made by the approver");
       });
 
       it("never widens a rejection", async () => {
@@ -1976,6 +2039,42 @@ describe("ListPendingApprovalsWithContext", () => {
     expect(result.data?.[0]?.chatName).toBe("A session");
     expect(result.data?.[0]?.originatorName).toBe("Olivia Operator");
     expect(result.data?.[0]?.originatorEmail).toBe("operator@corp.test");
+  });
+
+  // The approver must be able to see which stage of the chain they are — "first
+  // supervisor" and "second supervisor" are different jobs, and a queue that
+  // names neither leaves them guessing.
+  it("names the approval step and its role hint", async () => {
+    const approvals = new InMemoryApprovals();
+    await seedPending(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(checkpointed());
+    const nodes = new InMemoryFlowNodes();
+    nodes.add(
+      approvalNode({
+        name: "Second level endorsement",
+        config: { approverSource: "second_level_supervisor", roleHint: "SES Band 1 delegate" },
+      }),
+    );
+
+    const sut = build({ approvals, sessions, nodes });
+    const result = await sut.execute({ approverUserId: "manager-1", approverEmail: null });
+
+    expect(result.data?.[0]?.approvalStepName).toBe("Second level endorsement");
+    expect(result.data?.[0]?.roleHint).toBe("SES Band 1 delegate");
+  });
+
+  it("falls back to a generic step name when the approval node has gone", async () => {
+    const approvals = new InMemoryApprovals();
+    await seedPending(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(checkpointed());
+
+    const sut = build({ approvals, sessions });
+    const result = await sut.execute({ approverUserId: "manager-1", approverEmail: null });
+
+    expect(result.data?.[0]?.approvalStepName).toBe("Approval");
+    expect(result.data?.[0]?.roleHint).toBeNull();
   });
 
   it("surfaces the previous step's document as the key output", async () => {

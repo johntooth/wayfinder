@@ -6,15 +6,18 @@ import {
   buildAttachmentAnnotation,
   buildGatheredContext,
   buildPromptSessionUploads,
+  buildCrossCheckGapNote,
   CROSS_CHECK_PASS_NOTE,
   generateDocument,
   generateInitialMessage,
   generateTitle,
   maybeUpdateSessionTitle,
   OUTSTANDING_CONTEXT_KEY,
+  persistCrossCheckGapNote,
   persistCrossCheckPassNote,
   persistHeldReply,
   streamGapFollowup,
+  writeCrossCheckGapNote,
   writeCrossCheckPassNote,
 } from "./turn-helpers";
 import type { Session, TurnStreamWriter } from "@rbrasier/domain";
@@ -1032,6 +1035,64 @@ describe("cross-check pass note", () => {
     } as unknown as Parameters<typeof persistCrossCheckPassNote>[0];
 
     await expect(persistCrossCheckPassNote(container, "sess-1", "node-1")).resolves.toBeUndefined();
+  });
+});
+
+describe("cross-check gap note", () => {
+  const gaps = ["The start date is missing.", "The reporting line is unclear."];
+
+  it("names every outstanding item the review found", () => {
+    const note = buildCrossCheckGapNote(gaps);
+
+    expect(note).toContain("The start date is missing.");
+    expect(note).toContain("The reporting line is unclear.");
+  });
+
+  // The grader can fail the gate on confidence alone without naming an item. A
+  // note that then lists nothing is worse than no note, so it says what happened
+  // instead of presenting an empty bullet list.
+  it("falls back to a general line when the review named nothing specific", () => {
+    const note = buildCrossCheckGapNote([]);
+
+    expect(note).toContain("still need to be confirmed");
+    expect(note).not.toContain("- ");
+  });
+
+  it("streams the note behind a message boundary so it renders as a new bubble", () => {
+    const writer = recordingWriter();
+
+    writeCrossCheckGapNote(writer, gaps);
+
+    expect(writer.ops[0]).toBe("boundary");
+    expect(writer.ops[1]).toMatch(/^text:/);
+    expect(writer.texts[0]).toContain("The start date is missing.");
+  });
+
+  it("persists the note as a system message on the held node", async () => {
+    const create = vi.fn().mockResolvedValue({ data: {}, error: null });
+    const container = {
+      repos: { sessionMessages: { create } },
+    } as unknown as Parameters<typeof persistCrossCheckGapNote>[0];
+
+    await persistCrossCheckGapNote(container, "sess-1", "node-1", gaps);
+
+    expect(create).toHaveBeenCalledWith({
+      sessionId: "sess-1",
+      role: "system",
+      content: buildCrossCheckGapNote(gaps),
+      stepNodeId: "node-1",
+    });
+  });
+
+  it("swallows persistence failures so the follow-up still runs", async () => {
+    const create = vi.fn().mockRejectedValue(new Error("db down"));
+    const container = {
+      repos: { sessionMessages: { create } },
+    } as unknown as Parameters<typeof persistCrossCheckGapNote>[0];
+
+    await expect(
+      persistCrossCheckGapNote(container, "sess-1", "node-1", gaps),
+    ).resolves.toBeUndefined();
   });
 });
 

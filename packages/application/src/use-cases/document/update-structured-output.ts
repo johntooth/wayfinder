@@ -16,6 +16,7 @@ import {
   type TemplateField,
 } from "@rbrasier/domain";
 import type { GroupItems } from "@rbrasier/shared";
+import { resolveRecordLock } from "../approvals/resolve-record-lock";
 import { validateGroupItems } from "./group-edit";
 
 export interface UpdateStructuredStepOutputInput {
@@ -138,9 +139,9 @@ export class UpdateStructuredStepOutput {
       return err(domainError("FORBIDDEN", "Manual editing is disabled for this step."));
     }
 
-    const snapshotResult = await this.approvals.hasRecordedSnapshot(sessionId);
-    if (snapshotResult.error) return snapshotResult;
-    if (snapshotResult.data) {
+    const lockResult = await resolveRecordLock(this.approvals, sessionResult.data, stepNodeId);
+    if (lockResult.error) return lockResult;
+    if (lockResult.data) {
       return err(domainError("FORBIDDEN", "This record is locked after an approval snapshot."));
     }
 
