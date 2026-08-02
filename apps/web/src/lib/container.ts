@@ -7,7 +7,6 @@ import {
   CreateFlow,
   CreateFlowEdge,
   CreateFlowNode,
-  ConfirmAndSend,
   CreateGroup,
   UpdateGroup,
   DeleteGroup,
@@ -19,7 +18,6 @@ import {
   RemoveGroupMember,
   ResolveGroupAuthorization,
   CreateUser,
-  DecideApproval,
   DeleteFlow,
   DeleteFlowEdge,
   DeleteFlowNode,
@@ -60,8 +58,6 @@ import {
   RenameRole,
   DeleteRole,
   ListScheduleRuns,
-  ListPendingApprovals,
-  ListPendingApprovalsWithContext,
   ListSessions,
   ListSessionsPage,
   ListUsers,
@@ -107,10 +103,6 @@ import {
   SetColumnMapping,
   SetFeatureFlagRoles,
   StartSession,
-  ApplyApprovalSignature,
-  ApproverEditSubjectFields,
-  ResolveApprovalSubject,
-  SuggestApprover,
   TrackUsage,
   UpdateErrorStatus,
   UpdateFlow,
@@ -120,6 +112,7 @@ import {
   UpdateUser,
   UpsertFeatureFlag,
 } from "@rbrasier/application";
+import { buildApprovalUseCases } from "./container-approval-use-cases";
 import { buildDocumentUseCases } from "./container-document-use-cases";
 import { buildOnboarding } from "./container-onboarding";
 import {
@@ -611,27 +604,27 @@ const build = () => {
     approvals,
     auditLogger,
   });
-  const approverEditSubjectFields = new ApproverEditSubjectFields(
+  const approvalUseCases = buildApprovalUseCases({
+    unitOfWork,
     approvals,
+    sessions,
+    sessionMessages,
+    sessionStepOutputs,
+    flowNodes,
+    flowEdges,
     users,
-    sessionMessages,
-    documentUseCases.updateDocumentFields,
-  );
-  const resolveApprovalSubject = new ResolveApprovalSubject(
-    approvals,
-    flowNodes,
-    sessionStepOutputs,
-    sessionMessages,
-    llm,
-  );
-  const applyApprovalSignature = new ApplyApprovalSignature(
-    approvals,
-    flowNodes,
-    sessionMessages,
-    sessionStepOutputs,
+    auditLogger,
+    languageModel: llm,
     documentGenerator,
     objectStorage,
-  );
+    reportingLineResolver,
+    embeddings,
+    documentChunks,
+    sha256Hex,
+    updateDocumentFields: documentUseCases.updateDocumentFields,
+    notifyOnApprovalRequested,
+    notifyOnApprovalDecided,
+  });
 
   return {
     env,
@@ -765,44 +758,7 @@ const build = () => {
       getUsageLimitsEnabled: new GetUsageLimitsEnabled(systemSettings),
       setUsageLimitsEnabled: new SetUsageLimitsEnabled(systemSettings),
       getFlowDeepDive: new GetFlowDeepDive(flows, flowNodes, analyticsRepo, sessionStepOutputs, flowEdges),
-      suggestApprover: new SuggestApprover(
-        approvals,
-        flowNodes,
-        reportingLineResolver,
-        users,
-        embeddings,
-        documentChunks,
-        llm,
-      ),
-      resolveApprovalSubject,
-      applyApprovalSignature,
-      approverEditSubjectFields,
-      confirmAndSend: new ConfirmAndSend(approvals, auditLogger, notifyOnApprovalRequested),
-      decideApproval: new DecideApproval(
-        unitOfWork,
-        approvals,
-        sessions,
-        flowEdges,
-        sessionStepOutputs,
-        auditLogger,
-        notifyOnApprovalDecided,
-        sessionMessages,
-        users,
-        flowNodes,
-        sha256Hex,
-        resolveApprovalSubject,
-        applyApprovalSignature,
-      ),
-      listPendingApprovals: new ListPendingApprovals(approvals),
-      listPendingApprovalsWithContext: new ListPendingApprovalsWithContext(
-        approvals,
-        sessions,
-        users,
-        sessionMessages,
-        sessionStepOutputs,
-        flowNodes,
-        resolveApprovalSubject,
-      ),
+      ...approvalUseCases,
       searchPeople: new SearchPeople([graphPeopleDirectory, hrPeopleDirectory]),
       importHrDataset: new ImportHrDataset(
         spreadsheetParser,
