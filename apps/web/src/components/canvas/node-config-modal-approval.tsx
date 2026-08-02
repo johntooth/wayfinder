@@ -5,12 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  approvalSubjectChoice,
+  approvalSubjectFromChoice,
+  CUSTOM_SUBJECT_CHOICE,
   editableReturnSteps,
   noEditablePredecessorWarning,
   signatureSlotConflict,
   signatureSlotControl,
   signatureSlotsFor,
-  type ApprovalSubjectKind,
   type PriorStep,
 } from "./approval-node-config";
 import type { ApproverSourceMode, NodeConfigValues } from "./node-config-modal";
@@ -82,45 +84,38 @@ export function NodeConfigModalApproval({
       )}
 
       <div className="space-y-1">
-        <Label htmlFor="approval-subject-kind">What is being approved?</Label>
+        <Label htmlFor="approval-subject">What is being approved?</Label>
         <select
-          id="approval-subject-kind"
+          id="approval-subject"
           className={SELECT_CLASS}
-          value={values.approvalSubjectKind}
-          onChange={(e) => set("approvalSubjectKind", e.target.value as ApprovalSubjectKind)}
+          value={approvalSubjectChoice({
+            kind: values.approvalSubjectKind,
+            nodeId: values.approvalSubjectNodeId,
+          })}
+          onChange={(e) => {
+            const subject = approvalSubjectFromChoice(e.target.value);
+            set("approvalSubjectKind", subject.kind);
+            set("approvalSubjectNodeId", subject.nodeId);
+            // The slot list belongs to the subject step, so changing the
+            // subject invalidates any slot already picked.
+            set("signatureFieldKey", "");
+          }}
         >
-          <option value="step">The output of an earlier step</option>
-          <option value="custom">Something you describe</option>
+          <option value="">The last completed step (default)</option>
+          {priorSteps.map((step) => (
+            <option key={step.nodeId} value={step.nodeId}>
+              {step.stepLabel}
+            </option>
+          ))}
+          <option value={CUSTOM_SUBJECT_CHOICE}>Something I&apos;ll describe…</option>
         </select>
-      </div>
-
-      {values.approvalSubjectKind === "step" && (
-        <div className="space-y-1">
-          <Label htmlFor="approval-subject-step">Which step?</Label>
-          <select
-            id="approval-subject-step"
-            className={SELECT_CLASS}
-            value={values.approvalSubjectNodeId}
-            onChange={(e) => {
-              set("approvalSubjectNodeId", e.target.value);
-              // The slot list belongs to the subject step, so changing the
-              // subject invalidates any slot already picked.
-              set("signatureFieldKey", "");
-            }}
-          >
-            <option value="">The last completed step (default)</option>
-            {priorSteps.map((step) => (
-              <option key={step.nodeId} value={step.nodeId}>
-                {step.stepLabel}
-              </option>
-            ))}
-          </select>
+        {values.approvalSubjectKind === "step" && (
           <p className={HINT_CLASS}>
-            The approver sees this step&apos;s document or captured values, and the record says
+            The approver sees that step&apos;s document or captured values, and the record says
             exactly what was approved.
           </p>
-        </div>
-      )}
+        )}
+      </div>
 
       {values.approvalSubjectKind === "custom" && (
         <div className="space-y-1">

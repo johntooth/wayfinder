@@ -107,7 +107,6 @@ export class GenerateDocument {
       purpose: "chat",
       prompt: `Write a 2-sentence summary of a document with these values: ${JSON.stringify(fieldValues).slice(0, 2000)}`,
       schema: documentSummarySchema,
-      temperature: 0.2,
     });
 
     const summary = summaryResult.error ? null : summaryResult.data.object.summary;

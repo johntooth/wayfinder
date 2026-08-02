@@ -206,7 +206,6 @@ export class GenerateRunDocuments {
         "You summarise the results of a bulk document-extraction run for a non-technical operator. " +
         "Write two or three short paragraphs of plain prose. Do not invent figures beyond those given.",
       prompt: `Instruction: ${schema.output.instruction || "Summarise the extracted records."}\n\nRecords:\n${digest}`,
-      temperature: 0.3,
     });
 
     return result.error ? "" : result.data.text.trim();

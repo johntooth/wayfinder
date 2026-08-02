@@ -1,11 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { openaiFactory, anthropicFactory, mistralFactory, bedrockFactory } = vi.hoisted(() => ({
-  openaiFactory: vi.fn((modelId: string) => ({ provider: "openai", modelId })),
-  anthropicFactory: vi.fn((modelId: string) => ({ provider: "anthropic", modelId })),
-  mistralFactory: vi.fn((modelId: string) => ({ provider: "mistral", modelId })),
-  bedrockFactory: vi.fn((modelId: string) => ({ provider: "bedrock", modelId })),
-}));
+const {
+  openaiFactory,
+  anthropicFactory,
+  mistralFactory,
+  bedrockFactory,
+  underlyingGenerate,
+  underlyingStream,
+} = vi.hoisted(() => {
+  const underlyingGenerate = vi.fn(async () => ({ text: "ok" }));
+  const underlyingStream = vi.fn(async () => ({ stream: "ok" }));
+  const model = (provider: string) => (modelId: string) => ({
+    provider,
+    modelId,
+    specificationVersion: "v1" as const,
+    doGenerate: underlyingGenerate,
+    doStream: underlyingStream,
+  });
+  return {
+    underlyingGenerate,
+    underlyingStream,
+    openaiFactory: vi.fn(model("openai")),
+    anthropicFactory: vi.fn(model("anthropic")),
+    mistralFactory: vi.fn(model("mistral")),
+    bedrockFactory: vi.fn(model("bedrock")),
+  };
+});
 
 vi.mock("@ai-sdk/openai", () => ({
   createOpenAI: vi.fn(() => openaiFactory),
@@ -64,10 +84,67 @@ describe("resolveModel — openai", () => {
     expect(createOpenAI).toHaveBeenCalledWith({});
   });
 
-  it("returns the LanguageModel produced by the openai factory", () => {
+  it("returns a LanguageModel carrying the openai factory's provider and model id", () => {
     const result = resolveModel("openai", "gpt-4o-mini", "sk-test");
 
-    expect(result).toEqual({ provider: "openai", modelId: "gpt-4o-mini" });
+    expect(result.provider).toBe("openai");
+    expect(result.modelId).toBe("gpt-4o-mini");
+  });
+});
+
+// Regression: the Claude 5 family rejects `temperature` outright, and ai@4
+// substitutes `temperature: 0` for an omitted one in `prepareCallSettings`
+// ("TODO v5 remove default 0 for temperature"). Withholding it above the SDK
+// therefore changed nothing — the request still carried it and still failed.
+describe("resolveModel — temperature never reaches the provider", () => {
+  const callOptions = {
+    inputFormat: "prompt" as const,
+    mode: { type: "regular" as const },
+    prompt: [],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("strips the temperature the SDK injected on a generate call", async () => {
+    const model = resolveModel("anthropic", "claude-opus-5", "sk-ant-test");
+
+    await model.doGenerate({ ...callOptions, temperature: 0 });
+
+    expect(underlyingGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({ temperature: undefined }),
+    );
+  });
+
+  it("strips it on a stream call too", async () => {
+    const model = resolveModel("anthropic", "claude-opus-5", "sk-ant-test");
+
+    await model.doStream({ ...callOptions, temperature: 0 });
+
+    expect(underlyingStream).toHaveBeenCalledWith(
+      expect.objectContaining({ temperature: undefined }),
+    );
+  });
+
+  it("strips it for every provider, not only anthropic", async () => {
+    const model = resolveModel("openai", "gpt-4o-mini", "sk-test");
+
+    await model.doGenerate({ ...callOptions, temperature: 0.7 });
+
+    expect(underlyingGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({ temperature: undefined }),
+    );
+  });
+
+  it("leaves the rest of the call options untouched", async () => {
+    const model = resolveModel("openai", "gpt-4o-mini", "sk-test");
+
+    await model.doGenerate({ ...callOptions, temperature: 0, maxTokens: 512 });
+
+    expect(underlyingGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({ maxTokens: 512, mode: { type: "regular" } }),
+    );
   });
 });
 

@@ -48,6 +48,24 @@ export const decodeApprovalSubject = (values: {
   return values.nodeId ? { kind: "step", nodeId: values.nodeId } : undefined;
 };
 
+// The modal asks one question — "what is being approved?" — whose answers are
+// the default, any earlier step, or a subject the author describes. A native
+// <select> value is always a string, so the described case needs a sentinel
+// that cannot collide with a node id.
+export const CUSTOM_SUBJECT_CHOICE = "__describe__";
+
+export const approvalSubjectChoice = (values: {
+  kind: ApprovalSubjectKind;
+  nodeId: string;
+}): string => (values.kind === "custom" ? CUSTOM_SUBJECT_CHOICE : values.nodeId);
+
+export const approvalSubjectFromChoice = (
+  choice: string,
+): { kind: ApprovalSubjectKind; nodeId: string } =>
+  choice === CUSTOM_SUBJECT_CHOICE
+    ? { kind: "custom", nodeId: DEFAULT_CHOICE }
+    : { kind: "step", nodeId: choice };
+
 export const encodeChangesRequestedTarget = (
   target: ChangesRequestedTarget | undefined,
 ): string => (target?.kind === "step" ? target.nodeId : DEFAULT_CHOICE);

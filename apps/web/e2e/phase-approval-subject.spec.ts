@@ -135,16 +135,16 @@ test.describe("approval subject, signature and routing", () => {
     await node.dblclick();
 
     const dialog = page.getByRole("dialog");
-    const subjectKind = dialog.getByLabel(/What is being approved/i);
-    await expect(subjectKind).toBeVisible();
-    await expect(subjectKind).toHaveValue("step");
+    const subject = dialog.getByLabel(/What is being approved/i);
+    await expect(subject).toBeVisible();
 
-    // An untouched node opens on the default, so it keeps behaving exactly as
-    // it did before the feature existed.
-    await expect(dialog.getByLabel(/Which step\?/i)).toHaveValue("");
+    // One question, not two: an untouched node opens on the default, so it
+    // keeps behaving exactly as it did before the feature existed.
+    await expect(subject).toHaveValue("");
+    await expect(dialog.getByLabel(/Which step\?/i)).toHaveCount(0);
 
     // Switching to a described subject reveals the free-text instruction.
-    await subjectKind.selectOption("custom");
+    await subject.selectOption("__describe__");
     await expect(dialog.getByLabel(/Describe the subject/i)).toBeVisible();
   });
 });

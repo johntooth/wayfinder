@@ -156,7 +156,6 @@ export class SuggestApprover {
         .filter(Boolean)
         .join("\n"),
       schema: delegationPositionSchema,
-      temperature: 0,
     });
     if (result.error) return null;
 

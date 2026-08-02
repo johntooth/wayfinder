@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Copy, Loader2, Mail, Stamp } from "lucide-react";
+import { Copy, Info, Loader2, Mail, Stamp } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/trpc/client";
+import { picksApproverManually, setupNotice, type SetupNotice } from "./approval-gate-state";
 
 interface ApprovalGateProps {
   sessionId: string;
@@ -35,6 +36,7 @@ export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions
   const [sentToEmail, setSentToEmail] = useState<string | null>(null);
   const [chosen, setChosen] = useState<ChosenApprover | null>(null);
   const [showSearch, setShowSearch] = useState(false);
+  const [showNotice, setShowNotice] = useState(false);
   const [query, setQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,6 +62,9 @@ export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions
         setSentToEmail(email);
         return;
       }
+      // With nothing to confirm, go straight to the choice the operator has to
+      // make rather than parking them behind a "Someone else" button.
+      setShowSearch(picksApproverManually(Boolean(data.suggestedApprover)));
       if (data.suggestedApprover) {
         setChosen({
           userId: data.suggestedApprover.userId,
@@ -128,6 +133,33 @@ export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions
     }
   };
 
+  // Sits to the right of the panel heading: an icon, a line, and the detail
+  // only when asked for. What is not configured is worth saying once, quietly —
+  // it is never the operator's task, and it must not read as an error.
+  const noticeButton = (notice: SetupNotice) => (
+    <button
+      type="button"
+      className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[12px] text-[#6d6a65] hover:bg-[#f3ede2] hover:text-[#1a1814]"
+      aria-expanded={showNotice}
+      onClick={() => setShowNotice((open) => !open)}
+      data-approval-setup-notice
+    >
+      <Info className="h-3.5 w-3.5" />
+      {notice.label}
+    </button>
+  );
+
+  const noticeDetail = (notice: SetupNotice) =>
+    showNotice && (
+      <div className="space-y-2 rounded-[10px] border border-[#e8d4b0] bg-white px-3 py-2">
+        {notice.paragraphs.map((paragraph) => (
+          <p key={paragraph} className="text-[12.5px] text-[#5a5650]">
+            {paragraph}
+          </p>
+        ))}
+      </div>
+    );
+
   // Until the initial suggest resolves we cannot tell whether the request is
   // already sent or still needs an approver, so show a loading state rather than
   // flashing the empty confirm form (which makes a re-opened session feel as if
@@ -145,24 +177,29 @@ export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions
   }
 
   if (sent) {
+    const notice = setupNotice({ emailConfigured, hasSuggestion: true });
     return (
       <div className="border-t border-[#dedad2] bg-[#fef3e2] px-5 py-4">
         <div className="mx-auto flex max-w-2xl flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <Stamp className="h-5 w-5 text-[#a65b05]" />
-            <p className="text-[13px] text-[#92400e]">
-              {emailConfigured ? (
-                <>
-                  Awaiting approval — sent to <span className="font-medium">{sentTo}</span>.
-                </>
-              ) : (
-                <>
-                  Awaiting approval from <span className="font-medium">{sentTo}</span>. Email isn&apos;t
-                  configured, so send the request manually.
-                </>
-              )}
-            </p>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <Stamp className="h-5 w-5 text-[#a65b05]" />
+              <p className="text-[13px] text-[#92400e]">
+                {emailConfigured ? (
+                  <>
+                    Awaiting approval — sent to <span className="font-medium">{sentTo}</span>.
+                  </>
+                ) : (
+                  <>
+                    Awaiting approval from <span className="font-medium">{sentTo}</span>.
+                  </>
+                )}
+              </p>
+            </div>
+            {notice && noticeButton(notice)}
           </div>
+
+          {notice && noticeDetail(notice)}
 
           {!emailConfigured && (
             <div className="flex flex-wrap gap-2">
@@ -185,13 +222,23 @@ export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions
     );
   }
 
+  const notice = setupNotice({ emailConfigured, hasSuggestion: chosen !== null });
+
   return (
     <div className="border-t border-[#dedad2] bg-[#fffaf2] px-5 py-4" data-approval-gate>
       <div className="mx-auto flex max-w-2xl flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <Stamp className="h-5 w-5 text-[#a65b05]" />
-          <p className="text-[14px] font-semibold text-[#1a1814]">Confirm the approver</p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Stamp className="h-5 w-5 text-[#a65b05]" />
+            <p className="text-[14px] font-semibold text-[#1a1814]">
+              {chosen ? "Confirm the approver" : "Choose the approver"}
+            </p>
+          </div>
+          {notice && noticeButton(notice)}
         </div>
+
+        {notice && noticeDetail(notice)}
+
         {/* The subject the approver will see and the record will lock, shown
             here first so the operator can catch a wrong one before it is sent. */}
         {suggest.data?.subject?.description && (
@@ -209,25 +256,15 @@ export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions
           </p>
         )}
 
-        <div className="rounded-[10px] border border-[#e8d4b0] bg-white px-3 py-2">
-          {chosen ? (
+        {chosen && (
+          <div className="rounded-[10px] border border-[#e8d4b0] bg-white px-3 py-2">
             <p className="text-[13px] text-[#1a1814]">
               Suggested: <span className="font-medium">{chosen.label}</span>
               {chosen.email && chosen.label !== chosen.email && (
                 <span className="text-[#6d6a65]"> ({chosen.email})</span>
               )}
             </p>
-          ) : (
-            <p className="text-[13px] text-[#6d6a65]">
-              {suggest.isPending ? "Resolving a suggestion…" : "No suggestion — choose someone."}
-            </p>
-          )}
-        </div>
-
-        {!emailConfigured && (
-          <p className="text-[12.5px] text-[#92400e]">
-            Email isn&apos;t configured. Confirm the approver, then send them the request manually.
-          </p>
+          </div>
         )}
 
         {showSearch && (
@@ -270,9 +307,13 @@ export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions
           <Button size="sm" onClick={send} disabled={!chosen || confirmAndSend.isPending}>
             {emailConfigured ? "Confirm & send" : "Confirm"}
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setShowSearch((open) => !open)}>
-            Someone else
-          </Button>
+          {/* Only an offer to change a suggestion. With the picker already open
+              there is nothing for it to do. */}
+          {!showSearch && (
+            <Button size="sm" variant="outline" onClick={() => setShowSearch(true)}>
+              Someone else
+            </Button>
+          )}
         </div>
       </div>
     </div>
