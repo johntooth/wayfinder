@@ -249,11 +249,12 @@ opening the field editor before deciding, with no signature slot offered; and �
 the error path — the authoring-time warning when no editable step precedes an
 approval.
 
-**These specs have not been executed.** The build sandbox has no Docker and no
-Postgres/Redis/MinIO, and `@playwright/test` is not installed in the workspace,
-so the Playwright suite could not be run here. They need a run against a live
-stack (the `/e2e` skill, or CI) before this phase is considered verified
-end-to-end.
+These specs could not be run in the build sandbox — no Docker, no
+Postgres/Redis/MinIO, and `@playwright/test` is not installed in the workspace.
+They were run by CI against a live stack on the PR
+([run #590](https://github.com/rbrasier/wayfinder/actions/runs/30726943729)):
+the full Playwright suite passed across four shards plus the PKI job — 242
+passed, 0 failed.
 
 ## Validation
 
