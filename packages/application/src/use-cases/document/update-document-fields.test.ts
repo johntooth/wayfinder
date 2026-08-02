@@ -593,3 +593,77 @@ describe("UpdateDocumentFields", () => {
     expect(deps.sessionStepOutputs.updateFields).not.toHaveBeenCalled();
   });
 });
+
+describe("UpdateDocumentFields — signature slots", () => {
+  const SIGNED_FIELDS = [
+    ...FIELDS,
+    {
+      key: "delegate_signature",
+      label: "Delegate Signature",
+      type: "signature",
+      optional: true,
+      raw: "Delegate Signature (approval)",
+    },
+  ] as const;
+
+  const withSignatureSlot = (approvalRows: unknown[]) => {
+    const approvals = makeApprovals();
+    (approvals.listBySession as ReturnType<typeof vi.fn>).mockResolvedValue(ok(approvalRows));
+    return build({
+      flowNodes: makeFlowNodes(makeNode({ documentTemplateFields: SIGNED_FIELDS })),
+      approvals,
+    });
+  };
+
+  const decidedApproval = {
+    id: "appr-1",
+    status: "approved",
+    recordSnapshot: {
+      subjectNodeId: "node-1",
+      signatureFieldKey: "delegate_signature",
+      attestationText: "Approved by:   Jane Doe\nDecision:      Approved",
+    },
+  };
+
+  it("keeps an approver's signature on the document when a later edit re-renders it", async () => {
+    const { useCase, deps } = withSignatureSlot([decidedApproval]);
+
+    await useCase.execute({
+      messageId: "msg-1",
+      editedByUserId: "user-1",
+      values: validValues,
+    });
+
+    const rendered = (deps.documentGenerator.generate as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(rendered.data.delegate_signature).toContain("Jane Doe");
+  });
+
+  it("leaves an undecided slot empty", async () => {
+    const { useCase, deps } = withSignatureSlot([]);
+
+    await useCase.execute({
+      messageId: "msg-1",
+      editedByUserId: "user-1",
+      values: validValues,
+    });
+
+    const rendered = (deps.documentGenerator.generate as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(rendered.data.delegate_signature).toBe("");
+  });
+
+  it("never writes a signature into the step output", async () => {
+    const { useCase, deps } = withSignatureSlot([decidedApproval]);
+
+    await useCase.execute({
+      messageId: "msg-1",
+      editedByUserId: "user-1",
+      values: validValues,
+    });
+
+    const [, fields] = (deps.sessionStepOutputs.updateFields as ReturnType<typeof vi.fn>).mock
+      .calls[0]!;
+    expect((fields as StepOutputField[]).map((field) => field.key)).not.toContain(
+      "delegate_signature",
+    );
+  });
+});

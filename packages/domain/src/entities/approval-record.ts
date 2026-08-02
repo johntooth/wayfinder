@@ -1,0 +1,89 @@
+// The approval record as it is frozen into `app_session_approvals.record_snapshot`
+// at decision time (ADR-040 §3, §5). Keys are flat and dot-separated, prefixed by
+// the approval step's key, so a report can pivot the jsonb straight into columns
+// without first walking the flow graph to learn the key names.
+
+import type { ApprovalStatus } from "./approval";
+import type { ApprovalNodeConfig } from "./flow-node";
+import { deriveFieldKey } from "./template-field";
+
+// What the approver is being asked to sign off. `nodeId` absent or null means
+// the last completed step, which is both the default and what an approval node
+// authored before ADR-040 resolves to.
+export type ApprovalSubject =
+  | { kind: "step"; nodeId?: string | null }
+  | { kind: "custom"; instruction: string };
+
+// Where a `changes_requested` decision returns the session. `nearest_editable`
+// walks back to the first step an operator can actually change (ADR-044 §2).
+export type ChangesRequestedTarget =
+  | { kind: "step"; nodeId: string }
+  | { kind: "nearest_editable" };
+
+export const approvalSubjectOf = (config: ApprovalNodeConfig): ApprovalSubject =>
+  config.approvalSubject ?? { kind: "step", nodeId: null };
+
+export const changesRequestedTargetOf = (config: ApprovalNodeConfig): ChangesRequestedTarget =>
+  config.changesRequestedTarget ?? { kind: "nearest_editable" };
+
+// Step keys for a flow's approval nodes, in author order. Two steps sharing a
+// label would collide in the flat record, so the second and later get a numeric
+// suffix — resolved when the flow is saved rather than at decision time, because
+// a report must not be the thing that discovers a name clash (ADR-040 §5).
+export const deriveStepKeys = (labels: string[]): string[] => {
+  const taken = new Set<string>();
+  return labels.map((label) => {
+    const base = deriveFieldKey(label);
+    if (!taken.has(base)) {
+      taken.add(base);
+      return base;
+    }
+    let suffix = 2;
+    while (taken.has(`${base}_${suffix}`)) suffix += 1;
+    const key = `${base}_${suffix}`;
+    taken.add(key);
+    return key;
+  });
+};
+
+export interface ApprovalRecordInput {
+  stepKey: string;
+  // The recorded status, which may be `approved_with_edits` — the value the
+  // approver's edits earned, not the button they pressed (ADR-040 §5).
+  decision: ApprovalStatus;
+  // Copied in at decision time, never joined at read time: a later rename or a
+  // deleted account must not alter what the record says was true.
+  approverName: string | null;
+  approverEmail: string | null;
+  decidedAt: Date;
+  comment: string | null;
+  subjectDescription?: string | null;
+  subjectNodeId?: string | null;
+  signatureFieldKey?: string | null;
+  verificationCode?: string | null;
+  editsMade?: boolean;
+  editedFieldKeys?: string[];
+}
+
+export const buildApprovalRecord = (input: ApprovalRecordInput): Record<string, unknown> => {
+  const prefixed = (suffix: string): string => `${input.stepKey}.${suffix}`;
+
+  // The five guaranteed keys — present on every decided approval, whatever the
+  // flow looks like.
+  const record: Record<string, unknown> = {
+    [prefixed("decision")]: input.decision,
+    [prefixed("approver_name")]: input.approverName ?? "",
+    [prefixed("approver_email")]: input.approverEmail ?? "",
+    [prefixed("decided_at")]: input.decidedAt.toISOString(),
+    [prefixed("comment")]: input.comment ?? "",
+  };
+
+  if (input.subjectDescription) record[prefixed("subject_description")] = input.subjectDescription;
+  if (input.subjectNodeId) record[prefixed("subject_node_id")] = input.subjectNodeId;
+  if (input.signatureFieldKey) record[prefixed("signature_field_key")] = input.signatureFieldKey;
+  if (input.verificationCode) record[prefixed("verification_code")] = input.verificationCode;
+  if (input.editsMade !== undefined) record[prefixed("edits_made")] = input.editsMade;
+  if (input.editedFieldKeys) record[prefixed("edited_field_keys")] = input.editedFieldKeys;
+
+  return record;
+};

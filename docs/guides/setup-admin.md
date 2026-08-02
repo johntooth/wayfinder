@@ -159,3 +159,4 @@ from `main`'s `VERSION` and updates every current-alpha reference.
 | Migration fails in `restart.sh` | Ensure `docker compose up -d` ran first and `DATABASE_URL` is correct in `.env` |
 | Port 3000 / 3001 already in use | `./restart.sh` kills those ports automatically; or kill manually with `lsof -ti:3000 | xargs kill -9` |
 | Admin login email never arrives | In development, the magic link is printed to the API terminal output — check there |
+| Nobody can sign in as an administrator (Entra is failing, and the password no longer works) | See [`recovering-admin-access.md`](recovering-admin-access.md) |

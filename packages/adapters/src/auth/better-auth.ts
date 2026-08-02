@@ -63,6 +63,18 @@ export const microsoftProviderFor = (
 export interface Auth {
   readonly handler: (req: Request) => Promise<Response>;
   readonly api: Readonly<Record<string, unknown>>;
+  // Better Auth's resolved runtime context, exposed so break-glass recovery can
+  // hash a password with the provider's own hasher. Verified against
+  // better-auth@1.6: `auth.$context` is the promise returned by `init`
+  // (dist/auth/base.mjs), and `password.hash` there is the same function
+  // sign-in verifies against (dist/context/create-context.mjs).
+  readonly $context: Promise<AuthRuntimeContext>;
+}
+
+export interface AuthRuntimeContext {
+  readonly password: {
+    hash: (password: string) => Promise<string>;
+  };
 }
 
 /**

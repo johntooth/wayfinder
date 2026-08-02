@@ -24,6 +24,7 @@ import { documentSummarySchema, type DocumentData, type GroupItems } from "@rbra
 import { DOCUMENT_MIME, templateFormat } from "./document-format";
 import { buildRenderData } from "./render-data";
 import { validateGroupItems } from "./group-edit";
+import { signatureValuesForStep } from "../approvals/signature-values";
 
 export interface UpdateDocumentFieldsInput {
   messageId: string;
@@ -33,6 +34,11 @@ export interface UpdateDocumentFieldsInput {
   // here keeps the items extracted at generation (a scalar-only edit); a group
   // present replaces them wholesale after validation.
   groupItems?: Record<string, Array<Record<string, string>>>;
+  // Set only by the approver-edit path, which has already established that the
+  // caller holds a pending approval whose subject is this step. It lifts the
+  // post-approval lock, because the thing that lock protects — the record — is
+  // frozen independently and is not what an approver is changing (ADR-045 §6).
+  editedAsPendingApprover?: boolean;
 }
 
 export interface DocumentFieldError {
@@ -47,7 +53,7 @@ export type UpdateDocumentFieldsOutput =
 // `generated/{sessionId}/{basename}-r{n}.{ext}`: the previous object is retained,
 // so each edit lands at the next revision suffix (first edit becomes r1). The
 // extension is preserved from the current path so an xlsx document keeps `.xlsx`.
-const nextRevisionPath = (storagePath: string): string => {
+export const nextRevisionPath = (storagePath: string): string => {
   const lastSlash = storagePath.lastIndexOf("/");
   const directory = storagePath.slice(0, lastSlash + 1);
   const nameWithExt = storagePath.slice(lastSlash + 1);
@@ -87,7 +93,11 @@ export class UpdateDocumentFields {
     }
     const currentDocument = message.document;
 
-    const guard = await this.guard(message.sessionId, message.stepNodeId);
+    const guard = await this.guard(
+      message.sessionId,
+      message.stepNodeId,
+      input.editedAsPendingApprover === true,
+    );
     if (guard.error) return guard;
     const { config, templateBytes } = guard.data;
 
@@ -124,6 +134,19 @@ export class UpdateDocumentFields {
     for (const field of fields) {
       if (field.type === "group") renderValues[field.key] = itemsFor(field.key);
     }
+    // Without this the re-render would write an empty string into every
+    // signature slot, silently unsigning a document an approver had already
+    // signed. Signatures live in the approval records, not the step output, so
+    // they have to be read back in on every render.
+    Object.assign(
+      renderValues,
+      await signatureValuesForStep(
+        this.approvals,
+        message.sessionId,
+        message.stepNodeId ?? "",
+        fields,
+      ),
+    );
 
     const generateResult = this.documentGenerator.generate({
       templateBytes,
@@ -140,7 +163,11 @@ export class UpdateDocumentFields {
     if (putResult.error) return putResult;
 
     const previousValues = new Map(stepOutput.fields.map((field) => [field.key, field.value]));
-    const newFields: StepOutputField[] = fields.map((field) => {
+    // A signature is never a captured value — it belongs to the approval record,
+    // and letting one into the step output would put it in reporting and in the
+    // edit dialog, which is exactly what nodeFieldSet exists to prevent.
+    const capturedFields = fields.filter((field) => field.type !== "signature");
+    const newFields: StepOutputField[] = capturedFields.map((field) => {
       if (field.type === "group") {
         return {
           key: field.key,
@@ -164,8 +191,8 @@ export class UpdateDocumentFields {
     if (updateOutputResult.error) return updateOutputResult;
 
     const changes = [
-      ...this.diffChanges(fields, previousValues, values),
-      ...this.diffGroupChanges(fields, priorItemsByKey, itemsFor),
+      ...this.diffChanges(capturedFields, previousValues, values),
+      ...this.diffGroupChanges(capturedFields, priorItemsByKey, itemsFor),
     ];
     const editedAt = new Date().toISOString();
     const edit: DocumentEdit = {
@@ -203,6 +230,7 @@ export class UpdateDocumentFields {
   private async guard(
     sessionId: string,
     stepNodeId: string | null,
+    isPendingApprover: boolean,
   ): Promise<Result<{ config: ConversationalNodeConfig; templateBytes: Buffer }>> {
     const sessionResult = await this.sessions.findById(sessionId);
     if (sessionResult.error) return sessionResult;
@@ -223,12 +251,14 @@ export class UpdateDocumentFields {
       return err(domainError("FORBIDDEN", "Manual editing is disabled for this step."));
     }
 
-    const snapshotResult = await this.approvals.hasRecordedSnapshot(sessionId);
-    if (snapshotResult.error) return snapshotResult;
-    if (snapshotResult.data) {
-      return err(
-        domainError("FORBIDDEN", "This document is locked after an approval snapshot."),
-      );
+    if (!isPendingApprover) {
+      const snapshotResult = await this.approvals.hasRecordedSnapshot(sessionId);
+      if (snapshotResult.error) return snapshotResult;
+      if (snapshotResult.data) {
+        return err(
+          domainError("FORBIDDEN", "This document is locked after an approval snapshot."),
+        );
+      }
     }
 
     if (!config.documentTemplatePath) {

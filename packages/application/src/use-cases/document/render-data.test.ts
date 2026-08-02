@@ -32,6 +32,21 @@ describe("buildRenderData", () => {
     expect(data).toEqual({ recommendations: items });
   });
 
+  it("substitutes a signature slot with the attestation block it was given", () => {
+    const signature = field({ key: "delegate_signature", label: "Delegate Signature", type: "signature", optional: true });
+    const block = "Approved by:   Jane Doe\nDecision:      Approved";
+
+    const data = buildRenderData([signature], { delegate_signature: block });
+
+    expect(data).toEqual({ delegate_signature: block });
+  });
+
+  it("renders an undecided signature slot empty rather than implying an approval", () => {
+    const signature = field({ key: "delegate_signature", label: "Delegate Signature", type: "signature", optional: true });
+
+    expect(buildRenderData([signature], {})).toEqual({ delegate_signature: "" });
+  });
+
   it("binds a missing or non-array group value to an empty array", () => {
     const group = parseTemplateFields(["#Recommendations (repeat)", "Owner", "/Recommendations"])
       .data![0]!;

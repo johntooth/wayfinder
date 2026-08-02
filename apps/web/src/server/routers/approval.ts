@@ -21,7 +21,17 @@ export const approvalRouter = router({
         requestedByUserId: ctx.userId,
       });
       if (result.error) throw toTrpcError(result.error);
-      return result.data;
+
+      // Resolved here rather than in SuggestApprover so the gate always has the
+      // statement, whether the row was just raised or is being re-read. The
+      // resolution caches itself on the pending row, so this costs at most one
+      // model call per approval (ADR-040 §2).
+      const subject = await ctx.container.useCases.resolveApprovalSubject.execute({
+        approvalId: result.data.approval.id,
+      });
+      if (subject.error) throw toTrpcError(subject.error);
+
+      return { ...result.data, subject: subject.data };
     }),
 
   confirmAndSend: authenticatedProcedure
