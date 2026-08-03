@@ -156,8 +156,8 @@ export const evaluationRouter = router({
       });
     }),
 
-  // The document behind a review row's source deep-link (redline delivery-plan
-  // item 1). `element` is the cited elem_order the link carries; it crosses the
+  // The document behind a review row's source deep-link. `element` is the cited
+  // elem_order the link carries; it crosses the
   // wire so renderDocumentView resolves the anchor server-side, the same way the
   // grid's sort and filter do, rather than the client re-deriving it.
   document: reviewProcedure.input(documentInput).query(async ({ ctx, input }) => {

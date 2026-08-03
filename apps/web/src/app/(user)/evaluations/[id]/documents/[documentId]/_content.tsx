@@ -6,8 +6,8 @@ import { Suspense, useEffect } from "react";
 import type { DocumentView } from "@redline/redline-web";
 import { trpc } from "@/trpc/client";
 
-// The document view behind every review row's source deep-link (redline
-// delivery-plan item 1). It binds to the framework-free DocumentView the
+// The document view behind every review row's source deep-link. It binds to the
+// framework-free DocumentView the
 // `evaluation.document` tRPC procedure returns; the ordering and the anchor the
 // `element` query parameter cites are resolved server-side in renderDocumentView,
 // so this component owns only the DOM, the scroll and the request state —

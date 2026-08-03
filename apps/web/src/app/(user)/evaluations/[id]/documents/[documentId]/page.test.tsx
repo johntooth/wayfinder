@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// The document route's own server-side gate (redline delivery-plan item 1). The
+// The document route's own server-side gate. The
 // router's gate is proven in server/routers/evaluation.test.ts; this proves the
 // route itself is invisible without evaluation:review, rather than a shell that
 // renders and then fails to load. Next's real notFound() throws, so the mock

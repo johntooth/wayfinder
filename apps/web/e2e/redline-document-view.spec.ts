@@ -1,12 +1,11 @@
 /**
  * redline-document-view.spec.ts
  *
- * The document view behind the review grid's provenance deep-link (ADR-0019,
- * redline delivery-plan item 1). redline-review-grid.spec.ts asserts the href
- * *pattern* and stops there — every one of those links 404'd until this route
- * existed. This is the assertion that spec stops short of: a specialist clicks a
- * review row's source link and lands on the document view, scrolled to the cited
- * element.
+ * The document view behind the review grid's provenance deep-link (ADR-0019).
+ * redline-review-grid.spec.ts asserts the href *pattern* and stops there — every
+ * one of those links 404'd until this route existed. This is the assertion that
+ * spec stops short of: a specialist clicks a review row's source link and lands
+ * on the document view, scrolled to the cited element.
  *
  * Runs against the served fork with the shared admin session, who holds
  * evaluation:review via the admin wildcard. Like its siblings it needs a real
@@ -24,7 +23,7 @@ test.describe('redline document view', () => {
   test.beforeEach(() => {
     test.skip(
       !EVALUATION_ID,
-      'Needs a redline evaluation the CI seed does not create yet (waits on the live corpus run, delivery-plan item 2) — runs with E2E_REDLINE_EVALUATION_ID set.',
+      'Needs a redline evaluation the CI seed does not create yet (waits on the live corpus run) — runs with E2E_REDLINE_EVALUATION_ID set.',
     );
   });
 
@@ -50,12 +49,13 @@ test.describe('redline document view', () => {
     await expect(page.getByTestId('document-elements')).toBeVisible();
 
     // The cited element is the one the view anchored, and it is in the viewport
-    // rather than merely present somewhere down the page.
+    // rather than merely present somewhere down the page. toBeInViewport retries:
+    // the scroll runs in an effect after the query settles, so the element is
+    // rendered before it is scrolled to.
     const anchored = page.getByTestId('document-anchored-element');
-    await expect(anchored).toBeVisible();
     await expect(anchored).toHaveAttribute('id', `element-${citedElement}`);
     await expect(page.getByTestId('document-anchor-missing')).toHaveCount(0);
-    expect(await isInViewport(anchored), 'the cited element is scrolled into view').toBe(true);
+    await expect(anchored).toBeInViewport();
 
     await page.screenshot({ path: 'screenshots/redline-document-view.png', fullPage: true });
   });
@@ -85,12 +85,3 @@ test.describe('redline document view', () => {
     await expect(page.getByTestId('document-elements')).toBeVisible();
   });
 });
-
-// Playwright's toBeVisible() only means "rendered and not hidden", which a
-// an element far below the fold satisfies — so being scrolled to needs its own check.
-async function isInViewport(locator: import('@playwright/test').Locator): Promise<boolean> {
-  return locator.evaluate((node) => {
-    const { top, bottom } = node.getBoundingClientRect();
-    return bottom > 0 && top < window.innerHeight;
-  });
-}

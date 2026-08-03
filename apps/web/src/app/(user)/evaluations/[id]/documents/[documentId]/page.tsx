@@ -2,8 +2,8 @@ import { notFound } from "next/navigation";
 import { createServerTrpcContext } from "@/server/server-context";
 import { EvaluationDocumentContent } from "./_content";
 
-// The document view every review row's source deep-link points at (redline
-// delivery-plan item 1). review-view.ts builds
+// The document view every review row's source deep-link points at. redline's
+// review-view.ts builds
 // /evaluations/:id/documents/:documentId?element=…&page=…&chunk=…; this is the
 // route that serves it, beside review / pivots / grouping under [id].
 //
