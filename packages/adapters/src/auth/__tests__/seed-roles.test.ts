@@ -92,6 +92,7 @@ describe("seedRoles", () => {
         "workflow:publish_to_everyone",
         "extraction:author",
         "extraction:run",
+        "evaluation:review",
       ].sort(),
     );
 

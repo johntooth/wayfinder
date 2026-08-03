@@ -116,4 +116,16 @@ describe("PERMISSIONS registry", () => {
     expect(keys).toContain("extraction:author");
     expect(keys).toContain("extraction:run");
   });
+
+  it("registers the redline evaluation-review permission key (ADR-0006, redline fork)", () => {
+    const keys = PERMISSIONS.map((permission) => permission.key);
+
+    expect(keys).toContain("evaluation:review");
+
+    const evaluationReview = PERMISSIONS.find(
+      (permission) => permission.key === "evaluation:review",
+    );
+    expect(evaluationReview?.label.length).toBeGreaterThan(0);
+    expect(evaluationReview?.description.length).toBeGreaterThan(0);
+  });
 });

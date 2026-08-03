@@ -9,7 +9,8 @@ export type PermissionKey =
   | "knowledge:curate"
   | "group:manage_own"
   | "extraction:author"
-  | "extraction:run";
+  | "extraction:run"
+  | "evaluation:review";
 
 export interface PermissionDefinition {
   readonly key: PermissionKey;
@@ -67,6 +68,12 @@ export const PERMISSIONS: readonly PermissionDefinition[] = [
     label: "Run extraction flows",
     description:
       "Upload documents to an extraction flow, run and preview extraction, and review results.",
+  },
+  {
+    key: "evaluation:review",
+    label: "Review procurement evaluations",
+    description:
+      "Open the redline evaluation-review surface: the delineated response grid, pricing pivots, and Excel export for a tender.",
   },
 ];
 

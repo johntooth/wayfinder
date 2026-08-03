@@ -154,6 +154,20 @@ const serverEnvSchema = z.object({
   ENTRA_TENANT_ID: z.string().optional(),
   ENTRA_CLIENT_ID: z.string().optional(),
   ENTRA_CLIENT_SECRET: z.string().optional(),
+  // redline's procurement-evaluation mount (ADR-0019). All optional: this fork
+  // must still boot as plain Wayfinder with no redline stack behind it, so the
+  // mount degrades to unavailable rather than failing the whole app's fail-fast
+  // env parse. buildRedlineContainer treats a missing REDLINE_DATABASE_URL as
+  // "not configured".
+  //
+  // REDLINE_DATABASE_URL is deliberately separate from DATABASE_URL — redline
+  // owns its own Postgres (ADR-0002) and never shares Wayfinder's.
+  REDLINE_DATABASE_URL: z.string().url().optional(),
+  REDLINE_WOMBLEX_INGEST_URL: z.string().url().optional(),
+  REDLINE_ADJUDICATOR_BASE_URL: z.string().url().optional(),
+  REDLINE_ADJUDICATOR_API_KEY: z.string().optional(),
+  REDLINE_ADJUDICATOR_MODEL: z.string().optional(),
+  REDLINE_PRODUCT_NAME: z.string().optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
