@@ -251,6 +251,9 @@ importers:
       '@rbrasier/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@redline/redline-adapters':
+        specifier: workspace:*
+        version: link:../../../../packages/redline-adapters
       '@redline/redline-application':
         specifier: workspace:*
         version: link:../../../../packages/redline-application

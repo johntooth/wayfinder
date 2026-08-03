@@ -202,6 +202,7 @@ import {
 import type { FlowVersion, PermissionKey } from "@rbrasier/domain";
 import { buildSkillsAndMcp } from "./container-skills-mcp";
 import { buildExtractionModule } from "./container-extraction";
+import { resolveRedlineModule } from "./container-redline";
 import { buildPeopleDirectory } from "./container-people-directory";
 import { createCachedPermissionResolver } from "./cached-permission-resolver";
 import {
@@ -490,6 +491,15 @@ const build = () => {
     resolveCostCeilingUsd: async () =>
       (await runtimeConfig.getExtractionConfig()).perRunCostCeilingUsd,
   });
+  // redline's procurement-evaluation mount (ADR-0019). Null when the redline
+  // stack is not configured, and a Result error when it is configured but does
+  // not compose — either way the fork boots and the evaluation router is the
+  // only surface that notices.
+  const redlineModule = resolveRedlineModule({ env, wayfinderLanguageModel: llm });
+  const redline =
+    redlineModule && !redlineModule.error
+      ? { workflowController: redlineModule.data.workflowController }
+      : null;
   const contextDocContent = new DrizzleContextDocContentRepository(db);
   const documentChunks = new DrizzleDocumentChunksRepository(db);
   const chunkCuration = new DrizzleChunkCurationRepository(db);
@@ -613,6 +623,7 @@ const build = () => {
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter, ...skillsAndMcp.services },
+    redline,
     repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds, extractionRuns: extraction.repository, extractionDrafts: extraction.draftRepository, ...skillsAndMcp.repos },
     useCases: {
       ...buildDocumentUseCases({

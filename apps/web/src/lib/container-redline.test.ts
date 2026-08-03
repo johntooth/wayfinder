@@ -7,6 +7,7 @@ import type {
   Evaluation,
   IAdjudicator,
   IChunkStore,
+  IClassificationLensReader,
   IEvaluationRepository,
   IFinancialExtractor,
   ILanguageModel,
@@ -123,12 +124,19 @@ const languageModel: ILanguageModel = {
   },
 };
 
+// The lens is resolved per call through IClassificationLensReader rather than
+// bound at construction, which is what lets one composed classifier serve every
+// evaluation behind a process-wide memoised container.
+const lensReader: IClassificationLensReader = {
+  async readLens() {
+    return ok({ topics, ruleSet: { rules: [] }, candidates: [] });
+  },
+};
+
 const classifier: IProcurementClassifier = buildColdStartClassifier({
   chunkStore: new FakeChunkStore(),
   adjudicator,
-  topics,
-  ruleSet: { rules: [] },
-  candidates: [],
+  lensReader,
 });
 
 const dependencies = (overrides: Partial<RedlineModuleDependencies> = {}): RedlineModuleDependencies => ({

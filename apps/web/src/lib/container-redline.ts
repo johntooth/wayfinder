@@ -11,6 +11,19 @@ import type {
   IProcurementClassifier,
   IProcurementExtractionReader,
 } from "@redline/redline-domain";
+import { ColdStartClassifier, MoneySpanFinancialExtractor } from "@redline/redline-application";
+import {
+  DrizzleChunkStore,
+  DrizzleClassificationLensReader,
+  DrizzleEvaluationRepository,
+  DrizzleMoneySpanStore,
+  HttpAdjudicator,
+  WomblexExtractionReader,
+  createRedlinePostgres,
+  makeExtractionHardRuleCandidateDeriver,
+} from "@redline/redline-adapters";
+import type { ILanguageModel as WayfinderLanguageModel } from "@rbrasier/domain";
+import { RedlineLanguageModelBridge } from "./redline-language-model";
 
 // redline's UI mount (ADR-0019, delivery-plan item 3 step 3), factored out of
 // container.ts the way container-extraction.ts is: it wires redline's
@@ -58,4 +71,88 @@ export const buildRedlineModule = (
   if (container.error) return container;
 
   return ok({ workflowController: new WorkflowController(container.data) });
+};
+
+// The live resolution: every port above bound to its production adapter
+// (delivery-plan §2 item 1). Split from buildRedlineModule so the composition
+// stays testable with fakes while this half owns the env-driven construction.
+//
+// Returns null — not an error — when REDLINE_DATABASE_URL is absent. This fork
+// must still boot as plain Wayfinder with no redline stack behind it; the
+// evaluation router then fails per-request rather than the whole app failing to
+// start.
+
+export interface RedlineRuntimeEnv {
+  readonly REDLINE_DATABASE_URL?: string | undefined;
+  readonly REDLINE_WOMBLEX_INGEST_URL?: string | undefined;
+  readonly REDLINE_ADJUDICATOR_BASE_URL?: string | undefined;
+  readonly REDLINE_ADJUDICATOR_API_KEY?: string | undefined;
+  readonly REDLINE_ADJUDICATOR_MODEL?: string | undefined;
+  readonly REDLINE_PRODUCT_NAME?: string | undefined;
+}
+
+export interface ResolveRedlineModuleInput {
+  readonly env: RedlineRuntimeEnv;
+  readonly wayfinderLanguageModel: WayfinderLanguageModel;
+}
+
+const fetchJson = async (url: string) => {
+  const response = await fetch(url);
+  return { ok: response.ok, status: response.status, json: () => response.json() };
+};
+
+const postJson = async (request: {
+  readonly method: "POST";
+  readonly url: string;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly body: unknown;
+}) => {
+  const response = await fetch(request.url, {
+    method: request.method,
+    headers: request.headers,
+    body: JSON.stringify(request.body),
+  });
+  return { ok: response.ok, status: response.status, json: () => response.json() };
+};
+
+export const resolveRedlineModule = (
+  input: ResolveRedlineModuleInput,
+): Result<RedlineModule> | null => {
+  const { env } = input;
+  if (!env.REDLINE_DATABASE_URL) return null;
+
+  const database = createRedlinePostgres({ databaseUrl: env.REDLINE_DATABASE_URL });
+
+  const extractionReader = new WomblexExtractionReader({
+    baseUrl: env.REDLINE_WOMBLEX_INGEST_URL ?? "http://womblex-ingest:8000",
+    httpClient: fetchJson,
+  });
+
+  // The cold-start path (ADR-0008 first pass): hard rules + adjudication over the
+  // store's exact fetch, against the lens the reader resolves per call — which is
+  // what makes one classifier instance safe at a process-wide memoised container.
+  const classifier = new ColdStartClassifier({
+    chunkStore: new DrizzleChunkStore(database),
+    adjudicator: new HttpAdjudicator({
+      baseUrl: env.REDLINE_ADJUDICATOR_BASE_URL ?? "https://api.openai.com/v1",
+      apiKey: env.REDLINE_ADJUDICATOR_API_KEY ?? "",
+      model: env.REDLINE_ADJUDICATOR_MODEL ?? "gpt-4o-mini",
+      httpClient: postJson,
+    }),
+    lensReader: new DrizzleClassificationLensReader({
+      database,
+      deriveCandidates: makeExtractionHardRuleCandidateDeriver(extractionReader),
+    }),
+  });
+
+  return buildRedlineModule({
+    repository: new DrizzleEvaluationRepository(database),
+    classifier,
+    financialExtractor: new MoneySpanFinancialExtractor({
+      moneySpanStore: new DrizzleMoneySpanStore(database),
+    }),
+    extractionReader,
+    languageModel: new RedlineLanguageModelBridge(input.wayfinderLanguageModel),
+    productName: env.REDLINE_PRODUCT_NAME ?? "the product",
+  });
 };
