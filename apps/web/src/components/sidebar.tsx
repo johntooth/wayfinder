@@ -9,6 +9,7 @@ import {
   BarChart2,
   BookOpen,
   ChevronDown,
+  ClipboardCheck,
   Clock,
   FlaskConical,
   Flag,
@@ -47,9 +48,18 @@ interface NavGroup {
   defaultCollapsed?: boolean;
 }
 
+interface UserNavContext {
+  readonly extractionEnabled: boolean;
+  readonly canReviewEvaluations: boolean;
+}
+
 // Synthesise Information sits directly under Approvals when the extraction_flows
 // flag resolves (ADR-033 §7) — inline in the main group, no separate rule.
-const buildUserNav = (extractionEnabled: boolean): NavGroup[] => [
+// Evaluations follows it when the caller holds evaluation:review (ADR-0006,
+// redline delivery-plan item 2): this is the only chrome that links to redline,
+// and the /evaluations route enforces the same key server-side, so hiding the
+// entry and refusing the route move together.
+const buildUserNav = ({ extractionEnabled, canReviewEvaluations }: UserNavContext): NavGroup[] => [
   {
     items: [
       { href: "/chats", icon: MessageSquare, label: "My Chats" },
@@ -57,6 +67,9 @@ const buildUserNav = (extractionEnabled: boolean): NavGroup[] => [
       { href: "/approvals", icon: Stamp, label: "Approvals" },
       ...(extractionEnabled
         ? [{ href: "/synthesise", icon: FlaskConical, label: "Synthesise Information" }]
+        : []),
+      ...(canReviewEvaluations
+        ? [{ href: "/evaluations", icon: ClipboardCheck, label: "Evaluations" }]
         : []),
       { href: "/settings", icon: Settings, label: "Settings" },
     ],
@@ -260,6 +273,11 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     key: "extraction_flows",
   });
   const extractionEnabled = extractionFlagQuery.data ?? false;
+  // The same rule permissionProcedure applies: admins pass via the wildcard,
+  // everyone else needs the key itself.
+  const canReviewEvaluations =
+    (userQuery.data?.isAdmin ?? false) ||
+    (userQuery.data?.permissions ?? []).includes("evaluation:review");
   const adminNav = buildAdminNav({
     skillsEnabled: skillsFlagQuery.data ?? false,
     mcpEnabled: mcpFlagQuery.data ?? false,
@@ -267,7 +285,9 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     organisationsEnabled: organisationsEnabledQuery.data ?? false,
     extractionEnabled,
   });
-  const nav: NavGroup[] = isAdmin ? adminNav : buildUserNav(extractionEnabled);
+  const nav: NavGroup[] = isAdmin
+    ? adminNav
+    : buildUserNav({ extractionEnabled, canReviewEvaluations });
   const homeHref = isAdmin ? "/admin/flows" : "/chats";
 
   const recentChats = isAdmin

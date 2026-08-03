@@ -3,6 +3,10 @@ import { configDefaults } from "vitest/config";
 import { fileURLToPath } from "node:url";
 
 export default defineConfig({
+  // tsconfig says jsx: "preserve" because Next owns the app build; vitest has no
+  // Next pipeline behind it, so it needs the runtime named here or any test that
+  // actually evaluates JSX fails on an undefined React.
+  esbuild: { jsx: "automatic" },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

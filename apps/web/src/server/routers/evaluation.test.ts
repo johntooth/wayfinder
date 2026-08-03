@@ -11,12 +11,16 @@ const evaluationId = "00000000-0000-4000-8000-000000000001";
 
 const makeController = (
   overrides: {
+    listEvaluations?: ReturnType<typeof vi.fn>;
     openReviewGrid?: ReturnType<typeof vi.fn>;
     openPricingPivot?: ReturnType<typeof vi.fn>;
     buildWorkbook?: ReturnType<typeof vi.fn>;
   } = {},
 ) => {
   return {
+    listEvaluations:
+      overrides.listEvaluations ??
+      vi.fn().mockResolvedValue(ok([{ id: evaluationId, name: "Tender 2026", stage: "review" }])),
     openReviewGrid:
       overrides.openReviewGrid ??
       vi.fn().mockResolvedValue(ok({ view: () => [], requirementIds: () => ["req-1"] })),
@@ -52,6 +56,79 @@ const contextWith = (container: Container): TrpcContext => ({
   isAdmin: true,
   permissions: new Set(),
   headers: new Headers(),
+});
+
+describe("evaluation.list", () => {
+  it("returns every evaluation the index lists, newest first", async () => {
+    const controller = makeController({
+      listEvaluations: vi.fn().mockResolvedValue(
+        ok([
+          { id: evaluationId, name: "Tender 2026", stage: "review" },
+          { id: "00000000-0000-4000-8000-000000000002", name: "Panel refresh", stage: "grouping" },
+        ]),
+      ),
+    });
+
+    const result = await createCaller(contextWith(makeContainer(controller))).evaluation.list();
+
+    expect(controller.listEvaluations).toHaveBeenCalled();
+    expect(result.map((evaluation) => evaluation.name)).toEqual(["Tender 2026", "Panel refresh"]);
+    expect(result[0]?.stage).toBe("review");
+  });
+
+  it("returns an empty list rather than an error when nothing has been evaluated yet", async () => {
+    const controller = makeController({ listEvaluations: vi.fn().mockResolvedValue(ok([])) });
+
+    const result = await createCaller(contextWith(makeContainer(controller))).evaluation.list();
+
+    expect(result).toEqual([]);
+  });
+
+  it("refuses an unauthenticated caller", async () => {
+    const controller = makeController();
+    const context = { ...contextWith(makeContainer(controller)), userId: null };
+
+    await expect(createCaller(context).evaluation.list()).rejects.toThrow(/authentication required/i);
+    expect(controller.listEvaluations).not.toHaveBeenCalled();
+  });
+
+  it("refuses a caller lacking the evaluation:review permission", async () => {
+    const controller = makeController();
+    const context = {
+      ...contextWith(makeContainer(controller)),
+      isAdmin: false,
+      permissions: new Set<PermissionKey>(),
+    };
+
+    await expect(createCaller(context).evaluation.list()).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    expect(controller.listEvaluations).not.toHaveBeenCalled();
+  });
+
+  it("admits a non-admin caller holding evaluation:review", async () => {
+    const controller = makeController();
+    const context = {
+      ...contextWith(makeContainer(controller)),
+      isAdmin: false,
+      permissions: new Set<PermissionKey>(["evaluation:review"]),
+    };
+
+    await expect(createCaller(context).evaluation.list()).resolves.toBeDefined();
+    expect(controller.listEvaluations).toHaveBeenCalled();
+  });
+
+  it("maps a redline domain error to a tRPC error, message intact", async () => {
+    const controller = makeController({
+      listEvaluations: vi
+        .fn()
+        .mockResolvedValue(err(domainError("INFRA_FAILURE", "failed to list evaluations"))),
+    });
+
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.list(),
+    ).rejects.toThrow(/failed to list evaluations/i);
+  });
 });
 
 describe("evaluation.reviewGrid", () => {

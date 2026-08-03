@@ -10,7 +10,7 @@ import {
   type ReviewGrid,
   type SortDirection,
 } from "@redline/redline-web";
-import type { DomainError, Result } from "@redline/redline-domain";
+import type { DomainError, Evaluation, Result } from "@redline/redline-domain";
 import { isErr } from "@redline/redline-domain";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -28,6 +28,7 @@ import { permissionProcedure, router } from "../trpc";
 // WorkflowController onto ctx.container.redline; that module replaces this cast
 // with a real container field.
 interface EvaluationController {
+  listEvaluations(): Promise<Result<readonly Evaluation[]>>;
   openReviewGrid(input: { evaluationId: string }): Promise<Result<ReviewGrid>>;
   openPricingPivot(input: { evaluationId: string }): Promise<Result<PricingPivot>>;
   buildWorkbook(input: { evaluationId: string }): Promise<Result<EvaluationWorkbook>>;
@@ -86,6 +87,17 @@ const reviewGridInput = evaluationIdInput.extend({
 });
 
 export const evaluationRouter = router({
+  // The evaluations index (delivery-plan item 2): the way in for a specialist who
+  // has neither the URL shape nor an evaluation id. Unlike its siblings this
+  // returns the domain entities unshaped — an evaluation carries only a name and
+  // a stage, so there is nothing for a view model to render that the screen
+  // cannot bind to directly.
+  list: reviewProcedure.query(async ({ ctx }) => {
+    const evaluations = await controllerOf(ctx).listEvaluations();
+    if (isErr(evaluations)) throw toTrpcError(evaluations.error);
+    return evaluations.data;
+  }),
+
   // The sortable/filterable review table for an evaluation at the review stage.
   reviewGrid: reviewProcedure.input(reviewGridInput).query(async ({ ctx, input }) => {
     const grid = await controllerOf(ctx).openReviewGrid({ evaluationId: input.evaluationId });
