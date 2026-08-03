@@ -34,9 +34,24 @@ interface EvaluationController {
   buildWorkbook(input: { evaluationId: string }): Promise<Result<EvaluationWorkbook>>;
 }
 
-const controllerOf = (ctx: { container: unknown }): EvaluationController =>
-  (ctx.container as { redline: { workflowController: EvaluationController } }).redline
-    .workflowController;
+// container.ts sets `redline` to null when REDLINE_* is unset, so this fork
+// still boots as plain Wayfinder — "the evaluation router is the only surface
+// that notices". Noticing means saying so: dereferencing the null instead would
+// surface a configuration state as a TypeError, and the /evaluations index is
+// reachable from the sidebar without an evaluation id, so it is the first thing
+// that would hit it.
+const controllerOf = (ctx: { container: unknown }): EvaluationController => {
+  const redline = (ctx.container as {
+    redline: { workflowController: EvaluationController } | null;
+  }).redline;
+  if (!redline) {
+    throw new TRPCError({
+      code: "NOT_IMPLEMENTED",
+      message: "The redline evaluation stack is not configured on this deployment.",
+    });
+  }
+  return redline.workflowController;
+};
 
 // redline's DomainError taxonomy is wider than the fork's (it carries
 // EXTRACTION_FAILED / CLASSIFICATION_FAILED / NOT_IMPLEMENTED), so map it here

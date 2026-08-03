@@ -48,7 +48,10 @@ describe("EvaluationsIndexPage — the evaluation:review gate", () => {
     expect(notFound).toHaveBeenCalled();
   });
 
-  it("404s an unauthenticated caller, who resolves to no permissions at all", async () => {
+  // The (user) layout redirects a caller with no session to /login before this
+  // page runs, so the 404 is the gate's own backstop rather than the path an
+  // unauthenticated visitor actually takes.
+  it("404s a caller whose session resolved to no permissions at all", async () => {
     createServerTrpcContext.mockResolvedValue({
       isAdmin: false,
       permissions: new Set(),

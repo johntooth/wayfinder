@@ -129,6 +129,19 @@ describe("evaluation.list", () => {
       createCaller(contextWith(makeContainer(controller))).evaluation.list(),
     ).rejects.toThrow(/failed to list evaluations/i);
   });
+
+  // container.ts leaves `redline` null when REDLINE_* is unset, so the fork
+  // still boots as plain Wayfinder. The index is the first surface a tester
+  // reaches, so that state has to read as configuration rather than as a
+  // TypeError on a null dereference.
+  it("says the stack is unconfigured when the fork booted without redline", async () => {
+    const context = contextWith({
+      services: { errorLogger: { log: async () => undefined } },
+      redline: null,
+    } as unknown as Container);
+
+    await expect(createCaller(context).evaluation.list()).rejects.toThrow(/not configured/i);
+  });
 });
 
 describe("evaluation.reviewGrid", () => {
