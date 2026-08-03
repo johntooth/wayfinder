@@ -15,9 +15,17 @@ const makeController = (
     openReviewGrid?: ReturnType<typeof vi.fn>;
     openPricingPivot?: ReturnType<typeof vi.fn>;
     buildWorkbook?: ReturnType<typeof vi.fn>;
+    openDocument?: ReturnType<typeof vi.fn>;
   } = {},
 ) => {
   return {
+    openDocument:
+      overrides.openDocument ??
+      vi
+        .fn()
+        .mockResolvedValue(
+          ok([{ documentId: "doc-1", elementOrder: 7, page: 3, text: "the cited passage" }]),
+        ),
     listEvaluations:
       overrides.listEvaluations ??
       vi.fn().mockResolvedValue(ok([{ id: evaluationId, name: "Tender 2026", stage: "review" }])),
@@ -265,5 +273,134 @@ describe("evaluation.workbook", () => {
 
     expect(controller.buildWorkbook).toHaveBeenCalledWith({ evaluationId });
     expect(result.sheetNames).toEqual(["Review"]);
+  });
+});
+
+// The route behind every source deep-link the review grid renders (redline
+// delivery-plan item 1). The pure ordering/anchor shaping is proven in redline's
+// document-view.test.ts; this proves the procedure that drives it — the gate, the
+// controller call, and that the `element` parameter reaches the view model.
+describe("evaluation.document", () => {
+  const documentId = "doc-1";
+
+  it("renders the document view for the cited document", async () => {
+    const controller = makeController();
+    const result = await createCaller(contextWith(makeContainer(controller))).evaluation.document({
+      evaluationId,
+      documentId,
+    });
+
+    expect(controller.openDocument).toHaveBeenCalledWith({ evaluationId, documentId });
+    expect(result.documentId).toBe(documentId);
+    expect(result.elements.map((element) => element.elementOrder)).toEqual([7]);
+    expect(result.backToReviewHref).toBe(`/evaluations/${evaluationId}/review`);
+  });
+
+  it("anchors on the element the deep-link cited", async () => {
+    const controller = makeController({
+      openDocument: vi.fn().mockResolvedValue(
+        ok([
+          { documentId, elementOrder: 7, page: 3, text: "the cited passage" },
+          { documentId, elementOrder: 2, page: 1, text: "an earlier paragraph" },
+        ]),
+      ),
+    });
+
+    const result = await createCaller(contextWith(makeContainer(controller))).evaluation.document({
+      evaluationId,
+      documentId,
+      element: 7,
+    });
+
+    expect(result.anchorDomId).toBe("element-7");
+    expect(result.anchorMissing).toBe(false);
+    expect(result.anchorPage).toBe(3);
+    // Ordering is the view model's, not the reader's.
+    expect(result.elements.map((element) => element.elementOrder)).toEqual([2, 7]);
+    expect(result.elements.map((element) => element.isAnchor)).toEqual([false, true]);
+  });
+
+  it("reports a stale deep-link rather than silently rendering the top of the document", async () => {
+    const controller = makeController();
+    const result = await createCaller(contextWith(makeContainer(controller))).evaluation.document({
+      evaluationId,
+      documentId,
+      element: 99,
+    });
+
+    expect(result.anchorMissing).toBe(true);
+    expect(result.anchorDomId).toBeNull();
+  });
+
+  it("rejects a negative element, which no elem_order can be", async () => {
+    const controller = makeController();
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.document({
+        evaluationId,
+        documentId,
+        element: -1,
+      }),
+    ).rejects.toThrow();
+    expect(controller.openDocument).not.toHaveBeenCalled();
+  });
+
+  it("rejects a blank document id", async () => {
+    const controller = makeController();
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.document({
+        evaluationId,
+        documentId: "",
+      }),
+    ).rejects.toThrow();
+    expect(controller.openDocument).not.toHaveBeenCalled();
+  });
+
+  it("refuses an unauthenticated caller", async () => {
+    const controller = makeController();
+    const context = { ...contextWith(makeContainer(controller)), userId: null };
+    await expect(
+      createCaller(context).evaluation.document({ evaluationId, documentId }),
+    ).rejects.toThrow(/authentication required/i);
+    expect(controller.openDocument).not.toHaveBeenCalled();
+  });
+
+  it("refuses a caller lacking the evaluation:review permission", async () => {
+    const controller = makeController();
+    const context = {
+      ...contextWith(makeContainer(controller)),
+      isAdmin: false,
+      permissions: new Set<PermissionKey>(),
+    };
+    await expect(
+      createCaller(context).evaluation.document({ evaluationId, documentId }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(controller.openDocument).not.toHaveBeenCalled();
+  });
+
+  it("admits a non-admin caller holding evaluation:review", async () => {
+    const controller = makeController();
+    const context = {
+      ...contextWith(makeContainer(controller)),
+      isAdmin: false,
+      permissions: new Set<PermissionKey>(["evaluation:review"]),
+    };
+    await expect(
+      createCaller(context).evaluation.document({ evaluationId, documentId }),
+    ).resolves.toBeDefined();
+    expect(controller.openDocument).toHaveBeenCalledWith({ evaluationId, documentId });
+  });
+
+  it("maps the reader's failure to a tRPC error, message intact", async () => {
+    const controller = makeController({
+      openDocument: vi
+        .fn()
+        .mockResolvedValue(err(domainError("INFRA_FAILURE", "womblex-ingest is unreachable"))),
+    });
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.document({
+        evaluationId,
+        documentId,
+      }),
+    ).rejects.toThrow(/womblex-ingest is unreachable/i);
   });
 });
