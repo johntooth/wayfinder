@@ -5,16 +5,22 @@ import {
 } from "@redline/redline-web";
 import { ok, type Result } from "@redline/redline-domain";
 import type {
+  IClassificationLensWriter,
   IEvaluationRepository,
   IFinancialExtractor,
   ILanguageModel,
   IProcurementClassifier,
   IProcurementExtractionReader,
 } from "@redline/redline-domain";
-import { ColdStartClassifier, MoneySpanFinancialExtractor } from "@redline/redline-application";
+import {
+  ColdStartClassifier,
+  IngestDocuments,
+  MoneySpanFinancialExtractor,
+} from "@redline/redline-application";
 import {
   DrizzleChunkStore,
   DrizzleClassificationLensReader,
+  DrizzleClassificationLensWriter,
   DrizzleEvaluationRepository,
   DrizzleMoneySpanStore,
   HttpAdjudicator,
@@ -115,13 +121,14 @@ const postJson = async (request: {
   return { ok: response.ok, status: response.status, json: () => response.json() };
 };
 
-export const resolveRedlineModule = (
-  input: ResolveRedlineModuleInput,
-): Result<RedlineModule> | null => {
+// The env-driven adapter construction, shared by the served module and the
+// corpus seeder so the two can never drift onto different adapters.
+const resolveRedlineAdapters = (input: ResolveRedlineModuleInput) => {
   const { env } = input;
-  if (!env.REDLINE_DATABASE_URL) return null;
+  const databaseUrl = env.REDLINE_DATABASE_URL;
+  if (!databaseUrl) return null;
 
-  const database = createRedlinePostgres({ databaseUrl: env.REDLINE_DATABASE_URL });
+  const database = createRedlinePostgres({ databaseUrl });
 
   const extractionReader = new WomblexExtractionReader({
     baseUrl: env.REDLINE_WOMBLEX_INGEST_URL ?? "http://womblex-ingest:8000",
@@ -145,7 +152,8 @@ export const resolveRedlineModule = (
     }),
   });
 
-  return buildRedlineModule({
+  return {
+    database,
     repository: new DrizzleEvaluationRepository(database),
     classifier,
     financialExtractor: new MoneySpanFinancialExtractor({
@@ -154,5 +162,59 @@ export const resolveRedlineModule = (
     extractionReader,
     languageModel: new RedlineLanguageModelBridge(input.wayfinderLanguageModel),
     productName: env.REDLINE_PRODUCT_NAME ?? "the product",
+  };
+};
+
+export const resolveRedlineModule = (
+  input: ResolveRedlineModuleInput,
+): Result<RedlineModule> | null => {
+  const adapters = resolveRedlineAdapters(input);
+  if (!adapters) return null;
+
+  return buildRedlineModule({
+    repository: adapters.repository,
+    classifier: adapters.classifier,
+    financialExtractor: adapters.financialExtractor,
+    extractionReader: adapters.extractionReader,
+    languageModel: adapters.languageModel,
+    productName: adapters.productName,
+  });
+};
+
+// The corpus seeder's parts (delivery-plan §2 item 1). Deliberately NOT on
+// RedlineModule: nothing served writes an evaluation or a lens, and the served
+// container should not hold a capability no route uses. The seeding script
+// resolves these directly.
+export interface RedlineSeedDependencies {
+  readonly repository: IEvaluationRepository;
+  readonly ingestDocuments: IngestDocuments;
+  readonly lensWriter: IClassificationLensWriter;
+  readonly workflowController: WorkflowController;
+}
+
+export const resolveRedlineSeedDependencies = (
+  input: ResolveRedlineModuleInput,
+): Result<RedlineSeedDependencies> | null => {
+  const adapters = resolveRedlineAdapters(input);
+  if (!adapters) return null;
+
+  const module = buildRedlineModule({
+    repository: adapters.repository,
+    classifier: adapters.classifier,
+    financialExtractor: adapters.financialExtractor,
+    extractionReader: adapters.extractionReader,
+    languageModel: adapters.languageModel,
+    productName: adapters.productName,
+  });
+  if (module.error) return module;
+
+  return ok({
+    repository: adapters.repository,
+    ingestDocuments: new IngestDocuments({
+      repository: adapters.repository,
+      extractionReader: adapters.extractionReader,
+    }),
+    lensWriter: new DrizzleClassificationLensWriter(adapters.database),
+    workflowController: module.data.workflowController,
   });
 };
