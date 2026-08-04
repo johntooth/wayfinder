@@ -286,6 +286,12 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      # This job boots the same app the sharded e2e job does, so it needs the
+      # @redline/* packages resolvable too. Must run before install; see the
+      # script's header.
+      - name: Compose the redline workspace
+        run: ./scripts/fetch-redline-workspaces.sh
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
