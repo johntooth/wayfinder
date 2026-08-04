@@ -9,11 +9,11 @@
     "pnpm": ">=9.0.0"
   },
   "scripts": {
-    "build": "turbo run build",
+    "build": "turbo run build --filter='!@redline/*' --only",
     "dev": "turbo run dev",
-    "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck",
-    "test": "turbo run test",
+    "lint": "turbo run lint --filter='!@redline/*' --only",
+    "typecheck": "turbo run typecheck --filter='!@redline/*' --only",
+    "test": "turbo run test --filter='!@redline/*' --only",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
     "db:generate": "pnpm --filter @rbrasier/adapters db:generate",
     "db:migrate": "pnpm --filter @rbrasier/adapters db:migrate",

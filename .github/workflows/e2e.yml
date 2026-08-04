@@ -100,6 +100,12 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      # The served app mounts redline's /evaluations routes, so the @redline/*
+      # packages have to be resolvable before the app is built or started.
+      # Must run before install; see the script's header.
+      - name: Compose the redline workspace
+        run: ./scripts/fetch-redline-workspaces.sh
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
