@@ -43,6 +43,39 @@ export default tseslint.config(
     },
   },
   {
+    // `ApprovalStatus` carries a value the compiler cannot police at comparison
+    // sites: a `status === "approved"` written later would silently exclude
+    // every approval its own approver edited (ADR-045 §4). Nothing in the
+    // codebase has that shape today, so this rule is what keeps it that way —
+    // it turns a future silent bug into a build failure.
+    //
+    // Deliberately narrow: it matches a comparison against a `.status` property
+    // only, so `input.decision === "approved"` — reading `ApprovalDecision`,
+    // which keeps its three values and drives all control flow — stays legal.
+    // `"pending"` is absent from the set because the decided-guard
+    // (`status !== "pending"`) is correct and stays correct with a fourth
+    // decided value.
+    files: ["packages/application/**/*.ts", "packages/adapters/**/*.ts", "apps/**/*.{ts,tsx}"],
+    ignores: ["**/*.test.ts", "**/*.test.tsx"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "BinaryExpression[operator=/^[!=]==$/][left.property.name='status'][right.value=/^(approved|approved_with_edits|rejected|changes_requested)$/]",
+          message:
+            "Do not compare an approval status to a literal — an `approved_with_edits` approval did approve. Use isApproved(status) from @rbrasier/domain.",
+        },
+        {
+          selector:
+            "BinaryExpression[operator=/^[!=]==$/][right.property.name='status'][left.value=/^(approved|approved_with_edits|rejected|changes_requested)$/]",
+          message:
+            "Do not compare an approval status to a literal — an `approved_with_edits` approval did approve. Use isApproved(status) from @rbrasier/domain.",
+        },
+      ],
+    },
+  },
+  {
     // packages/domain purity is enforced by validate.sh via a grep —
     // ESLint's no-restricted-imports cannot cleanly distinguish
     // "non-relative" imports from relative ones using its glob patterns.

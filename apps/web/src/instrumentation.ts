@@ -32,17 +32,15 @@ export async function register() {
     // First-run setup link (ADR-041 §5). Emitted at app startup so it appears
     // under every launch method (pnpm dev, pnpm start, node, containers).
     //
-    // Detached, and routed through a container-free module: Next.js awaits
-    // register() before the server takes requests, so anything heavy here delays
-    // the app's first response.
-    void (async () => {
-      try {
-        const { emitSetupLink } = await import("@/lib/setup-link");
-        await emitSetupLink();
-      } catch {
-        // The DB may not be migrated yet on the very first boot; the link is
-        // emitted on the next start. Never block or crash startup on it.
-      }
-    })();
+    // Routed through a container-free module: this avoids the heavy application
+    // graph while still making the quick-start link visible before the startup
+    // log scrolls past.
+    try {
+      const { emitSetupLink } = await import("@/lib/setup-link");
+      await emitSetupLink();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`Wayfinder first-run setup link was not emitted: ${message}`);
+    }
   }
 }

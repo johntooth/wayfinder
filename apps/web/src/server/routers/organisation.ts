@@ -196,6 +196,45 @@ export const organisationRouter = router({
     return { status: "nominate" as const, mode, joinable };
   }),
 
+  // Whether the caller may pick their own organisation, and the choices open to
+  // them. Unlike `signInState` this answers for a user who already has one, so
+  // the Organisation card in user settings can offer a change. Self-selection is
+  // only on when the configured strategy leaves the choice to the user — the
+  // same rule submitNomination enforces when the change is submitted.
+  nominationOptions: authenticatedProcedure.query(async ({ ctx }) => {
+    const enabledResult = await ctx.container.repos.systemSettings.get(
+      ORGANISATIONS_ENABLED_SETTING_KEY,
+    );
+    if (enabledResult.error) throw toTrpcError(enabledResult.error);
+    if (!parseOrganisationsEnabled(enabledResult.data?.value)) {
+      return { canSelfSelect: false as const };
+    }
+
+    const configResult = await ctx.container.useCases.getOrganisationResolution.execute();
+    if (configResult.error) throw toTrpcError(configResult.error);
+    const config = configResult.data;
+
+    const mode =
+      config.strategy === "self_nomination"
+        ? config.selfNomination?.mode ?? "create_or_join"
+        : config.strategy === "email_domain" && config.emailDomain?.onUnmatched === "nominate"
+          ? ("create_or_join" as const)
+          : null;
+    if (mode === null) return { canSelfSelect: false as const };
+
+    const organisationsResult = await ctx.container.useCases.listOrganisations.execute();
+    if (organisationsResult.error) throw toTrpcError(organisationsResult.error);
+
+    return {
+      canSelfSelect: true as const,
+      mode,
+      joinable: organisationsResult.data.map((organisation) => ({
+        id: organisation.id,
+        name: organisation.name,
+      })),
+    };
+  }),
+
   // First-sign-in nomination (ADR-038 §4, self_nomination): the user creates or
   // joins an organisation, bounded by the configured mode/allowlist.
   submitNomination: authenticatedProcedure

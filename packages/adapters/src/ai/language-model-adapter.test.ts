@@ -332,7 +332,7 @@ describe("LanguageModelAdapter (openai) — streamObject", () => {
     });
   });
 
-  it("passes onError to the SDK", async () => {
+  it("forwards SDK errors to the caller's onError", async () => {
     async function* partials() { yield {}; }
     vi.mocked(streamObject).mockReturnValue({
       partialObjectStream: partials(),
@@ -344,8 +344,13 @@ describe("LanguageModelAdapter (openai) — streamObject", () => {
 
     await adapter.streamObject({ purpose: "chat", schema, onError });
 
-    const call = vi.mocked(streamObject).mock.calls[0]![0] as { onError?: unknown };
-    expect(call.onError).toBe(onError);
+    const call = vi.mocked(streamObject).mock.calls[0]![0] as {
+      onError?: (event: { error: unknown }) => void;
+    };
+    const failure = new Error("boom");
+    call.onError?.({ error: failure });
+
+    expect(onError).toHaveBeenCalledWith({ error: failure });
   });
 });
 
@@ -462,5 +467,167 @@ describe("LanguageModelAdapter (bedrock) — credential plumbing", () => {
       "anthropic.claude-haiku-4-5-20251001-v1:0",
       null,
     );
+  });
+});
+
+// An AI call that genuinely fails is logged to admin_errors. A mid-stream break
+// is not: the primary chat path already logs it itself (route.ts's onError), so
+// logging it here too would duplicate that row.
+describe("LanguageModelAdapter — logging genuine AI call failures", () => {
+  const futureConfig: AiConfig = {
+    ...openaiConfig,
+    models: { chat: "gpt-6-turbo", documentGeneration: "gpt-6-turbo", branching: "gpt-6-turbo" },
+  };
+
+  const makeErrorLogger = () => ({ log: vi.fn().mockResolvedValue({ data: true as const }) });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("does not log when the call succeeds outright", async () => {
+    vi.mocked(generateText).mockResolvedValue({
+      text: "hi",
+      usage: { promptTokens: 1, completionTokens: 1 },
+      experimental_providerMetadata: undefined,
+    } as never);
+    const errorLogger = makeErrorLogger();
+    const adapter = new LanguageModelAdapter(
+      "openai",
+      makeConfigStore(openaiConfig),
+      undefined,
+      errorLogger,
+    );
+
+    await adapter.generateText({ purpose: "chat", prompt: "x" });
+
+    expect(errorLogger.log).not.toHaveBeenCalled();
+  });
+
+  it("logs a provider failure once, with the provider and model that failed", async () => {
+    vi.mocked(generateText).mockRejectedValue(new Error("overloaded_error"));
+    const errorLogger = makeErrorLogger();
+    const adapter = new LanguageModelAdapter(
+      "openai",
+      makeConfigStore(futureConfig),
+      undefined,
+      errorLogger,
+    );
+
+    const result = await adapter.generateText({ purpose: "chat", prompt: "x" });
+
+    expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
+    expect(errorLogger.log).toHaveBeenCalledTimes(1);
+    expect(errorLogger.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: "error",
+        message: expect.stringContaining("openai:gpt-6-turbo"),
+        metadata: expect.objectContaining({
+          method: "generateText",
+          provider: "openai",
+          model: "gpt-6-turbo",
+        }),
+      }),
+    );
+  });
+
+  it("does not retry a failed call — one attempt, one logged failure", async () => {
+    vi.mocked(generateText).mockRejectedValue(new Error("overloaded_error"));
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(futureConfig));
+
+    await adapter.generateText({ purpose: "chat", prompt: "x" });
+
+    expect(vi.mocked(generateText).mock.calls).toHaveLength(1);
+  });
+
+  it("logs a generateObject provider failure", async () => {
+    vi.mocked(generateObject).mockRejectedValue(new Error("overloaded_error"));
+    const errorLogger = makeErrorLogger();
+    const adapter = new LanguageModelAdapter(
+      "openai",
+      makeConfigStore(openaiConfig),
+      undefined,
+      errorLogger,
+    );
+
+    const result = await adapter.generateObject({ purpose: "chat", schema, prompt: "x" });
+
+    expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
+    expect(errorLogger.log).toHaveBeenCalledTimes(1);
+    expect(errorLogger.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("overloaded_error"),
+        metadata: expect.objectContaining({ method: "generateObject" }),
+      }),
+    );
+  });
+
+  it("logs a streamText/streamObject setup failure (thrown before any stream exists)", async () => {
+    vi.mocked(streamObject).mockImplementation(() => {
+      throw new Error("invalid schema");
+    });
+    const errorLogger = makeErrorLogger();
+    const adapter = new LanguageModelAdapter(
+      "openai",
+      makeConfigStore(openaiConfig),
+      undefined,
+      errorLogger,
+    );
+
+    const result = await adapter.streamObject({ purpose: "chat", schema });
+
+    expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
+    expect(errorLogger.log).toHaveBeenCalledTimes(1);
+    expect(errorLogger.log).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ method: "streamObject" }) }),
+    );
+  });
+
+  it("does not log a mid-stream failure on an otherwise-successful streamObject call", async () => {
+    vi.mocked(streamObject).mockReturnValue({
+      partialObjectStream: (async function* () { yield {}; })(),
+      object: Promise.resolve({}),
+      usage: Promise.resolve({ promptTokens: 0, completionTokens: 0 }),
+      providerMetadata: Promise.resolve(undefined),
+    } as never);
+    const errorLogger = makeErrorLogger();
+    const adapter = new LanguageModelAdapter(
+      "openai",
+      makeConfigStore(futureConfig),
+      undefined,
+      errorLogger,
+    );
+
+    await adapter.streamObject({ purpose: "chat", schema });
+    const onError = vi.mocked(streamObject).mock.calls[0]![0]!.onError as
+      | ((event: { error: unknown }) => void)
+      | undefined;
+    onError?.({ error: new Error("stream broke mid-flight") });
+
+    expect(errorLogger.log).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when no errorLogger is supplied", async () => {
+    vi.mocked(generateText).mockRejectedValue(new Error("boom"));
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+
+    const result = await adapter.generateText({ purpose: "chat", prompt: "x" });
+
+    expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
+  });
+
+  it("still returns the failure Result even when the logger itself rejects", async () => {
+    vi.mocked(generateText).mockRejectedValue(new Error("boom"));
+    const errorLogger = { log: vi.fn().mockRejectedValue(new Error("db down")) };
+    const adapter = new LanguageModelAdapter(
+      "openai",
+      makeConfigStore(openaiConfig),
+      undefined,
+      errorLogger,
+    );
+
+    const result = await adapter.generateText({ purpose: "chat", prompt: "x" });
+
+    expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
   });
 });

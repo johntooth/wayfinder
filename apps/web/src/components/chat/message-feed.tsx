@@ -6,6 +6,7 @@ import type { FlowNode, SessionMessage } from "@rbrasier/domain";
 import { ConfidenceBar } from "./confidence-bar";
 import { resolveCrossCheckingState } from "./cross-checking-state";
 import { resolveGeneratingDocumentState } from "./generating-document-state";
+import { MarkdownText } from "./markdown-text";
 import { messageTextSegments } from "./message-segments";
 import { DocumentCard } from "./document-card";
 import { RecordCard } from "./record-card";
@@ -19,6 +20,11 @@ import {
 } from "./milestone-pill";
 import { resolveMilestoneState } from "./milestone-state";
 import { TypingIndicator } from "./typing-indicator";
+import {
+  formatDecisionMoment,
+  parseApprovalDecisionMessage,
+  type ParsedApprovalDecision,
+} from "@/lib/approval-decision-message";
 import { formatScheduledResume, parseScheduledMessage } from "@/lib/scheduled-message";
 
 interface ConfidenceAnnotation {
@@ -81,6 +87,30 @@ const getRoleInitials = (role: string | null | undefined, fallback: string): str
     .toUpperCase();
   return initials || fallback;
 };
+
+// An approval decision, rendered as what it is: a person's decision, signed and
+// timed. The name and email come from the message itself rather than the
+// participant list, because an approver is often not a participant — and the
+// decision moment is shown on the reader's clock, not the server's.
+function ApprovalDecisionBubble({ decision }: { decision: ParsedApprovalDecision }) {
+  return (
+    <div className="flex flex-col gap-1" data-approval-decision>
+      <p className="text-[13px] font-semibold leading-[1.55] text-white">{decision.outcome}</p>
+      {decision.body && (
+        <p className="whitespace-pre-wrap text-[13px] leading-[1.55] text-white/90">
+          {decision.body}
+        </p>
+      )}
+      <p className="text-[11px] leading-[1.5] text-white/70">
+        {decision.approverName ?? decision.approverEmail ?? "Approver"}
+        {decision.approverName && decision.approverEmail && (
+          <span> · {decision.approverEmail}</span>
+        )}
+        <span> · {formatDecisionMoment(decision.decidedAt)}</span>
+      </p>
+    </div>
+  );
+}
 
 const formatRelativeTime = (date: Date): string => {
   const diff = (Date.now() - date.getTime()) / 1000;
@@ -147,8 +177,16 @@ export function MessageFeed({
           const isNewStep = msg.stepNodeId && prevMsg?.stepNodeId !== msg.stepNodeId && index > 0;
           const node = msg.stepNodeId ? nodeById[msg.stepNodeId] : null;
 
+          // An approval decision is the approver's own message, and it carries
+          // its own attribution: the approver is often not a session
+          // participant, so `senderNamesById` cannot name them.
+          const decision =
+            msg.role === "user" ? parseApprovalDecisionMessage(msg.content) : null;
           const senderName =
-            msg.role === "user" && msg.senderUserId ? senderNamesById?.[msg.senderUserId] ?? null : null;
+            decision?.approverName ??
+            (msg.role === "user" && msg.senderUserId
+              ? senderNamesById?.[msg.senderUserId] ?? null
+              : null);
           const messageUserInitials = senderName ? getRoleInitials(senderName, userInitials) : userInitials;
 
           const scheduled = msg.role === "system" ? parseScheduledMessage(msg.content) : null;
@@ -176,6 +214,9 @@ export function MessageFeed({
             isSessionComplete: Boolean(isComplete),
           });
 
+          const showsConfidenceBar = msg.role === "assistant" && !isNeverDone;
+          const showsInfoButton = msg.role === "assistant" && Boolean(msg.aiPayload);
+
           return (
             <div key={msg.id}>
               {isNewStep && node && (
@@ -196,27 +237,27 @@ export function MessageFeed({
                       : "rounded-bl-[4px] border border-[#dedad2] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
                   }`}
                 >
-                  {senderName && (
-                    <p className="mb-1 text-[10px] font-semibold text-white/70">{senderName}</p>
+                  {decision ? (
+                    <ApprovalDecisionBubble decision={decision} />
+                  ) : msg.role === "user" ? (
+                    <p className="whitespace-pre-wrap text-[13px] leading-[1.55] text-white/90">
+                      {displayContent}
+                    </p>
+                  ) : (
+                    <MarkdownText
+                      content={displayContent}
+                      className="text-[13px] leading-[1.55] text-[#1a1814]"
+                    />
                   )}
                   <p
-                    className={`whitespace-pre-wrap text-[13px] leading-[1.55] ${
-                      msg.role === "user" ? "text-white/90" : "text-[#1a1814]"
-                    }`}
-                  >
-                    {displayContent}
-                  </p>
-                  <p
                     className={`mt-1 text-right font-mono text-[10px] ${
-                      msg.role === "user" ? "text-white/50" : "text-[#6d6a65]"
-                    }`}
+                      showsInfoButton && !showsConfidenceBar ? "pr-6" : ""
+                    } ${msg.role === "user" ? "text-white/50" : "text-[#6d6a65]"}`}
                   >
                     {formatRelativeTime(msg.createdAt)}
                   </p>
-                  {msg.role === "assistant" && !isNeverDone && (
-                    <ConfidenceBar score={msg.confidence} />
-                  )}
-                  {msg.role === "assistant" && msg.aiPayload && (
+                  {showsConfidenceBar && <ConfidenceBar score={msg.confidence} />}
+                  {showsInfoButton && (
                     <MessageInfoModal
                       message={msg}
                       allMessages={dbMessages}
@@ -311,13 +352,16 @@ export function MessageFeed({
                         : "rounded-bl-[4px] border border-[#dedad2] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
                     }`}
                   >
-                    <p
-                      className={`whitespace-pre-wrap text-[13px] leading-[1.55] ${
-                        msg.role === "user" ? "text-white/90" : "text-[#1a1814]"
-                      }`}
-                    >
-                      {segment}
-                    </p>
+                    {msg.role === "user" ? (
+                      <p className="whitespace-pre-wrap text-[13px] leading-[1.55] text-white/90">
+                        {segment}
+                      </p>
+                    ) : (
+                      <MarkdownText
+                        content={segment}
+                        className="text-[13px] leading-[1.55] text-[#1a1814]"
+                      />
+                    )}
                     {msg.role === "assistant" && segmentIndex === 0 && !streamingIsNeverDone && (
                       <ConfidenceBar
                         score={confidenceAnnotation?.score ?? null}

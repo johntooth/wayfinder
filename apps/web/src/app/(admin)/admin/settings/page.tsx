@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { SetupWizard } from "@/components/onboarding/setup-wizard";
 import { AiProviderCard } from "@/components/settings/ai-provider-card";
+import { AboutLinksCard } from "@/components/settings/about-links-card";
 import { AuthMethodsCard } from "@/components/settings/auth-methods-card";
 import { CollapsibleSection } from "@/components/settings/collapsible-section";
 import {
@@ -72,7 +73,8 @@ export default function AppSettingsPage() {
                   used, so the single global name is only relevant when off. */}
               {organisationsEnabledQuery.data !== true && <OrganisationNameCard />}
               <RegistrationToggleCard />
-              <AuthMethodsCard />
+              <AuthMethodsCard connectivity={connectivity} />
+              <AboutLinksCard />
             </CollapsibleSection>
 
             <CollapsibleSection

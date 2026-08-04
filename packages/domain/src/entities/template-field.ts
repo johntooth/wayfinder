@@ -11,7 +11,10 @@ export type TemplateFieldType =
   | "yesno"
   | "narrative"
   | "section"
-  | "group";
+  | "group"
+  // Filled by the approval step that owns the slot, never by the conversation
+  // (ADR-043). `nodeFieldSet` keeps it out of everything that gathers values.
+  | "signature";
 
 export interface TemplateField {
   key: string;
@@ -42,7 +45,7 @@ export const DEFAULT_ITEM_CAP = 20;
 const SCALAR_TYPES: TemplateFieldType[] = ["text", "date", "currency", "number", "email", "yesno"];
 
 const VALID_ANNOTATIONS_HINT =
-  "Valid annotations: (text), (date), (currency), (number), (email), (yesno), (options: A, B, C), (multi-options: A, B, C), (multiple), (maxlen: N), (max: N), (min: N), (optional).";
+  "Valid annotations: (text), (date), (currency), (number), (email), (yesno), (approval), (options: A, B, C), (multi-options: A, B, C), (multiple), (maxlen: N), (max: N), (min: N), (optional).";
 
 const extractAnnotationGroups = (rawTag: string): string[] => {
   const matches = [...rawTag.matchAll(/\(([^()]*)\)/g)];
@@ -85,6 +88,20 @@ const applyAnnotation = (
   rawTag: string,
 ): Result<TemplateField> => {
   const lower = annotation.toLowerCase();
+
+  if (lower === "approval") {
+    if (field.options || field.type !== "text") {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `Tag "{{${rawTag}}}" declares more than one type. Pick a single type keyword.`,
+        ),
+      );
+    }
+    // Implicitly optional: the slot is filled by the approver at decision time,
+    // so an unsigned document must never look incomplete.
+    return ok({ ...field, type: "signature", optional: true });
+  }
 
   if (lower === "narrative" || lower.startsWith("narrative:")) {
     if (field.options) {
@@ -329,6 +346,25 @@ export const parseTemplateField = (rawTag: string): Result<TemplateField> => {
     field = applied.data;
   }
 
+  // Checked after the loop so the constraint is caught whichever order the
+  // author wrote the annotations in. A signature carries no author-supplied
+  // value, so there is nothing for a length, bound or multiplicity to constrain.
+  if (field.type === "signature") {
+    const constrained =
+      field.maxLength !== undefined ||
+      field.min !== undefined ||
+      field.max !== undefined ||
+      field.multiple === true;
+    if (constrained) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `Tag "{{${rawTag.trim()}}}" is an (approval) signature, which takes no (maxlen: …), (min: …), (max: …) or (multiple). Remove them.`,
+        ),
+      );
+    }
+  }
+
   if (field.multiple && !field.options) {
     return err(
       domainError(
@@ -358,6 +394,9 @@ const describeType = (field: TemplateField): string => {
     return instruction
       ? `narrative prose you compose for this section — ${instruction}`
       : `narrative prose you compose for this section`;
+  }
+  if (field.type === "signature") {
+    return "filled by the approval step that owns this slot — never ask anyone for it";
   }
   if (field.options && field.options.length > 0) {
     const prefix = field.multiple ? "one or more of" : "exactly one of";
@@ -404,6 +443,10 @@ export const templateFieldToLine = (field: TemplateField): string => {
   if (field.type === "section" || field.type === "group") return field.raw;
 
   const annotations: string[] = [];
+
+  // The keyword is `approval`; `signature` is the parsed type name, so writing
+  // the type here would produce a line the parser rejects.
+  if (field.type === "signature") return `${field.label} (approval)`;
 
   if (field.type === "narrative") {
     const instruction = field.instruction?.trim();
@@ -495,6 +538,17 @@ export const validateTemplateFieldValue = (
   if (value === "") {
     if (field.optional || field.type === "section") return ok("");
     return err(domainError("VALIDATION_FAILED", `"${field.label}" is required.`));
+  }
+
+  // Reached only if a caller bypasses nodeFieldSet's filter. A signature typed
+  // by anyone other than the decision path is a forged signature.
+  if (field.type === "signature") {
+    return err(
+      domainError(
+        "VALIDATION_FAILED",
+        `"${field.label}" is filled by its approval step and cannot be entered manually.`,
+      ),
+    );
   }
 
   if (field.maxLength !== undefined && value.length > field.maxLength) {
@@ -612,6 +666,16 @@ export const parseTemplateFields = (rawTags: string[]): Result<TemplateField[]> 
     }
 
     if (openGroup) {
+      // A signature is a single attested act, not a repeating item — inside a
+      // group it would imply N decisions from one approval (ADR-043 §1).
+      if (field.type === "signature") {
+        return err(
+          domainError(
+            "VALIDATION_FAILED",
+            `Signature "{{${trimmed}}}" is inside the repeating group "${openGroup.field.label}". A signature is one attested decision, so it must sit outside any (repeat) block.`,
+          ),
+        );
+      }
       if (!openGroup.innerKeys.has(field.key)) {
         openGroup.innerKeys.add(field.key);
         openGroup.inner.push(field);

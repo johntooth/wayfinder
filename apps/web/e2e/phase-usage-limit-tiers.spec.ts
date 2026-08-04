@@ -61,6 +61,13 @@ async function ensureEnforcementOn(page: Page): Promise<void> {
 }
 
 test.describe('Usage limit tiers + usage meter', () => {
+  // The body walks admin → user → admin → user with a 20s allowance on each of
+  // its five waits, so its declared waits already exceed the 45s default. It
+  // only ever passed because everything resolved quickly; on a slow shard it
+  // ran out of time mid-run and the retry then collided with the budget row the
+  // timed-out attempt had already written.
+  test.describe.configure({ timeout: 120_000 });
+
   test.afterEach(async ({ page }) => {
     // Best-effort: leave the DB clean and enforcement On (the default).
     await gotoUsageAdmin(page).catch(() => undefined);

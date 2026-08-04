@@ -2,11 +2,12 @@
 
 import type { Flow } from "@rbrasier/domain";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogBody,
@@ -35,15 +36,19 @@ interface EditState {
 }
 
 export function AdminFlowsContent() {
+  const router = useRouter();
   const utils = trpc.useUtils();
   const flowsQuery = trpc.flow.list.useQuery();
   const usersQuery = trpc.user.list.useQuery({});
 
+  // A new flow is empty, so the only useful next step is laying out its steps —
+  // go straight to the canvas rather than back to the list.
   const createMutation = trpc.flow.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (flow) => {
       void utils.flow.list.invalidate();
       setCreating(false);
       toast.success("Flow created");
+      router.push(`/flows/${flow.id}/config`);
     },
   });
 
@@ -104,15 +109,17 @@ export function AdminFlowsContent() {
   };
 
   return (
-    <div className="h-full overflow-auto">
-      <div className="container py-8">
+    <div className="flex h-full flex-col overflow-hidden">
+      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#dedad2] bg-white pl-5 pr-[52px]">
+        <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1a1814]">All Flows</h1>
+        <Button onClick={() => setCreating(true)}>New Flow</Button>
+      </header>
+
+      <div className="flex-1 overflow-auto">
+        <div className="container py-8">
         <Card>
-          <CardHeader className="flex-row items-center justify-between space-y-0">
-            <CardTitle>Flows</CardTitle>
-            <Button onClick={() => setCreating(true)}>New Flow</Button>
-          </CardHeader>
-          <CardContent>
-            {flowsQuery.isLoading ? (
+          <CardContent className="pt-6">
+            {flowsQuery.isPending ? (
               <TableSkeletonRows count={4} />
             ) : !flowsQuery.data?.length ? (
               <EmptyState
@@ -268,6 +275,7 @@ export function AdminFlowsContent() {
             </DialogContent>
           </Dialog>
         </Card>
+        </div>
       </div>
     </div>
   );

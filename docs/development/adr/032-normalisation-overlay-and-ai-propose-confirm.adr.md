@@ -79,9 +79,12 @@ A new port `INormalisationProposer` (domain) with adapter `AiNormalisationPropos
 
 - Input: the field label (for context) and the list of **distinct unmapped raw
   values** (bounded — e.g. top-N by frequency, chunked if large).
-- Call: `languageModel.generateObject` at `temperature: 0` with a zod schema like
+- Call: `languageModel.generateObject` with a zod schema like
   `{ clusters: { canonical: string, members: string[] }[] }` and
   `purpose: "field-normalisation"` (so usage/cost is tracked in Langfuse).
+  (Amended in v0.22.1: the port no longer takes a `temperature` — the Claude 5
+  family rejects the parameter, so it is stripped from every request. The schema
+  and the output sanitising below are what constrain the result.)
 - **Sanitise the output**: drop any `member` that is not an actually-observed
   input value and any cluster the model invents — the same defensive discipline
   `AiColumnMappingDetector.sanitise` uses. A hallucinated merge must be

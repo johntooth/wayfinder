@@ -32,10 +32,10 @@ Ask all of these via `AskUserQuestion` before proceeding:
    - Decompose into sub-components
    - Write tests before implementation for each sub-component
    - Run `./validate.sh` after each sub-component
-4. Write at least one Playwright e2e test that exercises the changed or extended functionality end-to-end:
+4. Write at least one Playwright e2e test that exercises the changed or extended functionality end-to-end — write it, do not run it:
    - Place tests under `apps/web/e2e/` in a file named after the enhancement (e.g. `enhance-<slug>.spec.ts`)
    - Cover the primary user-facing behaviour introduced or modified by this enhancement
-   - The test must pass against the updated code before moving on
+   - **Do not run the e2e suite.** CI runs it — `.github/workflows/e2e.yml` fires on every pull request and push to `main` and `release/**`, sharded, against a full stack. A local run needs Postgres, Redis, MinIO and a built app, and only duplicates that. Run `/e2e` or `/e2e-cc-web` only if the user explicitly asks for a local run.
 5. On completion:
    - Move phase doc to `implemented/<release line>/v[version]/`. The release line comes from
      the **Release Branching** section of `CLAUDE.md`, not from the version number: the
@@ -44,4 +44,6 @@ Ask all of these via `AskUserQuestion` before proceeding:
    - Write implementation summary (include which e2e test covers the change)
    - Apply the version bump
    - Run `./validate.sh`
-   - Commit all changes, push the branch, then open a pull request via `mcp__github__create_pull_request` against the base branch from step 0 (not necessarily `main`) so CI runs automatically. Include in the PR body: what changed, why, and which e2e test covers the new behaviour.
+   - Commit all changes and push the branch
+   - **Always open the pull request** via `mcp__github__create_pull_request`, against the base branch from step 0 (not necessarily `main`) — no need to ask first, and never stop at "pushed". The PR is what starts CI, including the e2e suite that was deliberately not run locally. Include in the PR body: what changed, why, and which e2e test covers the new behaviour.
+   - Report the PR URL, and note that the e2e suite runs there rather than locally.

@@ -3,6 +3,7 @@ import {
   err,
   ok,
   type AiTurnPayload,
+  type ApprovalChangeRequest,
   type ConversationalNodeConfig,
   type DocumentGenerationConfidence,
   type Flow,
@@ -48,6 +49,9 @@ export interface GenerateDocumentInput {
   // it is persisted as the message's documentGenerationConfidence and the
   // redundant in-generation grading call is skipped.
   grade?: DocumentGenerationConfidence;
+  // Approver corrections still awaiting sign-off. A regeneration triggered by a
+  // change request has to act on it; the transcript alone never made it act.
+  changeRequests?: ApprovalChangeRequest[];
 }
 
 export interface GenerateDocumentOutput {
@@ -107,7 +111,6 @@ export class GenerateDocument {
       purpose: "chat",
       prompt: `Write a 2-sentence summary of a document with these values: ${JSON.stringify(fieldValues).slice(0, 2000)}`,
       schema: documentSummarySchema,
-      temperature: 0.2,
     });
 
     const summary = summaryResult.error ? null : summaryResult.data.object.summary;
@@ -174,6 +177,7 @@ export class GenerateDocument {
         contextDocs: input.flow.contextDocs,
         instruction: config.aiInstruction,
         purpose: "documentGeneration",
+        changeRequests: input.changeRequests,
         contextBudgetChars: input.budget?.contextBudgetChars,
         maxPromptTokens: input.budget?.maxPromptTokens,
       });

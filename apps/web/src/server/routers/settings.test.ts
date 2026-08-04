@@ -174,12 +174,14 @@ describe("settings router — extractionConfigInputSchema", () => {
   });
 });
 
-import { mergeAuthConfig } from "./settings";
+import { mergeAuthConfig } from "./settings-auth";
 
 const storedAuth = {
   emailPasswordEnabled: true,
   entraEnabled: true,
   entra: { tenantId: "stored-tenant", clientId: "stored-client", clientSecret: "stored-secret" },
+  pkiEnabled: true,
+  pki: { sessionTtlHours: 12 },
 };
 
 describe("settings router — mergeAuthConfig", () => {
@@ -222,5 +224,37 @@ describe("settings router — mergeAuthConfig", () => {
     );
 
     expect(merged.entra.clientSecret).toBe("stored-secret");
+  });
+
+  it("applies an incoming PKI switch and TTL", () => {
+    const merged = mergeAuthConfig(
+      {
+        emailPasswordEnabled: true,
+        entraEnabled: false,
+        entra: { tenantId: "t", clientId: "c" },
+        pkiEnabled: false,
+        pki: { sessionTtlHours: 4 },
+      },
+      storedAuth,
+    );
+
+    expect(merged.pkiEnabled).toBe(false);
+    expect(merged.pki.sessionTtlHours).toBe(4);
+  });
+
+  // An older client that knows nothing about PKI must not silently switch it
+  // off just by saving the Entra half of the form.
+  it("keeps the stored PKI settings when the client omits them", () => {
+    const merged = mergeAuthConfig(
+      {
+        emailPasswordEnabled: true,
+        entraEnabled: false,
+        entra: { tenantId: "t", clientId: "c" },
+      },
+      storedAuth,
+    );
+
+    expect(merged.pkiEnabled).toBe(true);
+    expect(merged.pki.sessionTtlHours).toBe(12);
   });
 });

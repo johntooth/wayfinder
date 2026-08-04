@@ -196,6 +196,18 @@ describe("XlsxGenerator", () => {
       expect(result.data?.fields.map((field) => field.key)).toEqual(["name"]);
     });
 
+    it("rejects an (approval) signature tag, naming the limitation", () => {
+      const templateBytes = buildXlsx([
+        ["{{ Client Email (email) }}", "{{ Delegate Signature (approval) }}"],
+      ]);
+
+      const result = generator.extractFields({ templateBytes });
+
+      expect(result.error?.code).toBe("VALIDATION_FAILED");
+      expect(result.error?.message).toContain("Delegate Signature");
+      expect(result.error?.message).toContain(".docx");
+    });
+
     it("rejects a workbook with no tags and no usable header row", () => {
       const templateBytes = buildXlsx([[], [""]]);
 
@@ -335,6 +347,109 @@ describe("XlsxGenerator", () => {
       expect(result.data?.text).toContain("Name");
       expect(result.data?.text).toContain("Email");
       expect(result.data?.text).toContain("Notes");
+    });
+  });
+
+  describe("annotate", () => {
+    it("replaces a cell value with a placeholder", () => {
+      const templateBytes = buildXlsx([
+        ["Supplier", "Acme Pty Ltd"],
+        ["Value", "184500"],
+      ]);
+
+      const result = generator.annotate({
+        templateBytes,
+        edits: [
+          { find: "Acme Pty Ltd", occurrence: 0, replacement: "{{ Supplier Name (text) }}" },
+        ],
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(result.data?.appliedCount).toBe(1);
+      const text = generator.extractFullText({ templateBytes: result.data!.bytes }).data?.text;
+      expect(text).toContain("{{ Supplier Name (text) }}");
+      expect(text).not.toContain("Acme Pty Ltd");
+    });
+
+    it("re-annotates an existing tag in place", () => {
+      const templateBytes = buildXlsx([["Supplier", "{{ Supplier Name }}"]]);
+
+      const result = generator.annotate({
+        templateBytes,
+        edits: [
+          {
+            find: "{{ Supplier Name }}",
+            occurrence: 0,
+            replacement: "{{ Supplier Name (text) (maxlen: 80) }}",
+          },
+        ],
+      });
+
+      expect(result.data?.appliedCount).toBe(1);
+      expect(generator.extractTags({ templateBytes: result.data!.bytes }).data?.tags).toEqual([
+        "Supplier Name (text) (maxlen: 80)",
+      ]);
+    });
+
+    it("replaces only the substring, leaving the rest of the cell intact", () => {
+      const templateBytes = buildXlsx([["Issued to Acme Pty Ltd on 3 June 2025"]]);
+
+      const result = generator.annotate({
+        templateBytes,
+        edits: [{ find: "Acme Pty Ltd", occurrence: 0, replacement: "{{ Supplier Name }}" }],
+      });
+
+      expect(generator.extractFullText({ templateBytes: result.data!.bytes }).data?.text).toBe(
+        "Issued to {{ Supplier Name }} on 3 June 2025",
+      );
+    });
+
+    it("addresses repeated values by occurrence, across sheets in workbook order", () => {
+      const templateBytes = buildXlsx([["Acme Pty Ltd"]], [["Acme Pty Ltd"]]);
+
+      const result = generator.annotate({
+        templateBytes,
+        edits: [{ find: "Acme Pty Ltd", occurrence: 1, replacement: "{{ Second }}" }],
+      });
+
+      expect(result.data?.appliedCount).toBe(1);
+      const text = generator.extractFullText({ templateBytes: result.data!.bytes }).data?.text;
+      expect(text).toBe("Acme Pty Ltd\n{{ Second }}");
+    });
+
+    it("reports an edit whose text is absent rather than dropping it", () => {
+      const templateBytes = buildXlsx([["Acme Pty Ltd"]]);
+
+      const result = generator.annotate({
+        templateBytes,
+        edits: [{ find: "Northwind Ltd", occurrence: 0, replacement: "{{ Supplier Name }}" }],
+      });
+
+      expect(result.data?.appliedCount).toBe(0);
+      expect(result.data?.unmatched).toHaveLength(1);
+    });
+
+    it("returns the workbook unchanged when there are no edits", () => {
+      const templateBytes = buildXlsx([["Acme Pty Ltd"]]);
+
+      const result = generator.annotate({ templateBytes, edits: [] });
+
+      expect(result.data?.appliedCount).toBe(0);
+      expect(generator.extractFullText({ templateBytes: result.data!.bytes }).data?.text).toBe(
+        "Acme Pty Ltd",
+      );
+    });
+
+    it("converts a header-mode workbook to tag mode, per ADR-039 precedence", () => {
+      const templateBytes = buildXlsx([["Supplier", "Value"]]);
+      expect(generator.detectMode({ templateBytes }).data?.mode).toBe("header");
+
+      const result = generator.annotate({
+        templateBytes,
+        edits: [{ find: "Supplier", occurrence: 0, replacement: "{{ Supplier Name (text) }}" }],
+      });
+
+      expect(generator.detectMode({ templateBytes: result.data!.bytes }).data?.mode).toBe("tags");
     });
   });
 });

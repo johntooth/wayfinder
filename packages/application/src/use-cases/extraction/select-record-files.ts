@@ -66,7 +66,6 @@ export const selectRecordFiles = async (
       "You group document files into records for a bulk extraction. Only ever reference the file ids you are given.",
     prompt: buildGroupingPrompt(input),
     schema: fileGroupingSchema,
-    temperature: 0.2,
   });
   if (result.error) return result;
 
