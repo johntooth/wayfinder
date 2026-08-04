@@ -1,0 +1,199 @@
+import { describe, it, expect } from "vitest";
+import {
+  emptyModel,
+  hasNonDefaultConfig,
+  lineToModel,
+  linesToModels,
+  modelToLine,
+  withType,
+  type FieldModel,
+} from "./field-row-model";
+
+const model = (overrides: Partial<FieldModel> = {}): FieldModel => ({
+  ...emptyModel(),
+  label: "Supplier Name",
+  ...overrides,
+});
+
+describe("lineToModel", () => {
+  it("reads a bare label as a required text field", () => {
+    expect(lineToModel("Supplier Name")).toMatchObject({
+      label: "Supplier Name",
+      type: "text",
+      optional: false,
+    });
+  });
+
+  it("reads a type annotation", () => {
+    expect(lineToModel("Contract Value (currency)")).toMatchObject({
+      label: "Contract Value",
+      type: "currency",
+    });
+  });
+
+  it("reads an options list as a single-select", () => {
+    expect(lineToModel("Status (options: Approved, Rejected)")).toMatchObject({
+      type: "select",
+      options: ["Approved", "Rejected"],
+    });
+  });
+
+  it("reads a multi-options list as a multi-select", () => {
+    expect(lineToModel("Tags (multi-options: A, B)")).toMatchObject({
+      type: "multiselect",
+      options: ["A", "B"],
+    });
+  });
+
+  it("reads constraints and optionality", () => {
+    expect(lineToModel("Notes (text) (maxlen: 80) (optional)")).toMatchObject({
+      maxLength: 80,
+      optional: true,
+    });
+  });
+
+  it("reads a narrative instruction", () => {
+    expect(lineToModel('Background (narrative: "Summarise the project")')).toMatchObject({
+      type: "narrative",
+      instruction: "Summarise the project",
+    });
+  });
+
+  it("accepts a line still wrapped in braces from Word", () => {
+    expect(lineToModel("{{ Supplier Name (text) }}")).toMatchObject({
+      label: "Supplier Name",
+      type: "text",
+    });
+  });
+
+  it("degrades an unparseable line to a text field carrying the raw text", () => {
+    expect(lineToModel("Supplier (telephone)")).toMatchObject({
+      label: "Supplier (telephone)",
+      type: "text",
+    });
+  });
+
+  it("returns an empty model for a blank line", () => {
+    expect(lineToModel("   ")).toEqual(emptyModel());
+  });
+});
+
+describe("modelToLine", () => {
+  it("emits a bare label for an unconstrained text field", () => {
+    expect(modelToLine(model())).toBe("Supplier Name");
+  });
+
+  it("emits separate parenthesised groups, not a comma-joined list", () => {
+    // The grammar splits on each (…) group; a comma form would be read as one
+    // unknown annotation and would collide with (options: A, B, C).
+    expect(modelToLine(model({ label: "Contract Value", type: "currency", min: 0 }))).toBe(
+      "Contract Value (currency) (min: 0)",
+    );
+  });
+
+  it("omits the type group for text, which is the grammar's default", () => {
+    expect(modelToLine(model({ type: "text", maxLength: 80 }))).toBe("Supplier Name (maxlen: 80)");
+  });
+
+  it("emits an options annotation for a select", () => {
+    expect(modelToLine(model({ label: "Status", type: "select", options: ["A", "B"] }))).toBe(
+      "Status (options: A, B)",
+    );
+  });
+
+  it("emits multi-options for a multiselect", () => {
+    expect(modelToLine(model({ label: "Tags", type: "multiselect", options: ["A", "B"] }))).toBe(
+      "Tags (multi-options: A, B)",
+    );
+  });
+
+  it("drops blank choices", () => {
+    expect(modelToLine(model({ label: "Status", type: "select", options: ["A", "  ", ""] }))).toBe(
+      "Status (options: A)",
+    );
+  });
+
+  it("emits an empty line for a blank label so the parser skips the row", () => {
+    expect(modelToLine(model({ label: "   " }))).toBe("");
+  });
+
+  it("round-trips every model back through the parser", () => {
+    const original = model({ label: "Notes", type: "text", maxLength: 40, optional: true });
+    expect(lineToModel(modelToLine(original))).toMatchObject({
+      label: "Notes",
+      maxLength: 40,
+      optional: true,
+    });
+  });
+});
+
+describe("hasNonDefaultConfig", () => {
+  it("is false for a plain required text field", () => {
+    expect(hasNonDefaultConfig(model())).toBe(false);
+  });
+
+  it("is true when the field is optional", () => {
+    expect(hasNonDefaultConfig(model({ optional: true }))).toBe(true);
+  });
+
+  it("is true when a length limit is set", () => {
+    expect(hasNonDefaultConfig(model({ maxLength: 80 }))).toBe(true);
+  });
+
+  it("is true when a numeric bound is set", () => {
+    expect(hasNonDefaultConfig(model({ min: 1 }))).toBe(true);
+    expect(hasNonDefaultConfig(model({ max: 10 }))).toBe(true);
+  });
+
+  it("is true when choices are set", () => {
+    expect(hasNonDefaultConfig(model({ type: "select", options: ["A"] }))).toBe(true);
+  });
+
+  it("is false when the only choices are blank", () => {
+    expect(hasNonDefaultConfig(model({ type: "select", options: ["", "  "] }))).toBe(false);
+  });
+
+  it("is true when a narrative instruction is set", () => {
+    expect(hasNonDefaultConfig(model({ type: "narrative", instruction: "Summarise" }))).toBe(true);
+  });
+
+  it("ignores the field type on its own — the type has its own control", () => {
+    expect(hasNonDefaultConfig(model({ type: "currency" }))).toBe(false);
+  });
+});
+
+describe("withType", () => {
+  it("clears choices when leaving a select type", () => {
+    const changed = withType(model({ type: "select", options: ["A", "B"] }), "text");
+    expect(changed.options).toEqual([]);
+  });
+
+  it("keeps choices when moving between select types", () => {
+    const changed = withType(model({ type: "select", options: ["A"] }), "multiselect");
+    expect(changed.options).toEqual(["A"]);
+  });
+
+  it("clears numeric bounds carried over from the previous type", () => {
+    const changed = withType(model({ type: "number", min: 1, max: 10 }), "text");
+    expect(changed.min).toBeUndefined();
+    expect(changed.max).toBeUndefined();
+  });
+
+  it("keeps the label and optionality", () => {
+    const changed = withType(model({ optional: true }), "date");
+    expect(changed).toMatchObject({ label: "Supplier Name", optional: true, type: "date" });
+  });
+});
+
+describe("linesToModels", () => {
+  it("returns one row for an empty list so the editor is never blank", () => {
+    expect(linesToModels([])).toHaveLength(1);
+  });
+
+  it("maps each line to a model", () => {
+    expect(linesToModels(["A (text)", "B (date)"]).map((entry) => entry.type)).toEqual([
+      "text",
+      "date",
+    ]);
+  });
+});

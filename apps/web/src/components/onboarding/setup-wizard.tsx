@@ -14,7 +14,7 @@ import {
 import { useConnectivity } from "@/components/settings/connectivity";
 import { StorageCard } from "@/components/settings/storage-card";
 import { AiProviderCard } from "@/components/settings/ai-provider-card";
-import { AuthMethodsCard } from "@/components/settings/auth-methods-card";
+import { AUTH_METHOD_LABELS, AuthMethodsCard } from "@/components/settings/auth-methods-card";
 import { trpc } from "@/trpc/client";
 import { WizardDeploymentStep, type DeploymentMode } from "./wizard-deployment-step";
 import { WizardRequirement } from "./wizard-requirement";
@@ -77,7 +77,33 @@ export function SetupWizard({ forceOpen = false, onClose }: Props) {
     setupStatusQuery.data?.ai.configured ?? false,
     connectivity.states.ai?.status,
   );
-  const requiredReady = isRequirementSatisfied(storageState) && isRequirementSatisfied(aiState);
+
+  // Authentication was rendered here but gated by nothing, so setup could finish
+  // with an enabled, broken sign-in method (ADR-042 §5). Only enabled methods
+  // are tested and gate — turning one off is the escape hatch when its probe
+  // fails for a transient reason.
+  const enabledMethods = setupStatusQuery.data?.auth.enabledMethods;
+  const authRequirements = (
+    [
+      ["emailPassword", "auth-email-password"],
+      ["entra", "auth-entra"],
+      ["pki", "auth-pki"],
+    ] as const
+  )
+    .filter(([method]) => enabledMethods?.[method] === true)
+    .map(([method, target]) => ({
+      method,
+      target,
+      label: AUTH_METHOD_LABELS[method],
+      // Enabled is what "configured" means for a sign-in method: there is no
+      // env default that could make an unconfigured one read as ready.
+      state: resolveRequirement(true, connectivity.states[target]?.status),
+    }));
+
+  const requiredReady =
+    isRequirementSatisfied(storageState) &&
+    isRequirementSatisfied(aiState) &&
+    authRequirements.every((requirement) => isRequirementSatisfied(requirement.state));
 
   const close = (): void => {
     setManuallyClosed(true);
@@ -190,7 +216,17 @@ export function SetupWizard({ forceOpen = false, onClose }: Props) {
                   />
                   <AiProviderCard connectivity={connectivity} />
                 </div>
-                <AuthMethodsCard />
+                <div className="space-y-2">
+                  {authRequirements.map((requirement) => (
+                    <WizardRequirement
+                      key={requirement.target}
+                      label={requirement.label}
+                      state={requirement.state}
+                      testId={`wizard-requirement-${requirement.target}`}
+                    />
+                  ))}
+                  <AuthMethodsCard connectivity={connectivity} />
+                </div>
               </div>
             )}
 

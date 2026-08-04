@@ -1,4 +1,5 @@
 import { test, expect } from "./helpers/base";
+import { openSettingsSection } from "./helpers/settings";
 
 // E2E for the audit & compliance trail (PRD: audit-compliance-trail, ADR-033).
 //
@@ -65,6 +66,8 @@ test.describe("legal holds", () => {
 test.describe("SIEM streaming", () => {
   test("the settings page exposes a SIEM streaming card", async ({ page }) => {
     await page.goto(SETTINGS_PATH);
+    // The card lives in "Directory & security", which starts collapsed.
+    await openSettingsSection(page, "Directory & security");
 
     await expect(page.getByText(/siem streaming/i).first()).toBeVisible();
   });

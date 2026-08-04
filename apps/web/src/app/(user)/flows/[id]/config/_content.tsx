@@ -41,12 +41,22 @@ import {
   scheduledConfigFromValues,
   scheduledValuesFromConfig,
 } from "@/components/canvas/scheduled-node-config";
+import {
+  approvalConfigFromValues,
+  approvalValuesFromConfig,
+} from "@/components/canvas/approval-config-mapping";
 import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/flow-metadata-dialog";
 import { trpc } from "@/trpc/client";
 import type { ConversationalNodeData } from "@/components/canvas/conversational-node";
 import { normaliseOutputType } from "@rbrasier/domain";
-import type { FieldValueSource, FlowContextDoc, PermissionKey, PriorStepField, TemplateField } from "@rbrasier/domain";
-import { compareStepLabels, computeStepNumbers } from "@/lib/flow-utils";
+import type {
+  FieldValueSource,
+  FlowContextDoc,
+  PermissionKey,
+  TemplateField,
+} from "@rbrasier/domain";
+import { computeStepNumbers } from "@/lib/flow-utils";
+import type { NextStepAnchor } from "@/lib/canvas/canvas-guidance";
 import {
   CANVAS_DEBOUNCE_MS as DEBOUNCE_MS,
   readFields,
@@ -54,6 +64,18 @@ import {
   toRfNode,
 } from "@/lib/canvas/rf-adapters";
 import { FlowConfigHeader } from "./_flow-config-header";
+import { usePriorStepViews } from "./_use-prior-step-views";
+
+// What the template endpoints return on success. Shared by the direct upload and
+// the guided annotation modal so both apply the result identically.
+interface TemplateUploadResult {
+  path?: string;
+  filename?: string;
+  documentTemplateContent?: string | null;
+  documentTemplateFields?: TemplateField[];
+  documentTemplateFormat?: "docx" | "xlsx";
+  spreadsheetTemplateMode?: "tags" | "header" | null;
+}
 
 function CanvasInner({ flowId }: { flowId: string }) {
   const router = useRouter();
@@ -91,10 +113,13 @@ function CanvasInner({ flowId }: { flowId: string }) {
   // document uploads work without an explicit first save).
   const [createdNodeId, setCreatedNodeId] = useState<string | null>(null);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
-  // A connector dragged into blank space: the new node's source and drop point.
-  // The type picker resolves the type first, mirroring the Add step button.
+  // A step waiting on a type: where it goes, and what it hangs off. A connector
+  // dragged into blank space always names its source; the canvas's next-step
+  // prompt leaves it null when the graph has more than one open branch and no
+  // single parent is correct. The type picker resolves the type first, mirroring
+  // the Add step button.
   const [pendingConnect, setPendingConnect] = useState<{
-    fromNodeId: string;
+    fromNodeId: string | null;
     position: { x: number; y: number };
   } | null>(null);
   const [flowMenuOpen, setFlowMenuOpen] = useState(false);
@@ -150,7 +175,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
     );
     setExpertRole(data.flow.expertRole ?? "");
     if (data.nodes.length > 3) {
-      setTimeout(() => { fitView({ padding: 0.2 }); }, 100);
+      setTimeout(() => { fitView({ padding: 0.2, maxZoom: 1 }); }, 100);
     }
   }, [canvasQuery.data, fitView]);
 
@@ -261,24 +286,13 @@ function CanvasInner({ flowId }: { flowId: string }) {
     positionTimers.current.set(node.id, timer);
   }, [updatePositionMutation, flowId, markEdited]);
 
-  const handleUploadTemplate = useCallback(async (file: File, _currentValues: NodeConfigValues): Promise<{ path: string; filename: string; documentTemplateContent: string | null; documentTemplateFormat?: "docx" | "xlsx"; spreadsheetTemplateMode?: "tags" | "header" | null } | { error: string; code?: string }> => {
-    if (!editingNodeId) {
-      return { error: "Save the step first before uploading a template." };
-    }
-    const formData = new FormData();
-    formData.append("file", file);
-    const res = await fetch(`/api/flows/${flowId}/nodes/${editingNodeId}/template`, {
-      method: "POST",
-      body: formData,
-    });
-    const data = await res.json() as { path?: string; filename?: string; documentTemplateContent?: string | null; documentTemplateFields?: TemplateField[]; documentTemplateFormat?: "docx" | "xlsx"; spreadsheetTemplateMode?: "tags" | "header" | null; error?: string; code?: string };
-    if (!res.ok || data.error) {
-      return { error: data.error ?? "Upload failed", code: data.code };
-    }
-    // Reflect the whole upload result in rfNodes immediately: the fields so
-    // priorStepFields picks them up, and the filename/path/content so the modal's
-    // initialValues re-sync (keyed on rfNodes) doesn't wipe the just-set filename
-    // pill before the next save.
+  // Reflect a template result in rfNodes immediately: the fields so
+  // priorStepFields picks them up, and the filename/path/content so the modal's
+  // initialValues re-sync (keyed on rfNodes) doesn't wipe the just-set filename
+  // pill before the next save. Shared by the direct upload path and the guided
+  // annotation modal, which reach the same endpoint by different routes.
+  const applyTemplateResult = useCallback((data: TemplateUploadResult) => {
+    if (!editingNodeId) return;
     setRfNodes((nds) =>
       nds.map((n) => {
         if (n.id !== editingNodeId) return n;
@@ -300,6 +314,23 @@ function CanvasInner({ flowId }: { flowId: string }) {
         };
       }),
     );
+  }, [editingNodeId, setRfNodes]);
+
+  const handleUploadTemplate = useCallback(async (file: File, _currentValues: NodeConfigValues): Promise<{ path: string; filename: string; documentTemplateContent: string | null; documentTemplateFormat?: "docx" | "xlsx"; spreadsheetTemplateMode?: "tags" | "header" | null } | { error: string; code?: string }> => {
+    if (!editingNodeId) {
+      return { error: "Save the step first before uploading a template." };
+    }
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`/api/flows/${flowId}/nodes/${editingNodeId}/template`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json() as TemplateUploadResult & { error?: string; code?: string };
+    if (!res.ok || data.error) {
+      return { error: data.error ?? "Upload failed", code: data.code };
+    }
+    applyTemplateResult(data);
     return {
       path: data.path!,
       filename: data.filename!,
@@ -307,7 +338,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
       documentTemplateFormat: data.documentTemplateFormat ?? "docx",
       spreadsheetTemplateMode: data.spreadsheetTemplateMode ?? null,
     };
-  }, [editingNodeId, flowId]);
+  }, [editingNodeId, flowId, applyTemplateResult]);
 
   const handleConfigSave = useCallback(async (values: NodeConfigValues) => {
     if (!editingNodeId) return;
@@ -335,12 +366,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         return { ...scheduledConfigFromValues(values), notifyOnComplete: values.notifyOnComplete };
       }
       if (values.type === "approval") {
-        return {
-          approverSource: values.approverSource,
-          roleHint: values.roleHint,
-          instructions: values.approvalInstructions,
-          notifyOnComplete: values.notifyOnComplete,
-        };
+        return approvalConfigFromValues(values);
       }
       if (values.type === "mcp") {
         return {
@@ -398,12 +424,20 @@ function CanvasInner({ flowId }: { flowId: string }) {
     setTypePickerOpen(true);
   }, []);
 
+  // The canvas's next-step prompt. It already knows where the step belongs and
+  // whether there is an unambiguous parent to join it to, so it hands both
+  // straight to the drag-out path rather than adding a second way to create one.
+  const handleAddNextStep = useCallback((anchor: NextStepAnchor) => {
+    setPendingConnect({ fromNodeId: anchor.connectFromNodeId, position: anchor.position });
+    setTypePickerOpen(true);
+  }, []);
+
   const handleSelectNodeType = useCallback((type: NodeConfigType) => {
     setTypePickerOpen(false);
     if (pendingConnect) {
       const { fromNodeId, position } = pendingConnect;
       setPendingConnect(null);
-      void createAndEditNode(type, position, fromNodeId);
+      void createAndEditNode(type, position, fromNodeId ?? undefined);
       return;
     }
     const xOffset = rfNodes.length > 0 ? (rfNodes[rfNodes.length - 1]?.position.x ?? 0) + 280 : 200;
@@ -455,45 +489,11 @@ function CanvasInner({ flowId }: { flowId: string }) {
   // Fields declared by steps before the one being edited — auto-node response
   // fields and conversational document-template fields — offered as value
   // sources for the current node's request fields / scheduled timestamp.
-  const priorStepFields = useMemo<PriorStepField[]>(() => {
-    if (!editingNodeId) return [];
-    const currentLabel = stepNumbers.get(editingNodeId);
-    if (currentLabel == null) return [];
-    const result: PriorStepField[] = [];
-    for (const node of rfNodes) {
-      const label = stepNumbers.get(node.id);
-      if (label == null) continue;
-      // Offer only steps that read as strictly earlier on the canvas. Ordering
-      // by (depth, branch letter) keeps this correct past ten steps, where a
-      // raw string compare would rank "10" before "2".
-      if (compareStepLabels(label, currentLabel) >= 0) continue;
-      const config = ((node.data as { config?: Record<string, unknown> }).config ?? {}) as Record<
-        string,
-        unknown
-      >;
-      const fields =
-        node.type === "autoNode"
-          ? readFields(config.responseFields)
-          : node.type === "scheduledNode"
-            ? []
-            : config.outputType === "generate_document"
-              ? readFields(config.documentTemplateFields)
-              : [];
-      if (fields.length === 0) continue;
-      const stepName = (node.data as { name?: string }).name ?? "Step";
-      const stepLabel = `${label}. ${stepName}`;
-      for (const field of fields) {
-        result.push({
-          nodeId: node.id,
-          stepLabel,
-          stepNumber: Number.parseInt(label, 10) || 0,
-          stepName,
-          field: { key: field.key, label: field.label, type: field.type },
-        });
-      }
-    }
-    return result;
-  }, [editingNodeId, rfNodes, stepNumbers]);
+  const { priorStepFields, priorSteps, takenSignatureFieldKeys } = usePriorStepViews(
+    rfNodes,
+    stepNumbers,
+    editingNodeId,
+  );
 
   // A reference is stale when a step binds a value (a request field or a
   // schedule anchor) to a prior-step field that no longer exists in the graph —
@@ -571,6 +571,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
             | undefined) ?? "first_level_supervisor",
         roleHint: (editingConfig.roleHint as string | null) ?? "",
         approvalInstructions: (editingConfig.instructions as string | null) ?? "",
+        ...approvalValuesFromConfig(editingConfig),
         aiInstruction: (editingConfig.aiInstruction as string | null) ?? editingData.aiInstruction ?? "",
         doneWhen: (editingConfig.doneWhen as string | null) ?? "",
         neverDone: Boolean(editingConfig.neverDone),
@@ -642,6 +643,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         onNodeClick={onNodeClick}
         onNodeDragStop={onNodeDragStop}
         onAddStep={handleAddStep}
+        onAddNextStep={handleAddNextStep}
         staleReferences={staleReferences}
       />
 
@@ -662,12 +664,16 @@ function CanvasInner({ flowId }: { flowId: string }) {
       <NodeConfigModal
         open={configOpen}
         flowId={flowId}
+        nodeId={editingNodeId}
+        onTemplateApplied={applyTemplateResult}
         initialValues={initialConfigValues}
         onSave={handleConfigSave}
         onDelete={editingNodeId ? handleNodeDelete : undefined}
         onClose={handleConfigClose}
         isSaving={isSavingConfig}
         priorStepFields={priorStepFields}
+        priorSteps={priorSteps}
+        takenSignatureFieldKeys={takenSignatureFieldKeys}
         skillsEnabled={skillsEnabled}
         mcpEnabled={mcpEnabled}
         onUploadTemplate={editingNodeId ? handleUploadTemplate : undefined}

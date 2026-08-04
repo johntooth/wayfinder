@@ -38,7 +38,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <SiteBanner />
           <div className="flex min-h-0 flex-1 flex-col">{children}</div>
         </TrpcProvider>
-        <Toaster richColors closeButton />
+        {/* `expand` keeps concurrent toasts as a spaced column growing upward
+            from the corner. Sonner's default stacks them on top of one another
+            and only fans them out on hover, which reads as one toast obscuring
+            the rest. */}
+        <Toaster richColors closeButton expand visibleToasts={5} />
       </body>
     </html>
   );

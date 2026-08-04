@@ -58,7 +58,7 @@ export function AdminFlagsContent() {
           </Button>
         </div>
 
-        {flagsQuery.isLoading ? (
+        {flagsQuery.isPending ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
           <Table>

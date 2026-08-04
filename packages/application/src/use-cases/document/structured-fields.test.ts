@@ -142,6 +142,64 @@ describe("extractStructuredFields", () => {
   });
 });
 
+describe("extractStructuredFields with outstanding change requests", () => {
+  const extractWith = async (
+    changeRequests: { nodeId: string; stepName: string; comment: string }[] | undefined,
+  ): Promise<string> => {
+    const languageModel = makeLanguageModel({ field: "value" });
+    await extractStructuredFields(languageModel, {
+      fields: [field({})],
+      transcript: "User: the start date is 01-03-2026",
+      contextDocs: [],
+      instruction: "Gather the details.",
+      purpose: "documentGeneration",
+      priorStepOutputs: [
+        {
+          id: "output-1",
+          sessionId: "session-1",
+          flowId: "flow-1",
+          nodeId: "node-1",
+          messageId: null,
+          fields: [{ key: "field", label: "Field", type: "text", value: "captured" }],
+          createdAt: new Date("2026-03-01T09:00:00.000Z"),
+          updatedAt: new Date("2026-03-01T09:00:00.000Z"),
+        },
+      ],
+      changeRequests,
+    });
+    return (languageModel.generateObject as ReturnType<typeof vi.fn>).mock.calls[0]![0].prompt;
+  };
+
+  // The whole point of the section: an approver's correction has to outrank both
+  // the transcript that states the old value and the step output that captured
+  // it, or regeneration reproduces exactly what was rejected.
+  it("names each request above the captured step data and the transcript", async () => {
+    const prompt = await extractWith([
+      { nodeId: "node-a", stepName: "Finance sign-off", comment: "Set the start date to 03-03-2026." },
+    ]);
+
+    expect(prompt).toContain("Finance sign-off: Set the start date to 03-03-2026.");
+    expect(prompt.indexOf("Finance sign-off")).toBeLessThan(prompt.indexOf("most reliable"));
+    expect(prompt.indexOf("Finance sign-off")).toBeLessThan(prompt.indexOf("Session transcript"));
+  });
+
+  it("lists every outstanding request", async () => {
+    const prompt = await extractWith([
+      { nodeId: "node-a", stepName: "Manager sign-off", comment: "Correct the supplier." },
+      { nodeId: "node-b", stepName: "Finance sign-off", comment: "Add the risk section." },
+    ]);
+
+    expect(prompt).toContain("Manager sign-off: Correct the supplier.");
+    expect(prompt).toContain("Finance sign-off: Add the risk section.");
+  });
+
+  it("leaves the prompt byte-for-byte unchanged when there are none", async () => {
+    const [withNone, withEmpty] = await Promise.all([extractWith(undefined), extractWith([])]);
+
+    expect(withEmpty).toBe(withNone);
+  });
+});
+
 describe("buildContextDocsSection budgeting", () => {
   const completeDoc = (filename: string, text: string): FlowContextDoc => ({
     id: filename,

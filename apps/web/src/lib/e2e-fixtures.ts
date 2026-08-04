@@ -64,6 +64,14 @@ export interface SeedResult {
   approvalSessionId: string;
   structuredSessionId: string;
   structuredFlowId: string;
+  // `conversational → approval A (decided) → approval B (pending)`, the shape
+  // ADR-040 §2 and ADR-044 exist for. B must be shown the document, not A's
+  // decision fields.
+  approvalSubjectSessionId: string;
+  approvalSubjectFlowId: string;
+  // A flow whose first step is an approval, so the config editor has an
+  // authoring-time warning to show (ADR-044 §2).
+  approvalFirstFlowId: string;
 }
 
 // A fork flow whose two mutually-exclusive branches capture the same `amount`
@@ -423,6 +431,17 @@ const seedApprovalRequest = async (
   return session.id;
 };
 
+// `Prepare instrument (2 signature slots) → Delegate sign-off (approved) →
+// Finance sign-off (pending)`. The shape that used to break: `advancedFrom`
+// named the *previous approval*, so the second approver was shown the first
+// one's decision fields instead of the document they were asked to sign
+// (ADR-040 §2). The document is at -r2 carrying the delegate's attestation,
+// with the finance slot still empty.
+import {
+  seedApprovalFirstFlow,
+  seedApprovalSubjectSession,
+} from "./e2e-fixtures-approval";
+
 export const seedE2EFixtures = async (container: Container): Promise<SeedResult> => {
   const ownerUserId = await resolveAdminUserId(container);
   await resolveMemberUserId(container);
@@ -644,6 +663,8 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
   const confirmationSessionId = await seedConfirmationSession(container, ownerUserId);
   const approvalSessionId = await seedApprovalRequest(container, ownerUserId);
   const structured = await seedStructuredSession(container, ownerUserId);
+  const approvalSubject = await seedApprovalSubjectSession(container, ownerUserId);
+  const approvalFirstFlowId = await seedApprovalFirstFlow(container, ownerUserId);
 
   return {
     flowId: flow.id,
@@ -653,6 +674,9 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     approvalSessionId,
     structuredSessionId: structured.sessionId,
     structuredFlowId: structured.flowId,
+    approvalSubjectSessionId: approvalSubject.sessionId,
+    approvalSubjectFlowId: approvalSubject.flowId,
+    approvalFirstFlowId,
   };
 };
 

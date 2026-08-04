@@ -4,6 +4,7 @@ import {
   ok,
   CONNECTIVITY_TARGETS,
   type AiConfig,
+  type AuthConfig,
   type ConnectivityResult,
   type ConnectivityTarget,
   type EmbeddingsConfig,
@@ -15,11 +16,15 @@ import {
 } from "@rbrasier/domain";
 import {
   probeAiConnectivity,
+  probeAuthEmailPassword,
+  probeAuthEntra,
+  probeAuthPki,
   probeEmailConnectivity,
   probeEmbeddingsConnectivity,
   probeEntraConnectivity,
   probeN8nConnectivity,
   probeStorageConnectivity,
+  type CredentialAccountProbe,
   type EmailProbe,
   type GraphProbe,
   type MinioClientFactory,
@@ -30,6 +35,10 @@ interface RuntimeConfigSource {
   getStorageConfig(): Promise<StorageConfig>;
   getN8nConfig(): Promise<N8nConfig>;
   getEmbeddingsConfig(): Promise<EmbeddingsConfig>;
+  getAuthConfig(): Promise<AuthConfig>;
+  // The PKI environment gate as a boolean — the addresses themselves never
+  // reach a probe (ADR-042 §3).
+  isPkiEnvConfigured(): boolean;
 }
 
 export interface ConnectivityTesterDeps {
@@ -40,6 +49,11 @@ export interface ConnectivityTesterDeps {
   // Embeddings' OpenAI provider uses the environment key, kept separate from the
   // admin-set AI provider key.
   openaiApiKey: string | null;
+  // Counts accounts that carry a password, for the email + password sign-in
+  // probe: the method can be enabled with nobody able to use it.
+  credentialAccounts: CredentialAccountProbe;
+  // Sign-in authority override, matching the one the Entra provider uses.
+  entraAuthority?: string;
   fetchFn?: typeof fetch;
   minioClientFactory?: MinioClientFactory;
   timeoutMs?: number;
@@ -101,6 +115,22 @@ export class CompositeConnectivityTester implements IConnectivityTester {
         return probeEmailConnectivity(deps.emailSender, { timeoutMs });
       case "entra":
         return probeEntraConnectivity(deps.graphClient, { timeoutMs });
+      case "auth-entra":
+        return probeAuthEntra(await deps.runtimeConfig.getAuthConfig(), {
+          fetchFn: deps.fetchFn,
+          timeoutMs,
+          authority: deps.entraAuthority,
+        });
+      case "auth-pki":
+        return probeAuthPki(
+          await deps.runtimeConfig.getAuthConfig(),
+          deps.runtimeConfig.isPkiEnvConfigured(),
+        );
+      case "auth-email-password":
+        return probeAuthEmailPassword(
+          await deps.runtimeConfig.getAuthConfig(),
+          deps.credentialAccounts,
+        );
     }
   }
 }

@@ -8,7 +8,14 @@ export type ConnectivityTarget =
   | "email"
   | "n8n"
   | "embeddings"
-  | "entra";
+  // The Microsoft Graph directory probe, which needs the User.Read.All
+  // application permission. Not a sign-in check — see auth-entra below.
+  | "entra"
+  // One per sign-in method, never one aggregate: an operator needs to know
+  // which method is broken, not that "authentication" is (ADR-042 §5).
+  | "auth-entra"
+  | "auth-pki"
+  | "auth-email-password";
 
 export const CONNECTIVITY_TARGETS: readonly ConnectivityTarget[] = [
   "ai",
@@ -17,6 +24,9 @@ export const CONNECTIVITY_TARGETS: readonly ConnectivityTarget[] = [
   "n8n",
   "embeddings",
   "entra",
+  "auth-entra",
+  "auth-pki",
+  "auth-email-password",
 ];
 
 export interface ConnectivityResult {

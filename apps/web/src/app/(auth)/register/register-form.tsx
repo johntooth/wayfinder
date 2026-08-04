@@ -35,7 +35,7 @@ export function RegisterForm() {
       const result = await authClient.signUp.email({
         email,
         password,
-        name: name.trim() || email,
+        name: name.trim(),
         callbackURL: "/chats",
       });
       if (result.error) {

@@ -131,7 +131,7 @@ export function createAdapters(db: Database, config: AdaptersConfig): Adapters {
   const auditLogger =
     overrides.auditLogger ?? new DrizzleAuditLogger(db, siemForwarder, logger);
   let llm: ILanguageModel =
-    overrides.llm ?? new LanguageModelAdapter(aiProvider, runtimeConfig);
+    overrides.llm ?? new LanguageModelAdapter(aiProvider, runtimeConfig, undefined, errorLogger);
   llm = withUsageTracking(llm, usageRepo);
   llm = withOptionalLangfuse(llm, {
     LANGFUSE_PUBLIC_KEY: langfuse.publicKey,

@@ -82,7 +82,7 @@
     "@types/pg": "^8.11.10",
     "@vitest/coverage-v8": "^4.1.0",
     "ai": "^4.0.0",
-    "better-auth": "^1.6.22",
+    "better-auth": "~1.6.25",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
     "langfuse": "^3.30.0",

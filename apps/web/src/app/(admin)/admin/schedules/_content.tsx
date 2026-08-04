@@ -31,7 +31,7 @@ export function AdminSchedulesContent() {
             <CardTitle>Scheduled Run History</CardTitle>
           </CardHeader>
           <CardContent>
-            {runsQuery.isLoading ? (
+            {runsQuery.isPending ? (
               <TableSkeletonRows count={4} />
             ) : runs.length === 0 ? (
               <EmptyState

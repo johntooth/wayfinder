@@ -7,10 +7,11 @@ import { toast } from "sonner";
 import { isTerminalRun, type RunStatus } from "@rbrasier/domain";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/trpc/client";
-import { RunProgress } from "./run-progress";
+import { RunProgress, RUN_POLL_INTERVAL_MS } from "./run-progress";
 import { ResultGrid, type SampleResult } from "./result-grid";
 import { SummaryPreview } from "./summary-preview";
 import { RunReport } from "./run-report";
+import { isLiveRun } from "./run-tick-state";
 
 // The finished review surface for a run (phase §4): the run header with its
 // downloads, live progress, the summary, records with confidence and source
@@ -28,8 +29,21 @@ const artifactHref = (runId: string, artifact: string): string =>
 
 export function RunResults({ flowId, runId }: RunResultsProps) {
   const utils = trpc.useUtils();
-  const resultsQuery = trpc.extraction.getResults.useQuery({ runId });
-  const summaryQuery = trpc.extraction.summaryMarkdown.useQuery({ runId });
+  // The worker settles documents in the background, so every panel on this
+  // screen re-reads itself while the run is live — without it the table only
+  // caught up when the operator reloaded the page.
+  const resultsQuery = trpc.extraction.getResults.useQuery(
+    { runId },
+    {
+      refetchInterval: (query) =>
+        isLiveRun(query.state.data?.run.status) ? RUN_POLL_INTERVAL_MS : false,
+    },
+  );
+  const live = isLiveRun(resultsQuery.data?.run.status);
+  const summaryQuery = trpc.extraction.summaryMarkdown.useQuery(
+    { runId },
+    { refetchInterval: live ? RUN_POLL_INTERVAL_MS : false },
+  );
   const [generated, setGenerated] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   // Which format the operator asked for, so the artifact fetched on success
@@ -117,6 +131,7 @@ export function RunResults({ flowId, runId }: RunResultsProps) {
           filename: document.filename,
           treePath: document.treePath,
           readable: document.readable,
+          status: document.status,
         })),
         records: data.records.map((record) => ({
           id: record.id,
@@ -273,7 +288,7 @@ export function RunResults({ flowId, runId }: RunResultsProps) {
                 }}
               />
 
-              <RunReport runId={runId} />
+              <RunReport runId={runId} live={live} />
             </>
           )}
         </div>

@@ -1,4 +1,5 @@
 import type { NodeConfigType } from "./node-config-modal";
+import { TEMPLATE_COMPLETE_SENTINEL } from "./output-type";
 
 // The config persisted for a freshly created node, before the author has saved
 // anything. Notifications default on for scheduled steps only. The shapes mirror
@@ -48,9 +49,11 @@ export const defaultConfigForType = (type: NodeConfigType): Record<string, unkno
   }
   return {
     aiInstruction: "",
-    doneWhen: "",
+    // Producing a document is what most steps are for, so a new step starts
+    // there with the matching "all fields captured" completion condition.
+    doneWhen: TEMPLATE_COMPLETE_SENTINEL,
     neverDone: false,
-    outputType: "unstructured",
+    outputType: "generate_document",
     structuredFields: null,
     documentTemplatePath: null,
     documentTemplateFilename: null,

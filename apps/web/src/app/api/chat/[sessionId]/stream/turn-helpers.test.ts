@@ -6,18 +6,29 @@ import {
   buildAttachmentAnnotation,
   buildGatheredContext,
   buildPromptSessionUploads,
+  buildCrossCheckGapNote,
   CROSS_CHECK_PASS_NOTE,
   generateDocument,
   generateInitialMessage,
   generateTitle,
   maybeUpdateSessionTitle,
   OUTSTANDING_CONTEXT_KEY,
+  persistCrossCheckGapNote,
   persistCrossCheckPassNote,
   persistHeldReply,
   streamGapFollowup,
+  writeCrossCheckGapNote,
   writeCrossCheckPassNote,
 } from "./turn-helpers";
 import type { Session, TurnStreamWriter } from "@rbrasier/domain";
+
+// The approval reads every extracting generation makes, to pick up an
+// approver's outstanding change requests. Stubbed empty so these tests stay
+// about generation; the change-request path has its own tests below.
+const noChangeRequests = () => ({
+  approvals: { listBySession: vi.fn().mockResolvedValue({ data: [], error: null }) },
+  flowNodes: { listByFlow: vi.fn().mockResolvedValue({ data: [], error: null }) },
+});
 
 // A TurnStreamWriter that records the ordered sequence of semantic operations
 // ("boundary" for endBubble, "text:<t>" for writeText) plus the text payloads,
@@ -270,7 +281,7 @@ describe("generateDocument wrapper", () => {
 
     const container = {
       useCases: { generateDocument: { execute } },
-      repos: { sessionMessages: { updateDocumentStatus } },
+      repos: { ...noChangeRequests(), sessionMessages: { updateDocumentStatus } },
       services: { errorLogger: { log: errorLog } },
     } as unknown as Parameters<typeof generateDocument>[0];
 
@@ -297,7 +308,7 @@ describe("generateDocument wrapper", () => {
 
     const container = {
       useCases: { generateDocument: { execute } },
-      repos: { sessionMessages: { updateDocumentStatus } },
+      repos: { ...noChangeRequests(), sessionMessages: { updateDocumentStatus } },
       services: { errorLogger: { log: errorLog } },
     } as unknown as Parameters<typeof generateDocument>[0];
 
@@ -325,7 +336,7 @@ describe("generateDocument wrapper", () => {
     const container = {
       useCases: { generateDocument: { execute } },
       runtimeConfig: { resolveDocumentGenerationBudget: vi.fn().mockResolvedValue(budget) },
-      repos: { sessionMessages: { updateDocumentStatus: vi.fn() } },
+      repos: { ...noChangeRequests(), sessionMessages: { updateDocumentStatus: vi.fn() } },
       services: { errorLogger: { log: vi.fn() } },
     } as unknown as Parameters<typeof generateDocument>[0];
 
@@ -342,6 +353,94 @@ describe("generateDocument wrapper", () => {
     expect(execute).toHaveBeenCalledWith(expect.objectContaining({ budget }));
   });
 
+  // The reported defect: an approver sent the work back asking for a change and
+  // regeneration here rebuilt the document from the conversation alone.
+  it("threads an approver's outstanding change request into the use case", async () => {
+    const execute = vi.fn().mockResolvedValue({
+      data: { document: { filename: "f", storagePath: "p", summary: null, generatedAt: "now" } },
+      error: null,
+    });
+
+    const container = {
+      useCases: { generateDocument: { execute } },
+      runtimeConfig: { resolveDocumentGenerationBudget: vi.fn().mockResolvedValue(undefined) },
+      repos: {
+        approvals: {
+          listBySession: vi.fn().mockResolvedValue({
+            data: [
+              {
+                nodeId: "node-approval-2",
+                status: "changes_requested",
+                comment: "The start date must be 03-03-2026.",
+                decidedAt: new Date("2026-03-01T09:00:00.000Z"),
+              },
+            ],
+            error: null,
+          }),
+        },
+        flowNodes: {
+          listByFlow: vi.fn().mockResolvedValue({
+            data: [{ id: "node-approval-2", name: "Finance sign-off" }],
+            error: null,
+          }),
+        },
+        sessionMessages: { updateDocumentStatus: vi.fn() },
+      },
+      services: { errorLogger: { log: vi.fn() } },
+    } as unknown as Parameters<typeof generateDocument>[0];
+
+    await generateDocument(
+      container,
+      "msg-cr",
+      "sess-1",
+      makeFlow(),
+      [],
+      [],
+      makeNode({ config: { outputType: "generate_document", documentTemplatePath: "x" } as unknown as FlowNode["config"] }),
+    );
+
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        changeRequests: [
+          {
+            nodeId: "node-approval-2",
+            stepName: "Finance sign-off",
+            comment: "The start date must be 03-03-2026.",
+          },
+        ],
+      }),
+    );
+  });
+
+  it("skips the approval read when the gate already extracted the values", async () => {
+    const execute = vi.fn().mockResolvedValue({
+      data: { document: { filename: "f", storagePath: "p", summary: null, generatedAt: "now" } },
+      error: null,
+    });
+    const repos = { ...noChangeRequests(), sessionMessages: { updateDocumentStatus: vi.fn() } };
+
+    const container = {
+      useCases: { generateDocument: { execute } },
+      runtimeConfig: { resolveDocumentGenerationBudget: vi.fn().mockResolvedValue(undefined) },
+      repos,
+      services: { errorLogger: { log: vi.fn() } },
+    } as unknown as Parameters<typeof generateDocument>[0];
+
+    await generateDocument(
+      container,
+      "msg-precomputed",
+      "sess-1",
+      makeFlow(),
+      [],
+      [],
+      makeNode({ config: { outputType: "generate_document", documentTemplatePath: "x" } as unknown as FlowNode["config"] }),
+      { fieldValues: { project_title: "Reused" } },
+    );
+
+    expect(repos.approvals.listBySession).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledWith(expect.objectContaining({ changeRequests: undefined }));
+  });
+
   it("does not touch status when use case succeeds (updateDocument already set complete)", async () => {
     const updateDocumentStatus = vi.fn();
     const errorLog = vi.fn();
@@ -352,7 +451,7 @@ describe("generateDocument wrapper", () => {
 
     const container = {
       useCases: { generateDocument: { execute } },
-      repos: { sessionMessages: { updateDocumentStatus } },
+      repos: { ...noChangeRequests(), sessionMessages: { updateDocumentStatus } },
       services: { errorLogger: { log: errorLog } },
     } as unknown as Parameters<typeof generateDocument>[0];
 
@@ -379,7 +478,7 @@ describe("generateDocument return value", () => {
     });
     const container = {
       useCases: { generateDocument: { execute } },
-      repos: { sessionMessages: { updateDocumentStatus: vi.fn().mockResolvedValue({ data: {}, error: null }) } },
+      repos: { ...noChangeRequests(), sessionMessages: { updateDocumentStatus: vi.fn().mockResolvedValue({ data: {}, error: null }) } },
       services: { errorLogger: { log: vi.fn().mockResolvedValue({ data: undefined, error: null }) } },
     } as unknown as Parameters<typeof generateDocument>[0];
 
@@ -400,7 +499,7 @@ describe("generateDocument return value", () => {
     const execute = vi.fn().mockRejectedValue(new Error("network down"));
     const container = {
       useCases: { generateDocument: { execute } },
-      repos: { sessionMessages: { updateDocumentStatus: vi.fn().mockResolvedValue({ data: {}, error: null }) } },
+      repos: { ...noChangeRequests(), sessionMessages: { updateDocumentStatus: vi.fn().mockResolvedValue({ data: {}, error: null }) } },
       services: { errorLogger: { log: vi.fn().mockResolvedValue({ data: undefined, error: null }) } },
     } as unknown as Parameters<typeof generateDocument>[0];
 
@@ -424,7 +523,7 @@ describe("generateDocument return value", () => {
     });
     const container = {
       useCases: { generateDocument: { execute } },
-      repos: { sessionMessages: { updateDocumentStatus: vi.fn() } },
+      repos: { ...noChangeRequests(), sessionMessages: { updateDocumentStatus: vi.fn() } },
       services: { errorLogger: { log: vi.fn() } },
     } as unknown as Parameters<typeof generateDocument>[0];
 
@@ -493,6 +592,7 @@ describe("applyAdvanceSideEffects", () => {
 
     const container = {
       repos: {
+        ...noChangeRequests(),
         sessionMessages: { listBySession, updateDocumentStatus },
         usageRepo: {},
       },
@@ -515,7 +615,7 @@ describe("applyAdvanceSideEffects", () => {
     });
 
     const container = {
-      repos: { sessionMessages: { listBySession, updateDocumentStatus }, usageRepo: {} },
+      repos: { ...noChangeRequests(), sessionMessages: { listBySession, updateDocumentStatus }, usageRepo: {} },
       runtimeConfig: { resolveDocumentGenerationBudget: vi.fn().mockResolvedValue(undefined) },
       useCases: { generateDocument: { execute: generateDocumentExecute } },
       services: { errorLogger: { log: vi.fn().mockResolvedValue({ error: null }) } },
@@ -546,7 +646,7 @@ describe("applyAdvanceSideEffects", () => {
     (approvalNode as { type: string }).type = "approval";
 
     const container = {
-      repos: { sessionMessages: { listBySession, updateDocumentStatus: vi.fn() }, usageRepo: {} },
+      repos: { ...noChangeRequests(), sessionMessages: { listBySession, updateDocumentStatus: vi.fn() }, usageRepo: {} },
       useCases: {
         generateDocument: { execute: vi.fn() },
         retrieveDocumentChunks: { execute: retrieveExecute },
@@ -587,6 +687,7 @@ describe("applyAdvanceSideEffects", () => {
 
     const container = {
       repos: {
+        ...noChangeRequests(),
         sessionMessages: { listBySession, updateDocumentStatus: vi.fn(), create },
         sessionUploads: { listBySession: vi.fn().mockResolvedValue({ data: [], error: null }) },
         usageRepo: {},
@@ -639,6 +740,7 @@ describe("applyAdvanceSideEffects", () => {
 
     const container = {
       repos: {
+        ...noChangeRequests(),
         sessionMessages: {
           listBySession,
           updateDocumentStatus: vi.fn().mockResolvedValue({ data: {}, error: null }),
@@ -689,6 +791,7 @@ describe("applyAdvanceSideEffects", () => {
 
     const container = {
       repos: {
+        ...noChangeRequests(),
         sessionMessages: { listBySession, updateDocumentStatus: vi.fn().mockResolvedValue({ data: {}, error: null }) },
         usageRepo: {},
       },
@@ -1032,6 +1135,64 @@ describe("cross-check pass note", () => {
     } as unknown as Parameters<typeof persistCrossCheckPassNote>[0];
 
     await expect(persistCrossCheckPassNote(container, "sess-1", "node-1")).resolves.toBeUndefined();
+  });
+});
+
+describe("cross-check gap note", () => {
+  const gaps = ["The start date is missing.", "The reporting line is unclear."];
+
+  it("names every outstanding item the review found", () => {
+    const note = buildCrossCheckGapNote(gaps);
+
+    expect(note).toContain("The start date is missing.");
+    expect(note).toContain("The reporting line is unclear.");
+  });
+
+  // The grader can fail the gate on confidence alone without naming an item. A
+  // note that then lists nothing is worse than no note, so it says what happened
+  // instead of presenting an empty bullet list.
+  it("falls back to a general line when the review named nothing specific", () => {
+    const note = buildCrossCheckGapNote([]);
+
+    expect(note).toContain("still need to be confirmed");
+    expect(note).not.toContain("- ");
+  });
+
+  it("streams the note behind a message boundary so it renders as a new bubble", () => {
+    const writer = recordingWriter();
+
+    writeCrossCheckGapNote(writer, gaps);
+
+    expect(writer.ops[0]).toBe("boundary");
+    expect(writer.ops[1]).toMatch(/^text:/);
+    expect(writer.texts[0]).toContain("The start date is missing.");
+  });
+
+  it("persists the note as a system message on the held node", async () => {
+    const create = vi.fn().mockResolvedValue({ data: {}, error: null });
+    const container = {
+      repos: { sessionMessages: { create } },
+    } as unknown as Parameters<typeof persistCrossCheckGapNote>[0];
+
+    await persistCrossCheckGapNote(container, "sess-1", "node-1", gaps);
+
+    expect(create).toHaveBeenCalledWith({
+      sessionId: "sess-1",
+      role: "system",
+      content: buildCrossCheckGapNote(gaps),
+      stepNodeId: "node-1",
+    });
+  });
+
+  it("swallows persistence failures so the follow-up still runs", async () => {
+    const create = vi.fn().mockRejectedValue(new Error("db down"));
+    const container = {
+      repos: { sessionMessages: { create } },
+    } as unknown as Parameters<typeof persistCrossCheckGapNote>[0];
+
+    await expect(
+      persistCrossCheckGapNote(container, "sess-1", "node-1", gaps),
+    ).resolves.toBeUndefined();
   });
 });
 

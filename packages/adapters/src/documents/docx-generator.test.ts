@@ -509,4 +509,159 @@ describe("DocxGenerator", () => {
       expect(fullText).toContain("World");
     });
   });
+
+  describe("annotate", () => {
+    const documentXmlOf = (bytes: Buffer): string =>
+      new PizZip(bytes).file("word/document.xml")!.asText();
+
+    it("re-annotates an existing tag", () => {
+      const templateBytes = buildTemplateBuffer(simpleDocXml("Supplier: {{ Supplier Name }}"));
+
+      const result = generator.annotate({
+        templateBytes,
+        edits: [
+          {
+            find: "{{ Supplier Name }}",
+            occurrence: 0,
+            replacement: "{{ Supplier Name (text) (maxlen: 80) }}",
+          },
+        ],
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(result.data?.appliedCount).toBe(1);
+      expect(result.data?.unmatched).toEqual([]);
+      expect(generator.extractFullText({ templateBytes: result.data!.bytes }).data?.text).toBe(
+        "Supplier: {{ Supplier Name (text) (maxlen: 80) }}",
+      );
+    });
+
+    it("replaces a filled example's literal value with a placeholder", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("This agreement is made with Acme Pty Ltd for catering."),
+      );
+
+      const result = generator.annotate({
+        templateBytes,
+        edits: [
+          { find: "Acme Pty Ltd", occurrence: 0, replacement: "{{ Supplier Name (text) }}" },
+        ],
+      });
+
+      expect(result.data?.appliedCount).toBe(1);
+      expect(generator.extractFullText({ templateBytes: result.data!.bytes }).data?.text).toBe(
+        "This agreement is made with {{ Supplier Name (text) }} for catering.",
+      );
+    });
+
+    it("matches a span split across runs by Word", () => {
+      const templateBytes = buildTemplateBuffer(splitRunDocXml("Acme ", "Pty ", "Ltd trades here"));
+
+      const result = generator.annotate({
+        templateBytes,
+        edits: [{ find: "Acme Pty Ltd", occurrence: 0, replacement: "{{ Supplier Name }}" }],
+      });
+
+      expect(result.data?.appliedCount).toBe(1);
+      expect(generator.extractFullText({ templateBytes: result.data!.bytes }).data?.text).toBe(
+        "{{ Supplier Name }} trades here",
+      );
+    });
+
+    it("addresses repeated identical text by occurrence", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("Acme Pty Ltd and Acme Pty Ltd and Acme Pty Ltd"),
+      );
+
+      const result = generator.annotate({
+        templateBytes,
+        edits: [
+          { find: "Acme Pty Ltd", occurrence: 1, replacement: "{{ Second }}" },
+          { find: "Acme Pty Ltd", occurrence: 2, replacement: "{{ Third }}" },
+        ],
+      });
+
+      expect(result.data?.appliedCount).toBe(2);
+      expect(generator.extractFullText({ templateBytes: result.data!.bytes }).data?.text).toBe(
+        "Acme Pty Ltd and {{ Second }} and {{ Third }}",
+      );
+    });
+
+    it("preserves the run formatting at the replaced span", () => {
+      const boldRun =
+        '<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">Acme Pty Ltd</w:t></w:r>';
+      const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document ${NS}>
+  <w:body><w:p><w:r><w:t xml:space="preserve">Supplier: </w:t></w:r>${boldRun}</w:p></w:body>
+</w:document>`;
+      const templateBytes = buildTemplateBuffer(xml);
+
+      const result = generator.annotate({
+        templateBytes,
+        edits: [{ find: "Acme Pty Ltd", occurrence: 0, replacement: "{{ Supplier Name }}" }],
+      });
+
+      const annotatedXml = documentXmlOf(result.data!.bytes);
+      const placeholderRun = annotatedXml.match(/<w:r>(?:(?!<\/w:r>)[\s\S])*Supplier Name[\s\S]*?<\/w:r>/);
+      expect(placeholderRun?.[0]).toContain("<w:b/>");
+    });
+
+    it("reports an edit whose text is absent rather than dropping it", () => {
+      const templateBytes = buildTemplateBuffer(simpleDocXml("Supplier: Acme Pty Ltd"));
+
+      const result = generator.annotate({
+        templateBytes,
+        edits: [
+          { find: "Northwind Ltd", occurrence: 0, replacement: "{{ Supplier Name }}" },
+          { find: "Acme Pty Ltd", occurrence: 4, replacement: "{{ Other }}" },
+        ],
+      });
+
+      expect(result.data?.appliedCount).toBe(0);
+      expect(result.data?.unmatched).toHaveLength(2);
+    });
+
+    it("leaves a section block untouched", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("{{#Pricing}} Rate: {{ Rate }} {{/Pricing}}"),
+      );
+
+      const result = generator.annotate({
+        templateBytes,
+        edits: [{ find: "{{ Rate }}", occurrence: 0, replacement: "{{ Rate (currency) }}" }],
+      });
+
+      const text = generator.extractFullText({ templateBytes: result.data!.bytes }).data?.text;
+      expect(text).toContain("{{#Pricing}}");
+      expect(text).toContain("{{/Pricing}}");
+      expect(text).toContain("{{ Rate (currency) }}");
+    });
+
+    it("returns the document unchanged when there are no edits", () => {
+      const templateBytes = buildTemplateBuffer(simpleDocXml("Supplier: Acme Pty Ltd"));
+
+      const result = generator.annotate({ templateBytes, edits: [] });
+
+      expect(result.data?.appliedCount).toBe(0);
+      expect(generator.extractFullText({ templateBytes: result.data!.bytes }).data?.text).toBe(
+        "Supplier: Acme Pty Ltd",
+      );
+    });
+
+    it("produces a template the tag extractor can then read", () => {
+      const templateBytes = buildTemplateBuffer(simpleDocXml("Supplier: Acme Pty Ltd"));
+
+      const annotated = generator.annotate({
+        templateBytes,
+        edits: [
+          { find: "Acme Pty Ltd", occurrence: 0, replacement: "{{ Supplier Name (text) }}" },
+        ],
+      });
+      const fields = generator.extractFields({ templateBytes: annotated.data!.bytes });
+
+      expect(fields.error).toBeUndefined();
+      expect(fields.data?.fields).toHaveLength(1);
+      expect(fields.data?.fields[0]).toMatchObject({ label: "Supplier Name", type: "text" });
+    });
+  });
 });

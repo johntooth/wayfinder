@@ -1,3 +1,4 @@
+import type { ApprovalSubject, ChangesRequestedTarget } from "./approval-record";
 import type { FieldValueSource } from "./field-value-source";
 import type { McpToolRef } from "./mcp-server";
 import type { StoredOutputType } from "./node-output";
@@ -18,6 +19,17 @@ export interface ApprovalNodeConfig {
   roleHint?: string;
   // Shown to the operator (when confirming) and to the approver (when deciding).
   instructions?: string;
+  // What is being approved (ADR-040). Absent resolves to the last completed step,
+  // so approval nodes authored before this existed keep working unedited. Read
+  // through `approvalSubjectOf`, never directly.
+  approvalSubject?: ApprovalSubject;
+  // Which signature slot on the subject step's template this approval fills
+  // (ADR-043 §5). Absent when the template declares none.
+  signatureFieldKey?: string;
+  // Where a `changes_requested` decision returns the session (ADR-044 §1).
+  // Absent resolves to the nearest prior editable step. Read through
+  // `changesRequestedTargetOf`, never directly.
+  changesRequestedTarget?: ChangesRequestedTarget;
 }
 
 export interface ConversationalNodeConfig {

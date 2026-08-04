@@ -1,7 +1,7 @@
 "use client";
 
 import { type ChangeEvent, type RefObject } from "react";
-import { HelpCircle, Plug, Sparkles, X } from "lucide-react";
+import { Download, HelpCircle, ListChecks, Plug, Sparkles, X } from "lucide-react";
 import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -46,6 +46,10 @@ export interface NodeConfigModalConversationalProps {
   uploadError: string | null;
   setUploadError: (value: string | null) => void;
   onOpenHelpDialog: () => void;
+  // Re-opens the field editor for the attached template without re-uploading.
+  onEditTemplateFields?: () => void;
+  // Present once a template is attached; null before then.
+  templateDownloadUrl?: string | null;
   // Power-user surfaces (ADR-022). When the flag is off the section is hidden.
   skillsEnabled: boolean;
   mcpEnabled: boolean;
@@ -71,6 +75,8 @@ export function NodeConfigModalConversational({
   uploadError,
   setUploadError,
   onOpenHelpDialog,
+  onEditTemplateFields,
+  templateDownloadUrl = null,
   skillsEnabled,
   mcpEnabled,
   skillsById,
@@ -205,8 +211,12 @@ export function NodeConfigModalConversational({
             </button>
           </div>
           <p className="text-[12px] text-[#6d6a65]">
-            Works best using variables marked with tags (e.g{" "}
-            <code className="font-mono">{EXAMPLE_TAG}</code>)
+            Upload the document this step should produce. The AI fills it in during the
+            conversation, so wherever a detail changes each time, it becomes a field to capture.
+          </p>
+          <p className="text-[12px] text-[#6d6a65]">
+            Already marked up with tags (e.g <code className="font-mono">{EXAMPLE_TAG}</code>)? Those
+            are picked up automatically — otherwise we&apos;ll show you how to add them.
           </p>
           {!onUploadTemplate ? (
             <p className="rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3 text-[12px] text-[#6d6a65]">
@@ -253,6 +263,26 @@ export function NodeConfigModalConversational({
                     : " (its header row becomes the fields)"}
                 </p>
               )}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                {onEditTemplateFields && (
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-[12px] text-[#3a5fd9] transition-colors hover:text-[#2e4bb0]"
+                    onClick={onEditTemplateFields}
+                    disabled={isUploading}
+                  >
+                    <ListChecks size={13} /> Edit fields
+                  </button>
+                )}
+                {templateDownloadUrl && (
+                  <a
+                    href={templateDownloadUrl}
+                    className="flex items-center gap-1 text-[12px] text-[#6d6a65] transition-colors hover:text-[#3a5fd9]"
+                  >
+                    <Download size={13} /> Keep your master copy in sync
+                  </a>
+                )}
+              </div>
             </div>
           ) : (
             <button
@@ -261,7 +291,7 @@ export function NodeConfigModalConversational({
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
             >
-              {isUploading ? "Uploading…" : "Click to upload a .docx or .xlsx template"}
+              {isUploading ? "Setting up…" : "Click to upload a .docx or .xlsx template"}
             </button>
           )}
           <input

@@ -1,0 +1,142 @@
+import { describe, expect, it } from "vitest";
+import {
+  NEXT_STEP_GAP,
+  STEP_NODE_HEIGHT,
+  STEP_NODE_WIDTH,
+  findDisconnectedNodeIds,
+  findNextStepAnchor,
+  type GuidanceEdge,
+  type GuidanceNode,
+} from "./canvas-guidance";
+
+const step = (
+  id: string,
+  x: number,
+  y = 0,
+  overrides: Partial<GuidanceNode> = {},
+): GuidanceNode => ({
+  id,
+  position: { x, y },
+  type: "conversationalNode",
+  data: {},
+  ...overrides,
+});
+
+const neverDoneStep = (id: string, x: number, y = 0): GuidanceNode =>
+  step(id, x, y, { data: { neverDone: true, config: { neverDone: true } } });
+
+const edge = (source: string, target: string): GuidanceEdge => ({ source, target });
+
+describe("findDisconnectedNodeIds", () => {
+  it("returns nothing for an empty canvas", () => {
+    expect(findDisconnectedNodeIds([], [])).toEqual([]);
+  });
+
+  it("returns nothing for a single step, even with no edges", () => {
+    expect(findDisconnectedNodeIds([step("a", 0)], [])).toEqual([]);
+  });
+
+  it("finds the step with no edges among connected ones", () => {
+    const nodes = [step("a", 0), step("b", 280), step("loose", 560)];
+    expect(findDisconnectedNodeIds(nodes, [edge("a", "b")])).toEqual(["loose"]);
+  });
+
+  it("treats a step with only an incoming edge as connected", () => {
+    const nodes = [step("a", 0), step("b", 280)];
+    expect(findDisconnectedNodeIds(nodes, [edge("a", "b")])).toEqual([]);
+  });
+
+  it("treats a step with only an outgoing edge as connected", () => {
+    const nodes = [step("a", 0), step("b", 280), step("c", 560)];
+    expect(findDisconnectedNodeIds(nodes, [edge("b", "c"), edge("c", "a")])).toEqual([]);
+  });
+
+  it("returns every loose step in input order", () => {
+    const nodes = [step("loose1", 0), step("a", 280), step("loose2", 560), step("b", 840)];
+    expect(findDisconnectedNodeIds(nodes, [edge("a", "b")])).toEqual(["loose1", "loose2"]);
+  });
+
+  it("reports both steps when two steps share a canvas with no edge at all", () => {
+    expect(findDisconnectedNodeIds([step("a", 0), step("b", 280)], [])).toEqual(["a", "b"]);
+  });
+});
+
+describe("findNextStepAnchor", () => {
+  it("returns null for an empty canvas", () => {
+    expect(findNextStepAnchor([], [])).toBeNull();
+  });
+
+  it("anchors past the right-most step by x, not by insertion order", () => {
+    const nodes = [step("far", 900, 40), step("near", 100, 200)];
+    const anchor = findNextStepAnchor(nodes, []);
+    expect(anchor?.position).toEqual({ x: 900 + STEP_NODE_WIDTH + NEXT_STEP_GAP, y: 40 });
+  });
+
+  it("offsets by the measured width when React Flow has reported one", () => {
+    const nodes = [step("a", 100, 0, { measured: { width: 300 } })];
+    expect(findNextStepAnchor(nodes, [])?.position.x).toBe(100 + 300 + NEXT_STEP_GAP);
+  });
+
+  it("reports the measured height so the prompt can centre against the step", () => {
+    const nodes = [step("a", 0, 0, { measured: { width: 224, height: 120 } })];
+    expect(findNextStepAnchor(nodes, [])?.nodeHeight).toBe(120);
+  });
+
+  it("falls back to the default step height before React Flow has measured", () => {
+    expect(findNextStepAnchor([step("a", 0)], [])?.nodeHeight).toBe(STEP_NODE_HEIGHT);
+  });
+
+  it("connects from the only step when the canvas holds one", () => {
+    expect(findNextStepAnchor([step("a", 0)], [])?.connectFromNodeId).toBe("a");
+  });
+
+  it("connects from the single open end of a linear chain", () => {
+    const nodes = [step("a", 0), step("b", 280), step("c", 560)];
+    const edges = [edge("a", "b"), edge("b", "c")];
+    expect(findNextStepAnchor(nodes, edges)?.connectFromNodeId).toBe("c");
+  });
+
+  it("leaves the new step unconnected when two branches are open", () => {
+    const nodes = [step("a", 0), step("b", 280, -120), step("c", 280, 120)];
+    const edges = [edge("a", "b"), edge("a", "c")];
+    expect(findNextStepAnchor(nodes, edges)?.connectFromNodeId).toBeNull();
+  });
+
+  it("connects from the single open end even when it is not the right-most step", () => {
+    // The author has dragged the terminal step to the left of an earlier one;
+    // the button still sits past the right-most step but joins the real end.
+    const nodes = [step("a", 900), step("b", 200)];
+    const anchor = findNextStepAnchor(nodes, [edge("a", "b")]);
+    expect(anchor?.connectFromNodeId).toBe("b");
+    expect(anchor?.position.x).toBe(900 + STEP_NODE_WIDTH + NEXT_STEP_GAP);
+  });
+
+  it("leaves the new step unconnected when no step has an open end", () => {
+    const nodes = [step("a", 0), step("b", 280)];
+    expect(findNextStepAnchor(nodes, [edge("a", "b"), edge("b", "a")])?.connectFromNodeId).toBeNull();
+  });
+
+  it("returns null when the right-most step never completes", () => {
+    expect(findNextStepAnchor([step("a", 0), neverDoneStep("b", 280)], [edge("a", "b")])).toBeNull();
+  });
+
+  it("reads never-done from the saved config when the flag is not mirrored on data", () => {
+    const nodes = [step("a", 0, 0, { data: { config: { neverDone: true } } })];
+    expect(findNextStepAnchor(nodes, [])).toBeNull();
+  });
+
+  it("does not suppress the button for a never-done step that is not right-most", () => {
+    const nodes = [neverDoneStep("a", 0), step("b", 280)];
+    expect(findNextStepAnchor(nodes, [edge("a", "b")])?.connectFromNodeId).toBe("b");
+  });
+
+  it("ignores never-done on step types that cannot carry the flag", () => {
+    const nodes = [step("a", 0, 0, { type: "autoNode", data: { config: { neverDone: true } } })];
+    expect(findNextStepAnchor(nodes, [])?.connectFromNodeId).toBe("a");
+  });
+
+  it("breaks a tie on x by y then id so the anchor never jitters", () => {
+    const nodes = [step("b", 400, 300), step("a", 400, 100)];
+    expect(findNextStepAnchor(nodes, [])?.position.y).toBe(300);
+  });
+});

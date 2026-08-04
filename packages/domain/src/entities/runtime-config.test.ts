@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_DEPLOYMENT_CONFIG,
   DEFAULT_ONBOARDING_STATE,
+  DEFAULT_PKI_SESSION_TTL_HOURS,
   DEFAULT_SIEM_CONFIG,
   createDefaultAuthConfig,
   isAtLeastOneMethodEnabled,
   isEntraConfigured,
+  isPkiUsable,
   isSiemConfigured,
   parseDeploymentConfig,
   parseOnboardingState,
@@ -26,6 +28,32 @@ describe("AuthConfig defaults", () => {
 
     expect(config.entra).toEqual({ tenantId: "", clientId: "", clientSecret: "" });
   });
+
+  it("disables PKI by default, with a session TTL already set", () => {
+    const config = createDefaultAuthConfig();
+
+    expect(config.pkiEnabled).toBe(false);
+    expect(config.pki.sessionTtlHours).toBe(DEFAULT_PKI_SESSION_TTL_HOURS);
+  });
+});
+
+describe("isPkiUsable", () => {
+  const config = (pkiEnabled: boolean): AuthConfig => ({
+    ...createDefaultAuthConfig(),
+    pkiEnabled,
+  });
+
+  it("is true only when the switch is on and the environment gate is satisfied", () => {
+    expect(isPkiUsable(config(true), true)).toBe(true);
+  });
+
+  it("is false when the switch is on but the environment gate is not satisfied", () => {
+    expect(isPkiUsable(config(true), false)).toBe(false);
+  });
+
+  it("is false when the environment gate is satisfied but the switch is off", () => {
+    expect(isPkiUsable(config(false), true)).toBe(false);
+  });
 });
 
 describe("isEntraConfigured", () => {
@@ -44,23 +72,65 @@ describe("isEntraConfigured", () => {
 
 describe("isAtLeastOneMethodEnabled", () => {
   const blankEntra = { tenantId: "", clientId: "", clientSecret: "" };
+  const pkiOff = { pkiEnabled: false, pki: { sessionTtlHours: 8 } };
 
   it("is true when only email/password is enabled", () => {
-    const config: AuthConfig = { emailPasswordEnabled: true, entraEnabled: false, entra: blankEntra };
+    const config: AuthConfig = {
+      emailPasswordEnabled: true,
+      entraEnabled: false,
+      entra: blankEntra,
+      ...pkiOff,
+    };
 
-    expect(isAtLeastOneMethodEnabled(config)).toBe(true);
+    expect(isAtLeastOneMethodEnabled(config, false)).toBe(true);
   });
 
   it("is true when only Entra is enabled", () => {
-    const config: AuthConfig = { emailPasswordEnabled: false, entraEnabled: true, entra: blankEntra };
+    const config: AuthConfig = {
+      emailPasswordEnabled: false,
+      entraEnabled: true,
+      entra: blankEntra,
+      ...pkiOff,
+    };
 
-    expect(isAtLeastOneMethodEnabled(config)).toBe(true);
+    expect(isAtLeastOneMethodEnabled(config, false)).toBe(true);
   });
 
   it("is false when both methods are disabled", () => {
-    const config: AuthConfig = { emailPasswordEnabled: false, entraEnabled: false, entra: blankEntra };
+    const config: AuthConfig = {
+      emailPasswordEnabled: false,
+      entraEnabled: false,
+      entra: blankEntra,
+      ...pkiOff,
+    };
 
-    expect(isAtLeastOneMethodEnabled(config)).toBe(false);
+    expect(isAtLeastOneMethodEnabled(config, false)).toBe(false);
+  });
+
+  it("counts PKI as the sole method when its environment gate is satisfied", () => {
+    const config: AuthConfig = {
+      emailPasswordEnabled: false,
+      entraEnabled: false,
+      entra: blankEntra,
+      pkiEnabled: true,
+      pki: { sessionTtlHours: 8 },
+    };
+
+    expect(isAtLeastOneMethodEnabled(config, true)).toBe(true);
+  });
+
+  // The lockout this guard exists to prevent: an admin leaves PKI as the only
+  // method, then a later deploy ships without PKI_TRUSTED_PROXY_IPS.
+  it("does not count an enabled PKI whose environment gate is unsatisfied", () => {
+    const config: AuthConfig = {
+      emailPasswordEnabled: false,
+      entraEnabled: false,
+      entra: blankEntra,
+      pkiEnabled: true,
+      pki: { sessionTtlHours: 8 },
+    };
+
+    expect(isAtLeastOneMethodEnabled(config, false)).toBe(false);
   });
 });
 
