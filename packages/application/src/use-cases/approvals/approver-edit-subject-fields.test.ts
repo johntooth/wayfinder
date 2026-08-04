@@ -27,7 +27,30 @@ const approval = (overrides: Partial<Approval> = {}): Approval =>
     ...overrides,
   }) as Approval;
 
-const build = (rows: Approval[] = [approval()]) => {
+// The subject step's declared field set, so a changed key resolves to the label
+// the originator actually reads.
+const draftNode = {
+  id: "node-draft",
+  flowId: "flow-1",
+  type: "conversational",
+  name: "Draft the instrument",
+  config: {
+    aiInstruction: "Draft it.",
+    doneWhen: "Drafted.",
+    outputType: "generate_document",
+    documentTemplateFields: [
+      {
+        key: "commencement_date",
+        label: "Commencement date",
+        type: "date",
+        optional: false,
+        raw: "",
+      },
+    ],
+  },
+};
+
+const build = (rows: Approval[] = [approval()], node: unknown = draftNode) => {
   const approvals = { listBySession: vi.fn(async () => ok(rows)) };
   const users = {
     findById: vi.fn(async () =>
@@ -61,14 +84,17 @@ const build = (rows: Approval[] = [approval()]) => {
     ),
   };
 
+  const flowNodes = { findById: vi.fn(async () => ok(node)) };
+
   const useCase = new ApproverEditSubjectFields(
     approvals as never,
     users as never,
     sessionMessages as never,
     updateDocumentFields as never,
+    flowNodes as never,
   );
 
-  return { useCase, approvals, users, sessionMessages, updateDocumentFields };
+  return { useCase, approvals, users, sessionMessages, updateDocumentFields, flowNodes };
 };
 
 const edit = { messageId: "msg-1", editedByUserId: "manager-1", values: { commencement_date: "01-10-2026" } };
@@ -106,8 +132,38 @@ describe("ApproverEditSubjectFields", () => {
     };
     expect(posted.role).toBe("system");
     expect(posted.content).toContain("Jane Doe");
-    expect(posted.content).toContain("commencement_date");
+    // Regression guard: the notice named the raw field key, which the
+    // originator has never been shown anywhere else in the product.
+    expect(posted.content).toContain("Commencement date");
+    expect(posted.content).not.toContain("commencement_date");
     expect(posted.stepNodeId).toBe("node-draft");
+  });
+
+  it("round-trips into the shape the chat feed parses", async () => {
+    const { useCase, sessionMessages } = build();
+
+    await useCase.execute(edit);
+
+    const posted = sessionMessages.create.mock.calls[0]![0] as { content: string };
+    // The feed matches this to decide whether to render the changed document
+    // beneath the notice; a drift here silently loses that card.
+    expect(posted.content).toBe(
+      "Jane Doe edited this step before deciding the approval: Commencement date.",
+    );
+  });
+
+  it("falls back to the raw key when the field has since been removed", async () => {
+    const { useCase, sessionMessages } = build([approval()], {
+      ...draftNode,
+      config: { ...draftNode.config, documentTemplateFields: [] },
+    });
+
+    await useCase.execute(edit);
+
+    const posted = sessionMessages.create.mock.calls[0]![0] as { content: string };
+    // A changed value the originator is not told about is the one outcome this
+    // must never produce, so an unresolvable label degrades to the key.
+    expect(posted.content).toContain("commencement_date");
   });
 
   it("refuses an approver editing a step that is not their subject", async () => {

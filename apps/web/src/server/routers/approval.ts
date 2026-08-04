@@ -114,7 +114,20 @@ export const approvalRouter = router({
       if (result.error) throw toTrpcError(result.error);
 
       const nextApproval = await resolveNextApproval(ctx.container, result.data.newNodeId);
-      return { ...result.data, nextApproval };
+      // Who to tell, when email cannot tell them. Best-effort by construction:
+      // the decision has already committed, so a resolution failure costs a
+      // suggestion, not the decision.
+      const notify = await ctx.container.useCases.resolveDecisionNotifyTargets.execute({
+        approval: result.data.approval,
+        newNodeId: result.data.newNodeId,
+        sessionCompleted: result.data.sessionCompleted,
+        decidedByUserId: ctx.userId,
+      });
+      return {
+        ...result.data,
+        nextApproval,
+        notifyTargets: notify.error ? [] : notify.data,
+      };
     }),
 
   // Enriched with the context the approver needs to decide: chat name, who
@@ -122,13 +135,48 @@ export const approvalRouter = router({
   listPending: authenticatedProcedure.query(async ({ ctx }) => {
     const userResult = await ctx.container.repos.users.findById(ctx.userId);
     if (userResult.error) throw toTrpcError(userResult.error);
-    const result = await ctx.container.useCases.listPendingApprovalsWithContext.execute({
+    const result = await ctx.container.useCases.listApprovalsWithContext.execute({
       approverUserId: ctx.userId,
       approverEmail: userResult.data?.email ?? null,
     });
     if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
+
+  // The same context, widened past the pending queue so an approver can review
+  // what they have already decided and where that work ended up.
+  list: authenticatedProcedure
+    .input(z.object({ scope: z.enum(["pending", "decided", "all"]).default("pending") }))
+    .query(async ({ ctx, input }) => {
+      const userResult = await ctx.container.repos.users.findById(ctx.userId);
+      if (userResult.error) throw toTrpcError(userResult.error);
+      const result = await ctx.container.useCases.listApprovalsWithContext.execute({
+        approverUserId: ctx.userId,
+        approverEmail: userResult.data?.email ?? null,
+        scope: input.scope,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  // One decision, for its own page. The authorisation lives in the use case
+  // because the rule is about the approval rather than the session: being named
+  // on any approval of a session already opens that session (ADR-018), but a
+  // decision record is only readable by the people it is about.
+  get: authenticatedProcedure
+    .input(z.object({ approvalId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const userResult = await ctx.container.repos.users.findById(ctx.userId);
+      if (userResult.error) throw toTrpcError(userResult.error);
+      const result = await ctx.container.useCases.listApprovalsWithContext.getById({
+        approvalId: input.approvalId,
+        viewerUserId: ctx.userId,
+        viewerEmail: userResult.data?.email ?? null,
+        isAdmin: ctx.isAdmin,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
 
   // Whether an approval request can actually be emailed. False when notifications
   // are disabled or no transport is configured, so the gate can offer the

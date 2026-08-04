@@ -84,7 +84,7 @@ in the room.
 The rule is therefore: **a human who is party to the approval confirms it**,
 never the system.
 
-### Org data: three federated sources behind one search
+### Org data: four federated sources behind one search
 
 Resolution and the "Someone else" picker draw on a federated people directory:
 
@@ -102,13 +102,16 @@ export interface IReportingLineResolver {
 
 | Source | Role | How |
 | ------ | ---- | --- |
+| **Existing Wayfinder accounts** | the people who can actually act | Case-insensitive match over `core_users.name` / `.email`. Listed first and preferred in the de-duplication: an approver with no account cannot decide until one exists (see *Consequences*), so a candidate who already has one is never buried under a directory record for the same address. Requires no external configuration, so it is the one source that always works. |
 | **Microsoft Entra ID (Graph)** | authoritative hierarchy + people search | Reuse the Email-Notifications **M365 app registration**, adding `User.Read.All` + `Directory.Read.All`. `GET /users/{id}/manager` walked once/twice gives first/second level; `$search` powers auto-suggest. |
 | **Uploaded HR dataset** | fallback / orgs without a clean directory; extra position data | Admin uploads CSV/XLSX in configuration (see below). |
 | **Free-text email** | escape hatch | The operator may type *any* email address; it is validated and accepted even if it matches no known source. |
 
-Precedence for the hierarchical *suggestion*: Entra → HR upload (mapped manager
-column) → unresolved (operator picks). For the "Someone else" search, all three
-are merged and de-duplicated by email.
+Precedence for the hierarchical *suggestion* is unchanged: Entra → HR upload
+(mapped manager column) → unresolved (operator picks). For the "Someone else"
+search, all four are merged and de-duplicated by lowercased email, preferring
+the account-backed record. Preference is by source rank, not by search order, so
+reordering the directory list cannot change which record survives.
 
 ### HR upload is stored as-uploaded, not into fixed columns
 
@@ -183,7 +186,7 @@ confirm rule means no single stored edge is treated as ground truth.
 
 **Positive**
 
-- One picker, three sources: structural levels, policy-driven roles, and a free
+- One picker, four sources: structural levels, policy-driven roles, and a free
   email escape hatch all resolve through the same confirmable UI.
 - Reuses the existing M365 app registration — no new identity integration to
   stand up, just added Graph scopes.
@@ -193,7 +196,7 @@ confirm rule means no single stored edge is treated as ground truth.
 
 **Negative**
 
-- A federated directory with de-duplication and three adapters is more moving
+- A federated directory with de-duplication and four adapters is more moving
   parts than a single column.
 - Graph scopes (`Directory.Read.All`) are privileged and need tenant admin
   consent.

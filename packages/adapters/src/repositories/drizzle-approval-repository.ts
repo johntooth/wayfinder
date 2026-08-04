@@ -1,17 +1,20 @@
-import { and, desc, eq, inArray, isNotNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, ne, notInArray, or } from "drizzle-orm";
 import {
   APPROVED_STATUSES,
+  DISCARDED_SESSION_STATUSES,
   domainError,
   err,
   ok,
   type Approval,
+  type ApprovalListScope,
   type ApprovalUpdate,
+  type ApproverQuery,
   type IApprovalRepository,
   type NewApproval,
   type Result,
 } from "@rbrasier/domain";
 import type { Database } from "../db/client";
-import { app_session_approvals } from "../db/schema/wayfinder";
+import { app_session_approvals, app_sessions } from "../db/schema/wayfinder";
 
 // The governed record exists once an approval has *approved* something. Two
 // other states carry a `record_snapshot` and must not lock the document: a
@@ -106,25 +109,74 @@ export class DrizzleApprovalRepository implements IApprovalRepository {
     }
   }
 
-  async listPendingForApprover(input: {
-    approverUserId: string;
-    approverEmail: string | null;
-  }): Promise<Result<Approval[]>> {
+  // Who this approval is currently routed to. An email-only assignment
+  // (ADR-018) is raised before the recipient has an account, so the address is
+  // matched alongside the id.
+  private assigneeMatch(input: ApproverQuery) {
+    if (!input.approverEmail) {
+      return eq(app_session_approvals.approver_user_id, input.approverUserId);
+    }
+    return or(
+      eq(app_session_approvals.approver_user_id, input.approverUserId),
+      eq(app_session_approvals.approver_email, input.approverEmail),
+    );
+  }
+
+  async listPendingForApprover(input: ApproverQuery): Promise<Result<Approval[]>> {
     try {
-      const assigneeMatch = input.approverEmail
-        ? or(
-            eq(app_session_approvals.approver_user_id, input.approverUserId),
-            eq(app_session_approvals.approver_email, input.approverEmail),
-          )
-        : eq(app_session_approvals.approver_user_id, input.approverUserId);
+      // Joined rather than filtered after the fact: an approval on a discarded
+      // session must never reach the queue, and the join also keeps the read to
+      // one round trip.
       const rows = await this.db
-        .select()
+        .select({ approval: app_session_approvals })
         .from(app_session_approvals)
-        .where(and(assigneeMatch, eq(app_session_approvals.status, "pending")))
+        .innerJoin(app_sessions, eq(app_sessions.id, app_session_approvals.session_id))
+        .where(
+          and(
+            this.assigneeMatch(input),
+            eq(app_session_approvals.status, "pending"),
+            notInArray(app_sessions.status, [...DISCARDED_SESSION_STATUSES]),
+          ),
+        )
         .orderBy(desc(app_session_approvals.created_at));
-      return ok(rows.map(toEntity));
+      return ok(rows.map((row) => toEntity(row.approval)));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list pending approvals.", cause));
+    }
+  }
+
+  async listForApprover(
+    input: ApproverQuery & { scope: ApprovalListScope },
+  ): Promise<Result<Approval[]>> {
+    if (input.scope === "pending") return this.listPendingForApprover(input);
+
+    try {
+      // A decision belongs to whoever made it, so a row reassigned after the
+      // fact still appears in the decider's history. Discarded sessions are not
+      // filtered here: a decision that was made is a matter of record, and the
+      // detail page reports the session's real state alongside it.
+      const decidedMatch = and(
+        ne(app_session_approvals.status, "pending"),
+        or(
+          this.assigneeMatch(input),
+          eq(app_session_approvals.decided_by_user_id, input.approverUserId),
+        ),
+      );
+      const pendingMatch = and(
+        eq(app_session_approvals.status, "pending"),
+        this.assigneeMatch(input),
+        notInArray(app_sessions.status, [...DISCARDED_SESSION_STATUSES]),
+      );
+
+      const rows = await this.db
+        .select({ approval: app_session_approvals })
+        .from(app_session_approvals)
+        .innerJoin(app_sessions, eq(app_sessions.id, app_session_approvals.session_id))
+        .where(input.scope === "decided" ? decidedMatch : or(decidedMatch, pendingMatch))
+        .orderBy(desc(app_session_approvals.created_at));
+      return ok(rows.map((row) => toEntity(row.approval)));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to list approvals.", cause));
     }
   }
 

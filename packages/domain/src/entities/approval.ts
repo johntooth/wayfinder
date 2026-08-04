@@ -34,6 +34,13 @@ export const APPROVED_STATUSES: readonly ApprovalStatus[] = ["approved", "approv
 
 export const isApproved = (status: ApprovalStatus): boolean => APPROVED_STATUSES.includes(status);
 
+// Which slice of an approver's approvals to read. `pending` is their queue —
+// what still needs them. `decided` is their history: everything they have
+// already ruled on. A flow can hold several decisions for one approval step,
+// because a change request routes work back and re-entering the node raises a
+// fresh row, so history lists rows rather than steps.
+export type ApprovalListScope = "pending" | "decided" | "all";
+
 export interface Approval {
   readonly id: string;
   readonly sessionId: string;

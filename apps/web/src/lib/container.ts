@@ -478,7 +478,7 @@ const build = () => {
     languageModel: llm,
     sessionStepOutputs,
   });
-  const { spreadsheetParser, graphClient, graphPeopleDirectory, hrPeopleDirectory, reportingLineResolver } =
+  const { spreadsheetParser, graphClient, graphPeopleDirectory, hrPeopleDirectory, userPeopleDirectory, reportingLineResolver } =
     buildPeopleDirectory({ env, hrDatasets, users });
 
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
@@ -607,6 +607,7 @@ const build = () => {
     unitOfWork,
     approvals,
     sessions,
+    sessionParticipants,
     sessionMessages,
     sessionStepOutputs,
     flowNodes,
@@ -758,7 +759,10 @@ const build = () => {
       setUsageLimitsEnabled: new SetUsageLimitsEnabled(systemSettings),
       getFlowDeepDive: new GetFlowDeepDive(flows, flowNodes, analyticsRepo, sessionStepOutputs, flowEdges),
       ...approvalUseCases,
-      searchPeople: new SearchPeople([graphPeopleDirectory, hrPeopleDirectory]),
+      // Accounts first: they are the people who can actually act on what they
+      // are sent, and ranking makes them win a de-dupe against the same address
+      // from Entra or HR. The external directories augment the list (ADR-018).
+      searchPeople: new SearchPeople([userPeopleDirectory, graphPeopleDirectory, hrPeopleDirectory]),
       importHrDataset: new ImportHrDataset(
         spreadsheetParser,
         hrDatasets,

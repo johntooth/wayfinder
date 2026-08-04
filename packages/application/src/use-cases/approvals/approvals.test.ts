@@ -3,8 +3,11 @@ import { describe, it, expect } from "vitest";
 import {
   domainError,
   err,
+  isSessionDiscarded,
   ok,
   type Approval,
+  type ApprovalListScope,
+  type ApprovalStatus,
   type ApprovalUpdate,
   type FlowEdge,
   type FlowNode,
@@ -37,6 +40,7 @@ import {
   type RetrievedChunk,
   type Session,
   type SessionStepOutput,
+  type SessionStatus,
   type SessionUpdate,
   type TokenUsage,
   type TransactionalRepositories,
@@ -46,8 +50,8 @@ import {
 import { SuggestApprover } from "./suggest-approver";
 import { ConfirmAndSend } from "./confirm-and-send";
 import { DecideApproval } from "./decide-approval";
-import { ListPendingApprovals } from "./list-pending-approvals";
-import { ListPendingApprovalsWithContext } from "./list-pending-approvals-with-context";
+import { ListApprovals } from "./list-approvals";
+import { ListApprovalsWithContext } from "./list-approvals-with-context";
 import { ResolveApprovalSubject } from "./resolve-approval-subject";
 import type {
   IApprovalDecidedNotifier,
@@ -96,17 +100,51 @@ class InMemoryApprovals implements IApprovalRepository {
     return ok(found);
   }
 
+  // Mirrors the port's session-state contract, which the SQL implementation
+  // enforces with a join: a discarded session's approvals are not in anyone's
+  // queue. Statuses default to `active` for the many tests that never set one.
+  sessionStatuses = new Map<string, SessionStatus>();
+
+  private assigned(row: Approval, input: { approverUserId: string; approverEmail: string | null }) {
+    return (
+      row.approverUserId === input.approverUserId ||
+      (input.approverEmail !== null && row.approverEmail === input.approverEmail)
+    );
+  }
+
+  private discarded(row: Approval): boolean {
+    return isSessionDiscarded(this.sessionStatuses.get(row.sessionId) ?? "active");
+  }
+
   async listPendingForApprover(input: {
     approverUserId: string;
     approverEmail: string | null;
   }): Promise<Result<Approval[]>> {
     return ok(
       [...this.rows.values()].filter(
-        (row) =>
-          row.status === "pending" &&
-          (row.approverUserId === input.approverUserId ||
-            (input.approverEmail !== null && row.approverEmail === input.approverEmail)),
+        (row) => row.status === "pending" && this.assigned(row, input) && !this.discarded(row),
       ),
+    );
+  }
+
+  async listForApprover(
+    input: { approverUserId: string; approverEmail: string | null; scope: ApprovalListScope },
+  ): Promise<Result<Approval[]>> {
+    const matches = (row: Approval): boolean => {
+      if (input.scope === "pending") {
+        return row.status === "pending" && this.assigned(row, input) && !this.discarded(row);
+      }
+      // Their own decision stays theirs even if the row was later reassigned.
+      const decided =
+        row.status !== "pending" &&
+        (this.assigned(row, input) || row.decidedByUserId === input.approverUserId);
+      if (input.scope === "decided") return decided;
+      return decided || (row.status === "pending" && this.assigned(row, input) && !this.discarded(row));
+    };
+    return ok(
+      [...this.rows.values()]
+        .filter(matches)
+        .sort((first, second) => second.createdAt.getTime() - first.createdAt.getTime()),
     );
   }
 
@@ -247,6 +285,17 @@ class InMemoryUsers implements IUserRepository {
   async findByEmail(email: string): Promise<Result<User | null>> {
     return ok([...this.rows.values()].find((user) => user.email === email) ?? null);
   }
+  async search(input: { query: string; limit: number }): Promise<Result<User[]>> {
+    const term = input.query.trim().toLowerCase();
+    if (term.length === 0) return ok([]);
+    const matches = [...this.rows.values()].filter(
+      (row) =>
+        row.email.toLowerCase().includes(term) ||
+        (row.name ?? "").toLowerCase().includes(term),
+    );
+    return ok(matches.slice(0, input.limit));
+  }
+
   async list(): Promise<Result<User[]>> {
     return ok([...this.rows.values()]);
   }
@@ -1926,7 +1975,7 @@ describe("DecideApproval", () => {
   });
 });
 
-describe("ListPendingApprovals", () => {
+describe("ListApprovals", () => {
   it("returns only the pending approvals for the given approver", async () => {
     const approvals = new InMemoryApprovals();
     await approvals.create({
@@ -1946,7 +1995,7 @@ describe("ListPendingApprovals", () => {
       approverUserId: "manager-2",
     });
     await approvals.update(other.data!.id, { status: "approved" });
-    const sut = new ListPendingApprovals(approvals);
+    const sut = new ListApprovals(approvals);
 
     const result = await sut.execute({
       approverUserId: "manager-1",
@@ -1967,7 +2016,7 @@ describe("ListPendingApprovals", () => {
       approverSource: "first_level_supervisor",
       approverEmail: "manager@corp.test",
     });
-    const sut = new ListPendingApprovals(approvals);
+    const sut = new ListApprovals(approvals);
 
     const result = await sut.execute({
       approverUserId: "manager-1",
@@ -1977,9 +2026,67 @@ describe("ListPendingApprovals", () => {
     expect(result.data).toHaveLength(1);
     expect(result.data?.[0]?.approverEmail).toBe("manager@corp.test");
   });
+
+  // Regression guard: the originator discarded the chat, but the approval it
+  // raised stayed in the approver's queue awaiting a decision that could no
+  // longer do anything.
+  it("hides an approval whose session was discarded", async () => {
+    const approvals = new InMemoryApprovals();
+    await approvals.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-appr",
+      requestedByUserId: "operator-1",
+      approverSource: "first_level_supervisor",
+      approverUserId: "manager-1",
+    });
+    approvals.sessionStatuses.set("session-1", "abandoned");
+    const sut = new ListApprovals(approvals);
+
+    const result = await sut.execute({ approverUserId: "manager-1", approverEmail: null });
+
+    expect(result.data).toEqual([]);
+  });
+
+  it("hides an approval whose session a rejection cancelled", async () => {
+    const approvals = new InMemoryApprovals();
+    await approvals.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-appr",
+      requestedByUserId: "operator-1",
+      approverSource: "first_level_supervisor",
+      approverUserId: "manager-1",
+    });
+    approvals.sessionStatuses.set("session-1", "cancelled");
+    const sut = new ListApprovals(approvals);
+
+    expect((await sut.execute({ approverUserId: "manager-1", approverEmail: null })).data).toEqual(
+      [],
+    );
+  });
+
+  it("keeps an approval on a completed session", async () => {
+    // `complete` is not `discarded`: the approvals are what completed it.
+    const approvals = new InMemoryApprovals();
+    await approvals.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-appr",
+      requestedByUserId: "operator-1",
+      approverSource: "first_level_supervisor",
+      approverUserId: "manager-1",
+    });
+    approvals.sessionStatuses.set("session-1", "complete");
+    const sut = new ListApprovals(approvals);
+
+    expect((await sut.execute({ approverUserId: "manager-1", approverEmail: null })).data).toHaveLength(
+      1,
+    );
+  });
 });
 
-describe("ListPendingApprovalsWithContext", () => {
+describe("ListApprovalsWithContext", () => {
   const previousNode = (overrides: Partial<FlowNode> = {}): FlowNode =>
     approvalNode({ id: "node-prev", type: "conversational", name: "Draft the memo", ...overrides });
 
@@ -2012,7 +2119,7 @@ describe("ListPendingApprovalsWithContext", () => {
     // The real resolver, not a stub — the context and the gate must resolve the
     // subject the same way, and a stub here would hide it if they stopped.
     const subject = new ResolveApprovalSubject(parts.approvals, nodes, stepOutputs, messages);
-    return new ListPendingApprovalsWithContext(
+    return new ListApprovalsWithContext(
       parts.approvals,
       parts.sessions ?? new InMemorySessions(),
       parts.users ?? new InMemoryUsers(),
@@ -2224,5 +2331,222 @@ describe("ListPendingApprovalsWithContext", () => {
     expect(previous?.nodeId).toBe("node-prev");
     expect(previous?.document?.document.storagePath).toBe("s/memo-r2.docx");
     expect(previous?.fields).toBeNull();
+  });
+
+  describe("history", () => {
+    const decide = async (
+      approvals: InMemoryApprovals,
+      approvalId: string,
+      patch: { status: ApprovalStatus; decidedByUserId: string },
+    ) => {
+      await approvals.update(approvalId, { ...patch, decidedAt: new Date() });
+    };
+
+    it("returns a decision the approver made but is no longer assigned to", async () => {
+      const approvals = new InMemoryApprovals();
+      const raised = await seedPending(approvals);
+      await decide(approvals, raised.id, { status: "approved", decidedByUserId: "manager-1" });
+      // Reassigned afterwards — the decision is still manager-1's.
+      await approvals.update(raised.id, { approverUserId: "manager-9" });
+      const sessions = new InMemorySessions();
+      sessions.add(checkpointed());
+
+      const sut = build({ approvals, sessions });
+      const result = await sut.execute({
+        approverUserId: "manager-1",
+        approverEmail: null,
+        scope: "decided",
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data?.[0]?.approval.status).toBe("approved");
+    });
+
+    it("names who decided it, and leaves that null while pending", async () => {
+      const approvals = new InMemoryApprovals();
+      const raised = await seedPending(approvals);
+      const sessions = new InMemorySessions();
+      sessions.add(checkpointed());
+      const users = new InMemoryUsers();
+      users.add({ ...user("manager-1", "manager@corp.test"), name: "Mo Manager" });
+
+      const pending = await build({ approvals, sessions, users }).execute({
+        approverUserId: "manager-1",
+        approverEmail: null,
+      });
+      expect(pending.data?.[0]?.decidedByName).toBeNull();
+
+      await decide(approvals, raised.id, { status: "approved", decidedByUserId: "manager-1" });
+      const decided = await build({ approvals, sessions, users }).execute({
+        approverUserId: "manager-1",
+        approverEmail: null,
+        scope: "decided",
+      });
+      expect(decided.data?.[0]?.decidedByName).toBe("Mo Manager");
+    });
+
+    // A decision is only half the story: the approver needs to know whether
+    // what they signed went on to complete, was sent back, or was discarded.
+    it("reports where the session has since got to", async () => {
+      const approvals = new InMemoryApprovals();
+      const raised = await seedPending(approvals);
+      await decide(approvals, raised.id, { status: "approved", decidedByUserId: "manager-1" });
+      const sessions = new InMemorySessions();
+      sessions.add({ ...checkpointed(), status: "complete", currentNodeId: "node-prev" });
+      const nodes = new InMemoryFlowNodes();
+      nodes.add(previousNode());
+
+      const sut = build({ approvals, sessions, nodes });
+      const result = await sut.execute({
+        approverUserId: "manager-1",
+        approverEmail: null,
+        scope: "decided",
+      });
+
+      expect(result.data?.[0]?.sessionState).toEqual({
+        status: "complete",
+        currentStepName: "Draft the memo",
+      });
+    });
+
+    it("lists several decisions on one approval step as separate entries", async () => {
+      // A change request routes work back; re-entering the node raises a fresh
+      // row. Both rounds are the approver's history.
+      const approvals = new InMemoryApprovals();
+      const first = await seedPending(approvals);
+      await decide(approvals, first.id, {
+        status: "changes_requested",
+        decidedByUserId: "manager-1",
+      });
+      const second = await seedPending(approvals);
+      await decide(approvals, second.id, { status: "approved", decidedByUserId: "manager-1" });
+      const sessions = new InMemorySessions();
+      sessions.add(checkpointed());
+
+      const sut = build({ approvals, sessions });
+      const result = await sut.execute({
+        approverUserId: "manager-1",
+        approverEmail: null,
+        scope: "decided",
+      });
+
+      expect(result.data).toHaveLength(2);
+      expect(result.data?.map((entry) => entry.approval.status).sort()).toEqual([
+        "approved",
+        "changes_requested",
+      ]);
+    });
+
+    it("keeps a decided approval visible after its session was discarded", async () => {
+      const approvals = new InMemoryApprovals();
+      const raised = await seedPending(approvals);
+      await decide(approvals, raised.id, { status: "approved", decidedByUserId: "manager-1" });
+      approvals.sessionStatuses.set("session-1", "abandoned");
+      const sessions = new InMemorySessions();
+      sessions.add({ ...checkpointed(), status: "abandoned" });
+
+      const sut = build({ approvals, sessions });
+      const result = await sut.execute({
+        approverUserId: "manager-1",
+        approverEmail: null,
+        scope: "all",
+      });
+
+      // The decision stands as a matter of record; the state says what happened.
+      expect(result.data).toHaveLength(1);
+      expect(result.data?.[0]?.sessionState.status).toBe("abandoned");
+    });
+  });
+
+  describe("getById", () => {
+    it("returns the approval to the approver it was addressed to", async () => {
+      const approvals = new InMemoryApprovals();
+      const raised = await seedPending(approvals);
+      const sessions = new InMemorySessions();
+      sessions.add(checkpointed());
+
+      const result = await build({ approvals, sessions }).getById({
+        approvalId: raised.id,
+        viewerUserId: "manager-1",
+        viewerEmail: null,
+        isAdmin: false,
+      });
+
+      expect(result.data?.approval.id).toBe(raised.id);
+    });
+
+    it("refuses a viewer the approval was not addressed to", async () => {
+      // Being named on *another* approval of the session opens the session
+      // (ADR-018), but not someone else's decision record.
+      const approvals = new InMemoryApprovals();
+      const raised = await seedPending(approvals);
+
+      const result = await build({ approvals }).getById({
+        approvalId: raised.id,
+        viewerUserId: "manager-2",
+        viewerEmail: "other@corp.test",
+        isAdmin: false,
+      });
+
+      expect(result.error?.code).toBe("FORBIDDEN");
+    });
+
+    it("allows an admin, and the person who decided it", async () => {
+      const approvals = new InMemoryApprovals();
+      const raised = await seedPending(approvals);
+      await approvals.update(raised.id, {
+        status: "approved",
+        decidedByUserId: "admin-1",
+        decidedAt: new Date(),
+      });
+
+      const asAdmin = await build({ approvals }).getById({
+        approvalId: raised.id,
+        viewerUserId: "someone-else",
+        viewerEmail: null,
+        isAdmin: true,
+      });
+      expect(asAdmin.error).toBeUndefined();
+
+      const asDecider = await build({ approvals }).getById({
+        approvalId: raised.id,
+        viewerUserId: "admin-1",
+        viewerEmail: null,
+        isAdmin: false,
+      });
+      expect(asDecider.error).toBeUndefined();
+    });
+
+    it("matches an email-only assignment case-insensitively", async () => {
+      const approvals = new InMemoryApprovals();
+      const created = await approvals.create({
+        sessionId: "session-1",
+        flowId: "flow-1",
+        nodeId: "node-appr",
+        requestedByUserId: "operator-1",
+        approverSource: "first_level_supervisor",
+        approverEmail: "Manager@Corp.test",
+      });
+
+      const result = await build({ approvals }).getById({
+        approvalId: created.data!.id,
+        viewerUserId: "manager-1",
+        viewerEmail: "manager@corp.test",
+        isAdmin: false,
+      });
+
+      expect(result.error).toBeUndefined();
+    });
+
+    it("is NOT_FOUND for an approval that does not exist", async () => {
+      const result = await build({ approvals: new InMemoryApprovals() }).getById({
+        approvalId: "missing",
+        viewerUserId: "manager-1",
+        viewerEmail: null,
+        isAdmin: true,
+      });
+
+      expect(result.error?.code).toBe("NOT_FOUND");
+    });
   });
 });

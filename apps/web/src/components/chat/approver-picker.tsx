@@ -296,7 +296,7 @@ export function ApproverPicker({
             ref={searchInputRef}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search Entra, HR, or type any email…"
+            placeholder="Search people, Entra, HR, or type any email…"
           />
           <div className="max-h-44 space-y-1 overflow-y-auto">
             {(searchQuery.data ?? []).map((person) => (

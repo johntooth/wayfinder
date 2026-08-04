@@ -10,6 +10,7 @@ export * from "./revoke-session-participant";
 export * from "./add-session-upload";
 export * from "./remove-session-upload";
 export * from "./retrieve-document-chunks";
+export * from "./build-retrieval-query";
 export * from "./run-turn";
 export * from "./turn-lease";
 export * from "./evaluate-step-readiness";
