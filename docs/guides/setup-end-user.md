@@ -90,7 +90,6 @@ This starts:
 | Service | Default port | Notes |
 |---|---|---|
 | Postgres 16 + pgvector | 5432 | Required |
-| Redis 7 | 6379 | Required |
 | Langfuse 2 | 3030 | Optional — only useful if Langfuse keys are set |
 
 Wait a few seconds for Postgres to become healthy before the next step.

@@ -95,9 +95,13 @@ override.
 
 See [`docs/guides/setup-local.md`](docs/guides/setup-local.md).
 
-## Railway deployment
+## Deployment
 
-See [`docs/guides/setup-railway.md`](docs/guides/setup-railway.md).
+| Target | Guide |
+|---|---|
+| Railway | [`docs/guides/setup-railway.md`](docs/guides/setup-railway.md) |
+| AWS (ECS Fargate + RDS + S3) | [`docs/guides/setup-aws.md`](docs/guides/setup-aws.md) |
+| Azure (Container Apps + Flexible Server) | [`docs/guides/setup-azure.md`](docs/guides/setup-azure.md) |
 
 ## Locked out of admin
 

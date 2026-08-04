@@ -20,8 +20,9 @@ railway init
 In your Railway project, add:
 
 - **PostgreSQL** plugin (provides `DATABASE_URL` automatically)
-- **Redis** plugin (provides `REDIS_URL` automatically)
 - **MinIO plugin** — or point at an external S3-compatible store (Backblaze B2, AWS S3, etc.)
+
+Wayfinder needs no Redis — it was removed in alpha-1.
 
 ## 3. Environment variable mapping
 
@@ -33,7 +34,6 @@ deployment, with each value explained. Set the following on both the `web` and
 |---|---|
 | `NODE_ENV` | `production` |
 | `DATABASE_URL` | Injected by Railway Postgres plugin |
-| `REDIS_URL` | Injected by Railway Redis plugin |
 | `BETTER_AUTH_SECRET` | Generate: `openssl rand -hex 32` |
 | `SETTINGS_ENCRYPTION_KEY` | Generate: `openssl rand -hex 32`. Required at startup — encrypts the integration credentials the setup wizard stores, so back it up; losing it makes those rows unreadable |
 | `BETTER_AUTH_URL` | Your Railway-assigned URL, e.g. `https://wayfinder-web.up.railway.app` |
