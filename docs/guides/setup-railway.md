@@ -22,8 +22,6 @@ In your Railway project, add:
 - **PostgreSQL** plugin (provides `DATABASE_URL` automatically)
 - **MinIO plugin** — or point at an external S3-compatible store (Backblaze B2, AWS S3, etc.)
 
-Wayfinder needs no Redis — it was removed in alpha-1.
-
 ## 3. Environment variable mapping
 
 `.env.min.example.prod` in the repo root is the smallest working set for a

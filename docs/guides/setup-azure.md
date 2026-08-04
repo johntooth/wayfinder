@@ -21,9 +21,6 @@ Four things, whatever the platform:
 | **Two Node processes** — `web` and `api` | `web` is the Next.js app and the only thing users reach; `api` is a long-lived Express server that also runs the scheduler, retention and extraction workers |
 | **One public HTTPS origin** | Sign-in callbacks, the first-run `/setup` link, and links in notification emails are all built from it |
 
-There is **no Redis** — it was removed in alpha-1 and nothing reads `REDIS_URL`
-any more.
-
 ---
 
 ## 1. Map the pieces to Azure services
