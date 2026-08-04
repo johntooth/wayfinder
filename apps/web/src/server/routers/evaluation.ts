@@ -1,6 +1,7 @@
 import {
   PIVOT_AXES,
   REVIEW_COLUMNS,
+  renderDocumentView,
   renderPivotView,
   renderReviewGridView,
   type EvaluationWorkbook,
@@ -10,7 +11,12 @@ import {
   type ReviewGrid,
   type SortDirection,
 } from "@redline/redline-web";
-import type { DomainError, Evaluation, Result } from "@redline/redline-domain";
+import type {
+  DomainError,
+  Evaluation,
+  ExtractionElement,
+  Result,
+} from "@redline/redline-domain";
 import { isErr } from "@redline/redline-domain";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -32,6 +38,10 @@ interface EvaluationController {
   openReviewGrid(input: { evaluationId: string }): Promise<Result<ReviewGrid>>;
   openPricingPivot(input: { evaluationId: string }): Promise<Result<PricingPivot>>;
   buildWorkbook(input: { evaluationId: string }): Promise<Result<EvaluationWorkbook>>;
+  openDocument(input: {
+    evaluationId: string;
+    documentId: string;
+  }): Promise<Result<readonly ExtractionElement[]>>;
 }
 
 // container.ts sets `redline` to null when REDLINE_* is unset, so this fork
@@ -101,6 +111,13 @@ const reviewGridInput = evaluationIdInput.extend({
     .optional(),
 });
 
+// A documentId is a womblex source_hash, not a uuid, so it is validated as a
+// non-blank string. `element` is a womblex elem_order — a non-negative integer.
+const documentInput = evaluationIdInput.extend({
+  documentId: z.string().min(1),
+  element: z.number().int().nonnegative().optional(),
+});
+
 export const evaluationRouter = router({
   // The evaluations index (delivery-plan item 2): the way in for a specialist who
   // has neither the URL shape nor an evaluation id. Unlike its siblings this
@@ -138,6 +155,24 @@ export const evaluationRouter = router({
         result: pivot.data.compute({ axis: input.axis, measure: input.measure }),
       });
     }),
+
+  // The document behind a review row's source deep-link. `element` is the cited
+  // elem_order the link carries; it crosses the
+  // wire so renderDocumentView resolves the anchor server-side, the same way the
+  // grid's sort and filter do, rather than the client re-deriving it.
+  document: reviewProcedure.input(documentInput).query(async ({ ctx, input }) => {
+    const elements = await controllerOf(ctx).openDocument({
+      evaluationId: input.evaluationId,
+      documentId: input.documentId,
+    });
+    if (isErr(elements)) throw toTrpcError(elements.error);
+    return renderDocumentView({
+      evaluationId: input.evaluationId,
+      documentId: input.documentId,
+      elements: elements.data,
+      anchorElementOrder: input.element,
+    });
+  }),
 
   // The Excel export workbook (one review sheet plus one sheet per pivot). The
   // client hands this to redline's exportEvaluationXlsx to trigger the download,
