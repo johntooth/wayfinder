@@ -54,6 +54,12 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      # apps/web imports @redline/* from the parent checkout, which CI does not
+      # get from actions/checkout alone. Must run before install; see the
+      # script's header for why a plain clone and not a checkout step.
+      - name: Compose the redline workspace
+        run: ./scripts/fetch-redline-workspaces.sh
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 

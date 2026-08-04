@@ -20,22 +20,14 @@ cd "$ROOT"
 # list as short as it can possibly be — an entry here is a security gate held
 # open, and anything not listed still fails.
 #
-# GHSA-mh99-v99m-4gvg — brace-expansion: DoS via unbounded expansion length.
-#   Reached only through eslint's plugin chain (eslint-plugin-import,
-#   eslint-plugin-jsx-a11y, eslint-plugin-react → minimatch@3 →
-#   brace-expansion@1.1.16), so it is dev tooling and never ships in a runtime
-#   bundle; exploiting it needs attacker-controlled glob patterns handed to
-#   eslint, which nothing in this repo does.
-#   There is no fix available: the advisory patches only >=5.0.8 with no backport
-#   to the 1.x line, and brace-expansion@5 exports an object rather than the
-#   callable minimatch@3 requires — forcing it breaks the linter outright. The
-#   three plugins above still cap at eslint 9 in their latest releases, so
-#   upgrading eslint does not remove minimatch@3 either.
-#   REMOVE WHEN: eslint-plugin-import / jsx-a11y / react ship eslint-10 support
-#   (dropping minimatch@3), or brace-expansion backports the fix to 1.x.
-ALLOWED_ADVISORIES=(
-  "GHSA-mh99-v99m-4gvg"
-)
+# Empty, and that is the goal: every finding is fixed by a version, not waived.
+# GHSA-mh99-v99m-4gvg (brace-expansion) sat here until brace-expansion backported
+# the fix to the 1.x line — the exact condition its REMOVE WHEN named. The
+# `brace-expansion@1/@2/@5` pins in the root package.json now carry all three
+# majors past both that advisory and GHSA-rgw5-rvv9-x895, so the waiver went with
+# it. Staying on the 1.x line matters: brace-expansion@5 exports an object rather
+# than the callable minimatch@3 requires, so forcing the major breaks the linter.
+ALLOWED_ADVISORIES=()
 
 # ── Run the audit ─────────────────────────────────────────────────────────────
 AUDIT_JSON=$(pnpm audit --audit-level=high --json 2>&1)
@@ -54,7 +46,8 @@ if echo "$AUDIT_JSON" | grep -qiE 'ERR_PNPM_AUDIT_BAD_RESPONSE|being retired|aud
 fi
 
 # ── Filter the findings against the allowlist ─────────────────────────────────
-ALLOWED_CSV=$(IFS=,; echo "${ALLOWED_ADVISORIES[*]}")
+# The `-` default keeps `set -u` from tripping over an empty allowlist array.
+ALLOWED_CSV=$(IFS=,; echo "${ALLOWED_ADVISORIES[*]-}")
 
 REPORT=$(ALLOWED="$ALLOWED_CSV" node -e '
 const allowed = new Set((process.env.ALLOWED || "").split(",").filter(Boolean));

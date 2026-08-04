@@ -201,9 +201,10 @@ const readGroup = (
   return ok({ id: id.data, label: label.data, vendorIds: groupVendorIds.data, documentIds: documentIds.data });
 };
 
-// A document belongs to exactly one response group: WorkflowManager.assignDocument
-// moves a document rather than copying it, so a manifest claiming one document
-// for two groups would quietly lose it from the first.
+// A document belongs to exactly one response group. Nothing downstream enforces
+// this — AssignDocumentsToGroups takes the groups as given — so a manifest
+// claiming one document twice would classify it under both, double-counting its
+// pricing in the pivots. This parser is the only place the invariant holds.
 const collectDocumentIds = (groups: readonly ResponseGroupInput[]): Result<string[]> => {
   const claimedBy = new Map<string, string>();
   for (const group of groups) {

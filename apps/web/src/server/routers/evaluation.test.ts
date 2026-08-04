@@ -246,6 +246,31 @@ describe("evaluation.reviewGrid", () => {
       createCaller(contextWith(makeContainer(controller))).evaluation.reviewGrid({ evaluationId }),
     ).rejects.toThrow(/similarity search deferred/i);
   });
+
+  // redline_evaluations.id is `text`, the domain type is `string`, and the corpus
+  // manifest lets the operator author the id. A uuid() input rejected every such
+  // evaluation at the router — created successfully, then unreadable.
+  it("accepts an operator-authored evaluation id that is not a uuid", async () => {
+    const controller = makeController();
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.reviewGrid({
+        evaluationId: "cloud-rft-2026",
+      }),
+    ).resolves.toBeDefined();
+    expect(controller.openReviewGrid).toHaveBeenCalledWith(
+      expect.objectContaining({ evaluationId: "cloud-rft-2026" }),
+    );
+  });
+
+  it("still refuses an empty evaluation id", async () => {
+    const controller = makeController();
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.reviewGrid({
+        evaluationId: "",
+      }),
+    ).rejects.toThrow();
+    expect(controller.openReviewGrid).not.toHaveBeenCalled();
+  });
 });
 
 describe("evaluation.pricingPivot", () => {
