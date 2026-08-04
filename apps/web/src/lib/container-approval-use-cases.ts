@@ -3,9 +3,10 @@ import {
   ApproverEditSubjectFields,
   ConfirmAndSend,
   DecideApproval,
-  ListPendingApprovals,
-  ListPendingApprovalsWithContext,
+  ListApprovals,
+  ListApprovalsWithContext,
   ResolveApprovalSubject,
+  ResolveDecisionNotifyTargets,
   SuggestApprover,
   type UpdateDocumentFields,
 } from "@rbrasier/application";
@@ -21,6 +22,7 @@ import type {
   IObjectStorage,
   IReportingLineResolver,
   ISessionMessageRepository,
+  ISessionParticipantRepository,
   ISessionRepository,
   ISessionStepOutputRepository,
   IUnitOfWork,
@@ -32,6 +34,7 @@ export interface ApprovalUseCaseDeps {
   unitOfWork: IUnitOfWork;
   approvals: IApprovalRepository;
   sessions: ISessionRepository;
+  sessionParticipants: ISessionParticipantRepository;
   sessionMessages: ISessionMessageRepository;
   sessionStepOutputs: ISessionStepOutputRepository;
   flowNodes: IFlowNodeRepository;
@@ -81,6 +84,7 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
       deps.users,
       deps.sessionMessages,
       deps.updateDocumentFields,
+      deps.flowNodes,
     ),
     suggestApprover: new SuggestApprover(
       deps.approvals,
@@ -111,8 +115,8 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
       resolveApprovalSubject,
       applyApprovalSignature,
     ),
-    listPendingApprovals: new ListPendingApprovals(deps.approvals),
-    listPendingApprovalsWithContext: new ListPendingApprovalsWithContext(
+    listApprovals: new ListApprovals(deps.approvals),
+    listApprovalsWithContext: new ListApprovalsWithContext(
       deps.approvals,
       deps.sessions,
       deps.users,
@@ -120,6 +124,13 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
       deps.sessionStepOutputs,
       deps.flowNodes,
       resolveApprovalSubject,
+    ),
+    resolveDecisionNotifyTargets: new ResolveDecisionNotifyTargets(
+      deps.sessions,
+      deps.sessionParticipants,
+      deps.users,
+      deps.flowNodes,
+      deps.approvals,
     ),
   };
 };

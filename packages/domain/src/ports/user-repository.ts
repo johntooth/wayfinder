@@ -10,6 +10,10 @@ export interface IUserRepository {
   findByIds(ids: readonly string[]): Promise<Result<User[]>>;
   findByEmail(email: string): Promise<Result<User | null>>;
   list(opts?: { limit?: number; offset?: number }): Promise<Result<User[]>>;
+  // Case-insensitive substring match over name and email, for the approver
+  // type-ahead. Bounded by `limit` — this backs a keystroke-driven search, so it
+  // must never return the whole user table.
+  search(input: { query: string; limit: number }): Promise<Result<User[]>>;
   update(id: string, patch: UserUpdate): Promise<Result<User>>;
   delete(id: string): Promise<Result<true>>;
 }

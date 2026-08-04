@@ -1,9 +1,13 @@
 import {
+  buildApproverEditMessage,
   domainError,
   err,
+  nodeFieldSet,
   ok,
   type Approval,
+  type ConversationalNodeConfig,
   type IApprovalRepository,
+  type IFlowNodeRepository,
   type ISessionMessageRepository,
   type IUserRepository,
   type Result,
@@ -33,6 +37,8 @@ export class ApproverEditSubjectFields {
     private readonly users: IUserRepository,
     private readonly sessionMessages: ISessionMessageRepository,
     private readonly updateDocumentFields: UpdateDocumentFields,
+    // Only ever read to resolve a changed key to its author-facing label.
+    private readonly flowNodes: IFlowNodeRepository,
   ) {}
 
   async execute(
@@ -106,6 +112,10 @@ export class ApproverEditSubjectFields {
   // Silent third-party mutation of someone's document is the failure mode: the
   // originator must not discover a changed value by reading the final artefact
   // (ADR-045 §3). Best-effort — the edit itself has already persisted.
+  //
+  // The text comes from the domain builder because the feed parses it back:
+  // matching it is what lets the originator's thread show the document that was
+  // changed directly beneath the notice that it changed.
   private async announce(
     sessionId: string,
     stepNodeId: string | null,
@@ -115,22 +125,37 @@ export class ApproverEditSubjectFields {
     const changedKeys = latestEditKeys(output, input.editedByUserId);
     if (changedKeys.length === 0) return;
 
-    const name = await this.nameOf(input.editedByUserId);
+    const content = buildApproverEditMessage({
+      editorName: await this.nameOf(input.editedByUserId),
+      changedLabels: await this.labelsFor(stepNodeId, changedKeys),
+    });
+    if (!content) return;
+
     try {
-      await this.sessionMessages.create({
-        sessionId,
-        role: "system",
-        content: `${name} edited this step before deciding the approval: ${changedKeys.join(", ")}.`,
-        stepNodeId,
-      });
+      await this.sessionMessages.create({ sessionId, role: "system", content, stepNodeId });
     } catch {
       // Ignore — the edit history remains the source of truth.
     }
   }
 
-  private async nameOf(userId: string): Promise<string> {
+  // The originator reads "Start date"; `start_date` is an implementation detail
+  // they have never been shown anywhere else. A key whose field has since been
+  // removed from the step falls back to itself rather than vanishing from the
+  // notice — a changed value the originator is not told about is the one thing
+  // this method must never produce.
+  private async labelsFor(stepNodeId: string | null, keys: string[]): Promise<string[]> {
+    if (!stepNodeId) return keys;
+    const result = await this.flowNodes.findById(stepNodeId);
+    if (result.error || !result.data) return keys;
+
+    const config = result.data.config as unknown as ConversationalNodeConfig;
+    const labelByKey = new Map(nodeFieldSet(config).map((field) => [field.key, field.label]));
+    return keys.map((key) => labelByKey.get(key)?.trim() || key);
+  }
+
+  private async nameOf(userId: string): Promise<string | null> {
     const result = await this.users.findById(userId);
-    if (result.error || !result.data) return "The approver";
+    if (result.error || !result.data) return null;
     return result.data.name?.trim() || result.data.email;
   }
 }

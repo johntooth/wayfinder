@@ -1,355 +1,50 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { toast } from "sonner";
-import { Copy, Mail, PencilLine, Stamp } from "lucide-react";
-import type { inferRouterOutputs } from "@trpc/server";
-import type { AppRouter } from "@/server/router";
+import { ChevronRight, Stamp } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { DecisionModal } from "@/components/approvals/decision-modal";
+import { isDecided } from "@/components/approvals/approval-outcome";
 import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { approverStageLabel } from "@/components/chat/approver-label";
-import { ApproverPicker } from "@/components/chat/approver-picker";
-import { DocumentCard } from "@/components/chat/document-card";
-import { DocumentEditDialog } from "@/components/chat/document-edit-dialog";
+  ApprovalSubject,
+  ApproverStage,
+  OutcomeChip,
+  PreviousStep,
+  type ApprovalContext,
+} from "@/components/approvals/approval-parts";
 import { trpc } from "@/trpc/client";
 
 type Decision = "approved" | "rejected" | "changes_requested";
-type PendingApproval = inferRouterOutputs<AppRouter>["approval"]["listPending"][number];
-type StepField = NonNullable<NonNullable<PendingApproval["previousStep"]>["fields"]>[number];
-type NextApproval = inferRouterOutputs<AppRouter>["approval"]["decide"]["nextApproval"];
+type Tab = "active" | "completed" | "all";
 
-const DECISION_TITLE: Record<Decision, string> = {
-  approved: "Approve request",
-  rejected: "Reject request",
-  changes_requested: "Request changes",
+const TABS: { key: Tab; label: string; scope: "pending" | "decided" | "all" }[] = [
+  { key: "active", label: "Active", scope: "pending" },
+  { key: "completed", label: "Completed", scope: "decided" },
+  { key: "all", label: "All", scope: "all" },
+];
+
+const EMPTY_COPY: Record<Tab, { heading: string; body: string }> = {
+  active: {
+    heading: "No approvals awaiting you",
+    body: "Requests routed to you for sign-off will appear here.",
+  },
+  completed: {
+    heading: "No decisions yet",
+    body: "Once you approve, reject, or request changes, the decision is kept here.",
+  },
+  all: {
+    heading: "Nothing here yet",
+    body: "Requests routed to you, and the decisions you have made, both appear here.",
+  },
 };
 
-function StepFields({ fields }: { fields: StepField[] }) {
-  return (
-    <div className="overflow-hidden rounded-[10px] border border-[#dedad2] bg-white">
-      <table className="w-full text-[12.5px]">
-        <tbody>
-          {fields.map((field) => (
-            <tr key={field.key} className="border-b border-[#efede8] last:border-0">
-              <td className="w-2/5 px-3 py-1.5 align-top font-medium text-[#6d6a65]">{field.label}</td>
-              <td className="px-3 py-1.5 align-top whitespace-pre-wrap text-[#1a1814]">{field.value}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// What the approver is being asked to sign off, resolved from the node's
-// configured subject and locked into the record when they decide (ADR-040).
-function ApprovalSubject({ description }: { description: string | null }) {
-  if (!description) return null;
-
-  return (
-    <p className="text-[13px] text-[#1a1814]">
-      <span className="font-semibold">You are approving:</span> {description}
-    </p>
-  );
-}
-
-function PreviousStep({ previousStep }: { previousStep: PendingApproval["previousStep"] }) {
-  // An approver may fix their own subject step before deciding, rather than
-  // sending the whole thing back over a typo. The edit commits first and is
-  // visible in the document they are looking at when they decide, so what they
-  // sign is what they left behind (ADR-045 §5).
-  const [editing, setEditing] = useState(false);
-  if (!previousStep) return null;
-  const { document, fields, stepName } = previousStep;
-
-  return (
-    <div className="rounded-[12px] bg-[#f7f6f3] p-3">
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#6d6a65]">
-        {stepName}
-      </p>
-      {document ? (
-        <DocumentCard
-          messageId={document.messageId}
-          document={document.document}
-          documentGenerationConfidence={document.documentGenerationConfidence}
-          canEdit={false}
-        />
-      ) : fields && fields.length > 0 ? (
-        <StepFields fields={fields} />
-      ) : (
-        <p className="text-[12.5px] text-[#6d6a65]">No preview available for this step.</p>
-      )}
-
-      {document && (
-        <>
-          <Button
-            size="sm"
-            variant="outline"
-            className="mt-2"
-            onClick={() => setEditing(true)}
-          >
-            <PencilLine className="h-4 w-4" />
-            Edit before deciding
-          </Button>
-          <DocumentEditDialog
-            open={editing}
-            messageId={document.messageId}
-            title="Edit before deciding"
-            onClose={() => setEditing(false)}
-            onSaved={() => setEditing(false)}
-          />
-        </>
-      )}
-    </div>
-  );
-}
-
-// Which signature this is. Always rendered, never conditional on a role hint —
-// "first supervisor" and "second supervisor" are different jobs, and an approver
-// deciding without knowing which one they are is deciding half-informed.
-function ApproverStage({ approval }: { approval: PendingApproval }) {
-  return (
-    <p className="text-[13px] text-[#5a5650]" data-approver-stage>
-      You are the{" "}
-      <span className="font-medium text-[#1a1814]">
-        {approverStageLabel({
-          approverSource: approval.approval.approverSource,
-          roleHint: approval.roleHint,
-        })}
-      </span>{" "}
-      on <span className="font-medium text-[#1a1814]">{approval.approvalStepName}</span>.
-    </p>
-  );
-}
-
-function DecisionModal({
-  approval,
-  decision,
-  emailConfigured,
-  onClose,
-}: {
-  approval: PendingApproval;
-  decision: Decision;
-  emailConfigured: boolean;
-  onClose: () => void;
-}) {
-  const utils = trpc.useUtils();
-  const [comment, setComment] = useState("");
-  const commentRef = useRef<HTMLTextAreaElement>(null);
-  // Set once a decision is recorded but email could not deliver it, so the
-  // approver can notify the originator by hand before the row clears.
-  const [manualNotify, setManualNotify] = useState(false);
-  // Set when the decision advanced the session onto another approval step. The
-  // approver nominates who signs next without leaving the page — a chained
-  // approval otherwise sits idle until the originator reopens the session.
-  const [nextApproval, setNextApproval] = useState<NextApproval>(null);
-
-  const sessionUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/chats/${approval.sessionId}`
-      : `/chats/${approval.sessionId}`;
-
-  const decide = trpc.approval.decide.useMutation({
-    onSuccess: async (data) => {
-      // Handing the next approval straight back to the approver takes priority
-      // over closing: they are the one person currently looking at this
-      // request, and nobody else can move it forward until it is routed.
-      if (data.nextApproval) {
-        toast.success("Decision recorded");
-        setNextApproval(data.nextApproval);
-        return;
-      }
-      if (emailConfigured) {
-        await utils.approval.listPending.invalidate();
-        toast.success("Decision recorded");
-        onClose();
-        return;
-      }
-      // Keep the modal open so the manual-notify buttons stay mounted; the list
-      // is only refreshed when the approver closes.
-      setManualNotify(true);
-    },
-    onError: (error) => toast.error(error.message ?? "Could not record the decision"),
-  });
-
-  const submit = (routeBack?: boolean) =>
-    decide.mutate({
-      approvalId: approval.approval.id,
-      decision,
-      comment: comment.trim() || null,
-      routeBack: decision === "rejected" ? routeBack : undefined,
-    });
-
-  const close = async () => {
-    if (manualNotify || nextApproval) await utils.approval.listPending.invalidate();
-    onClose();
-  };
-
-  const buildMailtoHref = (): string => {
-    const subject = `Re: your '${approval.chatName}' request`;
-    const summary =
-      decision === "approved"
-        ? "has been approved"
-        : decision === "changes_requested"
-          ? "needs changes"
-          : "has been rejected";
-    const body = [
-      `Your request "${approval.chatName}" ${summary}.`,
-      ...(comment.trim() ? ["", comment.trim()] : []),
-      "",
-      "View the session here:",
-      sessionUrl,
-    ].join("\n");
-    return `mailto:${encodeURIComponent(approval.originatorEmail ?? "")}?subject=${encodeURIComponent(
-      subject,
-    )}&body=${encodeURIComponent(body)}`;
-  };
-
-  const copyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(sessionUrl);
-      toast.success("Session link copied");
-    } catch {
-      toast.error("Could not copy the link");
-    }
-  };
-
-  const commentRequired = decision === "changes_requested";
-
-  return (
-    <Dialog open onOpenChange={(open) => (open ? undefined : void close())}>
-      <DialogContent
-        onOpenAutoFocus={(event) => {
-          // Focus the comment field instead of the dialog's first focusable
-          // element. Replaces autoFocus (jsx-a11y/no-autofocus) without ceding
-          // focus management away from Radix's focus trap.
-          if (commentRef.current) {
-            event.preventDefault();
-            commentRef.current.focus();
-          }
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle>{nextApproval ? "Choose the next approver" : DECISION_TITLE[decision]}</DialogTitle>
-          <DialogDescription>
-            {nextApproval
-              ? `Your decision is recorded. "${approval.chatName}" now needs ${nextApproval.nodeName}.`
-              : manualNotify
-                ? "Email isn't configured, so let the originator know manually."
-                : `For "${approval.chatName}"${
-                    approval.originatorName ? ` from ${approval.originatorName}` : ""
-                  }.`}
-          </DialogDescription>
-        </DialogHeader>
-
-        {nextApproval ? (
-          <DialogBody>
-            <ApproverPicker
-              sessionId={approval.sessionId}
-              flowId={approval.approval.flowId}
-              flowName={approval.chatName}
-              nodeId={nextApproval.nodeId}
-              nodeName={nextApproval.nodeName}
-              approverSource={nextApproval.approverSource}
-              instructions={nextApproval.instructions}
-              roleHint={nextApproval.roleHint}
-              emailConfigured={emailConfigured}
-            />
-          </DialogBody>
-        ) : manualNotify ? (
-          <DialogBody>
-            <p className="text-[13px] text-[#5a5650]">
-              The decision was recorded and is shown in the session. Notify{" "}
-              <span className="font-medium">{approval.originatorName ?? "the originator"}</span> so
-              they can pick the request back up.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {approval.originatorEmail && (
-                <Button asChild size="sm">
-                  <a href={buildMailtoHref()}>
-                    <Mail className="h-4 w-4" />
-                    Email user
-                  </a>
-                </Button>
-              )}
-              <Button size="sm" variant="outline" onClick={copyLink}>
-                <Copy className="h-4 w-4" />
-                Copy link
-              </Button>
-            </div>
-          </DialogBody>
-        ) : (
-          <DialogBody>
-            {/* The same three things the chat gate shows before a request is
-                sent: which signature this is, what is being signed, and the
-                artefact itself. Deciding from a bare comment box meant scrolling
-                back to the row behind the modal to recall any of it. */}
-            <ApproverStage approval={approval} />
-            <ApprovalSubject description={approval.subjectDescription} />
-            <PreviousStep previousStep={approval.previousStep} />
-            <Textarea
-              ref={commentRef}
-              aria-label="Decision comment"
-              rows={3}
-              value={comment}
-              onChange={(event) => setComment(event.target.value)}
-              placeholder={
-                commentRequired
-                  ? "Describe the changes needed (required)…"
-                  : "Add a comment (optional)…"
-              }
-            />
-          </DialogBody>
-        )}
-
-        <DialogFooter>
-          {nextApproval ? (
-            <Button size="sm" variant="outline" onClick={() => void close()}>
-              Done
-            </Button>
-          ) : manualNotify ? (
-            <Button size="sm" onClick={() => void close()}>
-              Done
-            </Button>
-          ) : decision === "rejected" ? (
-            <>
-              <Button size="sm" variant="outline" onClick={() => submit(false)} disabled={decide.isPending}>
-                Close request
-              </Button>
-              <Button size="sm" onClick={() => submit(true)} disabled={decide.isPending}>
-                Route back to user
-              </Button>
-            </>
-          ) : (
-            <Button
-              size="sm"
-              onClick={() => submit()}
-              disabled={decide.isPending || (commentRequired && !comment.trim())}
-            >
-              {decision === "approved" ? "Confirm approval" : "Request changes"}
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
+// The full card, for a request that still needs deciding.
 function ApprovalRow({
   approval,
   emailConfigured,
 }: {
-  approval: PendingApproval;
+  approval: ApprovalContext;
   emailConfigured: boolean;
 }) {
   const [decision, setDecision] = useState<Decision | null>(null);
@@ -380,7 +75,7 @@ function ApprovalRow({
 
       <ApprovalSubject description={approval.subjectDescription} />
 
-      <PreviousStep previousStep={approval.previousStep} />
+      <PreviousStep previousStep={approval.previousStep} canEdit />
 
       <div className="flex flex-wrap gap-2">
         <Button size="sm" onClick={() => setDecision("approved")}>
@@ -406,10 +101,38 @@ function ApprovalRow({
   );
 }
 
+// A decided request, collapsed to one line. The detail lives on its own page:
+// history is scanned far more often than it is read, and a list of expanded
+// documents is unscannable.
+function DecidedRow({ approval }: { approval: ApprovalContext }) {
+  const decidedAt = approval.approval.decidedAt;
+
+  return (
+    <Link
+      href={`/approvals/${approval.approval.id}`}
+      data-approval-id={approval.approval.id}
+      data-approval-status={approval.approval.status}
+      className="flex items-center gap-3 rounded-[12px] border border-[#dedad2] bg-white px-4 py-3 hover:border-[#c9c4b9]"
+    >
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13.5px] font-semibold text-[#1a1814]">{approval.chatName}</p>
+        <p className="mt-[3px] truncate text-[12px] text-[#6d6a65]">
+          {approval.approvalStepName}
+          {decidedAt ? <> · {new Date(decidedAt).toLocaleString()}</> : null}
+          {approval.decidedByName ? <> · by {approval.decidedByName}</> : null}
+        </p>
+      </div>
+      <OutcomeChip approval={approval} />
+      <ChevronRight className="h-4 w-4 shrink-0 text-[#6d6a65]" />
+    </Link>
+  );
+}
+
 export function ApprovalsContent() {
-  const approvalsQuery = trpc.approval.listPending.useQuery(undefined, {
-    refetchOnMount: "always",
-  });
+  const [tab, setTab] = useState<Tab>("active");
+  const scope = TABS.find((entry) => entry.key === tab)!.scope;
+
+  const approvalsQuery = trpc.approval.list.useQuery({ scope }, { refetchOnMount: "always" });
   const emailStatusQuery = trpc.approval.emailStatus.useQuery();
   const emailConfigured = emailStatusQuery.data?.configured ?? true;
   const approvals = approvalsQuery.data ?? [];
@@ -420,26 +143,49 @@ export function ApprovalsContent() {
         <h1 className="text-[16px] font-bold text-[#1a1814]">Approvals</h1>
       </header>
 
+      <div className="flex shrink-0 gap-1 border-b border-[#dedad2] px-5">
+        {TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setTab(key)}
+            aria-current={tab === key ? "page" : undefined}
+            className={`px-3 py-[10px] text-[13px] font-medium transition-colors ${
+              tab === key
+                ? "border-b-2 border-[#3a5fd9] text-[#3a5fd9]"
+                : "text-[#6d6a65] hover:text-[#5a5650]"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className="flex-1 overflow-auto">
         <div className="container py-6">
           {approvalsQuery.isPending ? (
             <p className="text-[13px] text-[#6d6a65]">Loading…</p>
           ) : approvals.length === 0 ? (
             <div className="rounded-[14px] border border-dashed border-[#dedad2] bg-white p-8 text-center">
-              <p className="text-[14px] font-semibold text-[#1a1814]">No approvals awaiting you</p>
-              <p className="mt-1 text-[13px] text-[#6d6a65]">
-                Requests routed to you for sign-off will appear here.
-              </p>
+              <p className="text-[14px] font-semibold text-[#1a1814]">{EMPTY_COPY[tab].heading}</p>
+              <p className="mt-1 text-[13px] text-[#6d6a65]">{EMPTY_COPY[tab].body}</p>
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {approvals.map((approval) => (
-                <ApprovalRow
-                  key={approval.approval.id}
-                  approval={approval}
-                  emailConfigured={emailConfigured}
-                />
-              ))}
+              {approvals.map((approval) =>
+                // A decided row is history whichever tab it arrived on, so the
+                // "All" tab shows each in its own right rather than flattening
+                // both to one shape.
+                isDecided(approval.approval.status) ? (
+                  <DecidedRow key={approval.approval.id} approval={approval} />
+                ) : (
+                  <ApprovalRow
+                    key={approval.approval.id}
+                    approval={approval}
+                    emailConfigured={emailConfigured}
+                  />
+                ),
+              )}
             </div>
           )}
         </div>

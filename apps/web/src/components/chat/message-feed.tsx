@@ -25,7 +25,9 @@ import {
   parseApprovalDecisionMessage,
   type ParsedApprovalDecision,
 } from "@/lib/approval-decision-message";
+import { parseApproverEditMessage } from "@/lib/approver-edit-message";
 import { formatScheduledResume, parseScheduledMessage } from "@/lib/scheduled-message";
+import { resolveApproverEditDocument } from "./approver-edit-document";
 
 interface ConfidenceAnnotation {
   type: "confidence";
@@ -194,6 +196,16 @@ export function MessageFeed({
             ? formatScheduledResume(scheduled.stepName, scheduled.nextFireAt)
             : msg.content;
 
+          // An approver's edit is announced as a system line far below the card
+          // it refers to, so the author was told their document had changed and
+          // given no way to see what changed. The approver's own queue re-renders
+          // the document beside the decision; this does the same for the thread.
+          const approverEdit =
+            msg.role === "system" ? parseApproverEditMessage(msg.content) : null;
+          const approverEditDocument = approverEdit
+            ? resolveApproverEditDocument(dbMessages, msg.stepNodeId)
+            : null;
+
           const config = node?.config as Record<string, unknown> | undefined;
           const isDocNode = config?.["outputType"] === "generate_document";
           const isStructuredNode = config?.["outputType"] === "structured";
@@ -275,6 +287,18 @@ export function MessageFeed({
                   </div>
                 )}
               </div>
+              {/* Read-only: the author is being shown what the approver did,
+                  and the record is locked while an approval is pending. */}
+              {approverEditDocument?.document && (
+                <DocumentCard
+                  messageId={approverEditDocument.id}
+                  document={approverEditDocument.document}
+                  documentGenerationConfidence={
+                    approverEditDocument.aiPayload?.documentGenerationConfidence ?? null
+                  }
+                  canEdit={false}
+                />
+              )}
               {isAdvancingMsg && node && !isNeverDone && (
                 <>
                   <MilestonePill

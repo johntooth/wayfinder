@@ -101,3 +101,69 @@ describe("SearchPeople", () => {
     expect(result.data).toHaveLength(2);
   });
 });
+
+describe("SearchPeople with an account-backed source", () => {
+  it("collapses an account and an Entra record for the same address to one entry", async () => {
+    // The de-dup requirement: an operator searching for a colleague who is in
+    // both places must see them once, and the entry they see must be the one
+    // that routes the approval to a user rather than a bare address.
+    const accounts = new StubDirectory([
+      person({ source: "user", email: "ada@corp.test", userId: "user-1", displayName: "Ada L." }),
+    ]);
+    const entra = new StubDirectory([
+      person({ source: "entra", email: "Ada@corp.test", directoryId: "entra-1" }),
+    ]);
+    const sut = new SearchPeople([accounts, entra]);
+
+    const result = await sut.execute({ query: "ada", limit: 10 });
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data?.[0]).toMatchObject({ source: "user", userId: "user-1" });
+  });
+
+  it("still surfaces an Entra-only person alongside the accounts", async () => {
+    // Entra augments the account list rather than replacing it, and vice versa.
+    const accounts = new StubDirectory([
+      person({ source: "user", email: "ada@corp.test", userId: "user-1" }),
+    ]);
+    const entra = new StubDirectory([person({ source: "entra", email: "zoe@corp.test" })]);
+    const sut = new SearchPeople([accounts, entra]);
+
+    const result = await sut.execute({ query: "corp", limit: 10 });
+
+    expect(result.data?.map((candidate) => candidate.email).sort()).toEqual([
+      "ada@corp.test",
+      "zoe@corp.test",
+    ]);
+  });
+
+  it("keeps working when the account source is the only one configured", async () => {
+    const accounts = new StubDirectory([
+      person({ source: "user", email: "ada@corp.test", userId: "user-1" }),
+    ]);
+    const sut = new SearchPeople([accounts, new FailingDirectory()]);
+
+    const result = await sut.execute({ query: "ada", limit: 10 });
+
+    expect(result.data).toHaveLength(1);
+  });
+});
+
+describe("source preference", () => {
+  it("prefers the account even when it is searched last", async () => {
+    // Order-independence is the point: reordering the directory list must not
+    // change which record survives a de-dupe.
+    const entra = new StubDirectory([
+      person({ source: "entra", email: "ada@corp.test", userId: "user-1" }),
+    ]);
+    const accounts = new StubDirectory([
+      person({ source: "user", email: "ada@corp.test", userId: "user-1" }),
+    ]);
+    const sut = new SearchPeople([entra, accounts]);
+
+    const result = await sut.execute({ query: "ada", limit: 10 });
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data?.[0]?.source).toBe("user");
+  });
+});

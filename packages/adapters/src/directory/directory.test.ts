@@ -16,6 +16,8 @@ import { GraphClient } from "./graph-client";
 import { GraphPeopleDirectory } from "./graph-people-directory";
 import { HrPeopleDirectory } from "./hr-people-directory";
 import { GraphReportingLineResolver } from "./graph-reporting-line-resolver";
+import { UserPeopleDirectory } from "./user-people-directory";
+import { escapeLikePattern } from "../repositories/drizzle-user-repository";
 
 class FakeHrRepository implements IHrDatasetRepository {
   datasets: HrDataset[] = [];
@@ -92,6 +94,15 @@ class FakeUsers implements IUserRepository {
   }
   async list(): Promise<Result<User[]>> {
     return ok([...this.byId.values()]);
+  }
+  async search(input: { query: string; limit: number }): Promise<Result<User[]>> {
+    const term = input.query.trim().toLowerCase();
+    if (term.length === 0) return ok([]);
+    const matches = [...this.byId.values()].filter(
+      (row) =>
+        row.email.toLowerCase().includes(term) || (row.name ?? "").toLowerCase().includes(term),
+    );
+    return ok(matches.slice(0, input.limit));
   }
   async update(): Promise<Result<User>> {
     throw new Error("unused");
@@ -257,5 +268,59 @@ describe("GraphReportingLineResolver (HR fallback)", () => {
 
     expect(result.data).toHaveLength(1);
     expect(result.data?.[0]).toMatchObject({ userId: "del-1", email: "del@corp.test" });
+  });
+});
+
+describe("UserPeopleDirectory", () => {
+  const seeded = () => {
+    const users = new FakeUsers();
+    users.seed({ ...user("ada-1", "ada@corp.test"), name: "Ada Lovelace" } as User);
+    users.seed({ ...user("ben-1", "ben@corp.test"), name: "Ben Barnes" } as User);
+    return users;
+  };
+
+  it("finds an existing account by name", async () => {
+    // The gap being closed: a colleague who already has a Wayfinder account but
+    // appears in neither Entra nor the HR upload could not be found at all.
+    const result = await new UserPeopleDirectory(seeded()).search({ query: "Lovelace", limit: 10 });
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data?.[0]).toMatchObject({
+      source: "user",
+      userId: "ada-1",
+      email: "ada@corp.test",
+      displayName: "Ada Lovelace",
+    });
+  });
+
+  it("finds an existing account by email", async () => {
+    const result = await new UserPeopleDirectory(seeded()).search({ query: "ben@", limit: 10 });
+
+    expect(result.data?.map((person) => person.userId)).toEqual(["ben-1"]);
+  });
+
+  it("carries the account id, so the approval is routed to a user rather than an address", async () => {
+    const result = await new UserPeopleDirectory(seeded()).search({ query: "ada", limit: 10 });
+
+    expect(result.data?.[0]?.userId).toBe("ada-1");
+    expect(result.data?.[0]?.directoryId).toBeNull();
+  });
+
+  it("returns nothing for a blank query rather than the whole user table", async () => {
+    const result = await new UserPeopleDirectory(seeded()).search({ query: "  ", limit: 10 });
+
+    expect(result.data).toEqual([]);
+  });
+});
+
+describe("escapeLikePattern", () => {
+  it("neutralises LIKE wildcards so a search narrows rather than widens", () => {
+    expect(escapeLikePattern("100%")).toBe("100\\%");
+    expect(escapeLikePattern("a_b")).toBe("a\\_b");
+    expect(escapeLikePattern("back\\slash")).toBe("back\\\\slash");
+  });
+
+  it("leaves an ordinary name untouched", () => {
+    expect(escapeLikePattern("Ada Lovelace")).toBe("Ada Lovelace");
   });
 });

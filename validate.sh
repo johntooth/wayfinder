@@ -355,9 +355,12 @@ while IFS= read -r script_file; do
   [ -n "$script_file" ] || continue
   while IFS= read -r array_name; do
     [ -n "$array_name" ] || continue
-    # The safe form ${NAME[@]+"${NAME[@]}"} contains the unsafe form as a
-    # substring, so a line only counts as unguarded when the "[@]+" token is absent.
-    unguarded=$(grep -n "\"\${${array_name}\[@\]}\"" "$script_file" 2>/dev/null \
+    # Both subscripts abort identically on bash 3.2 — "${arr[@]}" and
+    # "${arr[*]}" alike — so both are checked. The safe forms
+    # ${NAME[@]+"${NAME[@]}"} and ${NAME[@]+${NAME[*]}} contain the unsafe form
+    # as a substring, so a line only counts as unguarded when the "[@]+" token
+    # is absent from it.
+    unguarded=$(grep -nE "\"\\\$\{${array_name}\[[@*]\]\}\"" "$script_file" 2>/dev/null \
       | grep -v "\${${array_name}\[@\]+" || true)
     [ -n "$unguarded" ] || continue
     while IFS= read -r hit; do

@@ -115,6 +115,17 @@ class FakeUserRepository implements IUserRepository {
   async create(): Promise<Result<User>> {
     return err(domainError("INFRA_FAILURE", "not used"));
   }
+  async search(input: { query: string; limit: number }): Promise<Result<User[]>> {
+    const term = input.query.trim().toLowerCase();
+    if (term.length === 0) return ok([]);
+    const matches = [...this.rows.values()].filter(
+      (row) =>
+        row.email.toLowerCase().includes(term) ||
+        (row.name ?? "").toLowerCase().includes(term),
+    );
+    return ok(matches.slice(0, input.limit));
+  }
+
   async list(): Promise<Result<User[]>> {
     return ok([]);
   }

@@ -4,6 +4,21 @@ import type { Result } from "../result";
 import type { ConversationalNodeConfig } from "./flow-node";
 import type { TemplateField } from "./template-field";
 
+// Stored in `doneWhen` when a template-backed step's completion criterion is
+// "the template is filled" rather than an author-written sentence. It is a
+// marker, not English: anything that reads `doneWhen` as guidance — a branch
+// purpose, a retrieval query — must skip it rather than pass it on.
+export const TEMPLATE_COMPLETE_SENTINEL = "__TEMPLATE_COMPLETE__";
+
+// `doneWhen` as prose, or null when it holds the sentinel (or nothing). The one
+// accessor for "is there an author-written criterion here", so a reader can
+// never forget the sentinel case.
+export const doneWhenGuidance = (doneWhen: string | null | undefined): string | null => {
+  const trimmed = doneWhen?.trim();
+  if (!trimmed || trimmed === TEMPLATE_COMPLETE_SENTINEL) return null;
+  return trimmed;
+};
+
 // The three author-facing output types for a conversational step (ADR-038).
 // `unstructured` is the current name for the legacy stored `conversation_only`
 // value; `structured` captures author-declared fields with no document.

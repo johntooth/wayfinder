@@ -37,8 +37,12 @@ and continue only once they approve. The `pending_approval` status exists in the
 - The resolver only ever **suggests** an approver; for *every* mode the operator
   **must confirm**, and can always choose **"Someone else"** via type-ahead
   auto-suggest.
-- Auto-suggest federates **three sources** — Microsoft Entra (Graph), an
-  uploaded HR dataset, and any free-text email address.
+- Auto-suggest federates **four sources** — existing Wayfinder user accounts,
+  Microsoft Entra (Graph), an uploaded HR dataset, and any free-text email
+  address. Accounts are listed first and win a de-duplication against the same
+  address from another source: they are the only candidates who can actually
+  sign in and decide (see §12). Results are de-duplicated by email, so a person
+  present in several sources appears once.
 - Administrators can **upload an HR file (CSV/XLSX)** in configuration, stored in
   the structure it was uploaded (original columns preserved), with a column
   mapping for resolution.
@@ -77,18 +81,29 @@ and continue only once they approve. The `pending_approval` status exists in the
    for the right kind of sign-off.
 2. As an operator, when I reach an approval node I'm shown a *suggested* approver
    and must confirm or choose someone else before it's sent.
-3. As an operator, when I choose "Someone else" I can search my org (Entra), the
-   uploaded HR list, or just type any email address.
+3. As an operator, when I choose "Someone else" I can search the people who
+   already have accounts, my org (Entra), the uploaded HR list, or just type any
+   email address.
 4. As an administrator, I upload our HR spreadsheet and it's usable for search
    immediately, with a mapping for first/second-level resolution.
 5. As an approver, I see requests awaiting me and can approve, reject, or request
    changes with a comment.
 6. As an operator, approval advances the flow; changes-requested shows me the
    feedback to revise.
+7. As an approver, I can review the decisions I have already made — what I
+   signed, what I commented, and where that work ended up — without hunting
+   through the chats they belong to. One flow may hold several decisions for the
+   same approval step, because a change request routes work back and re-entering
+   the step raises a fresh request; each is listed in its own right.
 
 ## 7. Pages / surfaces affected
 
-- `/approvals` (web) — approver inbox.
+- `/approvals` (web) — approver inbox, tabbed **Active / Completed / All**.
+  Active is the pending queue; Completed and All list decisions as collapsed rows.
+- `/approvals/[approvalId]` (web) — one decision on its own page: what was
+  approved, the artefact as signed, the outcome/decider/comment, and the
+  session's current status and step. Approval-centric rather than chat-centric,
+  and readable only by the people that approval is about (or an admin).
 - `/admin/settings` (web) — HR file upload, detected-column review, mapping, and
   Entra/Graph configuration are surfaced here as modals, following the existing
   admin settings pattern (no standalone `/admin/hr` page).
@@ -96,7 +111,8 @@ and continue only once they approve. The `pending_approval` status exists in the
 - Session chat — a "confirm approver" card (suggestion + "Someone else"
   auto-suggest), then "awaiting approval" / decision result.
 - tRPC: `approval.suggest`, `approval.confirmAndSend`, `approval.decide`,
-  `people.search`, `hr.upload`, `hr.setMapping` — new.
+  `approval.list`, `approval.get`, `people.search`, `hr.upload`,
+  `hr.setMapping` — new.
 - `apps/api` — no new external route; approvals are in-app.
 
 ## 8. Database changes
@@ -147,8 +163,10 @@ hierarchy comes from Entra/HR and every route is operator-confirmed (ADR-018).
 - [ ] An `approval` node with an `approverSource` dropdown can be added and saved.
 - [ ] Reaching the node creates a `pending` row, computes a *suggestion*, and the
       session does not advance.
-- [ ] The operator must confirm; choosing "Someone else" searches Entra + HR +
-      accepts any typed email; overrides set `is_override`.
+- [ ] The operator must confirm; choosing "Someone else" searches existing
+      accounts + Entra + HR + accepts any typed email; overrides set
+      `is_override`. A person in more than one source appears once, as the
+      account-backed record.
 - [ ] First/second-level suggestions come from Entra (HR upload as fallback);
       `dynamic` retrieves the policy clause and proposes the position holder.
 - [ ] Admin can upload a CSV/XLSX; rows are stored as-uploaded and searchable;
@@ -158,6 +176,10 @@ hierarchy comes from Entra/HR and every route is operator-confirmed (ADR-018).
       and decided-at timestamp (and decided-by/comment) for reporting.
 - [ ] Approver emailed on request; requester emailed on decision; audit on both.
 - [ ] No double-decision; deciding an already-decided approval is rejected.
+- [ ] An approver can list their past decisions and open one, seeing what was
+      signed, the outcome and comment, and where the session has since got to.
+      Another user cannot open a decision that was not addressed to them.
+- [ ] A pending request whose session was discarded leaves the approver's queue.
 - [ ] `./validate.sh` passes; `VERSION` and `package.json#version` match.
 
 ## 11. Out of scope / future work
@@ -173,7 +195,10 @@ hierarchy comes from Entra/HR and every route is operator-confirmed (ADR-018).
 - **Free-typed approver with no account.** Every approver gets the same in-app
   link; an unauthenticated recipient is redirected to login (no magic-link, no
   approve-by-email). So a typed email with no account cannot act until one
-  exists — auto-invite vs admin-add is deferred (ADR-018).
+  exists — auto-invite vs admin-add is deferred (ADR-018). *Narrowed* by the
+  account source in §3: the people who can act are now the first thing the
+  operator sees, so the natural pick is someone who can decide. The risk stands
+  for a deliberately typed external address.
 - **Graph scopes.** `Directory.Read.All` is privileged and needs tenant admin
   consent; until granted, resolution falls back to the HR upload / manual pick.
 - HR mapping UX: require explicit mapping before a dataset is usable for

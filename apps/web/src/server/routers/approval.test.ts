@@ -6,16 +6,24 @@ import { approvalRouter } from "./approval";
 
 const createCaller = createCallerFactory(router({ approval: approvalRouter }));
 
+const approvalId = "11111111-1111-1111-1111-111111111111";
+
 const makeContainer = (): Container =>
   ({
     services: { errorLogger: { log: async () => undefined } },
     repos: { users: { findById: vi.fn().mockResolvedValue(ok({ email: "a@b.c" })) } },
     useCases: {
       decideApproval: {
-        execute: vi
-          .fn()
-          .mockResolvedValue(ok({ advanced: true, newNodeId: null, sessionCompleted: false })),
+        execute: vi.fn().mockResolvedValue(
+          ok({
+            approval: { id: approvalId, sessionId: "sess-1" },
+            advanced: true,
+            newNodeId: null,
+            sessionCompleted: false,
+          }),
+        ),
       },
+      resolveDecisionNotifyTargets: { execute: vi.fn().mockResolvedValue(ok([])) },
     },
   }) as unknown as Container;
 
@@ -26,8 +34,6 @@ const contextWith = (container: Container): TrpcContext => ({
   permissions: new Set(),
   headers: new Headers(),
 });
-
-const approvalId = "11111111-1111-1111-1111-111111111111";
 
 describe("approval.decide", () => {
   // `approved_with_edits` is derived by the system, never chosen. If it ever

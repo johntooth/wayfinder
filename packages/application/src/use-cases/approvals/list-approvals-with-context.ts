@@ -1,7 +1,11 @@
 import {
+  err,
+  domainError,
   ok,
   type Approval,
+  type ApprovalListScope,
   type ApprovalNodeConfig,
+  type ApprovalStatus,
   type DocumentGenerationConfidence,
   type FlowNode,
   type IApprovalRepository,
@@ -13,6 +17,7 @@ import {
   type Result,
   type Session,
   type SessionDocument,
+  type SessionStatus,
   type StepOutputField,
   type User,
 } from "@rbrasier/domain";
@@ -34,6 +39,15 @@ export interface PreviousStepContext {
   fields: StepOutputField[] | null;
 }
 
+// Where the work stands *now*, as opposed to what was decided then. A decision
+// is only half the story: an approver reviewing their own history needs to know
+// whether the thing they signed went on to complete, was sent back, or was
+// discarded.
+export interface ApprovalSessionState {
+  status: SessionStatus;
+  currentStepName: string | null;
+}
+
 export interface PendingApprovalContext {
   approval: Approval;
   sessionId: string;
@@ -49,19 +63,34 @@ export interface PendingApprovalContext {
   // knows whether they are the first or the second signature on this document.
   approvalStepName: string;
   roleHint: string | null;
+  // Populated for a decided approval; null while it is still pending. Resolved
+  // from the row, not the frozen record, so the queue and the history agree.
+  decidedByName: string | null;
+  sessionState: ApprovalSessionState;
 }
 
-export interface ListPendingApprovalsWithContextInput {
+export interface ListApprovalsWithContextInput {
   approverUserId: string;
   approverEmail: string | null;
+  // Defaults to the pending queue, which is what `/approvals` showed before
+  // history existed.
+  scope?: ApprovalListScope;
 }
 
-// Enriches the approver's pending queue with the context needed to decide:
-// the chat name, who raised it, and the previous step's key output (the
-// document, or its output fields). The approval row stays the source of truth;
-// every enrichment is best-effort so a missing session or lookup never drops the
-// pending request from the list.
-export class ListPendingApprovalsWithContext {
+export interface GetApprovalWithContextInput {
+  approvalId: string;
+  viewerUserId: string;
+  viewerEmail: string | null;
+  isAdmin: boolean;
+}
+
+// Enriches an approver's approvals with the context needed to decide, or to
+// review a decision already made: the chat name, who raised it, the subject
+// step's key output (the document, or its output fields), and where the session
+// has since got to. The approval row stays the source of truth; every
+// enrichment is best-effort so a missing session or lookup never drops the
+// request from the list.
+export class ListApprovalsWithContext {
   constructor(
     private readonly approvals: IApprovalRepository,
     private readonly sessions: ISessionRepository,
@@ -76,13 +105,41 @@ export class ListPendingApprovalsWithContext {
   ) {}
 
   async execute(
-    input: ListPendingApprovalsWithContextInput,
+    input: ListApprovalsWithContextInput,
   ): Promise<Result<PendingApprovalContext[]>> {
-    const pending = await this.approvals.listPendingForApprover(input);
-    if (pending.error) return pending;
+    const listed = await this.approvals.listForApprover({
+      approverUserId: input.approverUserId,
+      approverEmail: input.approverEmail,
+      scope: input.scope ?? "pending",
+    });
+    if (listed.error) return listed;
 
-    const contexts = await Promise.all(pending.data.map((approval) => this.buildContext(approval)));
+    const contexts = await Promise.all(listed.data.map((approval) => this.buildContext(approval)));
     return ok(contexts);
+  }
+
+  // One approval, for its own page. Authorised here rather than at the edge
+  // because the rule is about the approval, not the session: being named on
+  // *an* approval of a session already opens the session (ADR-018), but a
+  // decision record is only readable by the people it is about.
+  async getById(input: GetApprovalWithContextInput): Promise<Result<PendingApprovalContext>> {
+    const found = await this.approvals.findById(input.approvalId);
+    if (found.error) return found;
+    const approval = found.data;
+    if (!approval) return err(domainError("NOT_FOUND", "Approval not found."));
+
+    if (!input.isAdmin && !this.viewerOwns(approval, input)) {
+      return err(domainError("FORBIDDEN", "This approval was not addressed to you."));
+    }
+
+    return ok(await this.buildContext(approval));
+  }
+
+  private viewerOwns(approval: Approval, input: GetApprovalWithContextInput): boolean {
+    if (approval.approverUserId === input.viewerUserId) return true;
+    if (approval.decidedByUserId === input.viewerUserId) return true;
+    const email = input.viewerEmail?.toLowerCase();
+    return Boolean(email && approval.approverEmail?.toLowerCase() === email);
   }
 
   private async buildContext(approval: Approval): Promise<PendingApprovalContext> {
@@ -104,7 +161,29 @@ export class ListPendingApprovalsWithContext {
       subjectDescription: subject.error ? null : subject.data.description,
       approvalStepName: approvalNode?.name?.trim() || "Approval",
       roleHint: config.roleHint?.trim() || null,
+      decidedByName: await this.decidedByName(approval.status, approval.decidedByUserId),
+      sessionState: await this.resolveSessionState(session),
     };
+  }
+
+  private async decidedByName(
+    status: ApprovalStatus,
+    decidedByUserId: string | null,
+  ): Promise<string | null> {
+    if (status === "pending" || !decidedByUserId) return null;
+    const decider = await this.findUser(decidedByUserId);
+    if (!decider) return null;
+    return decider.name?.trim() || decider.email;
+  }
+
+  private async resolveSessionState(session: Session | null): Promise<ApprovalSessionState> {
+    // A session that cannot be read is reported as abandoned rather than
+    // guessed as active: telling an approver their decision is still in flight
+    // when it may not be is the worse error.
+    if (!session) return { status: "abandoned", currentStepName: null };
+    if (!session.currentNodeId) return { status: session.status, currentStepName: null };
+    const node = await this.findNode(session.currentNodeId);
+    return { status: session.status, currentStepName: node?.name?.trim() || null };
   }
 
   private async findNode(nodeId: string): Promise<FlowNode | null> {

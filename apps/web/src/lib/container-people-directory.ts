@@ -4,6 +4,7 @@ import {
   GraphReportingLineResolver,
   HrPeopleDirectory,
   SpreadsheetParser,
+  UserPeopleDirectory,
 } from "@rbrasier/adapters";
 import type { IHrDatasetRepository, IUserRepository } from "@rbrasier/domain";
 import type { ServerEnv } from "./env";
@@ -34,6 +35,7 @@ export const buildPeopleDirectory = ({ env, hrDatasets, users }: PeopleDirectory
     graphClient,
     graphPeopleDirectory: new GraphPeopleDirectory(graphClient),
     hrPeopleDirectory: new HrPeopleDirectory(hrDatasets),
+    userPeopleDirectory: new UserPeopleDirectory(users),
     reportingLineResolver: new GraphReportingLineResolver(graphClient, hrDatasets, users),
   };
 };
