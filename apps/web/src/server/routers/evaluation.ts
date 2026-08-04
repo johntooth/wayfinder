@@ -89,7 +89,11 @@ const toTrpcError = (error: DomainError): TRPCError =>
 // authenticatedProcedure, which permissionProcedure composes.
 const reviewProcedure = permissionProcedure("evaluation:review");
 
-const evaluationIdInput = z.object({ evaluationId: z.string().uuid() });
+// An evaluationId is operator-authored — `redline_evaluations.id` is `text`, the
+// domain type is `string`, and the corpus manifest lets the operator name it. A
+// uuid() input rejected every such evaluation here, so it was created and then
+// unreadable. Same reasoning as documentId below.
+const evaluationIdInput = z.object({ evaluationId: z.string().min(1) });
 
 const measureInput = z.enum(["sum", "avg"]) satisfies z.ZodType<PivotMeasureKind>;
 
