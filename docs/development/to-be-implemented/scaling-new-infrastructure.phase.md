@@ -7,7 +7,7 @@
   sub-phases and bump independently —
   - Redis adapters (shared auth cache, event-bus adapter 2): **MINOR**
   - Job queue + first migrated producers: **MINOR**
-  - Dockerfiles + object-storage parametrisation: **MINOR**
+  - Object-storage parametrisation: **MINOR** (the Dockerfile half shipped in v0.24.0)
   - Connection pooler and read replica: infra only, no code bump (the
     `DATABASE_LISTEN_URL` caveat in item 1 is part of the event-bus slice)
 - **Depends on / relates to**:
@@ -97,11 +97,13 @@ here until the last code slice lands (the former roadmap's convention).
 4. **Read replica.** Route analytics/reporting and vector-heavy reads to a
    replica to protect the primary's write throughput. Driven by measured
    need (load tests, production metrics), not pre-emptively.
-5. **Dockerfiles + service topology** (none exist today). Two containers:
-   `apps/web`, and `apps/api` as a **separate always-on service** — never
-   serverless, the scheduler is a long-lived polling loop. The load
-   balancer's idle timeout must exceed turn length (~300 s) for both the
-   chat stream and the SSE fan-out.
+5. **Service topology.** ~~Dockerfiles~~ — **done in v0.24.0** (container
+   distribution phase, ADR-046). There is **one** image, not one per app: the
+   runtime command selects `web`, `api` or `migrate`, so the two processes
+   cannot be built from different trees. `apps/api` still runs as a
+   **separate always-on service** — never serverless, the scheduler is a
+   long-lived polling loop. The load balancer's idle timeout must exceed turn
+   length (~300 s) for both the chat stream and the SSE fan-out.
 6. **Object storage parametrisation.** `MinioStorageAdapter` already speaks
    S3 — parametrise endpoint/region/credentials for native S3. Azure Blob
    needs a small new `IObjectStorage` adapter, or keep the S3 API via a

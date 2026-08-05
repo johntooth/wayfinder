@@ -95,9 +95,30 @@ override.
 
 See [`docs/guides/setup-local.md`](docs/guides/setup-local.md).
 
-## Railway deployment
+## Deployment
 
-See [`docs/guides/setup-railway.md`](docs/guides/setup-railway.md).
+Wayfinder ships as a public container image — `ghcr.io/rbrasier/wayfinder` — so
+no deployment target needs a build toolchain.
+
+The whole stack on one host:
+
+```bash
+cp .env.min.example.prod .env    # then fill in the secrets it names
+docker compose -f docker-compose.prod.yml up -d
+```
+
+That brings up web, api, Postgres and object storage, runs migrations as their
+own step, and leaves you at the first-run `/setup` page. Object storage, the AI
+provider, mail and sign-in are all configured there — not in environment
+variables.
+
+| Target | Guide |
+|---|---|
+| Docker Compose (single host) | `docker-compose.prod.yml` |
+| Railway | [`docs/guides/setup-railway.md`](docs/guides/setup-railway.md) |
+| AWS (ECS Fargate + RDS + S3) | [`docs/guides/setup-aws.md`](docs/guides/setup-aws.md) |
+| Azure (Container Apps + Flexible Server) | [`docs/guides/setup-azure.md`](docs/guides/setup-azure.md) |
+| Upgrading an existing deployment | [`docs/guides/upgrading.md`](docs/guides/upgrading.md) |
 
 ## Locked out of admin
 

@@ -85,6 +85,10 @@ jobs:
       # Lets the authenticated scheduler-tick spec reach the durable-claim path
       # (otherwise the endpoint short-circuits with 503 before claimDue runs).
       SCHEDULER_TICK_SECRET: e2e-scheduler-tick-secret
+      # Migrations run as their own step (`pnpm db:migrate`), so the app must not
+      # repeat them on boot — the deployment pattern ADR-047 prescribes, and it
+      # keeps seconds off every app start here.
+      RUN_MIGRATIONS_ON_START: "false"
       TEST_AUTH_BYPASS: "true"
       TEST_ADMIN_EMAIL: admin@example.com
       # Points Entra sign-in at the mock identity provider started below, so the
@@ -251,6 +255,10 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wayfinder_e2e_pki
+      # Migrations run as their own step (`pnpm db:migrate`), so the app must not
+      # repeat them on boot — the deployment pattern ADR-047 prescribes, and it
+      # keeps seconds off every app start here.
+      RUN_MIGRATIONS_ON_START: "false"
       BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET || 'e2e-test-secret-must-be-at-least-32-chars-long' }}
       BETTER_AUTH_URL: http://localhost:3000
       SETTINGS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"

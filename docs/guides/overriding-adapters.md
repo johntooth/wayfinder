@@ -24,7 +24,6 @@ const adapters = createAdapters(db, {
     secretKey: env.LANGFUSE_SECRET_KEY,
   },
   nodeEnv: env.NODE_ENV,
-  redisUrl: env.REDIS_URL,
 });
 ```
 
