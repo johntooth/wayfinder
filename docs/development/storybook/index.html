@@ -6,52 +6,52 @@
   <title>Wayfinder — Storybook</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     /* ── Design Tokens ─────────────────────────────────────────────────── */
     :root {
-      /* Core palette */
-      --bg:             #f7f6f3;
-      --bg2:            #efede8;
-      --bg3:            #e6e3dc;
+      /* Paper surfaces — warm neutral ramp */
+      --bg:             #faf9f7;   /* app canvas */
+      --bg2:            #f5f3ee;   /* rail / inset */
+      --bg3:            #ebe8e0;   /* pressed / bubble */
       --surface:        #ffffff;
-      --primary:        #3a5fd9;
-      --primary-light:  #eef1fc;
-      --primary-dim:    #c5d0f7;
-      --border:         #dedad2;
-      --border-strong:  #c9c4ba;
+      --border:         #e7e3db;   /* hairline */
+      --border-strong:  #dedad2;   /* card edge */
+      --border-dashed:  #d8d3c7;
       /* Text */
-      --text:           #1a1814;
-      --text2:          #5a5650;
-      --text3:          #918d87;
-      --text-muted:     #5a5650;
-      --text-subtle:    #918d87;
+      --text:           #1c1b19;
+      --text2:          #5c574c;
+      --text3:          #8a8272;
+      --text4:          #a09884;
+      /* Accent */
+      --primary:        #2f56d3;
+      --primary-light:  #eaeefb;
+      --primary-dim:    #c3cef2;
       /* Semantic */
-      --success:        #2e9e6a;
-      --success-bg:     #eaf6f0;
-      --warning:        #c17a1a;
-      --warning-bg:     #fdf3e3;
-      --rose:           #c2385a;
-      --rose-bg:        #fdeef2;
-      --teal:           #0e8a7a;
-      --teal-bg:        #e6f7f5;
-      --purple:         #7c3aed;
-      --purple-light:   #f3eeff;
-      --sand:           #efede8;
-      --sand-mid:       #e6e3dc;
-      --sand-light:     #f3f1ec;
-      /* Elevation */
-      --sh:             0 1px 3px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.05);
-      --sh-md:          0 2px 8px rgba(0,0,0,.09), 0 12px 36px rgba(0,0,0,.07);
-      --sh-xl:          0 4px 24px rgba(0,0,0,.13), 0 20px 60px rgba(0,0,0,.10);
+      --success:        #1f6b4d;
+      --success-bg:     #e3efe5;
+      --success-border: #c7e0cf;
+      --warning:        #8a5a1d;
+      --warning-bg:     #f6e9d8;
+      --warning-border: #e6d0ab;
+      --rose:           #a8324c;
+      --rose-bg:        #f9e8eb;
+      --teal:           #14312e;
+      --teal-bg:        #e6f2ee;
+      --purple:         #5b3fa8;
+      --purple-light:   #efeafa;
+      /* Elevation — low, warm, diffuse */
+      --sh:             0 1px 2px rgba(28,27,25,.04), 0 4px 12px -8px rgba(28,27,25,.18);
+      --sh-md:          0 2px 6px rgba(28,27,25,.06), 0 12px 28px -18px rgba(28,27,25,.30);
+      --sh-xl:          0 4px 16px rgba(28,27,25,.08), 0 32px 64px -28px rgba(28,27,25,.36);
       /* Radii */
-      --radius-sm:      9px;
-      --radius:         10px;
+      --radius-sm:      7px;
+      --radius:         9px;
       --radius-lg:      14px;
       --radius-xl:      18px;
       /* Type */
-      --font:           'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-      --font-mono:      'DM Mono', 'Courier New', monospace;
+      --font:           'Figtree', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono:      'JetBrains Mono', ui-monospace, 'Courier New', monospace;
     }
 
     /* ── Reset ─────────────────────────────────────────────────────────── */
@@ -63,886 +63,664 @@
       display: flex;
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
+      text-wrap: pretty;
     }
-    code { font-family: var(--font-mono); font-size: 12px; background: var(--bg2); padding: 1px 6px; border-radius: 4px; }
+    a { color: var(--primary); text-decoration: none; }
+    a:hover { color: #1f3ea8; }
+    code { font-family: var(--font-mono); font-size: 11.5px; background: var(--bg2); color: var(--text2); padding: 1px 5px; border-radius: 4px; }
+    .mono { font-family: var(--font-mono); }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--text4);
+    }
 
-    /* ── Shell sidebar ──────────────────────────────────────────────────── */
+    /* ── Storybook shell sidebar ───────────────────────────────────────── */
     .shell-sidebar {
-      width: 220px;
-      flex-shrink: 0;
-      background: var(--surface);
+      width: 232px; flex-shrink: 0;
+      background: var(--bg2);
       border-right: 1px solid var(--border);
-      position: sticky;
-      top: 0;
-      height: 100vh;
+      position: sticky; top: 0; height: 100vh;
       overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      scrollbar-width: thin;
-      scrollbar-color: var(--border) transparent;
+      display: flex; flex-direction: column;
+      scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent;
     }
-    .shell-sidebar header {
-      padding: 18px 16px 14px;
-      border-bottom: 1px solid var(--border);
-    }
-    .shell-sidebar header .wordmark {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .shell-sidebar header .wordmark .logo {
-      width: 26px; height: 26px;
-      background: var(--primary);
-      border-radius: 7px;
+    .shell-sidebar header { padding: 20px 18px 16px; }
+    .shell-sidebar .wordmark { display: flex; align-items: center; gap: 9px; }
+    .shell-sidebar .logo {
+      width: 26px; height: 26px; background: var(--primary); border-radius: var(--radius-sm);
       display: flex; align-items: center; justify-content: center;
-      font-size: 11px; font-weight: 700; color: #fff;
-      flex-shrink: 0;
+      font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0;
     }
-    .shell-sidebar header .wordmark h1 {
-      font-size: 14px; font-weight: 700; color: var(--text);
-      letter-spacing: -.3px;
-    }
-    .shell-sidebar header .sub {
-      font-size: 11px; color: var(--text3); margin-top: 3px; padding-left: 36px;
-    }
-    .shell-nav {
-      flex: 1;
-      padding: 12px 8px;
-    }
-    .nav-group {
-      margin-bottom: 20px;
-    }
+    .shell-sidebar h1 { font-size: 15px; font-weight: 600; letter-spacing: -.015em; }
+    .shell-sidebar .sub { margin-top: 6px; padding-left: 35px; }
+    .shell-nav { flex: 1; padding: 6px 10px 24px; }
+    .nav-group { margin-bottom: 18px; }
     .nav-group-label {
-      font-size: 10px; font-weight: 600; text-transform: uppercase;
-      letter-spacing: 0.07em; color: var(--text3);
-      padding: 0 8px 6px;
+      font-family: var(--font-mono);
+      font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--text4); padding: 0 10px 7px;
     }
     .nav-item {
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      padding: 7px 8px;
-      border-radius: 8px;
-      font-size: 13px; color: var(--text2);
-      text-decoration: none;
-      transition: background 0.12s, color 0.12s;
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 10px; border-radius: 8px;
+      font-size: 13.5px; color: var(--text2);
+      transition: background .12s, color .12s;
       cursor: pointer;
     }
-    .nav-item:hover { background: var(--sand); color: var(--text); }
-    .nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
-    .nav-item-dot {
-      width: 5px; height: 5px;
-      border-radius: 50%;
-      background: var(--border-strong);
-      flex-shrink: 0;
-      margin-left: 2px;
-    }
+    .nav-item:hover { background: #efece5; color: var(--text); }
+    .nav-item.active { background: var(--bg3); color: var(--text); font-weight: 600; }
+    .nav-item-dot { width: 6px; height: 6px; border-radius: 50%; background: #c9c3b5; flex-shrink: 0; }
     .nav-item.active .nav-item-dot { background: var(--primary); }
 
     /* ── Main content ──────────────────────────────────────────────────── */
-    .main {
-      flex: 1;
-      padding: 40px 48px;
-      max-width: 900px;
-      min-width: 0;
-    }
-    .page-title {
-      font-size: 22px; font-weight: 700; margin-bottom: 4px; letter-spacing: -.4px;
-    }
-    .page-subtitle {
-      font-size: 13.5px; color: var(--text3); margin-bottom: 40px;
+    .main { flex: 1; padding: 48px 56px 96px; max-width: 940px; min-width: 0; }
+    .page-title { font-size: 26px; font-weight: 600; letter-spacing: -.025em; margin-bottom: 8px; }
+    .page-subtitle { font-size: 14.5px; color: var(--text3); line-height: 1.6; margin-bottom: 12px; max-width: 620px; }
+    .page-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 48px; }
+    .meta-chip {
+      font-family: var(--font-mono); font-size: 11px; color: var(--text2);
+      border: 1px solid var(--border-strong); border-radius: 20px; padding: 4px 10px;
+      background: var(--surface);
     }
 
-    /* ── Section ───────────────────────────────────────────────────────── */
-    .section { margin-bottom: 64px; }
-    .section-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; letter-spacing: -.3px; }
-    .section-desc { font-size: 13px; color: var(--text3); margin-bottom: 24px; line-height: 1.6; max-width: 600px; }
+    .section { margin-bottom: 72px; }
+    .section-head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+    .section-title { font-size: 19px; font-weight: 600; letter-spacing: -.02em; }
+    .section-rule { flex: 1; height: 1px; background: var(--border); }
+    .section-desc { font-size: 13.5px; color: var(--text3); line-height: 1.65; margin-bottom: 26px; max-width: 640px; }
     .subsection-title {
-      font-size: 11px; font-weight: 600; text-transform: uppercase;
-      letter-spacing: 0.06em; color: var(--text3);
-      margin-bottom: 12px; margin-top: 24px;
+      font-family: var(--font-mono);
+      font-size: 10.5px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--text4); margin: 32px 0 14px;
     }
 
     /* ── Story card ────────────────────────────────────────────────────── */
     .story {
-      border: 1px solid var(--border);
+      border: 1px solid var(--border-strong);
       border-radius: var(--radius-lg);
       overflow: hidden;
-      margin-bottom: 20px;
+      margin-bottom: 18px;
+      background: var(--surface);
     }
     .story-label {
-      font-size: 11px; font-weight: 600; color: var(--text3);
-      padding: 7px 14px;
-      background: var(--sand-light);
+      font-family: var(--font-mono);
+      font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
+      color: var(--text3);
+      padding: 9px 16px;
+      background: var(--bg2);
       border-bottom: 1px solid var(--border);
-      text-transform: uppercase; letter-spacing: 0.05em;
     }
-    .story-canvas {
-      padding: 28px 24px;
-      background: var(--bg);
-    }
+    .story-canvas { padding: 28px 24px; background: var(--bg); }
     .story-canvas.white { background: var(--surface); }
-    .story-canvas.dark  { background: #1a1814; }
+    .story-canvas.flush { padding: 0; }
     .story-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+    hr.story-hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
 
-    /* ═══════════════════════════════════════════════════════════════════
-       1 — TOKENS
-    ═══════════════════════════════════════════════════════════════════ */
-    .token-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-      gap: 10px;
+    /* ── Tokens ────────────────────────────────────────────────────────── */
+    .token-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 10px; }
+    .swatch { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border-strong); background: var(--surface); }
+    .swatch-color { height: 46px; }
+    .swatch-info { padding: 8px 10px; }
+    .swatch-name { font-size: 11.5px; font-weight: 600; }
+    .swatch-value { font-family: var(--font-mono); font-size: 10px; color: var(--text4); margin-top: 3px; }
+    .spec-card {
+      background: var(--surface); border: 1px solid var(--border-strong);
+      padding: 18px 20px; font-size: 12.5px; font-weight: 600; min-width: 116px;
     }
-    .swatch {
-      border-radius: var(--radius);
-      overflow: hidden;
-      border: 1px solid var(--border);
-    }
-    .swatch-color { height: 44px; }
-    .swatch-info { padding: 8px 10px; background: var(--surface); }
-    .swatch-name { font-size: 11px; font-weight: 600; }
-    .swatch-value { font-size: 10px; color: var(--text3); margin-top: 2px; font-family: var(--font-mono); }
+    .spec-card span { display: block; margin-top: 4px; font-weight: 400; font-family: var(--font-mono); font-size: 10.5px; color: var(--text4); }
 
-    /* ═══════════════════════════════════════════════════════════════════
-       2 — HEADER
-    ═══════════════════════════════════════════════════════════════════ */
+    /* ═══════════════ APP HEADER ═══════════════ */
     .app-header {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
-      height: 52px;
-      display: flex;
-      align-items: center;
-      padding: 0 20px;
-      gap: 10px;
+      padding: 14px 24px 12px;
+      display: flex; flex-direction: column; gap: 12px;
     }
-    .app-header .brand {
-      width: 26px; height: 26px;
-      background: var(--primary);
-      border-radius: 7px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 11px; font-weight: 700; color: #fff;
-      flex-shrink: 0;
-    }
-    .app-header .flow-name {
-      font-size: 14px; font-weight: 600; flex: 1; letter-spacing: -.2px;
-    }
-    .header-actions { display: flex; gap: 8px; align-items: center; }
-    .status-pill {
-      font-size: 11px; font-weight: 600;
-      padding: 3px 9px;
-      border-radius: 99px;
-    }
-    .status-pill.draft       { background: var(--sand);         color: var(--text3); }
-    .status-pill.published   { background: var(--success-bg);   color: var(--success); }
+    .app-header-row { display: flex; align-items: center; gap: 12px; }
+    .crumb { font-size: 13px; color: var(--text3); white-space: nowrap; }
+    .crumb-sep { color: #d5cfc2; }
+    .app-title { font-size: 18px; font-weight: 600; letter-spacing: -.015em; }
+    .header-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+    .status-pill { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
+    .status-pill.complete    { background: var(--success-bg); color: var(--success); }
     .status-pill.in-progress { background: var(--primary-light); color: var(--primary); }
+    .status-pill.draft       { background: var(--bg3); color: var(--text3); }
+    .status-pill.published   { background: var(--success-bg); color: var(--success); }
+    .status-pill.awaiting    { background: var(--warning-bg); color: var(--warning); }
 
-    /* ═══════════════════════════════════════════════════════════════════
-       3 — BUTTONS
-    ═══════════════════════════════════════════════════════════════════ */
+    /* ═══════════════ BUTTONS ═══════════════ */
     .btn {
       display: inline-flex; align-items: center; gap: 6px;
-      padding: 8px 16px;
+      padding: 8px 15px;
       border-radius: var(--radius-sm);
-      font-family: var(--font);
-      font-size: 13px; font-weight: 500;
-      border: 1px solid transparent;
-      cursor: pointer;
-      white-space: nowrap;
-      line-height: 1;
-      letter-spacing: -.1px;
+      font-family: var(--font); font-size: 13px; font-weight: 500;
+      border: 1px solid transparent; cursor: pointer;
+      white-space: nowrap; line-height: 1.1;
+      transition: background .12s, border-color .12s, opacity .12s;
     }
     .btn-primary   { background: var(--primary); color: #fff; border-color: var(--primary); }
-    .btn-secondary { background: var(--surface); color: var(--text); border-color: var(--border); }
-    .btn-ghost     { background: transparent; color: var(--text); border-color: var(--border); }
-    .btn-danger    { background: var(--rose-bg); color: var(--rose); border-color: #f3ccd6; }
+    .btn-primary:hover:not(:disabled) { background: #2748b8; }
+    .btn-secondary { background: var(--surface); color: var(--text); border-color: var(--border-strong); }
+    .btn-secondary:hover:not(:disabled) { background: var(--bg2); }
+    .btn-ghost     { background: transparent; color: var(--text2); border-color: var(--border); }
+    .btn-ghost:hover:not(:disabled) { background: var(--bg2); color: var(--text); }
+    .btn-quiet     { background: transparent; color: var(--text2); border-color: transparent; }
+    .btn-quiet:hover:not(:disabled) { background: var(--bg3); }
+    .btn-danger    { background: var(--rose-bg); color: var(--rose); border-color: #eecdd4; }
     .btn-sm        { padding: 5px 11px; font-size: 12px; }
     .btn-icon {
-      width: 32px; height: 32px;
-      padding: 0;
+      width: 32px; height: 32px; padding: 0;
       display: inline-flex; align-items: center; justify-content: center;
       border-radius: var(--radius-sm);
-      border: 1px solid var(--border);
+      border: 1px solid var(--border-strong);
+      background: var(--surface); color: var(--text3); cursor: pointer;
+    }
+    .btn-icon:hover { background: var(--bg2); color: var(--text); }
+    .btn:disabled, .btn[disabled] { opacity: .4; cursor: not-allowed; }
+    .btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* Chip — quick action / suggested reply */
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--text2);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 5px 10px; background: var(--surface); cursor: pointer;
+      white-space: nowrap;
+    }
+    .chip:hover { background: var(--bg2); color: var(--text); }
+    .chip.accent { border-color: var(--primary-dim); color: var(--primary); background: var(--primary-light); }
+
+    /* ═══════════════ FORMS ═══════════════ */
+    .form-group { display: flex; flex-direction: column; gap: 7px; }
+    .form-label {
+      font-family: var(--font-mono);
+      font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--text4);
+    }
+    .form-input, .form-textarea {
+      width: 100%; padding: 9px 12px;
+      border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+      font-family: var(--font); font-size: 13.5px; color: var(--text);
       background: var(--surface);
-      cursor: pointer;
-      color: var(--text3);
     }
-    .btn:disabled, .btn[disabled] { opacity: 0.4; cursor: not-allowed; }
-    .btn-primary:hover:not(:disabled) { opacity: .92; }
-    .btn-secondary:hover:not(:disabled), .btn-ghost:hover:not(:disabled) { background: var(--bg2); }
-
-    /* ═══════════════════════════════════════════════════════════════════
-       4 — SIDEBAR COMPONENT (the actual in-app sidebar)
-    ═══════════════════════════════════════════════════════════════════ */
-
-    /* Demo wrapper */
-    .sidebar-demo-wrap {
-      display: flex;
-      height: 360px;
-      border-radius: var(--radius-lg);
-      overflow: hidden;
-      border: 1px solid var(--border);
+    .form-textarea { resize: none; min-height: 82px; line-height: 1.55; }
+    .form-input:focus, .form-textarea:focus { outline: none; border-color: var(--primary-dim); box-shadow: 0 0 0 3px var(--primary-light); }
+    .form-input::placeholder, .form-textarea::placeholder { color: var(--text4); }
+    .form-hint { font-size: 11.5px; color: var(--text4); }
+    .toggle-group { display: flex; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; background: var(--surface); }
+    .toggle-btn {
+      flex: 1; padding: 8px 0; font-family: var(--font);
+      font-size: 12.5px; font-weight: 500; color: var(--text3);
+      text-align: center; cursor: pointer; background: transparent; border: none;
     }
+    .toggle-btn.active { background: var(--bg3); color: var(--text); font-weight: 600; }
+    .color-swatches { display: flex; gap: 8px; }
+    .color-swatch { width: 24px; height: 24px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; box-shadow: 0 0 0 1px rgba(28,27,25,.08); }
+    .color-swatch.selected { border-color: var(--surface); box-shadow: 0 0 0 2px var(--text); }
+    .icon-picker { display: flex; gap: 8px; flex-wrap: wrap; }
+    .icon-swatch {
+      width: 38px; height: 38px; border-radius: var(--radius);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px; cursor: pointer;
+      border: 1px solid var(--border); background: var(--bg2);
+    }
+    .icon-swatch.selected { border-color: var(--primary); background: var(--primary-light); }
+    .switch { width: 34px; height: 20px; border-radius: 20px; position: relative; cursor: pointer; transition: background .2s; flex-shrink: 0; }
+    .switch-thumb { position: absolute; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(28,27,25,.25); transition: left .2s; }
+    .switch.off { background: var(--bg3); } .switch.off .switch-thumb { left: 2px; }
+    .switch.on  { background: var(--primary); } .switch.on .switch-thumb { left: 16px; }
+
+    /* ═══════════════ IN-APP SIDEBAR ═══════════════ */
+    .sidebar-demo-wrap { display: flex; height: 480px; border-top: 1px solid var(--border); overflow: hidden; }
     .sidebar-demo-content {
-      flex: 1;
-      background: var(--bg);
+      flex: 1; background: var(--bg);
       display: flex; align-items: center; justify-content: center;
-      font-size: 13px; color: var(--text3);
+      font-size: 13px; color: var(--text4);
     }
-
-    /* In-app sidebar styles — mirroring chats.html exactly */
     .inapp-sidebar {
-      width: 220px;
-      background: white;
+      width: 246px; flex-shrink: 0; height: 100%;
+      background: var(--bg2);
       border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      flex-shrink: 0;
-      height: 100%;
+      display: flex; flex-direction: column;
+      padding: 16px 12px;
+      gap: 18px;
+      overflow-y: auto;
     }
-    .inapp-sidebar-logo {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      padding: 16px 18px 14px;
-      border-bottom: 1px solid var(--border);
-    }
+    .inapp-brand { display: flex; align-items: center; gap: 9px; padding: 2px 6px; }
     .inapp-logo-mark {
-      width: 26px; height: 26px;
-      border-radius: 7px;
-      background: var(--primary);
+      width: 26px; height: 26px; border-radius: var(--radius-sm);
+      background: var(--primary); color: #fff;
       display: flex; align-items: center; justify-content: center;
-      color: white; font-size: 11px; font-weight: 700;
-      flex-shrink: 0;
+      font-size: 13px; font-weight: 700; flex-shrink: 0;
     }
-    .inapp-sidebar-nav {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      padding: 12px 10px;
-      flex: 1;
+    .inapp-brand .name { font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+    .alpha-tag {
+      font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em;
+      color: var(--text3); border: 1px solid var(--border-strong);
+      padding: 2px 5px; border-radius: 4px;
     }
+    /* New chat button (from option 1b) */
+    .new-chat-btn {
+      display: flex; align-items: center; gap: 8px;
+      padding: 9px 12px;
+      border: 1px solid var(--border-strong); border-radius: var(--radius);
+      background: var(--surface);
+      font-size: 13.5px; font-weight: 500; color: var(--text);
+      cursor: pointer; font-family: var(--font);
+      box-shadow: var(--sh);
+      transition: border-color .12s, background .12s;
+    }
+    .new-chat-btn:hover { border-color: var(--primary-dim); background: var(--primary-light); }
+    .new-chat-btn .plus { color: var(--primary); font-size: 15px; line-height: 1; }
+    .new-chat-btn kbd {
+      margin-left: auto; font-family: var(--font-mono); font-size: 10px;
+      color: var(--text4); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px;
+      background: var(--bg2);
+    }
+    .inapp-nav { display: flex; flex-direction: column; gap: 2px; }
     .inapp-nav-item {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      padding: 8px 10px;
-      border-radius: 8px;
-      font-size: 13.5px;
-      color: var(--text2);
-      cursor: pointer;
-      text-decoration: none;
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; border-radius: 8px;
+      font-size: 14px; color: var(--text2); cursor: pointer;
       transition: background .12s, color .12s;
     }
-    .inapp-nav-item:hover { background: var(--bg2); color: var(--text); }
-    .inapp-nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: 500; }
-    .inapp-nav-icon {
-      width: 18px; height: 18px;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
-    }
+    .inapp-nav-item:hover { background: #efece5; color: var(--text); }
+    .inapp-nav-item.active { background: var(--bg3); color: var(--text); font-weight: 600; }
+    .inapp-nav-item .dot { width: 6px; height: 6px; border-radius: 50%; background: #c9c3b5; flex-shrink: 0; }
+    .inapp-nav-item.active .dot { background: var(--primary); }
+    .inapp-nav-item .count { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--text3); }
     .inapp-section-label {
-      font-size: 10.5px; font-weight: 600; color: var(--text3);
-      letter-spacing: .06em;
-      padding: 4px 10px 6px;
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--text4); padding: 0 10px 6px;
     }
-    .inapp-flow-item {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      padding: 7px 10px;
-      border-radius: 8px;
-      font-size: 13px;
-      color: var(--text2);
-      cursor: pointer;
-      text-decoration: none;
-      transition: background .12s, color .12s;
+    .inapp-chat-item {
+      display: flex; flex-direction: column; gap: 4px;
+      padding: 9px 10px; border-radius: 8px; cursor: pointer;
     }
-    .inapp-flow-item:hover { background: var(--bg2); color: var(--text); }
-    .inapp-flow-icon {
-      width: 20px; height: 20px;
-      border-radius: 5px;
+    .inapp-chat-item:hover { background: #efece5; }
+    .inapp-chat-item.active { background: var(--surface); border: 1px solid var(--border); }
+    .inapp-chat-item .title { font-size: 13px; line-height: 1.3; color: var(--text2); }
+    .inapp-chat-item.active .title { font-weight: 500; color: var(--text); }
+    .inapp-chat-item .meta { font-size: 11px; color: var(--text4); }
+    .inapp-footer { margin-top: auto; display: flex; flex-direction: column; gap: 10px; padding-top: 8px; }
+    .admin-mode-btn {
+      font-size: 13px; color: var(--text2);
+      padding: 8px 10px; border: 1px dashed var(--border-dashed);
+      border-radius: 8px; text-align: center; cursor: pointer;
+    }
+    .admin-mode-btn:hover { background: #efece5; color: var(--text); }
+    .admin-mode-btn.on { border-style: solid; border-color: var(--primary-dim); background: var(--primary-light); color: var(--primary); font-weight: 500; }
+    .user-chip { display: flex; align-items: center; gap: 9px; padding: 6px 6px; border-radius: 8px; cursor: pointer; }
+    .user-chip:hover { background: #efece5; }
+    .avatar-round {
+      width: 26px; height: 26px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
-      font-size: 11px;
-      flex-shrink: 0;
+      font-size: 11px; font-weight: 600; flex-shrink: 0;
+      background: var(--border-strong); color: var(--text2);
     }
-    .inapp-sidebar-footer {
-      padding: 12px 10px;
-      border-top: 1px solid var(--border);
-    }
-    .inapp-admin-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 4px 10px 10px;
-    }
-    .inapp-toggle {
-      width: 34px; height: 20px;
-      border-radius: 99px;
-      position: relative;
-      cursor: pointer;
-      transition: background .2s;
-    }
-    .inapp-toggle-thumb {
-      position: absolute;
-      top: 2px;
-      width: 16px; height: 16px;
-      border-radius: 50%;
-      background: white;
-      box-shadow: 0 1px 3px rgba(0,0,0,.2);
-      transition: left .2s;
-    }
-    .inapp-toggle.off { background: var(--bg3); }
-    .inapp-toggle.off .inapp-toggle-thumb { left: 2px; }
-    .inapp-toggle.on  { background: var(--primary); }
-    .inapp-toggle.on  .inapp-toggle-thumb { left: 16px; }
-    .inapp-user-chip {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 10px;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-    .inapp-user-chip:hover { background: var(--bg2); }
-    .inapp-avatar {
-      width: 28px; height: 28px;
-      border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 11px; font-weight: 700; color: white;
-      flex-shrink: 0;
-    }
+    .user-chip .who { display: flex; flex-direction: column; overflow: hidden; }
+    .user-chip .who .n { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-chip .who .e { font-size: 11px; color: var(--text4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    /* Mobile hamburger drawer demo */
+    /* Mobile drawer demo */
     .mobile-frame {
-      width: 320px;
-      height: 460px;
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      overflow: hidden;
-      position: relative;
-      background: var(--bg);
+      width: 320px; height: 470px;
+      border: 1px solid var(--border-strong); border-radius: 18px;
+      overflow: hidden; position: relative; background: var(--bg);
       box-shadow: var(--sh-md);
     }
     .mobile-header {
-      height: 48px;
-      background: white;
+      height: 50px; background: var(--surface);
       border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      padding: 0 14px;
-      gap: 10px;
-      flex-shrink: 0;
+      display: flex; align-items: center; padding: 0 12px; gap: 10px;
     }
-    .hamburger-btn {
-      width: 32px; height: 32px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: transparent;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
-      flex-shrink: 0;
-    }
-    .drawer-backdrop {
-      display: none;
-      position: absolute;
-      inset: 0;
-      background: rgba(20,18,15,.35);
-      z-index: 10;
-    }
+    .drawer-backdrop { display: none; position: absolute; inset: 0; background: rgba(28,27,25,.32); z-index: 10; }
     .drawer {
-      position: absolute;
-      top: 0; left: -240px; bottom: 0;
-      width: 220px;
-      background: white;
-      z-index: 20;
-      display: flex;
-      flex-direction: column;
-      box-shadow: 4px 0 20px rgba(0,0,0,.12);
+      position: absolute; top: 0; left: -260px; bottom: 0; width: 246px;
+      z-index: 20; display: flex; flex-direction: column;
+      box-shadow: 6px 0 24px -8px rgba(28,27,25,.3);
       transition: left .22s cubic-bezier(.2,.9,.3,1);
     }
     .drawer.open { left: 0; }
-    .drawer-close-btn {
-      width: 26px; height: 26px;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      background: transparent;
-      cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 15px; color: var(--text3);
-      line-height: 1;
-    }
 
-    /* ═══════════════════════════════════════════════════════════════════
-       5 — SESSION CARDS
-    ═══════════════════════════════════════════════════════════════════ */
+    /* ═══════════════ SESSION CARDS ═══════════════ */
     .session-card {
       background: var(--surface);
-      border: 1.5px solid var(--border);
+      border: 1px solid var(--border-strong);
       border-radius: var(--radius-lg);
-      padding: 16px 18px;
-      display: flex;
-      gap: 14px;
-      align-items: flex-start;
-      width: 100%;
-      max-width: 520px;
-      cursor: pointer;
-      transition: box-shadow .12s, border-color .12s;
-      text-decoration: none;
-      color: inherit;
+      padding: 15px 17px;
+      display: flex; gap: 14px; align-items: flex-start;
+      width: 100%; max-width: 540px; cursor: pointer; color: inherit;
+      transition: border-color .12s, box-shadow .12s;
     }
-    .session-card:hover { border-color: var(--primary); box-shadow: var(--sh-md); }
+    .session-card:hover { border-color: var(--primary-dim); box-shadow: var(--sh-md); }
     .session-icon {
-      width: 42px; height: 42px;
-      border-radius: 11px;
+      width: 38px; height: 38px; border-radius: 10px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 18px;
-      flex-shrink: 0;
+      font-size: 16px; flex-shrink: 0;
     }
     .session-body { flex: 1; min-width: 0; }
-    .session-header-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 3px; }
-    .session-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -.2px; }
-    .session-time  { font-size: 11px; color: var(--text3); flex-shrink: 0; }
-    .session-snippet { font-size: 12.5px; color: var(--text3); line-height: 1.4; margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .session-progress { display: flex; align-items: center; gap: 6px; }
-    .progress-bar-track { flex: 1; height: 4px; background: var(--bg3); border-radius: 99px; overflow: hidden; }
-    .progress-bar-fill  { height: 100%; border-radius: 99px; }
-    .progress-label { font-size: 11px; color: var(--text3); font-family: var(--font-mono); white-space: nowrap; }
+    .session-header-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+    .session-title { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .session-time { font-family: var(--font-mono); font-size: 10.5px; color: var(--text4); flex-shrink: 0; }
+    .session-snippet { font-size: 12.5px; color: var(--text3); line-height: 1.45; margin-bottom: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .session-progress { display: flex; align-items: center; gap: 9px; }
+    .progress-bar-track { flex: 1; height: 3px; background: var(--bg3); border-radius: 20px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; border-radius: 20px; }
+    .progress-label { font-family: var(--font-mono); font-size: 10.5px; color: var(--text4); white-space: nowrap; }
     .user-badge {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 22px; height: 22px;
-      background: var(--bg2);
-      border-radius: 50%;
-      font-size: 9px; font-weight: 700;
-      color: var(--text3);
-      border: 1px solid var(--border);
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--bg2); border: 1px solid var(--border);
+      font-size: 9px; font-weight: 700; color: var(--text3);
     }
 
-    /* ═══════════════════════════════════════════════════════════════════
-       6 — STEP RAIL
-    ═══════════════════════════════════════════════════════════════════ */
-    .step-rail {
-      display: flex;
-      align-items: center;
-      padding: 10px 16px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      overflow-x: auto;
-      scrollbar-width: none;
-      gap: 0;
+    /* ═══════════════ STEP RAIL ═══════════════ */
+    /* Inline compact rail — lives inside the header (option 1a) */
+    .step-rail-inline {
+      display: flex; align-items: center; gap: 10px;
+      overflow-x: auto; scrollbar-width: none;
+      font-size: 12px; color: var(--text2);
     }
-    .step-rail::-webkit-scrollbar { display: none; }
-    .step-rail-item { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .step-rail-inline::-webkit-scrollbar { display: none; }
+    .step-item { display: flex; align-items: center; gap: 6px; flex-shrink: 0; white-space: nowrap; }
     .step-badge {
-      width: 22px; height: 22px;
-      border-radius: 50%;
+      width: 15px; height: 15px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
-      font-size: 10px; font-weight: 700;
+      font-family: var(--font-mono); font-size: 9px; font-weight: 500; flex-shrink: 0;
     }
     .step-badge.complete { background: var(--success); color: #fff; }
-    .step-badge.current  { background: var(--primary); color: #fff; }
-    .step-badge.pending  { background: var(--bg3); color: var(--text3); }
-    .step-label { font-size: 12px; font-weight: 500; }
-    .step-label.complete { color: var(--success); }
-    .step-label.current  { color: var(--primary); font-weight: 600; }
-    .step-label.pending  { color: var(--text3); }
-    .step-connector { width: 24px; height: 1px; background: var(--border); flex-shrink: 0; }
-    .step-connector.done { background: var(--success); }
+    .step-badge.current  { border: 1.5px solid var(--primary); color: var(--primary); }
+    .step-badge.pending  { border: 1.5px solid var(--border-strong); color: var(--text4); }
+    .step-item.complete .step-name { color: var(--text2); }
+    .step-item.current  .step-name { color: var(--primary); font-weight: 600; }
+    .step-item.pending  .step-name { color: var(--text4); }
+    .step-connector { width: 22px; height: 1px; background: var(--border-strong); flex-shrink: 0; }
+    .step-connector.done { background: #bcd0c2; }
 
-    /* ═══════════════════════════════════════════════════════════════════
-       7 — CHAT INTERFACE
-    ═══════════════════════════════════════════════════════════════════ */
-    .chat-wrap {
-      display: flex;
-      flex-direction: column;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      overflow: hidden;
-      background: var(--bg);
-    }
-    .chat-header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 0 20px;
-      height: 52px;
-      display: flex; align-items: center; gap: 12px;
-    }
-    .chat-header .flow-title { font-size: 14px; font-weight: 600; flex: 1; letter-spacing: -.2px; }
+    /* Vertical rail — used in wide layouts / context panel */
+    .step-rail-vertical { display: flex; flex-direction: column; }
+    .srv-row { display: grid; grid-template-columns: 16px 1fr; gap: 12px; }
+    .srv-gutter { display: flex; flex-direction: column; align-items: center; }
+    .srv-line { flex: 1; width: 1px; background: var(--border-strong); }
+    .srv-body { padding-bottom: 18px; }
+    .srv-name { font-size: 13.5px; font-weight: 500; }
+    .srv-meta { font-size: 11.5px; color: var(--text4); margin-top: 2px; }
+    .srv-row.current .srv-name { color: var(--primary); font-weight: 600; }
+
+    /* ═══════════════ CHAT ═══════════════ */
+    .chat-wrap { display: flex; flex-direction: column; background: var(--bg); }
     .chat-messages {
-      flex: 1;
-      padding: 24px 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-      min-height: 280px;
+      flex: 1; padding: 28px 24px;
+      display: flex; flex-direction: column; gap: 24px;
+      min-height: 300px;
     }
-    .message-row { display: flex; gap: 12px; align-items: flex-start; }
-    .message-row.user { flex-direction: row-reverse; }
-    .avatar {
-      width: 28px; height: 28px;
-      border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 10px; font-weight: 700;
-      flex-shrink: 0;
-    }
-    .avatar.agent { background: var(--primary); color: #fff; }
-    .avatar.user  { background: var(--bg3); color: var(--text); }
-    .message-bubble {
-      max-width: 68%;
-      border-radius: 14px;
-    }
-    .message-bubble.agent {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      padding: 12px 16px;
-      border-bottom-left-radius: 4px;
-    }
-    .message-bubble.user {
-      background: var(--primary);
-      color: #fff;
-      padding: 12px 16px;
-      border-bottom-right-radius: 4px;
-    }
-    .message-text { font-size: 13px; line-height: 1.55; }
-    .message-bubble.user .message-text { color: rgba(255,255,255,.92); }
-    .confidence-bar-wrap { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-    .confidence-track { flex: 1; height: 3px; background: var(--bg3); border-radius: 99px; overflow: hidden; }
-    .confidence-fill { height: 100%; border-radius: 99px; }
-    .confidence-fill.high   { background: var(--success); }
-    .confidence-fill.medium { background: var(--warning); }
-    .confidence-label { font-size: 10px; color: var(--text3); white-space: nowrap; font-family: var(--font-mono); }
-    .milestone-pill {
-      display: inline-flex; align-items: center; gap: 5px;
-      background: var(--success-bg);
-      color: var(--success);
-      border: 1px solid #c0e8d5;
-      border-radius: 99px;
-      font-size: 11px; font-weight: 600;
-      padding: 4px 10px;
+    .chat-col { max-width: 760px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+
+    /* Section divider inside the feed */
+    .feed-divider { display: flex; align-items: center; gap: 12px; }
+    .feed-divider .rule { flex: 1; height: 1px; background: var(--border); }
+    .feed-divider .label {
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--text4); white-space: nowrap;
     }
 
-    /* Milestone pill variants — mirrors apps/web/src/components/chat/milestone-pill.tsx.
-       Rendered centred in the message feed between assistant bubbles. */
-    .milestone-pill-wrap { display: flex; justify-content: center; margin: 12px 0; }
-    .milestone-pill-v {
-      display: inline-flex; align-items: center; gap: 6px;
-      border-radius: 99px;
+    /* Event row — approvals, edits, system actions. Replaces filled bubbles. */
+    .event-row { display: flex; gap: 12px; }
+    .event-avatar {
+      width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; margin-top: 2px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 600;
+    }
+    .event-avatar.approved { background: var(--success-bg); color: var(--success); }
+    .event-avatar.changes  { background: var(--warning-bg); color: var(--warning); }
+    .event-avatar.rejected { background: var(--rose-bg); color: var(--rose); }
+    .event-avatar.system   { background: var(--bg3); color: var(--text2); }
+    .event-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .event-headline { font-size: 14px; color: var(--text2); }
+    .event-headline strong { color: var(--text); font-weight: 600; }
+    .event-quote { font-size: 14px; color: #3d382f; }
+    .event-meta { font-family: var(--font-mono); font-size: 10.5px; color: var(--text4); }
+
+    /* User message — quiet sand bubble */
+    .user-row { display: flex; justify-content: flex-end; }
+    .user-bubble {
+      max-width: 68%; background: var(--bg3);
+      border-radius: 14px 14px 4px 14px;
+      padding: 11px 16px; font-size: 15px; line-height: 1.5;
+    }
+
+    /* Agent message — no bubble, avatar + prose */
+    .agent-row { display: flex; gap: 14px; }
+    .agent-avatar {
+      width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0;
+      background: var(--primary); color: #fff;
+      display: flex; align-items: center; justify-content: center;
       font-size: 11px; font-weight: 600;
-      padding: 4px 12px;
-      border: 1px solid transparent;
     }
-    .milestone-pill-v.complete  { background: #eaf6f0; color: #247c53; border-color: #c0e8d5; }
-    .milestone-pill-v.no-template { background: #efede8; color: #6d6a65; border-color: #dedad2; }
-    .milestone-pill-v.failed    { background: #fdf3e3; color: #9b6215; border-color: #e8b87c; }
+    .agent-body { display: flex; flex-direction: column; gap: 12px; font-size: 15px; line-height: 1.6; color: #26241f; min-width: 0; }
+    .agent-body p { margin: 0; }
+    .agent-list { display: flex; flex-direction: column; gap: 8px; }
+    .agent-list-item { display: flex; gap: 10px; }
+    .agent-list-item .marker { flex-shrink: 0; font-weight: 700; line-height: 1.6; }
+    .agent-list-item .marker.ok { color: var(--success); }
+    .agent-list-item .marker.change { color: var(--warning); }
+    .agent-list-item .marker.dot { color: var(--text4); }
+    .agent-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+    /* Confidence */
+    .confidence-wrap { display: flex; align-items: center; gap: 9px; max-width: 320px; }
+    .confidence-track { flex: 1; height: 3px; background: var(--bg3); border-radius: 20px; overflow: hidden; }
+    .confidence-fill { height: 100%; border-radius: 20px; }
+    .confidence-fill.high { background: var(--success); }
+    .confidence-fill.medium { background: var(--warning); }
+    .confidence-label { font-family: var(--font-mono); font-size: 10.5px; color: var(--text4); white-space: nowrap; }
+
+    /* Milestone pills */
+    .milestone-pill-wrap { display: flex; justify-content: center; }
+    .milestone-pill-v {
+      display: inline-flex; align-items: center; gap: 7px;
+      border-radius: 20px; font-size: 11.5px; font-weight: 600;
+      padding: 5px 12px; border: 1px solid transparent;
+    }
+    .milestone-pill-v.complete      { background: var(--success-bg); color: var(--success); border-color: var(--success-border); }
+    .milestone-pill-v.no-template   { background: var(--bg2); color: var(--text2); border-color: var(--border-strong); }
+    .milestone-pill-v.failed        { background: var(--warning-bg); color: var(--warning); border-color: var(--warning-border); }
     .milestone-pill-v.generating,
-    .milestone-pill-v.cross-checking { background: #eef1fc; color: #3a5fd9; border-color: #c5d0f7; }
-    .milestone-pill-v.approver  { background: #fef3e2; color: #92400e; border-color: #e8d4b0; }
-    .milestone-pill-v.flow-complete {
-      background: #eaf6f0; color: #247c53; border-color: #c0e8d5;
-      font-size: 12px; padding: 6px 16px; gap: 8px;
-    }
+    .milestone-pill-v.cross-checking { background: var(--primary-light); color: var(--primary); border-color: var(--primary-dim); }
+    .milestone-pill-v.approver      { background: var(--warning-bg); color: var(--warning); border-color: var(--warning-border); }
+    .milestone-pill-v.flow-complete { background: var(--success-bg); color: var(--success); border-color: var(--success-border); font-size: 12.5px; padding: 7px 16px; }
     .milestone-pill-v .pill-check { width: 12px; height: 12px; flex-shrink: 0; }
-    .milestone-pill-v.flow-complete .pill-check { width: 16px; height: 16px; }
-    .milestone-pill-v .pill-spinner {
-      width: 12px; height: 12px; flex-shrink: 0;
-      animation: pill-spin 1s linear infinite;
-    }
+    .milestone-pill-v.flow-complete .pill-check { width: 15px; height: 15px; }
+    .milestone-pill-v .pill-spinner { width: 12px; height: 12px; flex-shrink: 0; animation: pill-spin 1s linear infinite; }
     .milestone-pill-v .pill-retry {
-      margin-left: 4px;
-      text-decoration: underline;
-      background: none; border: none; padding: 0; cursor: pointer;
-      font: inherit; color: inherit;
+      margin-left: 3px; text-decoration: underline; background: none;
+      border: none; padding: 0; cursor: pointer; font: inherit; color: inherit;
     }
     .milestone-pill-v .pill-retry:hover { text-decoration: none; }
     @keyframes pill-spin { to { transform: rotate(360deg); } }
-    .chat-composer {
-      background: var(--surface);
-      border-top: 1px solid var(--border);
-      padding: 12px 16px;
-      display: flex; align-items: flex-end; gap: 10px;
+
+    /* Typing indicator */
+    .typing { display: flex; gap: 4px; align-items: center; height: 24px; }
+    .typing i { width: 5px; height: 5px; border-radius: 50%; background: var(--text4); animation: typing-bounce 1.1s infinite ease-in-out; }
+    .typing i:nth-child(2) { animation-delay: .15s; }
+    .typing i:nth-child(3) { animation-delay: .3s; }
+    @keyframes typing-bounce { 0%,80%,100% { opacity: .3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+
+    /* Composer */
+    .chat-composer { padding: 14px 24px 18px; }
+    .composer-col { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; }
+    .composer-shell {
+      background: var(--surface); border: 1px solid var(--border-strong);
+      border-radius: var(--radius-lg); padding: 12px 14px;
+      display: flex; flex-direction: column; gap: 10px;
+      box-shadow: var(--sh);
     }
+    .composer-shell:focus-within { border-color: var(--primary-dim); box-shadow: 0 0 0 3px var(--primary-light); }
     .composer-textarea {
-      flex: 1;
-      background: var(--bg);
-      border: 1.5px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 10px 14px;
-      font-family: var(--font);
-      font-size: 13px;
-      color: var(--text);
-      resize: none;
-      min-height: 40px;
-      max-height: 120px;
-      line-height: 1.45;
+      width: 100%; border: none; background: transparent; resize: none;
+      font-family: var(--font); font-size: 15px; line-height: 1.5; color: var(--text);
+      min-height: 24px; max-height: 140px;
     }
-    .composer-textarea:focus { outline: none; border-color: var(--primary-dim); }
-    .composer-textarea::placeholder { color: var(--text3); }
+    .composer-textarea:focus { outline: none; }
+    .composer-textarea::placeholder { color: var(--text4); }
+    .composer-tools { display: flex; align-items: center; gap: 8px; }
     .composer-send {
-      width: 36px; height: 36px;
-      background: var(--primary);
-      border: none;
-      border-radius: var(--radius-sm);
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
-      flex-shrink: 0;
+      margin-left: auto; width: 30px; height: 30px; flex-shrink: 0;
+      background: var(--primary); border: none; border-radius: var(--radius);
+      display: flex; align-items: center; justify-content: center; cursor: pointer;
     }
-    .composer-send svg { width: 16px; height: 16px; fill: none; stroke: #fff; stroke-width: 2; }
+    .composer-send:hover { background: #2748b8; }
+    .composer-send svg { width: 15px; height: 15px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .composer-send:disabled { background: var(--bg3); cursor: not-allowed; }
+    .composer-send:disabled svg { stroke: var(--text4); }
+    .composer-footnote { font-size: 11px; color: var(--text4); text-align: center; }
+
+    /* Document card */
     .document-card {
       display: flex; align-items: center; gap: 12px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 14px;
-      max-width: 380px;
+      background: var(--surface); border: 1px solid var(--border-strong);
+      border-radius: var(--radius); padding: 12px 14px; max-width: 400px;
     }
     .doc-icon {
-      width: 36px; height: 36px;
+      width: 34px; height: 34px; border-radius: 8px; flex-shrink: 0;
       background: var(--primary-light);
-      border-radius: 8px;
       display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
     }
-    .doc-icon svg { width: 18px; height: 18px; stroke: var(--primary); stroke-width: 1.8; fill: none; }
+    .doc-icon svg { width: 17px; height: 17px; stroke: var(--primary); stroke-width: 1.7; fill: none; }
     .doc-info { flex: 1; min-width: 0; }
-    .doc-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .doc-summary { font-size: 11px; color: var(--text3); margin-top: 2px; line-height: 1.35; }
+    .doc-name { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .doc-summary { font-family: var(--font-mono); font-size: 10.5px; color: var(--text4); margin-top: 3px; }
 
-    /* ═══════════════════════════════════════════════════════════════════
-       8 — MODALS
-    ═══════════════════════════════════════════════════════════════════ */
+    /* ═══════════════ MODALS ═══════════════ */
     .modal-backdrop {
-      background: rgba(20,18,15,.4);
-      border-radius: var(--radius-lg);
-      display: flex; align-items: center; justify-content: center;
-      padding: 20px;
+      background: rgba(28,27,25,.34);
+      display: flex; align-items: center; justify-content: center; padding: 24px;
     }
     .modal {
-      background: var(--surface);
-      border-radius: var(--radius-xl);
-      box-shadow: var(--sh-xl);
-      width: 100%;
-      max-width: 420px;
-      overflow: hidden;
+      background: var(--surface); border-radius: var(--radius-xl);
+      box-shadow: var(--sh-xl); width: 100%; max-width: 430px; overflow: hidden;
     }
-    .modal-header {
-      padding: 18px 22px 15px;
-      border-bottom: 1px solid var(--border);
-      display: flex; align-items: center; justify-content: space-between;
-    }
-    .modal-title { font-size: 16px; font-weight: 700; letter-spacing: -.3px; }
+    .modal-header { padding: 18px 22px 15px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .modal-title { font-size: 16.5px; font-weight: 600; letter-spacing: -.015em; }
     .modal-close {
-      width: 28px; height: 28px;
-      border-radius: 8px;
-      border: none;
-      background: var(--bg2);
-      cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      color: var(--text2);
-      font-size: 16px;
+      width: 28px; height: 28px; border-radius: var(--radius-sm); border: none;
+      background: var(--bg2); color: var(--text2); cursor: pointer;
+      display: flex; align-items: center; justify-content: center; font-size: 15px; line-height: 1;
     }
     .modal-close:hover { background: var(--bg3); }
     .modal-body { padding: 20px 22px; display: flex; flex-direction: column; gap: 16px; }
-    .modal-footer {
-      padding: 14px 22px;
-      border-top: 1px solid var(--border);
-      display: flex; gap: 8px; justify-content: flex-end;
-    }
-    .form-group { display: flex; flex-direction: column; gap: 6px; }
-    .form-label { font-size: 11px; font-weight: 600; color: var(--text3); letter-spacing: .05em; text-transform: uppercase; }
-    .form-input {
-      width: 100%;
-      padding: 9px 12px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      font-family: var(--font);
-      font-size: 13px;
-      color: var(--text);
-      background: var(--bg);
-    }
-    .form-input:focus { outline: none; border-color: var(--primary); background: white; }
-    .form-textarea {
-      width: 100%;
-      padding: 9px 12px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      font-family: var(--font);
-      font-size: 13px;
-      color: var(--text);
-      resize: none;
-      min-height: 80px;
-      line-height: 1.55;
-      background: var(--bg);
-    }
-    .form-textarea:focus { outline: none; border-color: var(--primary); background: white; }
-    .toggle-group { display: flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
-    .toggle-btn {
-      flex: 1; padding: 8px 0;
-      font-size: 12.5px; font-weight: 500;
-      text-align: center; cursor: pointer;
-      background: transparent; border: none;
-      font-family: var(--font); color: var(--text3);
-    }
-    .toggle-btn.active { background: var(--primary); color: #fff; font-weight: 600; }
-    .color-swatches { display: flex; gap: 8px; }
-    .color-swatch {
-      width: 24px; height: 24px;
-      border-radius: 50%; cursor: pointer;
-      border: 3px solid transparent;
-      transition: border-color .12s;
-    }
-    .color-swatch.selected { border-color: var(--text); }
-    .icon-picker { display: flex; gap: 8px; flex-wrap: wrap; }
-    .icon-swatch {
-      width: 38px; height: 38px;
-      border-radius: 10px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 18px;
-      cursor: pointer;
-      border: 2px solid transparent;
-      background: var(--bg2);
-    }
-    .icon-swatch.selected { border-color: var(--primary); background: var(--primary-light); }
+    .modal-footer { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; background: var(--bg); }
     .flow-select-list { display: flex; flex-direction: column; gap: 8px; }
     .flow-option {
-      display: flex; align-items: center; gap: 12px;
-      padding: 12px 14px;
-      border: 1.5px solid var(--border);
-      border-radius: var(--radius);
-      cursor: pointer;
+      display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+      border: 1px solid var(--border-strong); border-radius: var(--radius); cursor: pointer;
       transition: border-color .12s, background .12s;
     }
-    .flow-option:hover { border-color: var(--primary-dim); background: var(--primary-light); }
+    .flow-option:hover { border-color: var(--primary-dim); background: var(--bg); }
     .flow-option.selected { border-color: var(--primary); background: var(--primary-light); }
-    .flow-option-icon { width: 36px; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
-    .flow-option-info .name  { font-size: 13px; font-weight: 600; }
-    .flow-option-info .desc  { font-size: 11px; color: var(--text3); margin-top: 2px; }
+    .flow-option-icon { width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+    .flow-option-info .name { font-size: 13.5px; font-weight: 600; }
+    .flow-option-info .desc { font-size: 11.5px; color: var(--text4); margin-top: 2px; }
 
-    /* ═══════════════════════════════════════════════════════════════════
-       9 — FLOW DIAGRAM
-    ═══════════════════════════════════════════════════════════════════ */
-    .canvas-shell {
-      display: flex;
-      flex-direction: column;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      overflow: hidden;
-    }
+    /* ═══════════════ FLOW CANVAS ═══════════════ */
+    .canvas-shell { display: flex; flex-direction: column; }
     .canvas-toolbar {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 8px 16px;
-      display: flex; align-items: center; gap: 10px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 9px 16px; display: flex; align-items: center; gap: 10px;
       font-size: 12px; color: var(--text3);
     }
     .canvas-surface {
-      position: relative;
+      position: relative; height: 380px; overflow: hidden;
       background: var(--bg);
-      height: 380px;
-      overflow: hidden;
+      background-image: radial-gradient(var(--border-strong) 1px, transparent 1px);
+      background-size: 20px 20px;
     }
-    .canvas-controls {
-      position: absolute; bottom: 12px; right: 12px;
-      display: flex; flex-direction: column; gap: 4px;
-    }
+    .canvas-controls { position: absolute; bottom: 12px; right: 12px; display: flex; flex-direction: column; gap: 5px; }
     .canvas-minimap {
-      position: absolute; bottom: 12px; left: 12px;
-      width: 100px; height: 68px;
-      background: rgba(255,255,255,.88);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      box-shadow: var(--sh);
-      overflow: hidden;
+      position: absolute; bottom: 12px; left: 12px; width: 104px; height: 70px;
+      background: rgba(250,249,247,.9); border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm); box-shadow: var(--sh); overflow: hidden;
     }
     .flow-node {
-      position: absolute;
-      background: var(--surface);
-      border: 1.5px solid var(--border);
-      border-radius: 14px;
-      box-shadow: var(--sh);
-      padding: 12px 14px;
-      width: 180px;
-      display: flex; gap: 10px; align-items: center;
-      cursor: grab;
+      position: absolute; background: var(--surface);
+      border: 1px solid var(--border-strong); border-radius: 12px;
+      box-shadow: var(--sh); padding: 11px 13px; width: 188px;
+      display: flex; gap: 10px; align-items: center; cursor: grab;
     }
     .flow-node:hover { border-color: var(--primary-dim); box-shadow: var(--sh-md); }
     .flow-node.selected { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light), var(--sh-md); }
-    .node-badge { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
-    .node-info .node-name { font-size: 12.5px; font-weight: 700; }
-    .node-info .node-sub  { font-size: 10px; color: var(--text3); margin-top: 2px; line-height: 1.3; }
+    .flow-node.branch { border-style: dashed; }
+    .node-badge { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+    .node-name { display: block; font-size: 12.5px; font-weight: 600; }
+    .node-sub { display: block; font-family: var(--font-mono); font-size: 10px; color: var(--text4); margin-top: 3px; }
     .node-handle {
-      position: absolute; right: -5px; top: 50%;
-      transform: translateY(-50%);
-      width: 10px; height: 10px;
-      background: var(--surface);
-      border: 2px solid var(--border);
-      border-radius: 50%;
-      cursor: crosshair;
+      position: absolute; right: -5px; top: 50%; transform: translateY(-50%);
+      width: 10px; height: 10px; background: var(--surface);
+      border: 2px solid var(--border-strong); border-radius: 50%; cursor: crosshair;
     }
     .flow-node:hover .node-handle { border-color: var(--primary); }
 
-    /* ═══════════════════════════════════════════════════════════════════
-       10 — TOASTS & BADGES
-    ═══════════════════════════════════════════════════════════════════ */
+    /* ═══════════════ FEEDBACK ═══════════════ */
     .toast {
-      display: inline-flex; align-items: center; gap: 10px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      box-shadow: var(--sh-md);
-      padding: 12px 16px;
-      font-size: 13px;
-      max-width: 320px;
+      display: inline-flex; align-items: center; gap: 11px;
+      background: var(--surface); border: 1px solid var(--border-strong);
+      border-radius: var(--radius); box-shadow: var(--sh-md);
+      padding: 12px 15px; font-size: 13.5px; max-width: 340px;
     }
     .toast-icon {
-      width: 20px; height: 20px;
-      border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0; font-size: 11px;
+      width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 11px;
     }
     .toast.success .toast-icon { background: var(--success-bg); color: var(--success); }
     .toast.error   .toast-icon { background: var(--rose-bg); color: var(--rose); }
     .toast.info    .toast-icon { background: var(--primary-light); color: var(--primary); }
+    .toast .close { margin-left: auto; color: var(--text4); cursor: pointer; font-size: 15px; line-height: 1; }
     .empty-state { text-align: center; padding: 48px 24px; }
-    .empty-state-icon { font-size: 36px; margin-bottom: 12px; }
-    .empty-state-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; letter-spacing: -.2px; }
-    .empty-state-body { font-size: 13px; color: var(--text3); margin-bottom: 20px; }
-    .badge {
-      display: inline-flex; align-items: center;
-      padding: 2px 8px;
-      border-radius: 99px;
-      font-size: 11px; font-weight: 600;
+    .empty-mark {
+      width: 44px; height: 44px; margin: 0 auto 16px; border-radius: 12px;
+      border: 1px dashed var(--border-dashed); background: var(--bg2);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text4);
     }
-    .badge.blue   { background: var(--primary-light);  color: var(--primary); }
-    .badge.green  { background: var(--success-bg);     color: var(--success); }
-    .badge.amber  { background: var(--warning-bg);     color: var(--warning); }
-    .badge.grey   { background: var(--sand);            color: var(--text3); }
-    .badge.purple { background: var(--purple-light);   color: var(--purple); }
-    .badge.rose   { background: var(--rose-bg);         color: var(--rose); }
-    .badge.teal   { background: var(--teal-bg);         color: var(--teal); }
+    .empty-state-title { font-size: 15.5px; font-weight: 600; margin-bottom: 6px; letter-spacing: -.01em; }
+    .empty-state-body { font-size: 13.5px; color: var(--text3); margin-bottom: 20px; line-height: 1.6; }
+    .badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .badge.blue   { background: var(--primary-light); color: var(--primary); }
+    .badge.green  { background: var(--success-bg);   color: var(--success); }
+    .badge.amber  { background: var(--warning-bg);   color: var(--warning); }
+    .badge.grey   { background: var(--bg3);          color: var(--text2); }
+    .badge.purple { background: var(--purple-light); color: var(--purple); }
+    .badge.rose   { background: var(--rose-bg);      color: var(--rose); }
+    .badge.teal   { background: var(--teal-bg);      color: var(--teal); }
+    .skeleton {
+      background: linear-gradient(90deg, var(--bg2) 25%, var(--bg3) 37%, var(--bg2) 63%);
+      background-size: 400% 100%; border-radius: 6px;
+      animation: skeleton-sweep 1.4s ease infinite;
+    }
+    @keyframes skeleton-sweep { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
 
-    hr.story-hr { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
-
-    /* ── Responsive shell ───────────────────────────────────────────── */
-    @media (max-width: 768px) {
+    @media (max-width: 860px) {
       .shell-sidebar { display: none; }
-      .main { padding: 28px 20px; }
+      .main { padding: 28px 20px 72px; }
     }
   </style>
 </head>
 <body>
 
-<!-- ── Shell sidebar (storybook nav) ─────────────────────────────── -->
-<aside class="shell-sidebar" id="shell-sidebar">
+<!-- ── Storybook nav ─────────────────────────────────────────────────── -->
+<aside class="shell-sidebar">
   <header>
     <div class="wordmark">
       <div class="logo">W</div>
       <h1>Wayfinder</h1>
     </div>
-    <div class="sub">Component Storybook</div>
+    <div class="sub eyebrow">Component Storybook</div>
   </header>
   <nav class="shell-nav">
     <div class="nav-group">
       <div class="nav-group-label">Foundation</div>
-      <a class="nav-item" href="#tokens"><span class="nav-item-dot"></span>Design Tokens</a>
+      <a class="nav-item active" href="#tokens"><span class="nav-item-dot"></span>Design Tokens</a>
       <a class="nav-item" href="#typography"><span class="nav-item-dot"></span>Typography</a>
       <a class="nav-item" href="#buttons"><span class="nav-item-dot"></span>Buttons &amp; Inputs</a>
     </div>
@@ -953,784 +731,736 @@
     </div>
     <div class="nav-group">
       <div class="nav-group-label">Components</div>
-      <a class="nav-item" href="#session-cards"><span class="nav-item-dot"></span>Session Cards</a>
-      <a class="nav-item" href="#step-rail"><span class="nav-item-dot"></span>Step Progress Rail</a>
+      <a class="nav-item" href="#session-cards"><span class="nav-item-dot"></span>Chat Cards</a>
+      <a class="nav-item" href="#step-rail"><span class="nav-item-dot"></span>Step Progress</a>
       <a class="nav-item" href="#chat"><span class="nav-item-dot"></span>Chat Interface</a>
       <a class="nav-item" href="#modals"><span class="nav-item-dot"></span>Modals &amp; Forms</a>
       <a class="nav-item" href="#flow-diagram"><span class="nav-item-dot"></span>Flow Diagram</a>
-      <a class="nav-item" href="#toasts"><span class="nav-item-dot"></span>Toasts &amp; Badges</a>
+      <a class="nav-item" href="#feedback"><span class="nav-item-dot"></span>Toasts &amp; Badges</a>
     </div>
   </nav>
 </aside>
 
-<!-- ── Main content ──────────────────────────────────────────────── -->
+<!-- ── Main ──────────────────────────────────────────────────────────── -->
 <main class="main">
   <h1 class="page-title">Wayfinder — Component Storybook</h1>
-  <p class="page-subtitle">Visual reference for all UI components. Font: DM Sans · Monospace: DM Mono · Accent: #3a5fd9</p>
+  <p class="page-subtitle">Visual reference for every UI component in the app. This revision moves the shell onto a warm paper canvas, replaces filled approval bubbles with quiet timeline events, and compresses the step rail into the header.</p>
+  <div class="page-meta">
+    <span class="meta-chip">Figtree</span>
+    <span class="meta-chip">JetBrains Mono</span>
+    <span class="meta-chip">Accent #2f56d3</span>
+    <span class="meta-chip">Canvas #faf9f7</span>
+  </div>
 
-  <!-- ══════════════════════════════════════════════════════════════
-       SECTION 1 — DESIGN TOKENS
-  ══════════════════════════════════════════════════════════════════ -->
+  <!-- ═══════════ 1 — TOKENS ═══════════ -->
   <section class="section" id="tokens">
-    <h2 class="section-title">Design Tokens</h2>
-    <p class="section-desc">Core CSS custom properties defined in <code>shared.css</code> and used across all pages. All colours, radii, and shadows derive from these variables.</p>
+    <div class="section-head"><h2 class="section-title">Design Tokens</h2><span class="section-rule"></span></div>
+    <p class="section-desc">Core custom properties in <code>shared.css</code>. The neutral ramp is warm (paper, not grey) — surfaces sit on <code>--bg</code>, rails and insets on <code>--bg2</code>, pressed states and user bubbles on <code>--bg3</code>. White is reserved for cards that need to lift off the canvas.</p>
 
-    <p class="subsection-title">Brand &amp; Semantic Colours</p>
+    <p class="subsection-title">Surfaces &amp; borders</p>
     <div class="token-grid">
-      <div class="swatch">
-        <div class="swatch-color" style="background:#3a5fd9"></div>
-        <div class="swatch-info"><div class="swatch-name">--primary / --accent</div><div class="swatch-value">#3a5fd9</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#eef1fc"></div>
-        <div class="swatch-info"><div class="swatch-name">--primary-light</div><div class="swatch-value">#eef1fc</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#c5d0f7"></div>
-        <div class="swatch-info"><div class="swatch-name">--primary-dim</div><div class="swatch-value">#c5d0f7</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#2e9e6a"></div>
-        <div class="swatch-info"><div class="swatch-name">--success / --green</div><div class="swatch-value">#2e9e6a</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#eaf6f0"></div>
-        <div class="swatch-info"><div class="swatch-name">--success-bg</div><div class="swatch-value">#eaf6f0</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#c17a1a"></div>
-        <div class="swatch-info"><div class="swatch-name">--warning / --amber</div><div class="swatch-value">#c17a1a</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#fdf3e3"></div>
-        <div class="swatch-info"><div class="swatch-name">--warning-bg</div><div class="swatch-value">#fdf3e3</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#c2385a"></div>
-        <div class="swatch-info"><div class="swatch-name">--rose</div><div class="swatch-value">#c2385a</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#fdeef2"></div>
-        <div class="swatch-info"><div class="swatch-name">--rose-bg</div><div class="swatch-value">#fdeef2</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#7c3aed"></div>
-        <div class="swatch-info"><div class="swatch-name">--purple</div><div class="swatch-value">#7c3aed</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#f3eeff"></div>
-        <div class="swatch-info"><div class="swatch-name">--purple-light</div><div class="swatch-value">#f3eeff</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#0e8a7a"></div>
-        <div class="swatch-info"><div class="swatch-name">--teal</div><div class="swatch-value">#0e8a7a</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#e6f7f5"></div>
-        <div class="swatch-info"><div class="swatch-name">--teal-bg</div><div class="swatch-value">#e6f7f5</div></div>
-      </div>
+      <div class="swatch"><div class="swatch-color" style="background:#faf9f7;border-bottom:1px solid #e7e3db"></div><div class="swatch-info"><div class="swatch-name">--bg</div><div class="swatch-value">#faf9f7</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#f5f3ee"></div><div class="swatch-info"><div class="swatch-name">--bg2</div><div class="swatch-value">#f5f3ee</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#ebe8e0"></div><div class="swatch-info"><div class="swatch-name">--bg3</div><div class="swatch-value">#ebe8e0</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#ffffff;border-bottom:1px solid #e7e3db"></div><div class="swatch-info"><div class="swatch-name">--surface</div><div class="swatch-value">#ffffff</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#e7e3db"></div><div class="swatch-info"><div class="swatch-name">--border</div><div class="swatch-value">#e7e3db</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#dedad2"></div><div class="swatch-info"><div class="swatch-name">--border-strong</div><div class="swatch-value">#dedad2</div></div></div>
     </div>
 
-    <p class="subsection-title">Surfaces, Text &amp; Borders</p>
+    <p class="subsection-title">Text</p>
     <div class="token-grid">
-      <div class="swatch">
-        <div class="swatch-color" style="background:#f7f6f3;border:1px solid #dedad2"></div>
-        <div class="swatch-info"><div class="swatch-name">--bg</div><div class="swatch-value">#f7f6f3</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#efede8"></div>
-        <div class="swatch-info"><div class="swatch-name">--bg2 / --sand</div><div class="swatch-value">#efede8</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#e6e3dc"></div>
-        <div class="swatch-info"><div class="swatch-name">--bg3 / --sand-mid</div><div class="swatch-value">#e6e3dc</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#ffffff;border:1px solid #dedad2"></div>
-        <div class="swatch-info"><div class="swatch-name">--surface</div><div class="swatch-value">#ffffff</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#dedad2"></div>
-        <div class="swatch-info"><div class="swatch-name">--border</div><div class="swatch-value">#dedad2</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#c9c4ba"></div>
-        <div class="swatch-info"><div class="swatch-name">--border-strong</div><div class="swatch-value">#c9c4ba</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#1a1814"></div>
-        <div class="swatch-info"><div class="swatch-name">--text</div><div class="swatch-value">#1a1814</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#5a5650"></div>
-        <div class="swatch-info"><div class="swatch-name">--text2 / --text-muted</div><div class="swatch-value">#5a5650</div></div>
-      </div>
-      <div class="swatch">
-        <div class="swatch-color" style="background:#918d87"></div>
-        <div class="swatch-info"><div class="swatch-name">--text3 / --text-subtle</div><div class="swatch-value">#918d87</div></div>
-      </div>
+      <div class="swatch"><div class="swatch-color" style="background:#1c1b19"></div><div class="swatch-info"><div class="swatch-name">--text</div><div class="swatch-value">#1c1b19</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#5c574c"></div><div class="swatch-info"><div class="swatch-name">--text2</div><div class="swatch-value">#5c574c</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#8a8272"></div><div class="swatch-info"><div class="swatch-name">--text3</div><div class="swatch-value">#8a8272</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#a09884"></div><div class="swatch-info"><div class="swatch-name">--text4</div><div class="swatch-value">#a09884</div></div></div>
     </div>
 
-    <p class="subsection-title">Elevation — Box Shadows</p>
+    <p class="subsection-title">Accent &amp; semantic</p>
+    <div class="token-grid">
+      <div class="swatch"><div class="swatch-color" style="background:#2f56d3"></div><div class="swatch-info"><div class="swatch-name">--primary</div><div class="swatch-value">#2f56d3</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#eaeefb"></div><div class="swatch-info"><div class="swatch-name">--primary-light</div><div class="swatch-value">#eaeefb</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#c3cef2"></div><div class="swatch-info"><div class="swatch-name">--primary-dim</div><div class="swatch-value">#c3cef2</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#1f6b4d"></div><div class="swatch-info"><div class="swatch-name">--success</div><div class="swatch-value">#1f6b4d</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#e3efe5"></div><div class="swatch-info"><div class="swatch-name">--success-bg</div><div class="swatch-value">#e3efe5</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#8a5a1d"></div><div class="swatch-info"><div class="swatch-name">--warning</div><div class="swatch-value">#8a5a1d</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#f6e9d8"></div><div class="swatch-info"><div class="swatch-name">--warning-bg</div><div class="swatch-value">#f6e9d8</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#a8324c"></div><div class="swatch-info"><div class="swatch-name">--rose</div><div class="swatch-value">#a8324c</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#f9e8eb"></div><div class="swatch-info"><div class="swatch-name">--rose-bg</div><div class="swatch-value">#f9e8eb</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#5b3fa8"></div><div class="swatch-info"><div class="swatch-name">--purple</div><div class="swatch-value">#5b3fa8</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#14312e"></div><div class="swatch-info"><div class="swatch-name">--teal</div><div class="swatch-value">#14312e</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#e6f2ee"></div><div class="swatch-info"><div class="swatch-name">--teal-bg</div><div class="swatch-value">#e6f2ee</div></div></div>
+    </div>
+
+    <p class="subsection-title">Elevation</p>
     <div class="story-row">
-      <div style="background:white;border-radius:12px;padding:20px 24px;font-size:13px;font-weight:500;box-shadow:0 1px 3px rgba(0,0,0,.06),0 4px 14px rgba(0,0,0,.05);min-width:100px;text-align:center;">--sh<br><span style="font-size:10px;color:var(--text3);font-family:var(--font-mono);">Default</span></div>
-      <div style="background:white;border-radius:12px;padding:20px 24px;font-size:13px;font-weight:500;box-shadow:0 2px 8px rgba(0,0,0,.09),0 12px 36px rgba(0,0,0,.07);min-width:100px;text-align:center;">--sh-md<br><span style="font-size:10px;color:var(--text3);font-family:var(--font-mono);">Hover / Popover</span></div>
-      <div style="background:white;border-radius:12px;padding:20px 24px;font-size:13px;font-weight:500;box-shadow:0 4px 24px rgba(0,0,0,.13),0 20px 60px rgba(0,0,0,.10);min-width:100px;text-align:center;">--sh-xl<br><span style="font-size:10px;color:var(--text3);font-family:var(--font-mono);">Modal / Drawer</span></div>
+      <div class="spec-card" style="border-radius:12px;box-shadow:var(--sh)">--sh<span>Cards, composer</span></div>
+      <div class="spec-card" style="border-radius:12px;box-shadow:var(--sh-md)">--sh-md<span>Hover, popover</span></div>
+      <div class="spec-card" style="border-radius:12px;box-shadow:var(--sh-xl)">--sh-xl<span>Modal, drawer</span></div>
     </div>
 
     <p class="subsection-title">Radii</p>
     <div class="story-row" style="align-items:center">
-      <div style="background:white;border:1px solid var(--border);border-radius:9px;padding:16px 20px;font-size:12px;font-weight:600;">--radius-sm<br><span style="font-weight:400;color:var(--text3);">9px — Buttons</span></div>
-      <div style="background:white;border:1px solid var(--border);border-radius:10px;padding:16px 20px;font-size:12px;font-weight:600;">--radius<br><span style="font-weight:400;color:var(--text3);">10px — Cards</span></div>
-      <div style="background:white;border:1px solid var(--border);border-radius:14px;padding:16px 20px;font-size:12px;font-weight:600;">--radius-lg<br><span style="font-weight:400;color:var(--text3);">14px — Panels</span></div>
-      <div style="background:white;border:1px solid var(--border);border-radius:18px;padding:16px 20px;font-size:12px;font-weight:600;">--radius-xl<br><span style="font-weight:400;color:var(--text3);">18px — Modals</span></div>
+      <div class="spec-card" style="border-radius:7px">--radius-sm<span>7px · buttons</span></div>
+      <div class="spec-card" style="border-radius:9px">--radius<span>9px · inputs</span></div>
+      <div class="spec-card" style="border-radius:14px">--radius-lg<span>14px · panels</span></div>
+      <div class="spec-card" style="border-radius:18px">--radius-xl<span>18px · modals</span></div>
     </div>
   </section>
 
-  <!-- ══════════════════════════════════════════════════════════════
-       SECTION 2 — TYPOGRAPHY
-  ══════════════════════════════════════════════════════════════════ -->
+  <!-- ═══════════ 2 — TYPOGRAPHY ═══════════ -->
   <section class="section" id="typography">
-    <h2 class="section-title">Typography</h2>
-    <p class="section-desc">Type scale used across the application. Primary: <code>DM Sans</code> (Google Fonts, 300–600). Monospace: <code>DM Mono</code> (used for percentages, step counters, file sizes).</p>
+    <div class="section-head"><h2 class="section-title">Typography</h2><span class="section-rule"></span></div>
+    <p class="section-desc">Primary: <code>Figtree</code> 400–700. Monospace: <code>JetBrains Mono</code>, used only for metadata — timestamps, step counters, confidence scores, and uppercase section labels. Headings carry negative tracking; body text does not.</p>
 
     <div class="story">
-      <div class="story-label">Type Scale — DM Sans</div>
+      <div class="story-label">Type scale — Figtree</div>
       <div class="story-canvas white">
-        <div style="font-size:22px;font-weight:700;margin-bottom:14px;color:#1a1814;letter-spacing:-.4px;">Page Title — 22px 700</div>
-        <div style="font-size:18px;font-weight:700;margin-bottom:14px;color:#1a1814;letter-spacing:-.3px;">Section Heading — 18px 700</div>
-        <div style="font-size:16px;font-weight:600;margin-bottom:14px;color:#1a1814;letter-spacing:-.3px;">Modal Title — 16px 600</div>
-        <div style="font-size:14px;font-weight:600;margin-bottom:14px;color:#1a1814;letter-spacing:-.2px;">Body Bold / Session Title — 14px 600</div>
-        <div style="font-size:13.5px;font-weight:400;margin-bottom:14px;color:#1a1814;">Body Regular / Nav Items — 13.5px 400</div>
-        <div style="font-size:13px;font-weight:400;margin-bottom:14px;color:#1a1814;">Chat / Form text — 13px 400</div>
-        <div style="font-size:12.5px;font-weight:400;margin-bottom:14px;color:#5a5650;">Subtitle / Snippet — 12.5px muted</div>
-        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#918d87;">Section Label — 11px 600 uppercase · DM Sans</div>
+        <div style="font-size:26px;font-weight:600;letter-spacing:-.025em;margin-bottom:16px">Page title — 26px / 600</div>
+        <div style="font-size:19px;font-weight:600;letter-spacing:-.02em;margin-bottom:16px">Section heading — 19px / 600</div>
+        <div style="font-size:18px;font-weight:600;letter-spacing:-.015em;margin-bottom:16px">Chat title in header — 18px / 600</div>
+        <div style="font-size:16.5px;font-weight:600;letter-spacing:-.015em;margin-bottom:16px">Modal title — 16.5px / 600</div>
+        <div style="font-size:15px;line-height:1.6;margin-bottom:16px">Message body — 15px / 400, line-height 1.6. The conversation is the primary reading surface, so it runs a step larger than UI chrome.</div>
+        <div style="font-size:14px;color:var(--text2);margin-bottom:16px">UI body / nav — 14px / 400</div>
+        <div style="font-size:12.5px;color:var(--text3);margin-bottom:16px">Secondary / snippet — 12.5px muted</div>
+        <div class="eyebrow">Section label — 10px mono, .1em tracking</div>
       </div>
     </div>
 
     <div class="story">
-      <div class="story-label">Monospace — DM Mono</div>
+      <div class="story-label">Monospace — JetBrains Mono</div>
       <div class="story-canvas white">
-        <div style="font-family:'DM Mono',monospace;font-size:13px;margin-bottom:10px;">Step 3/7 · 42% — progress labels</div>
-        <div style="font-family:'DM Mono',monospace;font-size:12px;margin-bottom:10px;color:#918d87;">Today, 10:11 AM — timestamps</div>
-        <div style="font-family:'DM Mono',monospace;font-size:11px;color:#3a5fd9;">High confidence · 94% — confidence scores</div>
+        <div class="mono" style="font-size:12.5px;margin-bottom:11px">Step 3/7 · 42% — progress counters</div>
+        <div class="mono" style="font-size:11px;color:var(--text4);margin-bottom:11px">04/08/2026, 15:56 · 17h ago — timestamps</div>
+        <div class="mono" style="font-size:10.5px;color:var(--text4)">High confidence · 94% — confidence scores</div>
       </div>
     </div>
   </section>
 
-  <!-- ══════════════════════════════════════════════════════════════
-       SECTION 3 — BUTTONS & INPUTS
-  ══════════════════════════════════════════════════════════════════ -->
+  <!-- ═══════════ 3 — BUTTONS & INPUTS ═══════════ -->
   <section class="section" id="buttons">
-    <h2 class="section-title">Buttons &amp; Inputs</h2>
-    <p class="section-desc">Interactive controls. Border-radius: 9px. Default font-weight: 500. Size variants: default (13px/8px 16px) and small (12px/5px 11px).</p>
+    <div class="section-head"><h2 class="section-title">Buttons &amp; Inputs</h2><span class="section-rule"></span></div>
+    <p class="section-desc">Controls are 7px radius and weight 500. Only one filled primary per view — everything else is a bordered secondary, a quiet ghost, or a chip. Chips carry inline quick actions and suggested replies in the composer and message feed.</p>
 
     <div class="story">
-      <div class="story-label">Button Variants</div>
+      <div class="story-label">Button variants</div>
       <div class="story-canvas">
         <div class="story-row">
-          <button class="btn btn-primary">New Chat</button>
-          <button class="btn btn-secondary">Save Draft</button>
+          <button class="btn btn-primary">Confirm and continue</button>
+          <button class="btn btn-secondary">Save draft</button>
           <button class="btn btn-ghost">Cancel</button>
-          <button class="btn btn-danger">Remove Step</button>
+          <button class="btn btn-quiet">Skip</button>
+          <button class="btn btn-danger">Remove step</button>
           <button class="btn btn-primary" disabled>Disabled</button>
         </div>
-        <div class="story-row" style="margin-top:14px">
-          <button class="btn btn-primary btn-sm">+ New chat</button>
-          <button class="btn btn-secondary btn-sm">Open Chat →</button>
-          <button class="btn btn-ghost btn-sm">Save draft</button>
-          <button class="btn-icon" title="Upload">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><path d="M8 3v10M3 8l5-5 5 5"/></svg>
-          </button>
-          <button class="btn-icon" title="History">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><circle cx="8" cy="8" r="5"/><path d="M8 6v2.5L9.5 10"/></svg>
-          </button>
+        <div class="story-row" style="margin-top:14px;align-items:center">
+          <button class="btn btn-primary btn-sm">Open chat</button>
+          <button class="btn btn-secondary btn-sm">Export</button>
+          <button class="btn-icon" aria-label="More">•••</button>
+          <button class="btn-icon" aria-label="Help">?</button>
         </div>
       </div>
     </div>
 
     <div class="story">
-      <div class="story-label">Form Inputs</div>
-      <div class="story-canvas white" style="max-width:420px">
-        <div class="form-group" style="margin-bottom:14px">
-          <label class="form-label">Flow Name</label>
-          <input class="form-input" type="text" value="AU Gov Procurement — Open Tender" />
-        </div>
-        <div class="form-group" style="margin-bottom:14px">
-          <label class="form-label">AI Instructions</label>
-          <textarea class="form-textarea" rows="3">Ask the officer about the contract scope and collect project background…</textarea>
-        </div>
-        <div class="form-group" style="margin-bottom:14px">
-          <label class="form-label">Output Type</label>
-          <div class="toggle-group" style="max-width:280px">
-            <button class="toggle-btn active">Text reply</button>
-            <button class="toggle-btn">↓ Document</button>
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Node Colour</label>
-          <div class="color-swatches">
-            <div class="color-swatch selected" style="background:#3a5fd9"></div>
-            <div class="color-swatch" style="background:#2e9e6a"></div>
-            <div class="color-swatch" style="background:#c17a1a"></div>
-            <div class="color-swatch" style="background:#7c3aed"></div>
-            <div class="color-swatch" style="background:#c2385a"></div>
-            <div class="color-swatch" style="background:#0e8a7a"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ══════════════════════════════════════════════════════════════
-       SECTION 4 — HEADER
-  ══════════════════════════════════════════════════════════════════ -->
-  <section class="section" id="header">
-    <h2 class="section-title">App Header</h2>
-    <p class="section-desc">52px top bar present on all pages. Shows the brand mark, page/flow name as breadcrumb, optional status pill, and contextual actions on the right.</p>
-
-    <div class="story">
-      <div class="story-label">Chat page — Active session</div>
-      <div class="story-canvas" style="padding:0">
-        <div class="app-header">
-          <div class="brand">F</div>
-          <span style="font-weight:700;font-size:14px;letter-spacing:-.3px;">Wayfinder</span>
-          <span style="color:var(--text3);font-size:13px;">/</span>
-          <span class="flow-name" style="flex:1;font-size:13px;color:var(--text2);">HR System Procurement</span>
-          <div class="header-actions">
-            <span class="status-pill in-progress">Step 3 of 7</span>
-            <button class="btn btn-ghost btn-sm">Share</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="story">
-      <div class="story-label">Canvas Builder — Published flow</div>
-      <div class="story-canvas" style="padding:0">
-        <div class="app-header">
-          <div class="brand">F</div>
-          <span style="font-weight:700;font-size:14px;letter-spacing:-.3px;">Wayfinder</span>
-          <span style="color:var(--text3);font-size:13px;">/</span>
-          <span class="flow-name" style="flex:1;font-size:13px;color:var(--text2);">AU Gov Procurement</span>
-          <div class="header-actions">
-            <span class="status-pill published">Published</span>
-            <button class="btn btn-secondary btn-sm">Save Draft</button>
-            <button class="btn btn-primary btn-sm">Unpublish</button>
-            <button class="btn btn-secondary btn-sm">Open Chat →</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="story">
-      <div class="story-label">Canvas Builder — Draft (chat disabled)</div>
-      <div class="story-canvas" style="padding:0">
-        <div class="app-header">
-          <div class="brand">F</div>
-          <span style="font-weight:700;font-size:14px;letter-spacing:-.3px;">Wayfinder</span>
-          <span style="color:var(--text3);font-size:13px;">/</span>
-          <span class="flow-name" style="flex:1;font-size:13px;color:var(--text2);">Contract Management Plan</span>
-          <div class="header-actions">
-            <span class="status-pill draft">Draft</span>
-            <button class="btn btn-secondary btn-sm">Save Draft</button>
-            <button class="btn btn-primary btn-sm">Publish</button>
-            <button class="btn btn-secondary btn-sm" disabled>Open Chat</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="story">
-      <div class="story-label">Chats listing page</div>
-      <div class="story-canvas" style="padding:0">
-        <div class="app-header">
-          <div class="brand">F</div>
-          <span class="flow-name" style="font-weight:700;font-size:14px;letter-spacing:-.3px;">Wayfinder</span>
-          <div class="header-actions">
-            <button class="btn btn-primary btn-sm" style="display:flex;align-items:center;gap:5px;">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-              New chat
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ══════════════════════════════════════════════════════════════
-       SECTION 5 — SIDEBAR
-  ══════════════════════════════════════════════════════════════════ -->
-  <section class="section" id="sidebar">
-    <h2 class="section-title">Sidebar</h2>
-    <p class="section-desc">The Chats page uses a persistent 220 px text sidebar containing navigation links, a user's flow list, and a user footer with admin toggle. On mobile (≤ 640 px) the sidebar is hidden and replaced by a fixed bottom navigation bar. A hamburger drawer is used for pages that need quick sidebar access on narrow viewports.</p>
-
-    <!-- Story 1: User sidebar with chats active -->
-    <div class="story">
-      <div class="story-label">Text Sidebar — User routes (My Chats active)</div>
-      <div class="story-canvas" style="padding:0">
-        <div class="sidebar-demo-wrap">
-          <div class="inapp-sidebar">
-            <div class="inapp-sidebar-logo">
-              <div class="inapp-logo-mark">F</div>
-              <span style="font-weight:700;font-size:14px;letter-spacing:-.3px;">Wayfinder</span>
-            </div>
-            <nav class="inapp-sidebar-nav">
-              <a class="inapp-nav-item active" href="#">
-                <span class="inapp-nav-icon">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                </span>
-                My Chats
-              </a>
-              <hr style="border:none;border-top:1px solid var(--border);margin:10px 4px;">
-              <div class="inapp-section-label">MY FLOWS</div>
-              <a class="inapp-flow-item" href="#">
-                <span class="inapp-flow-icon" style="background:#eef1fc;color:#3a5fd9;">📋</span>
-                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">AU Gov Procurement</span>
-              </a>
-              <a class="inapp-flow-item" href="#">
-                <span class="inapp-flow-icon" style="background:#eaf6f0;color:#2e9e6a;">👤</span>
-                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Staff Onboarding</span>
-              </a>
-              <a class="inapp-flow-item" href="#">
-                <span class="inapp-flow-icon" style="background:#f3eeff;color:#7c3aed;">📑</span>
-                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Policy Review</span>
-              </a>
-            </nav>
-            <div class="inapp-sidebar-footer">
-              <div class="inapp-admin-row">
-                <span class="inapp-section-label" style="padding:0;">ADMIN</span>
-                <div class="inapp-toggle off">
-                  <div class="inapp-toggle-thumb"></div>
-                </div>
-              </div>
-              <div class="inapp-user-chip">
-                <div class="inapp-avatar" style="background:#3a5fd9;">SJ</div>
-                <div>
-                  <div style="font-size:13px;font-weight:500;">Sarah Johnson</div>
-                  <div style="font-size:11px;color:var(--text3);">Procurement Officer</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="sidebar-demo-content">Page content area</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Story 2: Admin mode sidebar -->
-    <div class="story">
-      <div class="story-label">Text Sidebar — Admin mode (toggle ON, all sessions view)</div>
-      <div class="story-canvas" style="padding:0">
-        <div class="sidebar-demo-wrap">
-          <div class="inapp-sidebar">
-            <div class="inapp-sidebar-logo">
-              <div class="inapp-logo-mark">F</div>
-              <span style="font-weight:700;font-size:14px;letter-spacing:-.3px;">Wayfinder</span>
-            </div>
-            <nav class="inapp-sidebar-nav">
-              <a class="inapp-nav-item active" href="#">
-                <span class="inapp-nav-icon">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                </span>
-                All Sessions
-              </a>
-              <hr style="border:none;border-top:1px solid var(--border);margin:10px 4px;">
-              <div class="inapp-section-label">ALL FLOWS</div>
-              <a class="inapp-flow-item" href="#">
-                <span class="inapp-flow-icon" style="background:#eef1fc;">📋</span>
-                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">AU Gov Procurement</span>
-              </a>
-              <a class="inapp-flow-item" href="#">
-                <span class="inapp-flow-icon" style="background:#eaf6f0;">👤</span>
-                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Staff Onboarding</span>
-              </a>
-              <a class="inapp-flow-item" href="#">
-                <span class="inapp-flow-icon" style="background:#fdf3e3;">🔍</span>
-                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Internal Audit</span>
-              </a>
-              <a class="inapp-flow-item" href="#">
-                <span class="inapp-flow-icon" style="background:#fdeef2;">🏛</span>
-                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Grant Assessment</span>
-              </a>
-              <a class="inapp-flow-item" href="#">
-                <span class="inapp-flow-icon" style="background:#e6f7f5;">💻</span>
-                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">ICT Business Case</span>
-              </a>
-            </nav>
-            <div class="inapp-sidebar-footer">
-              <!-- Amber admin warning -->
-              <div style="background:#fdf3e3;border:1px solid #e8b87c;border-radius:8px;padding:8px 10px;margin-bottom:10px;display:flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#c17a1a;">
-                <span>⚠</span> Admin mode active
-              </div>
-              <div class="inapp-admin-row">
-                <span class="inapp-section-label" style="padding:0;">ADMIN</span>
-                <div class="inapp-toggle on">
-                  <div class="inapp-toggle-thumb"></div>
-                </div>
-              </div>
-              <div class="inapp-user-chip">
-                <div class="inapp-avatar" style="background:#3a5fd9;">SJ</div>
-                <div>
-                  <div style="font-size:13px;font-weight:500;">Sarah Johnson</div>
-                  <div style="font-size:11px;color:var(--text3);">Procurement Officer</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="sidebar-demo-content" style="flex-direction:column;gap:8px;">
-            <span>All sessions — admin view</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Story 3: Mobile hamburger drawer — interactive -->
-    <div class="story">
-      <div class="story-label">Mobile — Hamburger Drawer (interactive — tap ☰ to open)</div>
-      <div class="story-canvas white">
-        <p style="font-size:12.5px;color:var(--text3);margin-bottom:20px;line-height:1.5;">On viewports ≤ 640 px, the sidebar is hidden. A hamburger icon in the header opens a full-height overlay drawer with transition. Tap outside or ✕ to dismiss.</p>
-        <div style="display:flex;justify-content:center;">
-          <div class="mobile-frame">
-            <!-- Mobile header -->
-            <div class="mobile-header">
-              <button class="hamburger-btn" id="burger-btn" onclick="openDrawer()">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-              </button>
-              <div style="width:22px;height:22px;border-radius:6px;background:var(--primary);display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:700;">F</div>
-              <span style="font-weight:700;font-size:13px;letter-spacing:-.2px;">Wayfinder</span>
-              <div style="flex:1;"></div>
-              <button class="btn btn-primary btn-sm" style="font-size:11px;padding:4px 10px;">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-                New
-              </button>
-            </div>
-            <!-- Page body -->
-            <div style="padding:16px;font-size:12px;color:var(--text3);line-height:1.6;">
-              Page content loads here — sidebar is hidden on mobile.<br><br>
-              <span style="background:var(--bg2);padding:4px 8px;border-radius:6px;font-size:11px;">Tap ☰ to open navigation</span>
-            </div>
-            <!-- Backdrop -->
-            <div class="drawer-backdrop" id="drawer-backdrop" onclick="closeDrawer()"></div>
-            <!-- Drawer -->
-            <div class="drawer" id="mobile-drawer">
-              <div class="inapp-sidebar-logo" style="padding:14px 14px 12px;">
-                <div class="inapp-logo-mark">F</div>
-                <span style="font-weight:700;font-size:13px;letter-spacing:-.2px;flex:1;">Wayfinder</span>
-                <button class="drawer-close-btn" onclick="closeDrawer()">✕</button>
-              </div>
-              <nav class="inapp-sidebar-nav" style="padding:10px 8px;overflow-y:auto;">
-                <a class="inapp-nav-item active" href="#" style="font-size:13px;">
-                  <span class="inapp-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
-                  My Chats
-                </a>
-                <hr style="border:none;border-top:1px solid var(--border);margin:8px 4px;">
-                <div class="inapp-section-label" style="font-size:10px;">MY FLOWS</div>
-                <a class="inapp-flow-item" href="#" style="font-size:12.5px;padding:6px 8px;">
-                  <span class="inapp-flow-icon" style="background:#eef1fc;width:18px;height:18px;font-size:10px;">📋</span>
-                  <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">AU Gov Procurement</span>
-                </a>
-                <a class="inapp-flow-item" href="#" style="font-size:12.5px;padding:6px 8px;">
-                  <span class="inapp-flow-icon" style="background:#eaf6f0;width:18px;height:18px;font-size:10px;">👤</span>
-                  <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Staff Onboarding</span>
-                </a>
-                <a class="inapp-flow-item" href="#" style="font-size:12.5px;padding:6px 8px;">
-                  <span class="inapp-flow-icon" style="background:#f3eeff;width:18px;height:18px;font-size:10px;">📑</span>
-                  <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Policy Review</span>
-                </a>
-              </nav>
-              <div class="inapp-sidebar-footer">
-                <div class="inapp-user-chip">
-                  <div class="inapp-avatar" style="background:#3a5fd9;width:26px;height:26px;font-size:10px;">SJ</div>
-                  <div>
-                    <div style="font-size:12.5px;font-weight:500;">Sarah Johnson</div>
-                    <div style="font-size:11px;color:var(--text3);">Procurement Officer</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-  </section>
-
-  <!-- ══════════════════════════════════════════════════════════════
-       SECTION 6 — SESSION CARDS
-  ══════════════════════════════════════════════════════════════════ -->
-  <section class="section" id="session-cards">
-    <h2 class="section-title">Session Cards</h2>
-    <p class="section-desc">Chat row cards on the <code>/chats</code> listing page. Each row links to an active or completed chat session. Progress is shown as a percentage bar with a monospace counter.</p>
-
-    <div class="story">
-      <div class="story-label">In Progress</div>
+      <div class="story-label">Chips — quick actions &amp; suggested replies</div>
       <div class="story-canvas">
-        <a class="session-card" href="#">
-          <div class="session-icon" style="background:#eef1fc;">📋</div>
+        <div class="story-row">
+          <span class="chip accent">It's clear — update the form</span>
+          <span class="chip">Check the calendar</span>
+          <span class="chip">Attach a document</span>
+          <span class="chip">Confirm date</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Form inputs</div>
+      <div class="story-canvas white" style="max-width:440px">
+        <div class="form-group" style="margin-bottom:16px">
+          <label class="form-label" for="sb-name">Chat name</label>
+          <input class="form-input" id="sb-name" value="Options for Start Date Inquiry for Joe Bloggs">
+        </div>
+        <div class="form-group" style="margin-bottom:16px">
+          <label class="form-label" for="sb-note">Instruction</label>
+          <textarea class="form-textarea" id="sb-note" placeholder="Describe what this step should ask for…"></textarea>
+          <span class="form-hint">Shown to the user when the step opens.</span>
+        </div>
+        <div class="form-group" style="margin-bottom:16px">
+          <span class="form-label">Step type</span>
+          <div class="toggle-group">
+            <button class="toggle-btn active">Question</button>
+            <button class="toggle-btn">Approval</button>
+            <button class="toggle-btn">Document</button>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:16px">
+          <span class="form-label">Accent</span>
+          <div class="color-swatches">
+            <span class="color-swatch selected" style="background:#2f56d3"></span>
+            <span class="color-swatch" style="background:#1f6b4d"></span>
+            <span class="color-swatch" style="background:#8a5a1d"></span>
+            <span class="color-swatch" style="background:#5b3fa8"></span>
+            <span class="color-swatch" style="background:#a8324c"></span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div><div style="font-size:13.5px;font-weight:500">Require a second approver</div><div class="form-hint" style="margin-top:2px">Adds a second endorsement step.</div></div>
+          <span class="switch on"><span class="switch-thumb"></span></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ 4 — APP HEADER ═══════════ -->
+  <section class="section" id="header">
+    <div class="section-head"><h2 class="section-title">App Header</h2><span class="section-rule"></span></div>
+    <p class="section-desc">Two-line header on white. Line one: breadcrumb, chat title, status pill, and right-aligned actions. Line two: the compact step rail, which used to be a separate 52px band — folding it in reclaims vertical space for the conversation. Pages without steps render line one only.</p>
+
+    <div class="story">
+      <div class="story-label">Chat — active session with step rail</div>
+      <div class="story-canvas flush">
+        <div class="app-header">
+          <div class="app-header-row">
+            <span class="crumb">My Chats</span>
+            <span class="crumb-sep">/</span>
+            <span class="app-title">Options for Start Date Inquiry for Joe Bloggs</span>
+            <span class="status-pill complete">Complete</span>
+            <div class="header-actions">
+              <button class="btn btn-secondary btn-sm">Share</button>
+              <button class="btn-icon">•••</button>
+            </div>
+          </div>
+          <div class="step-rail-inline">
+            <span class="step-item complete"><span class="step-badge complete">✓</span><span class="step-name">New employee details</span></span>
+            <span class="step-connector done"></span>
+            <span class="step-item complete"><span class="step-badge complete">✓</span><span class="step-name">First supervisor</span></span>
+            <span class="step-connector done"></span>
+            <span class="step-item current"><span class="step-badge current">3</span><span class="step-name">Second level endorsement</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Chats listing — no step rail</div>
+      <div class="story-canvas flush">
+        <div class="app-header">
+          <div class="app-header-row">
+            <span class="app-title">My Chats</span>
+            <span class="badge grey">12</span>
+            <div class="header-actions">
+              <button class="btn btn-secondary btn-sm">Filter</button>
+              <button class="btn btn-primary btn-sm">New chat</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Canvas builder — published flow</div>
+      <div class="story-canvas flush">
+        <div class="app-header">
+          <div class="app-header-row">
+            <span class="crumb">Flows</span>
+            <span class="crumb-sep">/</span>
+            <span class="app-title">New employee onboarding</span>
+            <span class="status-pill published">Published</span>
+            <div class="header-actions">
+              <button class="btn btn-secondary btn-sm">Version history</button>
+              <button class="btn btn-primary btn-sm">Open chat</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Canvas builder — draft (chat disabled)</div>
+      <div class="story-canvas flush">
+        <div class="app-header">
+          <div class="app-header-row">
+            <span class="crumb">Flows</span>
+            <span class="crumb-sep">/</span>
+            <span class="app-title">Contract extension</span>
+            <span class="status-pill draft">Draft</span>
+            <div class="header-actions">
+              <button class="btn btn-ghost btn-sm">Discard</button>
+              <button class="btn btn-secondary btn-sm">Publish</button>
+              <button class="btn btn-primary btn-sm" disabled>Open chat</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ 5 — SIDEBAR ═══════════ -->
+  <section class="section" id="sidebar">
+    <div class="section-head"><h2 class="section-title">Sidebar</h2><span class="section-rule"></span></div>
+    <p class="section-desc">246px rail on <code>--bg2</code>, separated from the canvas by a single hairline — no white panel, no shadow. Nav items use a 6px dot rather than an icon set. A bordered <strong>New chat</strong> button sits directly under the wordmark. Recent chats are two-line cards; the active one is the only white surface in the rail. Below 640px the rail becomes a drawer.</p>
+
+    <div class="story">
+      <div class="story-label">Rail — user routes, My Chats active</div>
+      <div class="story-canvas flush">
+        <div class="sidebar-demo-wrap">
+          <aside class="inapp-sidebar">
+            <div class="inapp-brand">
+              <div class="inapp-logo-mark">W</div>
+              <span class="name">Wayfinder</span>
+              <span class="alpha-tag">ALPHA</span>
+            </div>
+            <button class="new-chat-btn"><span class="plus">+</span>New chat<kbd>⌘K</kbd></button>
+            <div class="inapp-nav">
+              <div class="inapp-nav-item active"><span class="dot"></span>My Chats</div>
+              <div class="inapp-nav-item"><span class="dot"></span>Flows</div>
+              <div class="inapp-nav-item"><span class="dot"></span>Approvals<span class="count">2</span></div>
+              <div class="inapp-nav-item"><span class="dot"></span>Synthesise Information</div>
+            </div>
+            <div>
+              <div class="inapp-section-label">Recent</div>
+              <div class="inapp-chat-item active">
+                <span class="title">Options for Start Date Inquiry</span>
+                <span class="meta">Done · 17h ago</span>
+              </div>
+              <div class="inapp-chat-item">
+                <span class="title">Leave balance for Q3</span>
+                <span class="meta">Awaiting supervisor · 3d</span>
+              </div>
+              <div class="inapp-chat-item">
+                <span class="title">Contract extension — R. Patel</span>
+                <span class="meta">Draft · 6d</span>
+              </div>
+            </div>
+            <div class="inapp-footer">
+              <div class="admin-mode-btn">Enter admin mode</div>
+              <div class="user-chip">
+                <span class="avatar-round">R</span>
+                <span class="who"><span class="n">Richard Brasier</span><span class="e">richardcbrasier@gmail.com</span></span>
+              </div>
+            </div>
+          </aside>
+          <div class="sidebar-demo-content">Chat canvas</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Rail — admin mode on, all sessions</div>
+      <div class="story-canvas flush">
+        <div class="sidebar-demo-wrap">
+          <aside class="inapp-sidebar">
+            <div class="inapp-brand">
+              <div class="inapp-logo-mark">W</div>
+              <span class="name">Wayfinder</span>
+              <span class="alpha-tag">ADMIN</span>
+            </div>
+            <button class="new-chat-btn"><span class="plus">+</span>New chat<kbd>⌘K</kbd></button>
+            <div class="inapp-nav">
+              <div class="inapp-nav-item"><span class="dot"></span>All Chats<span class="count">128</span></div>
+              <div class="inapp-nav-item active"><span class="dot"></span>Flows</div>
+              <div class="inapp-nav-item"><span class="dot"></span>Approvals<span class="count">9</span></div>
+              <div class="inapp-nav-item"><span class="dot"></span>Users</div>
+              <div class="inapp-nav-item"><span class="dot"></span>Audit log</div>
+            </div>
+            <div>
+              <div class="inapp-section-label">Flows</div>
+              <div class="inapp-chat-item"><span class="title">New employee onboarding</span><span class="meta">Published · 7 steps</span></div>
+              <div class="inapp-chat-item"><span class="title">Leave request</span><span class="meta">Published · 4 steps</span></div>
+              <div class="inapp-chat-item"><span class="title">Contract extension</span><span class="meta">Draft · 5 steps</span></div>
+            </div>
+            <div class="inapp-footer">
+              <div class="admin-mode-btn on">Admin mode on</div>
+              <div class="user-chip">
+                <span class="avatar-round" style="background:var(--primary);color:#fff">R</span>
+                <span class="who"><span class="n">Richard Brasier</span><span class="e">Administrator</span></span>
+              </div>
+            </div>
+          </aside>
+          <div class="sidebar-demo-content">Flow canvas</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Mobile — drawer (interactive: tap ☰)</div>
+      <div class="story-canvas white">
+        <p style="font-size:12.5px;color:var(--text3);margin-bottom:20px;line-height:1.6;max-width:520px">At ≤640px the rail is hidden and opens as a full-height overlay drawer from the left. The backdrop is <code>rgba(28,27,25,.32)</code>; the drawer keeps the rail's <code>--bg2</code> fill.</p>
+        <div class="mobile-frame" id="mobile-demo">
+          <div class="mobile-header">
+            <button class="btn-icon" id="hamburger" aria-label="Open menu">☰</button>
+            <span style="font-size:14px;font-weight:600;letter-spacing:-.01em">Start Date Inquiry</span>
+            <span class="status-pill complete" style="margin-left:auto">Complete</span>
+          </div>
+          <div style="padding:20px;font-size:13px;color:var(--text4)">Conversation</div>
+          <div class="drawer-backdrop" id="drawer-backdrop"></div>
+          <aside class="drawer inapp-sidebar" id="drawer">
+            <div class="inapp-brand">
+              <div class="inapp-logo-mark">W</div>
+              <span class="name">Wayfinder</span>
+              <button class="modal-close" id="drawer-close" style="margin-left:auto">×</button>
+            </div>
+            <button class="new-chat-btn"><span class="plus">+</span>New chat</button>
+            <div class="inapp-nav">
+              <div class="inapp-nav-item active"><span class="dot"></span>My Chats</div>
+              <div class="inapp-nav-item"><span class="dot"></span>Flows</div>
+              <div class="inapp-nav-item"><span class="dot"></span>Approvals<span class="count">2</span></div>
+              <div class="inapp-nav-item"><span class="dot"></span>Synthesise Information</div>
+            </div>
+            <div class="inapp-footer">
+              <div class="admin-mode-btn">Enter admin mode</div>
+              <div class="user-chip">
+                <span class="avatar-round">R</span>
+                <span class="who"><span class="n">Richard Brasier</span><span class="e">richardcbrasier@gmail.com</span></span>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ 6 — CHAT CARDS ═══════════ -->
+  <section class="section" id="session-cards">
+    <div class="section-head"><h2 class="section-title">Chat Cards</h2><span class="section-rule"></span></div>
+    <p class="section-desc">Rows on <code>/chats</code>. White card on the paper canvas, 14px radius, hairline border that warms to <code>--primary-dim</code> on hover. Progress is a 3px track with a monospace counter; timestamps are monospace and right-aligned.</p>
+
+    <div class="story">
+      <div class="story-label">In progress</div>
+      <div class="story-canvas">
+        <div class="session-card">
+          <div class="session-icon" style="background:var(--primary-light);color:var(--primary)">◍</div>
           <div class="session-body">
             <div class="session-header-row">
-              <span class="session-title">HR Information System — HRIS Replacement</span>
-              <span class="session-time">Today, 10:11 AM</span>
+              <span class="session-title">Options for Start Date Inquiry for Joe Bloggs</span>
+              <span class="session-time">17h ago</span>
             </div>
-            <div class="session-snippet"><span style="color:#3a5fd9;font-weight:500;">AU Gov Procurement</span> · I've drafted the RFT based on our conversation. Review it below.</div>
+            <div class="session-snippet">Just to confirm — can you verify that 17 August 2026 is not a public holiday?</div>
             <div class="session-progress">
-              <div class="progress-bar-track"><div class="progress-bar-fill" style="width:71%;background:#3a5fd9;"></div></div>
-              <span class="progress-label">Step 5/7 · 71%</span>
-              <span class="status-pill in-progress" style="margin-left:4px;">In progress</span>
+              <span class="progress-bar-track"><span class="progress-bar-fill" style="width:43%;background:var(--primary)"></span></span>
+              <span class="progress-label">Step 3/7 · 43%</span>
             </div>
           </div>
-        </a>
+        </div>
       </div>
     </div>
 
     <div class="story">
       <div class="story-label">Completed</div>
       <div class="story-canvas">
-        <a class="session-card" href="#">
-          <div class="session-icon" style="background:#eaf6f0;">🔍</div>
+        <div class="session-card">
+          <div class="session-icon" style="background:var(--success-bg);color:var(--success)">✓</div>
           <div class="session-body">
             <div class="session-header-row">
-              <span class="session-title">New Starter — James Park</span>
-              <span class="session-time">Apr 28, 2:10 PM</span>
+              <span class="session-title">Leave request — Priya Nair</span>
+              <span class="session-time">2d ago</span>
             </div>
-            <div class="session-snippet"><span style="color:#2e9e6a;font-weight:500;">Staff Onboarding</span> · All onboarding steps complete. Welcome email sent.</div>
+            <div class="session-snippet">Approved by both supervisors. Confirmation letter generated.</div>
             <div class="session-progress">
-              <div class="progress-bar-track"><div class="progress-bar-fill" style="width:100%;background:#2e9e6a;"></div></div>
-              <span class="progress-label">Step 5/5 · 100%</span>
-              <span class="status-pill published" style="margin-left:4px;">✓ Complete</span>
+              <span class="progress-bar-track"><span class="progress-bar-fill" style="width:100%;background:var(--success)"></span></span>
+              <span class="progress-label">Complete · 4/4</span>
             </div>
           </div>
-        </a>
+        </div>
       </div>
     </div>
 
     <div class="story">
-      <div class="story-label">Early stage</div>
+      <div class="story-label">Awaiting approval</div>
       <div class="story-canvas">
-        <a class="session-card" href="#">
-          <div class="session-icon" style="background:#fdf3e3;">📑</div>
+        <div class="session-card">
+          <div class="session-icon" style="background:var(--warning-bg);color:var(--warning)">↻</div>
           <div class="session-body">
             <div class="session-header-row">
-              <span class="session-title">Travel Policy Review 2026</span>
-              <span class="session-time">Apr 30, 9:44 AM</span>
+              <span class="session-title">Contract extension — R. Patel</span>
+              <span class="session-time">6d ago</span>
             </div>
-            <div class="session-snippet"><span style="color:#7c3aed;font-weight:500;">Policy Review</span> · Stakeholder consultation complete. Drafting recommendations.</div>
+            <div class="session-snippet">Waiting on Grace Hopper to endorse the revised end date.</div>
             <div class="session-progress">
-              <div class="progress-bar-track"><div class="progress-bar-fill" style="width:67%;background:#c17a1a;"></div></div>
-              <span class="progress-label">Step 4/6 · 67%</span>
-              <span class="status-pill in-progress" style="margin-left:4px;">In progress</span>
+              <span class="progress-bar-track"><span class="progress-bar-fill" style="width:60%;background:var(--warning)"></span></span>
+              <span class="progress-label">Step 3/5 · 60%</span>
             </div>
           </div>
-        </a>
+        </div>
       </div>
     </div>
 
     <div class="story">
-      <div class="story-label">Admin view — with user badge</div>
+      <div class="story-label">Admin view — with owner badge</div>
       <div class="story-canvas">
-        <a class="session-card" href="#">
-          <div class="session-icon" style="background:#fdeef2;">🏛</div>
+        <div class="session-card">
+          <div class="session-icon" style="background:var(--bg2);color:var(--text3)">◌</div>
           <div class="session-body">
             <div class="session-header-row">
-              <span class="session-title">Regional Connectivity Program — Round 3</span>
-              <span class="session-time">Yesterday, 4:15 PM</span>
+              <span class="session-title">New employee details — draft</span>
+              <span class="session-time">just now</span>
             </div>
-            <div class="session-snippet"><span style="color:#c2385a;font-weight:500;">Grant Assessment</span> · Shortlisting complete. 14 applications proceeding.</div>
+            <div class="session-snippet">No messages yet.</div>
             <div class="session-progress">
-              <div class="progress-bar-track"><div class="progress-bar-fill" style="width:67%;background:#c17a1a;"></div></div>
-              <span class="progress-label">Step 4/6 · 67%</span>
+              <span class="user-badge">AL</span>
+              <span class="progress-bar-track"><span class="progress-bar-fill" style="width:8%;background:var(--text4)"></span></span>
+              <span class="progress-label">Step 1/7 · 8%</span>
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:6px;padding:4px 10px 4px 5px;border-radius:99px;background:var(--bg2);border:1px solid var(--border);flex-shrink:0;">
-            <div class="inapp-avatar" style="background:#c17a1a;width:22px;height:22px;font-size:9px;">BT</div>
-            <span style="font-size:12px;color:var(--text2);">Ben Turner</span>
-          </div>
-        </a>
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- ══════════════════════════════════════════════════════════════
-       SECTION 7 — STEP PROGRESS RAIL
-  ══════════════════════════════════════════════════════════════════ -->
+  <!-- ═══════════ 7 — STEP PROGRESS ═══════════ -->
   <section class="section" id="step-rail">
-    <h2 class="section-title">Step Progress Rail</h2>
-    <p class="section-desc">Horizontal scrollable rail rendered below the header in the chat view. Badges map to flow nodes. Completed = green ✓, current = blue, pending = grey.</p>
+    <div class="section-head"><h2 class="section-title">Step Progress</h2><span class="section-rule"></span></div>
+    <p class="section-desc">Two forms of the same data. The <strong>inline rail</strong> is the default and lives on the header's second line: 15px badges, 22px connectors, horizontally scrollable, no background of its own. The <strong>vertical rail</strong> is for wide layouts where the flow needs per-step metadata.</p>
 
     <div class="story">
-      <div class="story-label">Step 3 active — 2 complete, 4 pending</div>
-      <div class="story-canvas" style="padding:0">
-        <div class="step-rail">
-          <div class="step-rail-item">
-            <div class="step-badge complete">✓</div>
-            <span class="step-label complete">Identify Need</span>
-          </div>
-          <div class="step-connector done"></div>
-          <div class="step-rail-item">
-            <div class="step-badge complete">✓</div>
-            <span class="step-label complete">Procurement Type</span>
-          </div>
-          <div class="step-connector done"></div>
-          <div class="step-rail-item">
-            <div class="step-badge current">3</div>
-            <span class="step-label current">Market Assessment</span>
-          </div>
-          <div class="step-connector"></div>
-          <div class="step-rail-item">
-            <div class="step-badge pending">4</div>
-            <span class="step-label pending">Approach to Market</span>
-          </div>
-          <div class="step-connector"></div>
-          <div class="step-rail-item">
-            <div class="step-badge pending">5</div>
-            <span class="step-label pending">Evaluate &amp; Select</span>
-          </div>
-          <div class="step-connector"></div>
-          <div class="step-rail-item">
-            <div class="step-badge pending">6</div>
-            <span class="step-label pending">Contract</span>
-          </div>
-          <div class="step-connector"></div>
-          <div class="step-rail-item">
-            <div class="step-badge pending">7</div>
-            <span class="step-label pending">AusTender</span>
-          </div>
+      <div class="story-label">Inline rail — step 3 active, 2 complete</div>
+      <div class="story-canvas white">
+        <div class="step-rail-inline">
+          <span class="step-item complete"><span class="step-badge complete">✓</span><span class="step-name">New employee details</span></span>
+          <span class="step-connector done"></span>
+          <span class="step-item complete"><span class="step-badge complete">✓</span><span class="step-name">First supervisor</span></span>
+          <span class="step-connector done"></span>
+          <span class="step-item current"><span class="step-badge current">3</span><span class="step-name">Second level endorsement</span></span>
+          <span class="step-connector"></span>
+          <span class="step-item pending"><span class="step-badge pending">4</span><span class="step-name">Generate letter</span></span>
+          <span class="step-connector"></span>
+          <span class="step-item pending"><span class="step-badge pending">5</span><span class="step-name">Payroll notified</span></span>
         </div>
       </div>
     </div>
 
     <div class="story">
-      <div class="story-label">All complete</div>
-      <div class="story-canvas" style="padding:0">
-        <div class="step-rail">
-          <div class="step-rail-item"><div class="step-badge complete">✓</div><span class="step-label complete">Identify Need</span></div>
-          <div class="step-connector done"></div>
-          <div class="step-rail-item"><div class="step-badge complete">✓</div><span class="step-label complete">Procurement Type</span></div>
-          <div class="step-connector done"></div>
-          <div class="step-rail-item"><div class="step-badge complete">✓</div><span class="step-label complete">Market Assessment</span></div>
-          <div class="step-connector done"></div>
-          <div class="step-rail-item"><div class="step-badge complete">✓</div><span class="step-label complete">Approach to Market</span></div>
-          <div class="step-connector done"></div>
-          <div class="step-rail-item"><div class="step-badge complete">✓</div><span class="step-label complete">Evaluate &amp; Select</span></div>
+      <div class="story-label">Inline rail — all complete</div>
+      <div class="story-canvas white">
+        <div class="step-rail-inline">
+          <span class="step-item complete"><span class="step-badge complete">✓</span><span class="step-name">New employee details</span></span>
+          <span class="step-connector done"></span>
+          <span class="step-item complete"><span class="step-badge complete">✓</span><span class="step-name">First supervisor</span></span>
+          <span class="step-connector done"></span>
+          <span class="step-item complete"><span class="step-badge complete">✓</span><span class="step-name">Second level endorsement</span></span>
+          <span class="step-connector done"></span>
+          <span class="step-item complete"><span class="step-badge complete">✓</span><span class="step-name">Generate letter</span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Vertical rail — with step metadata</div>
+      <div class="story-canvas white" style="max-width:340px">
+        <div class="step-rail-vertical">
+          <div class="srv-row">
+            <div class="srv-gutter"><span class="step-badge complete">✓</span><span class="srv-line"></span></div>
+            <div class="srv-body"><div class="srv-name">New employee details</div><div class="srv-meta">Submitted 04/08, 15:41</div></div>
+          </div>
+          <div class="srv-row">
+            <div class="srv-gutter"><span class="step-badge complete">✓</span><span class="srv-line"></span></div>
+            <div class="srv-body"><div class="srv-name">First supervisor</div><div class="srv-meta">Ada Lovelace · approved</div></div>
+          </div>
+          <div class="srv-row current">
+            <div class="srv-gutter"><span class="step-badge current">3</span><span class="srv-line"></span></div>
+            <div class="srv-body"><div class="srv-name">Second level endorsement</div><div class="srv-meta">Awaiting your confirmation</div></div>
+          </div>
+          <div class="srv-row">
+            <div class="srv-gutter"><span class="step-badge pending">4</span></div>
+            <div class="srv-body" style="padding-bottom:0"><div class="srv-name" style="color:var(--text4)">Generate letter</div><div class="srv-meta">Not started</div></div>
+          </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ══════════════════════════════════════════════════════════════
-       SECTION 8 — CHAT INTERFACE
-  ══════════════════════════════════════════════════════════════════ -->
+  <!-- ═══════════ 8 — CHAT INTERFACE ═══════════ -->
   <section class="section" id="chat">
-    <h2 class="section-title">Chat Interface</h2>
-    <p class="section-desc">Conversational UI rendered in the chat page. Agent bubbles left-aligned with border; user bubbles right-aligned with primary fill. Confidence bars use DM Mono for percentages.</p>
+    <div class="section-head"><h2 class="section-title">Chat Interface</h2><span class="section-rule"></span></div>
+    <p class="section-desc">The feed is a single 760px column on the paper canvas. Three message shapes, deliberately unequal in weight: <strong>agent</strong> replies are plain prose with a small mark and no bubble; <strong>user</strong> messages are a quiet sand bubble on the right; <strong>events</strong> (approvals, edits, system actions) are timeline rows with a coloured initial. Approval traffic used to be full-width blue bubbles, which read louder than the agent's actual questions — these rows fix that.</p>
 
     <div class="story">
-      <div class="story-label">Conversation — with confidence bar and milestone</div>
-      <div class="story-canvas" style="padding:0">
+      <div class="story-label">Conversation — events, user reply, agent question</div>
+      <div class="story-canvas flush">
         <div class="chat-wrap">
-          <div class="chat-header">
-            <div class="brand">F</div>
-            <span class="flow-title">HR System Procurement</span>
-            <span class="status-pill in-progress">Step 3 of 7</span>
-          </div>
-          <div class="step-rail" style="min-height:auto">
-            <div class="step-rail-item"><div class="step-badge complete">✓</div><span class="step-label complete">Identify Need</span></div>
-            <div class="step-connector done"></div>
-            <div class="step-rail-item"><div class="step-badge complete">✓</div><span class="step-label complete">Type</span></div>
-            <div class="step-connector done"></div>
-            <div class="step-rail-item"><div class="step-badge current">3</div><span class="step-label current">Market</span></div>
-            <div class="step-connector"></div>
-            <div class="step-rail-item"><div class="step-badge pending">4</div><span class="step-label pending">ATM</span></div>
-            <div class="step-connector"></div>
-            <div class="step-rail-item"><div class="step-badge pending">5</div><span class="step-label pending">Evaluate</span></div>
-          </div>
           <div class="chat-messages">
-            <div class="message-row">
-              <div class="avatar agent">FA</div>
-              <div class="message-bubble agent">
-                <div class="message-text">Great — you've confirmed the need for an HRIS system. Next, I need to check existing panel arrangements before recommending an approach to market. Are you aware of any whole-of-government ICT panels that might cover this?</div>
-                <div class="confidence-bar-wrap">
-                  <div class="confidence-track"><div class="confidence-fill high" style="width:91%"></div></div>
-                  <span class="confidence-label" style="color:var(--success);">High confidence · 91%</span>
+            <div class="chat-col">
+              <div class="feed-divider">
+                <span class="rule"></span><span class="label">Second level endorsement</span><span class="rule"></span>
+              </div>
+
+              <div class="event-row">
+                <span class="event-avatar approved">AL</span>
+                <div class="event-body">
+                  <span class="event-headline"><strong>Ada Lovelace</strong> granted approval, with edits.</span>
+                  <span class="event-quote">“Looks good”</span>
+                  <span class="event-meta">04/08/2026, 15:56 · 17h ago</span>
                 </div>
               </div>
-            </div>
-            <div class="message-row user">
-              <div class="avatar user">SJ</div>
-              <div class="message-bubble user">
-                <div class="message-text">Yes, I believe there's an ICTPA panel we should check first.</div>
+
+              <div class="event-row">
+                <span class="event-avatar changes">GH</span>
+                <div class="event-body">
+                  <span class="event-headline"><strong>Grace Hopper</strong> requested a change.</span>
+                  <span class="event-quote">“Can he start on the 17th instead?”</span>
+                  <span class="event-meta">04/08/2026, 15:59 · 17h ago</span>
+                </div>
               </div>
-            </div>
-            <div class="message-row">
-              <div class="avatar agent">FA</div>
-              <div class="message-bubble agent">
-                <div class="message-text">Confirmed — ICTPA panel applies. I've noted that for the ATM documentation.</div>
-                <div style="margin-top:10px;">
-                  <span class="milestone-pill">
-                    <svg viewBox="0 0 12 12" width="12" height="12"><circle cx="6" cy="6" r="6" fill="currentColor"/><path d="M3.5 6l2 2 3-3" stroke="white" stroke-width="1.2" fill="none"/></svg>
-                    Step 3 complete
-                  </span>
+
+              <div class="user-row">
+                <div class="user-bubble">Agreed with the updated start date</div>
+              </div>
+
+              <div class="agent-row">
+                <span class="agent-avatar">W</span>
+                <div class="agent-body">
+                  <p>It looks like the form has come back with some feedback from the approvers:</p>
+                  <div class="agent-list">
+                    <div class="agent-list-item"><span class="marker ok">✓</span><span><strong>Ada Lovelace</strong> approved the form (with a minor edit to the department — so that's been taken care of).</span></div>
+                    <div class="agent-list-item"><span class="marker change">↻</span><span><strong>Grace Hopper</strong> has requested a change — she'd like Joe's start date moved to <strong>17 August 2026 (Monday)</strong>. You've noted that you agree with the updated start date.</span></div>
+                  </div>
+                  <p>Just to confirm — can you please verify that <strong>17 August 2026</strong> is not a public holiday? If it's clear, we can update the form and move forward.</p>
+                  <div class="agent-actions">
+                    <span class="chip accent">It's clear — update the form</span>
+                    <span class="chip">Check the calendar</span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
           <div class="chat-composer">
-            <textarea class="composer-textarea" placeholder="Type your reply…" rows="1"></textarea>
-            <button class="composer-send">
-              <svg viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
-            </button>
+            <div class="composer-col">
+              <div class="composer-shell">
+                <textarea class="composer-textarea" rows="1" placeholder="Message Wayfinder…"></textarea>
+                <div class="composer-tools">
+                  <span class="chip">Attach</span>
+                  <span class="chip">Confirm date</span>
+                  <button class="composer-send" aria-label="Send">
+                    <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                  </button>
+                </div>
+              </div>
+              <span class="composer-footnote">Wayfinder works agentically — it asks follow-up questions and signals when each step is complete.</span>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
     <hr class="story-hr">
-    <p class="subsection-title">Milestone Pills — status states</p>
-    <p class="section-desc">Centred status pills rendered in the message feed by <code>MilestonePill</code>, <code>CrossCheckingBadge</code>, <code>GeneratingDocumentBadge</code>, and <code>FlowCompletePill</code>. They mark a step transition, a running background task, or an approval hand-off.</p>
+    <p class="subsection-title">Event rows — states</p>
+    <div class="story">
+      <div class="story-label">Approved · changes requested · rejected · system</div>
+      <div class="story-canvas white">
+        <div style="display:flex;flex-direction:column;gap:22px">
+          <div class="event-row">
+            <span class="event-avatar approved">AL</span>
+            <div class="event-body">
+              <span class="event-headline"><strong>Ada Lovelace</strong> granted approval, with edits.</span>
+              <span class="event-quote">“Looks good”</span>
+              <span class="event-meta">04/08/2026, 15:56 · 17h ago</span>
+            </div>
+          </div>
+          <div class="event-row">
+            <span class="event-avatar changes">GH</span>
+            <div class="event-body">
+              <span class="event-headline"><strong>Grace Hopper</strong> requested a change.</span>
+              <span class="event-quote">“Can he start on the 17th instead?”</span>
+              <span class="event-meta">04/08/2026, 15:59 · 17h ago</span>
+            </div>
+          </div>
+          <div class="event-row">
+            <span class="event-avatar rejected">MK</span>
+            <div class="event-body">
+              <span class="event-headline"><strong>Mo Khan</strong> declined the request.</span>
+              <span class="event-quote">“Headcount isn't approved for this quarter.”</span>
+              <span class="event-meta">04/08/2026, 16:12 · 16h ago</span>
+            </div>
+          </div>
+          <div class="event-row">
+            <span class="event-avatar system">W</span>
+            <div class="event-body">
+              <span class="event-headline">Form updated — <strong>Start date</strong> changed to 17 August 2026.</span>
+              <span class="event-meta">04/08/2026, 16:20 · 16h ago</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="story-hr">
+    <p class="subsection-title">Agent states</p>
+    <div class="story">
+      <div class="story-label">With confidence score</div>
+      <div class="story-canvas white">
+        <div class="agent-row">
+          <span class="agent-avatar">W</span>
+          <div class="agent-body">
+            <p>I've read the position description and pre-filled the department as <strong>Operations</strong>.</p>
+            <div class="confidence-wrap">
+              <span class="confidence-track"><span class="confidence-fill high" style="width:94%"></span></span>
+              <span class="confidence-label">High · 94%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div class="story">
-      <div class="story-label">Step complete — default (green, with confidence)</div>
+      <div class="story-label">Low confidence — asks to confirm</div>
+      <div class="story-canvas white">
+        <div class="agent-row">
+          <span class="agent-avatar">W</span>
+          <div class="agent-body">
+            <p>The document lists two possible cost centres. I've guessed <strong>OPS-114</strong> — can you confirm?</p>
+            <div class="confidence-wrap">
+              <span class="confidence-track"><span class="confidence-fill medium" style="width:52%"></span></span>
+              <span class="confidence-label">Medium · 52%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Thinking</div>
+      <div class="story-canvas white">
+        <div class="agent-row">
+          <span class="agent-avatar">W</span>
+          <div class="typing"><i></i><i></i><i></i></div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="story-hr">
+    <p class="subsection-title">Milestone pills — status states</p>
+    <p class="section-desc">Centred pills rendered in the feed by <code>MilestonePill</code>, <code>CrossCheckingBadge</code>, <code>GeneratingDocumentBadge</code>, and <code>FlowCompleteBadge</code>. All are 20px radius with a 1px border in the matching family.</p>
+
+    <div class="story">
+      <div class="story-label">Step complete — default</div>
       <div class="story-canvas white">
         <div class="milestone-pill-wrap">
           <span class="milestone-pill-v complete">
-            <svg class="pill-check" viewBox="0 0 12 12"><circle cx="6" cy="6" r="6" fill="currentColor"/><path d="M3.5 6l2 2 3-3" stroke="white" stroke-width="1.2" fill="none"/></svg>
-            Step complete — Market Research (94%)
+            <svg class="pill-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 5"/></svg>
+            Step complete · confidence 94%
           </span>
         </div>
       </div>
     </div>
 
     <div class="story">
-      <div class="story-label">Step complete — no template configured (sand)</div>
+      <div class="story-label">Step complete — no template configured</div>
       <div class="story-canvas white">
         <div class="milestone-pill-wrap">
           <span class="milestone-pill-v no-template">
-            <span>📄</span>
-            Step complete — Market Research · No template configured
+            <svg class="pill-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 5"/></svg>
+            Step complete · no template configured
           </span>
         </div>
       </div>
     </div>
 
     <div class="story">
-      <div class="story-label">Generating document — running (blue, spinner)</div>
+      <div class="story-label">Generating document — running</div>
       <div class="story-canvas white">
         <div class="milestone-pill-wrap">
           <span class="milestone-pill-v generating">
-            <svg class="pill-spinner" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"/>
-              <path fill="currentColor" opacity="0.75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-            </svg>
-            Generating document — Approach to Market
-          </span>
-        </div>
-        <div class="milestone-pill-wrap">
-          <span class="milestone-pill-v generating">
-            <svg class="pill-spinner" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"/>
-              <path fill="currentColor" opacity="0.75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-            </svg>
+            <svg class="pill-spinner" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 1.5a6.5 6.5 0 1 1-4.6 1.9" opacity=".9"/></svg>
             Generating document…
           </span>
         </div>
@@ -1738,148 +1468,128 @@
     </div>
 
     <div class="story">
-      <div class="story-label">Document generation failed (amber, retry)</div>
+      <div class="story-label">Document generation failed — retry</div>
       <div class="story-canvas white">
         <div class="milestone-pill-wrap">
           <span class="milestone-pill-v failed">
-            <span>⚠️</span>
-            Document generation failed — Approach to Market
-            <button type="button" class="pill-retry">Retry</button>
+            Document generation failed
+            <button class="pill-retry">Retry</button>
           </span>
         </div>
       </div>
     </div>
 
     <div class="story">
-      <div class="story-label">Cross-checking — pre-generation gate (blue, spinner, cycles)</div>
+      <div class="story-label">Cross-checking — pre-generation gate</div>
       <div class="story-canvas white">
         <div class="milestone-pill-wrap">
           <span class="milestone-pill-v cross-checking">
-            <svg class="pill-spinner" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"/>
-              <path fill="currentColor" opacity="0.75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-            </svg>
-            Cross-checking Procurement Policy 2024…
-          </span>
-        </div>
-        <div class="milestone-pill-wrap">
-          <span class="milestone-pill-v cross-checking">
-            <svg class="pill-spinner" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"/>
-              <path fill="currentColor" opacity="0.75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-            </svg>
-            Cross-checking ICTPA Panel Terms…
+            <svg class="pill-spinner" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 1.5a6.5 6.5 0 1 1-4.6 1.9" opacity=".9"/></svg>
+            Cross-checking answers against the form…
           </span>
         </div>
       </div>
     </div>
 
     <div class="story">
-      <div class="story-label">Select approver — awaiting approval (amber)</div>
+      <div class="story-label">Select approver — awaiting approval</div>
       <div class="story-canvas white">
         <div class="milestone-pill-wrap">
-          <span class="milestone-pill-v approver">
-            <svg class="pill-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
-              <path d="M4 2h6l3 3v9H4z"/>
-              <path d="M6.5 8l1.4 1.4L11 6.4"/>
-            </svg>
-            Awaiting approval — sent to Priya Nair
-          </span>
-        </div>
-        <div class="milestone-pill-wrap">
-          <span class="milestone-pill-v approver">
-            <svg class="pill-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
-              <path d="M4 2h6l3 3v9H4z"/>
-              <path d="M6.5 8l1.4 1.4L11 6.4"/>
-            </svg>
-            Select approver — Approach to Market
-          </span>
+          <span class="milestone-pill-v approver">Awaiting approval from Grace Hopper</span>
         </div>
       </div>
     </div>
 
     <div class="story">
-      <div class="story-label">Flow complete — terminal (green, larger)</div>
+      <div class="story-label">Flow complete — terminal</div>
       <div class="story-canvas white">
         <div class="milestone-pill-wrap">
           <span class="milestone-pill-v flow-complete">
-            <svg class="pill-check" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="currentColor"/><path d="M4.5 8l2.5 2.5 4.5-4.5" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Flow complete
+            <svg class="pill-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 5"/></svg>
+            Flow complete — all steps endorsed
           </span>
         </div>
       </div>
     </div>
 
     <hr class="story-hr">
-    <p class="subsection-title">Document Card (output attachment)</p>
+    <p class="subsection-title">Document card &amp; composer</p>
 
     <div class="story">
       <div class="story-label">Inline document card — agent output</div>
       <div class="story-canvas">
-        <div class="message-row">
-          <div class="avatar agent">FA</div>
-          <div>
-            <div class="message-bubble agent" style="margin-bottom:10px;">
-              <div class="message-text">I've drafted the Approach to Market document based on our conversation. Review and download below.</div>
-            </div>
+        <div class="agent-row" style="max-width:760px;margin:0 auto">
+          <span class="agent-avatar">W</span>
+          <div class="agent-body">
+            <p>Here's the updated appointment letter with the 17 August start date.</p>
             <div class="document-card">
-              <div class="doc-icon">
-                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-              </div>
+              <span class="doc-icon"><svg viewBox="0 0 24 24"><path d="M14 3v5h5M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg></span>
               <div class="doc-info">
-                <div class="doc-name">Approach to Market — HRIS Replacement.docx</div>
-                <div class="doc-summary">RFT draft · 7 sections · Ready for review</div>
+                <div class="doc-name">Appointment letter — J. Bloggs.docx</div>
+                <div class="doc-summary">DOCX · 48 KB · generated 16h ago</div>
               </div>
-              <button class="btn btn-secondary btn-sm">↓ Download</button>
+              <button class="btn btn-secondary btn-sm">Open</button>
             </div>
           </div>
         </div>
       </div>
     </div>
-  </section>
-
-  <!-- ══════════════════════════════════════════════════════════════
-       SECTION 9 — MODALS & FORMS
-  ══════════════════════════════════════════════════════════════════ -->
-  <section class="section" id="modals">
-    <h2 class="section-title">Modals &amp; Forms</h2>
-    <p class="section-desc">Modals use border-radius 18px, <code>--sh-xl</code> shadow, and a semi-transparent backdrop. On mobile they slide up from the bottom. Form inputs use 9px radius and a focus state with primary border.</p>
 
     <div class="story">
-      <div class="story-label">New Chat — Flow Picker</div>
-      <div class="story-canvas" style="background:#e8e6e0">
-        <div class="modal-backdrop" style="position:relative;border-radius:0;min-height:420px;">
+      <div class="story-label">Composer — empty, disabled send</div>
+      <div class="story-canvas">
+        <div class="composer-col">
+          <div class="composer-shell">
+            <textarea class="composer-textarea" rows="1" placeholder="Message Wayfinder…"></textarea>
+            <div class="composer-tools">
+              <span class="chip">Attach</span>
+              <button class="composer-send" disabled aria-label="Send">
+                <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+              </button>
+            </div>
+          </div>
+          <span class="composer-footnote">Wayfinder works agentically — it asks follow-up questions and signals when each step is complete.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ 9 — MODALS & FORMS ═══════════ -->
+  <section class="section" id="modals">
+    <div class="section-head"><h2 class="section-title">Modals &amp; Forms</h2><span class="section-rule"></span></div>
+    <p class="section-desc">18px radius, <code>--sh-xl</code>, warm backdrop at 34%. The footer sits on <code>--bg</code> so the action row separates from the body without a heavy divider. On mobile modals slide up from the bottom edge.</p>
+
+    <div class="story">
+      <div class="story-label">New chat — flow picker</div>
+      <div class="story-canvas flush">
+        <div class="modal-backdrop" style="min-height:430px">
           <div class="modal">
             <div class="modal-header">
-              <div>
-                <div style="font-size:11px;color:var(--text3);font-weight:600;letter-spacing:.05em;margin-bottom:3px;">NEW CHAT SESSION</div>
-                <div class="modal-title">Choose a workflow</div>
-              </div>
-              <button class="modal-close">✕</button>
+              <span class="modal-title">Start a new chat</span>
+              <button class="modal-close">×</button>
             </div>
             <div class="modal-body">
-              <p style="font-size:13.5px;color:var(--text2);line-height:1.55;">Select the workflow you'd like to run. The agent will guide you through each step.</p>
-              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
-                <div class="flow-option selected" style="flex-direction:column;align-items:center;text-align:center;padding:14px 10px;">
-                  <div class="flow-option-icon" style="background:#eef1fc;margin-bottom:6px;">📋</div>
-                  <div style="font-size:12.5px;font-weight:600;">AU Gov Procurement</div>
-                  <div style="font-size:11px;color:var(--text3);margin-top:2px;">7 steps</div>
-                </div>
-                <div class="flow-option" style="flex-direction:column;align-items:center;text-align:center;padding:14px 10px;">
-                  <div class="flow-option-icon" style="background:#eaf6f0;margin-bottom:6px;">👤</div>
-                  <div style="font-size:12.5px;font-weight:600;">Staff Onboarding</div>
-                  <div style="font-size:11px;color:var(--text3);margin-top:2px;">5 steps</div>
-                </div>
-                <div class="flow-option" style="flex-direction:column;align-items:center;text-align:center;padding:14px 10px;">
-                  <div class="flow-option-icon" style="background:#f3eeff;margin-bottom:6px;">📑</div>
-                  <div style="font-size:12.5px;font-weight:600;">Policy Review</div>
-                  <div style="font-size:11px;color:var(--text3);margin-top:2px;">6 steps</div>
+              <div class="form-group">
+                <span class="form-label">Choose a flow</span>
+                <div class="flow-select-list">
+                  <div class="flow-option selected">
+                    <span class="flow-option-icon" style="background:var(--primary-light);color:var(--primary)">◍</span>
+                    <span class="flow-option-info"><span class="name">New employee onboarding</span><span class="desc">7 steps · two approvals</span></span>
+                  </div>
+                  <div class="flow-option">
+                    <span class="flow-option-icon" style="background:var(--success-bg);color:var(--success)">⌸</span>
+                    <span class="flow-option-info"><span class="name">Leave request</span><span class="desc">4 steps · one approval</span></span>
+                  </div>
+                  <div class="flow-option">
+                    <span class="flow-option-icon" style="background:var(--warning-bg);color:var(--warning)">⌾</span>
+                    <span class="flow-option-info"><span class="name">Contract extension</span><span class="desc">5 steps · draft</span></span>
+                  </div>
                 </div>
               </div>
             </div>
             <div class="modal-footer">
               <button class="btn btn-ghost">Cancel</button>
-              <button class="btn btn-primary">Start chat →</button>
+              <button class="btn btn-primary">Start chat</button>
             </div>
           </div>
         </div>
@@ -1887,53 +1597,46 @@
     </div>
 
     <div class="story">
-      <div class="story-label">Step Configuration Modal</div>
-      <div class="story-canvas" style="background:#e8e6e0">
-        <div class="modal-backdrop" style="position:relative;border-radius:0;min-height:500px;">
+      <div class="story-label">Step configuration</div>
+      <div class="story-canvas flush">
+        <div class="modal-backdrop" style="min-height:520px">
           <div class="modal">
             <div class="modal-header">
-              <div>
-                <div style="font-size:11px;color:var(--text3);font-weight:600;letter-spacing:.05em;margin-bottom:3px;">STEP 05 CONFIGURATION</div>
-                <div class="modal-title">Approach to Market</div>
-              </div>
-              <button class="modal-close">✕</button>
+              <span class="modal-title">Configure step</span>
+              <button class="modal-close">×</button>
             </div>
             <div class="modal-body">
               <div class="form-group">
-                <label class="form-label">Step name</label>
-                <input class="form-input" type="text" value="Approach to Market" />
+                <label class="form-label" for="sb-step">Step name</label>
+                <input class="form-input" id="sb-step" value="Second level endorsement">
               </div>
               <div class="form-group">
-                <label class="form-label">Output type</label>
-                <div style="display:flex;gap:8px;">
-                  <div class="toggle-group" style="max-width:260px;flex:1;">
-                    <button class="toggle-btn">Text reply</button>
-                    <button class="toggle-btn active">↓ Document</button>
-                  </div>
+                <span class="form-label">Step type</span>
+                <div class="toggle-group">
+                  <button class="toggle-btn">Question</button>
+                  <button class="toggle-btn active">Approval</button>
+                  <button class="toggle-btn">Document</button>
                 </div>
               </div>
               <div class="form-group">
-                <label class="form-label">Instructions for the AI</label>
-                <textarea class="form-textarea" rows="3">Draft the appropriate approach to market document — RFQ, RFT or SoR — based on the procurement type identified in step 2.</textarea>
+                <label class="form-label" for="sb-inst">Instruction to the agent</label>
+                <textarea class="form-textarea" id="sb-inst">Ask the requester to confirm the revised start date is not a public holiday before updating the form.</textarea>
               </div>
               <div class="form-group">
-                <label class="form-label">Node colour</label>
-                <div class="color-swatches">
-                  <div class="color-swatch selected" style="background:#3a5fd9;"></div>
-                  <div class="color-swatch" style="background:#2e9e6a;"></div>
-                  <div class="color-swatch" style="background:#c17a1a;"></div>
-                  <div class="color-swatch" style="background:#7c3aed;"></div>
-                  <div class="color-swatch" style="background:#c2385a;"></div>
-                  <div class="color-swatch" style="background:#0e8a7a;"></div>
+                <span class="form-label">Icon</span>
+                <div class="icon-picker">
+                  <span class="icon-swatch selected">◍</span>
+                  <span class="icon-swatch">⌸</span>
+                  <span class="icon-swatch">⌾</span>
+                  <span class="icon-swatch">⤳</span>
+                  <span class="icon-swatch">✓</span>
                 </div>
               </div>
             </div>
             <div class="modal-footer">
               <button class="btn btn-danger">Remove step</button>
-              <div style="display:flex;gap:8px;">
-                <button class="btn btn-ghost">Cancel</button>
-                <button class="btn btn-primary">Save changes</button>
-              </div>
+              <button class="btn btn-ghost">Cancel</button>
+              <button class="btn btn-primary">Save step</button>
             </div>
           </div>
         </div>
@@ -1941,109 +1644,74 @@
     </div>
   </section>
 
-  <!-- ══════════════════════════════════════════════════════════════
-       SECTION 10 — FLOW DIAGRAM
-  ══════════════════════════════════════════════════════════════════ -->
+  <!-- ═══════════ 10 — FLOW DIAGRAM ═══════════ -->
   <section class="section" id="flow-diagram">
-    <h2 class="section-title">Flow Diagram (Canvas)</h2>
-    <p class="section-desc">Interactive node canvas in the Configure page, built on ReactFlow. Nodes are 188 px wide cards; branch nodes use a dashed border. Each node has a coloured icon, step label, and an output badge.</p>
+    <div class="section-head"><h2 class="section-title">Flow Diagram</h2><span class="section-rule"></span></div>
+    <p class="section-desc">Node canvas in the Configure page, built on ReactFlow. 188px cards, 12px radius, hairline border, low shadow. The canvas keeps a 20px dot grid in <code>--border-strong</code>. Branch nodes use a dashed border; the selected node gets a 3px <code>--primary-light</code> ring.</p>
 
     <div class="story">
       <div class="story-label">Node variants</div>
       <div class="story-canvas">
-        <div class="story-row" style="flex-wrap:wrap;gap:12px;">
-          <!-- Standard node -->
-          <div class="flow-node" style="position:relative;width:188px;">
-            <div class="node-badge" style="background:#eef1fc;">📋</div>
-            <div class="node-info">
-              <div class="node-name">Identify the Need</div>
-              <div class="node-sub">Value · business unit</div>
-              <div style="display:inline-flex;align-items:center;gap:4px;border-radius:4px;padding:2px 7px;font-size:10.5px;font-weight:500;margin-top:8px;background:#eef1fc;color:#3a5fd9;">Text reply</div>
-            </div>
-            <div class="node-handle"></div>
+        <div class="story-row" style="gap:14px">
+          <div class="flow-node" style="position:relative">
+            <span class="node-badge" style="background:var(--primary-light);color:var(--primary)">◍</span>
+            <span><span class="node-name">New employee details</span><span class="node-sub">Question · 6 fields</span></span>
+            <span class="node-handle"></span>
           </div>
-          <!-- Selected node -->
-          <div class="flow-node selected" style="position:relative;width:188px;">
-            <div class="node-badge" style="background:#eaf6f0;">📑</div>
-            <div class="node-info">
-              <div class="node-name">Approach to Market</div>
-              <div class="node-sub">RFQ · RFT · SoR draft</div>
-              <div style="display:inline-flex;align-items:center;gap:4px;border-radius:4px;padding:2px 7px;font-size:10.5px;font-weight:500;margin-top:8px;background:#eaf6f0;color:#2e9e6a;">↓ Document</div>
-            </div>
-            <div class="node-handle"></div>
+          <div class="flow-node selected" style="position:relative">
+            <span class="node-badge" style="background:var(--success-bg);color:var(--success)">⌸</span>
+            <span><span class="node-name">First supervisor</span><span class="node-sub">Approval · selected</span></span>
+            <span class="node-handle"></span>
           </div>
-          <!-- Branch node -->
-          <div class="flow-node" style="position:relative;width:188px;border-style:dashed;border-color:var(--border-strong);">
-            <div class="node-badge" style="background:#f3eeff;">⑂</div>
-            <div class="node-info">
-              <div class="node-name">Determine Type</div>
-              <div class="node-sub">CPR category branch</div>
-            </div>
-            <div class="node-handle"></div>
+          <div class="flow-node branch" style="position:relative">
+            <span class="node-badge" style="background:var(--warning-bg);color:var(--warning)">⤳</span>
+            <span><span class="node-name">Changes requested?</span><span class="node-sub">Branch · 2 paths</span></span>
+            <span class="node-handle"></span>
+          </div>
+          <div class="flow-node" style="position:relative">
+            <span class="node-badge" style="background:var(--purple-light);color:var(--purple)">⌾</span>
+            <span><span class="node-name">Generate letter</span><span class="node-sub">Document · DOCX</span></span>
+            <span class="node-handle"></span>
           </div>
         </div>
       </div>
     </div>
 
     <div class="story">
-      <div class="story-label">Canvas shell (static preview)</div>
-      <div class="story-canvas" style="padding:0">
+      <div class="story-label">Canvas shell — static preview</div>
+      <div class="story-canvas flush">
         <div class="canvas-shell">
           <div class="canvas-toolbar">
-            <span style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--text3);">WORKFLOW CANVAS</span>
-            <span style="color:var(--border-strong);">·</span>
-            <span>Drag nodes to reposition. Drag from a handle to connect.</span>
-            <div style="flex:1;"></div>
-            <button class="btn btn-ghost btn-sm" style="font-size:12px;display:flex;align-items:center;gap:4px;"><span style="font-size:14px;line-height:1;">+</span> Add step</button>
+            <button class="btn btn-secondary btn-sm">Add step</button>
+            <button class="btn btn-ghost btn-sm">Auto-layout</button>
+            <span class="mono" style="margin-left:auto;font-size:11px;color:var(--text4)">7 steps · 2 approvals · zoom 80%</span>
           </div>
           <div class="canvas-surface">
-            <!-- Dot background -->
-            <svg width="100%" height="100%" style="position:absolute;inset:0;opacity:.5">
-              <defs><pattern id="dots" x="0" y="0" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="var(--bg3)"/></pattern></defs>
-              <rect width="100%" height="100%" fill="url(#dots)"/>
-            </svg>
-            <!-- Sample nodes -->
-            <div class="flow-node" style="left:40px;top:120px;width:180px;">
-              <div class="node-badge" style="background:#eef1fc;">📋</div>
-              <div class="node-info"><div class="node-name">Identify Need</div><div class="node-sub">Value · business unit</div></div>
-              <div class="node-handle"></div>
+            <div class="flow-node" style="left:36px;top:44px">
+              <span class="node-badge" style="background:var(--primary-light);color:var(--primary)">◍</span>
+              <span><span class="node-name">New employee details</span><span class="node-sub">Question · 6 fields</span></span>
+              <span class="node-handle"></span>
             </div>
-            <div class="flow-node selected" style="left:280px;top:120px;width:180px;">
-              <div class="node-badge" style="background:#fdf3e3;">⑂</div>
-              <div class="node-info"><div class="node-name">Determine Type</div><div class="node-sub">CPR category</div></div>
-              <div class="node-handle"></div>
+            <div class="flow-node" style="left:280px;top:44px">
+              <span class="node-badge" style="background:var(--success-bg);color:var(--success)">⌸</span>
+              <span><span class="node-name">First supervisor</span><span class="node-sub">Approval</span></span>
+              <span class="node-handle"></span>
             </div>
-            <div class="flow-node" style="left:520px;top:60px;width:180px;">
-              <div class="node-badge" style="background:#eef1fc;">◈</div>
-              <div class="node-info"><div class="node-name">Software</div><div class="node-sub">ICTPA panel</div></div>
-              <div class="node-handle"></div>
+            <div class="flow-node selected" style="left:280px;top:172px">
+              <span class="node-badge" style="background:var(--success-bg);color:var(--success)">⌸</span>
+              <span><span class="node-name">Second level endorsement</span><span class="node-sub">Approval · current</span></span>
+              <span class="node-handle"></span>
             </div>
-            <div class="flow-node" style="left:520px;top:180px;width:180px;">
-              <div class="node-badge" style="background:#eaf6f0;">◬</div>
-              <div class="node-info"><div class="node-name">Services</div><div class="node-sub">PCTDRP · business case</div></div>
-              <div class="node-handle"></div>
+            <div class="flow-node branch" style="left:524px;top:108px">
+              <span class="node-badge" style="background:var(--warning-bg);color:var(--warning)">⤳</span>
+              <span><span class="node-name">Changes requested?</span><span class="node-sub">Branch · 2 paths</span></span>
+              <span class="node-handle"></span>
             </div>
-            <!-- SVG edges -->
-            <svg style="position:absolute;inset:0;pointer-events:none;overflow:visible;">
-              <path d="M220 156 C 250 156 250 156 280 156" stroke="var(--border-strong)" stroke-width="1.6" fill="none"/>
-              <path d="M460 156 C 490 156 490 96 520 96" stroke="var(--border-strong)" stroke-width="1.6" fill="none"/>
-              <path d="M460 156 C 490 156 490 216 520 216" stroke="var(--border-strong)" stroke-width="1.6" fill="none"/>
-            </svg>
-            <!-- Controls -->
+            <div class="canvas-minimap"></div>
             <div class="canvas-controls">
-              <button class="btn-icon" style="font-size:16px;font-weight:400;">+</button>
-              <button class="btn-icon" style="font-size:16px;font-weight:400;">−</button>
-              <button class="btn-icon" style="font-size:14px;">⊙</button>
-            </div>
-            <!-- Minimap -->
-            <div class="canvas-minimap">
-              <svg width="100" height="68" viewBox="0 0 100 68">
-                <rect width="100" height="68" fill="#f7f6f3"/>
-                <rect x="5" y="25" width="20" height="12" rx="3" fill="white" stroke="#dedad2"/>
-                <rect x="30" y="25" width="20" height="12" rx="3" fill="white" stroke="#3a5fd9" stroke-width="1.5"/>
-                <rect x="55" y="10" width="18" height="10" rx="2" fill="white" stroke="#dedad2"/>
-                <rect x="55" y="35" width="18" height="10" rx="2" fill="white" stroke="#dedad2"/>
-              </svg>
+              <button class="btn-icon">+</button>
+              <button class="btn-icon">−</button>
+              <button class="btn-icon">⤢</button>
             </div>
           </div>
         </div>
@@ -2051,112 +1719,92 @@
     </div>
   </section>
 
-  <!-- ══════════════════════════════════════════════════════════════
-       SECTION 11 — TOASTS & BADGES
-  ══════════════════════════════════════════════════════════════════ -->
-  <section class="section" id="toasts">
-    <h2 class="section-title">Toasts &amp; Badges</h2>
-    <p class="section-desc">Inline status chips and floating notification toasts. Badge colours use the semantic palette. Toasts use <code>--sh-md</code> shadow and appear fixed bottom-right.</p>
+  <!-- ═══════════ 11 — FEEDBACK ═══════════ -->
+  <section class="section" id="feedback">
+    <div class="section-head"><h2 class="section-title">Toasts, Badges &amp; Empty States</h2><span class="section-rule"></span></div>
+    <p class="section-desc">Toasts are white cards with a tinted 20px icon well — no coloured fills or left-border accents. Badges are 20px pills at weight 600. Empty states lead with a dashed mark rather than an illustration.</p>
 
-    <p class="subsection-title">Status Badges</p>
     <div class="story">
-      <div class="story-label">Badge variants</div>
+      <div class="story-label">Toasts</div>
       <div class="story-canvas">
-        <div class="story-row">
-          <span class="badge blue">In Progress</span>
-          <span class="badge green">✓ Complete</span>
-          <span class="badge amber">Pending</span>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="toast success"><span class="toast-icon">✓</span>Form updated — start date is now 17 August 2026.<span class="close">×</span></div>
+          <div class="toast error"><span class="toast-icon">!</span>Couldn't reach the approver. We'll retry shortly.<span class="close">×</span></div>
+          <div class="toast info"><span class="toast-icon">i</span>Grace Hopper was notified.<span class="close">×</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Badges</div>
+      <div class="story-canvas">
+        <div class="story-row" style="align-items:center">
+          <span class="badge blue">In progress</span>
+          <span class="badge green">Complete</span>
+          <span class="badge amber">Awaiting approval</span>
           <span class="badge grey">Draft</span>
-          <span class="badge purple">Policy</span>
-          <span class="badge rose">Urgent</span>
-          <span class="badge teal">Verified</span>
+          <span class="badge purple">Document</span>
+          <span class="badge rose">Declined</span>
+          <span class="badge teal">Synthesised</span>
         </div>
       </div>
     </div>
 
-    <p class="subsection-title">Toasts</p>
     <div class="story">
-      <div class="story-label">Toast variants</div>
-      <div class="story-canvas">
-        <div class="story-row" style="flex-direction:column;align-items:flex-start;gap:10px;">
-          <div class="toast success">
-            <div class="toast-icon">✓</div>
-            <div>
-              <div style="font-weight:600;margin-bottom:2px;">Chat session started</div>
-              <div style="font-size:12px;color:var(--text3);">AU Gov Procurement — 7 steps</div>
-            </div>
-          </div>
-          <div class="toast error">
-            <div class="toast-icon">✕</div>
-            <div>
-              <div style="font-weight:600;margin-bottom:2px;">Upload failed</div>
-              <div style="font-size:12px;color:var(--text3);">Only .docx files are supported</div>
-            </div>
-          </div>
-          <div class="toast info">
-            <div class="toast-icon">i</div>
-            <div>
-              <div style="font-weight:600;margin-bottom:2px;">Flow published</div>
-              <div style="font-size:12px;color:var(--text3);">Users can now start new chat sessions</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <p class="subsection-title">Empty State</p>
-    <div class="story">
-      <div class="story-label">No chats found</div>
+      <div class="story-label">Empty state — no chats</div>
       <div class="story-canvas white">
         <div class="empty-state">
-          <div class="empty-state-icon">💬</div>
-          <div class="empty-state-title">No chats found</div>
-          <div class="empty-state-body">Start a new chat to begin a guided workflow session.</div>
-          <button class="btn btn-primary" style="display:inline-flex;align-items:center;gap:6px;">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-            New chat
-          </button>
+          <div class="empty-mark">◌</div>
+          <div class="empty-state-title">No chats yet</div>
+          <div class="empty-state-body">Pick a flow and Wayfinder will walk you through it, step by step.</div>
+          <button class="btn btn-primary">New chat</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Loading — skeleton rows</div>
+      <div class="story-canvas">
+        <div style="display:flex;flex-direction:column;gap:10px;max-width:540px">
+          <div style="background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-lg);padding:15px 17px;display:flex;gap:14px;align-items:center">
+            <span class="skeleton" style="width:38px;height:38px;border-radius:10px;flex-shrink:0"></span>
+            <span style="flex:1;display:flex;flex-direction:column;gap:8px">
+              <span class="skeleton" style="width:58%;height:12px"></span>
+              <span class="skeleton" style="width:82%;height:10px"></span>
+            </span>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-lg);padding:15px 17px;display:flex;gap:14px;align-items:center">
+            <span class="skeleton" style="width:38px;height:38px;border-radius:10px;flex-shrink:0"></span>
+            <span style="flex:1;display:flex;flex-direction:column;gap:8px">
+              <span class="skeleton" style="width:44%;height:12px"></span>
+              <span class="skeleton" style="width:70%;height:10px"></span>
+            </span>
+          </div>
         </div>
       </div>
     </div>
   </section>
-
 </main>
 
 <script>
-/* ── Hamburger drawer (mobile demo) ─────────────────────────────── */
-function openDrawer() {
-  const drawer = document.getElementById('mobile-drawer');
-  const backdrop = document.getElementById('drawer-backdrop');
-  drawer.classList.add('open');
-  backdrop.style.display = 'block';
-}
-function closeDrawer() {
-  const drawer = document.getElementById('mobile-drawer');
-  const backdrop = document.getElementById('drawer-backdrop');
-  drawer.classList.remove('open');
-  backdrop.style.display = 'none';
-}
+  (function () {
+    var drawer = document.getElementById('drawer');
+    var backdrop = document.getElementById('drawer-backdrop');
+    function open() { drawer.classList.add('open'); backdrop.style.display = 'block'; }
+    function close() { drawer.classList.remove('open'); backdrop.style.display = 'none'; }
+    document.getElementById('hamburger').addEventListener('click', open);
+    document.getElementById('drawer-close').addEventListener('click', close);
+    backdrop.addEventListener('click', close);
 
-/* ── Scroll spy — highlight active nav item ─────────────────────── */
-(function() {
-  const sections = document.querySelectorAll('section[id]');
-  const navLinks = document.querySelectorAll('.shell-nav .nav-item');
-
-  const obs = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        const id = entry.target.id;
-        navLinks.forEach(link => {
-          const active = link.getAttribute('href') === '#' + id;
-          link.classList.toggle('active', active);
-        });
-      }
+    var links = document.querySelectorAll('.shell-nav .nav-item');
+    links.forEach(function (link) {
+      link.addEventListener('click', function () {
+        links.forEach(function (l) { l.classList.remove('active'); });
+        link.classList.add('active');
+      });
     });
-  }, { rootMargin: '-30% 0px -60% 0px' });
-
-  sections.forEach(s => obs.observe(s));
-})();
+  })();
 </script>
+
 </body>
 </html>
