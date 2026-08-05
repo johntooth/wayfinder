@@ -58,7 +58,9 @@ services:
     volumes:
       - minio-data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      # Matches docker-compose.yml: `mc` is not guaranteed to be present in the
+      # server image, but curl and the health endpoint are.
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
       timeout: 5s
       retries: 12

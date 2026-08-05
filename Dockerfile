@@ -13,7 +13,7 @@ FROM base AS build
 
 # Dependencies change far less often than source, so install them in their own
 # layer keyed on the manifests alone.
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc* ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/
 COPY apps/api/package.json apps/api/
 COPY packages/domain/package.json packages/domain/

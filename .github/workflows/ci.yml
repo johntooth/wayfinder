@@ -90,7 +90,9 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Report image size
-        run: docker image inspect wayfinder:ci --format 'image size: {{.Size}} bytes'
+        run: |
+          SIZE=$(docker image inspect wayfinder:ci --format '{{.Size}}')
+          echo "image size: $((SIZE / 1024 / 1024)) MiB"
 
   # Exercises the one deployment artifact CI can run end to end, on the runner
   # itself: the whole stack comes up, migrations apply as their own service, and
@@ -121,12 +123,23 @@ jobs:
           BETTER_AUTH_SECRET: ci-test-secret-must-be-at-least-16-chars
           SETTINGS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
           SCHEDULER_TICK_SECRET: ci-scheduler-tick-secret
-        run: docker compose -f docker-compose.prod.yml up -d --wait --wait-timeout 300
+        # Deliberately not `--wait`: the migrate service runs to completion and
+        # exits, which `--wait` treats as a service that failed to stay up. The
+        # polling below is the real readiness check anyway.
+        run: docker compose -f docker-compose.prod.yml up -d
 
       - name: Assert migrations ran as their own step
         run: |
+          for attempt in $(seq 1 40); do
+            if docker compose -f docker-compose.prod.yml logs migrate 2>/dev/null | grep -qE "Applied [0-9]+ migration|already up to date"; then
+              docker compose -f docker-compose.prod.yml logs migrate
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "migrate service never reported a result"
           docker compose -f docker-compose.prod.yml logs migrate
-          docker compose -f docker-compose.prod.yml logs migrate | grep -q "\[migrate\]"
+          exit 1
 
       - name: Assert the web app serves the first-run setup page
         run: |
