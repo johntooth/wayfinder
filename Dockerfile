@@ -50,6 +50,14 @@ RUN if [ "$VENDOR_EMBEDDINGS_MODEL" = "true" ]; then \
 FROM base AS runtime
 ENV NODE_ENV=production
 
+# Only the final stage's labels reach the published image. `image.source` is the
+# one that matters operationally: GHCR uses it to link the package to this
+# repository, and an unlinked package shows no source, carries no README and
+# does not inherit the repository's permissions.
+LABEL org.opencontainers.image.source="https://github.com/rbrasier/wayfinder"
+LABEL org.opencontainers.image.description="Wayfinder — an AI-guided workflow agent for document-heavy processes"
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
+
 # Migrations are a deployment's own step, not a side effect of web boot. Both
 # cloud guides and docker-compose.prod.yml run the `migrate` command first.
 ENV RUN_MIGRATIONS_ON_START=false

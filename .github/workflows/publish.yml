@@ -28,6 +28,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
+          # The release-line check below asks which branches contain the tag.
+          # The default shallow checkout fetches the tag alone and creates no
+          # remote-tracking branches, so that question has no answer and
+          # `latest` would never move.
+          fetch-depth: 0
 
       - name: Resolve version and release line
         id: resolve
@@ -46,7 +51,10 @@ jobs:
 
           # `latest` tracks the current release line only. Pointing it at main
           # would hand unfinished work to anyone who omitted a tag (ADR-046 §2).
-          BRANCHES="$(git branch -r --contains "$GIT_TAG" || true)"
+          # Not masked with `|| true`: an empty result must mean "the tag is on
+          # no release branch", never "the lookup failed", or a broken checkout
+          # would silently degrade into skipping `latest`.
+          BRANCHES="$(git branch -r --contains "$GIT_TAG")"
           if echo "$BRANCHES" | grep -q "origin/release/"; then
             echo "publish_latest=true" >> "$GITHUB_OUTPUT"
           else
