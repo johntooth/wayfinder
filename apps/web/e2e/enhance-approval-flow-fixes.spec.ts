@@ -42,8 +42,14 @@ test.describe("the approval selector always names the approver", () => {
 
     // Always rendered: a first-level node with no roleHint used to show nothing
     // at all where the approver's identity belonged.
+    //
+    // The gate's outer container paints before ApproverPicker's suggest query
+    // resolves, and the picker shows a spinner until it does — so the gate can
+    // be visible while this child does not exist yet. That round-trip can
+    // outlast the default 5s expect timeout on a loaded CI runner, which is
+    // what made this assertion flaky rather than any change in the markup.
     const stage = gate.locator("[data-approver-stage]");
-    await expect(stage).toBeVisible();
+    await expect(stage).toBeVisible({ timeout: 20_000 });
     await expect(stage).toContainText(/supervisor|approver/i);
   });
 
