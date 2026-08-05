@@ -19,7 +19,7 @@ export function MilestonePill({
   if (documentState === "no_template") {
     return (
       <div className="my-3 flex justify-center">
-        <div className="inline-flex items-center gap-1.5 rounded-full border border-[#dedad2] bg-[#efede8] px-3 py-1 text-[11px] font-semibold text-[#6d6a65]">
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-[#e7e3db] bg-[#f5f3ee] px-3 py-1 text-[11px] font-semibold text-[#666055]">
           <span>📄</span>
           <span>Step complete — {nodeName} · No template configured</span>
         </div>
@@ -30,7 +30,7 @@ export function MilestonePill({
   if (documentState === "failed") {
     return (
       <div className="my-3 flex flex-col items-center gap-1">
-        <div className="inline-flex items-center gap-1.5 rounded-full border border-[#e8b87c] bg-[#fdf3e3] px-3 py-1 text-[11px] font-semibold text-[#9b6215]">
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-[#e6d0ab] bg-[#f6e9d8] px-3 py-1 text-[11px] font-semibold text-[#8a5a1d]">
           <span>⚠️</span>
           <span>Document generation failed — {nodeName}</span>
           {onRegenerate && (
@@ -46,7 +46,7 @@ export function MilestonePill({
   if (documentState === "generating") {
     return (
       <div className="my-3 flex justify-center">
-        <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c5d0f7] bg-[#eef1fc] px-3 py-1 text-[11px] font-semibold text-[#3a5fd9]">
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c3cef2] bg-[#eaeefb] px-3 py-1 text-[11px] font-semibold text-[#2f56d3]">
           <Spinner />
           <span>Generating document — {nodeName}</span>
         </div>
@@ -56,7 +56,7 @@ export function MilestonePill({
 
   return (
     <div className="my-3 flex justify-center">
-      <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c0e8d5] bg-[#eaf6f0] px-3 py-[4px] text-[11px] font-semibold text-[#247c53]">
+      <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c0e8d5] bg-[#e3efe5] px-3 py-[4px] text-[11px] font-semibold text-[#1f6b4d]">
         <svg viewBox="0 0 12 12" width="12" height="12" className="shrink-0">
           <circle cx="6" cy="6" r="6" fill="currentColor" />
           <path d="M3.5 6l2 2 3-3" stroke="white" strokeWidth="1.2" fill="none" />
@@ -95,7 +95,7 @@ export function CrossCheckingBadge({ documents = [] }: { documents?: string[] })
 
   return (
     <div className="my-3 flex justify-center">
-      <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c5d0f7] bg-[#eef1fc] px-3 py-1 text-[11px] font-semibold text-[#3a5fd9]">
+      <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c3cef2] bg-[#eaeefb] px-3 py-1 text-[11px] font-semibold text-[#2f56d3]">
         <Spinner />
         <span>{label}</span>
       </div>
@@ -110,7 +110,7 @@ export function CrossCheckingBadge({ documents = [] }: { documents?: string[] })
 export function GeneratingDocumentBadge() {
   return (
     <div className="my-3 flex justify-center">
-      <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c5d0f7] bg-[#eef1fc] px-3 py-1 text-[11px] font-semibold text-[#3a5fd9]">
+      <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c3cef2] bg-[#eaeefb] px-3 py-1 text-[11px] font-semibold text-[#2f56d3]">
         <Spinner />
         <span>Generating document…</span>
       </div>
@@ -125,7 +125,7 @@ export function GeneratingDocumentBadge() {
 export function AdvancingBadge() {
   return (
     <div className="my-3 flex justify-center">
-      <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c5d0f7] bg-[#eef1fc] px-3 py-1 text-[11px] font-semibold text-[#3a5fd9]">
+      <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c3cef2] bg-[#eaeefb] px-3 py-1 text-[11px] font-semibold text-[#2f56d3]">
         <Spinner />
         <span>Advancing…</span>
       </div>
@@ -136,7 +136,7 @@ export function AdvancingBadge() {
 export function FlowCompletePill() {
   return (
     <div className="my-4 flex justify-center">
-      <div className="inline-flex items-center gap-2 rounded-full border border-[#c0e8d5] bg-[#eaf6f0] px-4 py-[6px] text-[12px] font-semibold text-[#247c53]">
+      <div className="inline-flex items-center gap-2 rounded-full border border-[#c0e8d5] bg-[#e3efe5] px-4 py-[6px] text-[12px] font-semibold text-[#1f6b4d]">
         <svg viewBox="0 0 16 16" width="16" height="16" className="shrink-0">
           <circle cx="8" cy="8" r="8" fill="currentColor" />
           <path d="M4.5 8l2.5 2.5 4.5-4.5" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />

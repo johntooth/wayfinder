@@ -102,14 +102,14 @@ function ValueCell({
   if (!field) {
     return (
       <div className="flex min-w-0 items-start justify-between gap-[8px]">
-        <span className="min-w-0 text-[#b6b1a8]">—</span>
+        <span className="min-w-0 text-[#c9c3b5]">—</span>
       </div>
     );
   }
   return (
     <div className="flex min-w-0 items-start justify-between gap-[8px]">
       <span className="line-clamp-3 min-w-0 break-words" title={field.value || undefined}>
-        {field.value || <span className="text-[#b6b1a8]">—</span>}
+        {field.value || <span className="text-[#c9c3b5]">—</span>}
       </span>
       <span className="mt-[4px]">
         <ConfidenceDot field={field} recordLabel={record.label} onInfo={() => onInfo(field)} />
@@ -192,7 +192,7 @@ export function ResultGrid({
             className="max-w-[240px]"
             aria-label="Filter records"
           />
-          <label className="flex items-center gap-[6px] text-[13px] text-[#5a5650]">
+          <label className="flex items-center gap-[6px] text-[13px] text-[#5c574c]">
             <input
               type="checkbox"
               checked={exceptionsOnly}
@@ -205,14 +205,14 @@ export function ResultGrid({
 
       <div
         ref={scrollRef}
-        className="overflow-x-auto rounded-[10px] border border-[#e5e1d8] bg-white"
+        className="overflow-x-auto rounded-[10px] border border-[#e7e3db] bg-white"
       >
         <table
           className="w-full border-collapse text-[13px]"
           data-testid="results-table"
         >
           <thead>
-            <tr className="border-b border-[#e5e1d8] text-left text-[11px] uppercase tracking-[0.05em] text-[#6d6a65]">
+            <tr className="border-b border-[#e7e3db] text-left text-[11px] uppercase tracking-[0.05em] text-[#666055]">
               <th scope="col" className="w-[36px] px-[8px] py-[8px]">
                 <span className="sr-only">Expand</span>
               </th>
@@ -259,7 +259,7 @@ export function ResultGrid({
             ))}
             {rows.length === 0 && awaiting.length === 0 ? (
               <tr>
-                <td colSpan={columnCount} className="px-[12px] py-[16px] text-[#8a857c]">
+                <td colSpan={columnCount} className="px-[12px] py-[16px] text-[#736d5f]">
                   No records match the current filter.
                 </td>
               </tr>
@@ -279,8 +279,8 @@ export function ResultGrid({
                 <span className="font-semibold">{BAND_LABEL[confidenceBand(rationale.confidence)]}</span>{" "}
                 ({Math.round(rationale.confidence * 100)}%)
               </p>
-              <p className="text-[#5a5650]">{rationale.rationale || "No rationale provided."}</p>
-              <p className="text-[11px] text-[#8a857c]">
+              <p className="text-[#5c574c]">{rationale.rationale || "No rationale provided."}</p>
+              <p className="text-[11px] text-[#736d5f]">
                 Confidence is a self-assessed triage signal, not a guarantee — always verify amber and
                 red values.
               </p>
@@ -300,7 +300,7 @@ export function ResultGrid({
               onChange={(event) => setDraftValue(event.target.value)}
               aria-label="Corrected value"
             />
-            <p className="text-[11px] text-[#8a857c]">
+            <p className="text-[11px] text-[#736d5f]">
               Your correction is recorded in the audit trail. The AI is not re-run.
             </p>
           </DialogBody>
@@ -324,18 +324,18 @@ export function ResultGrid({
 function PendingRow({ document, columnCount }: { document: ResultDocument; columnCount: number }) {
   const extracting = document.status === "extracting";
   return (
-    <tr className="border-b border-[#e5e1d8] bg-[#fbfaf7]" data-testid="pending-row">
+    <tr className="border-b border-[#e7e3db] bg-[#fbfaf7]" data-testid="pending-row">
       <td className="px-[8px] py-[6px] align-middle">
-        <Spinner className="h-[13px] w-[13px] text-[#8a857c]" />
+        <Spinner className="h-[13px] w-[13px] text-[#736d5f]" />
       </td>
       {/* The field columns are empty until this document is read, so the name
           spans them rather than trailing a row of em-dashes. */}
-      <td colSpan={columnCount - 1} className="px-[12px] py-[6px] align-top text-[#6d6a65]">
+      <td colSpan={columnCount - 1} className="px-[12px] py-[6px] align-top text-[#666055]">
         <div className="flex min-w-0 items-start gap-[6px]">
           <span className="line-clamp-3 min-w-0 break-words" title={document.treePath}>
             {document.filename}
           </span>
-          <span className="mt-[2px] inline-block shrink-0 rounded-[4px] bg-[#eef1fc] px-[5px] py-[1px] text-[10px] font-semibold text-[#3a5fd9]">
+          <span className="mt-[2px] inline-block shrink-0 rounded-[4px] bg-[#eaeefb] px-[5px] py-[1px] text-[10px] font-semibold text-[#2f56d3]">
             {extracting ? "Processing" : "Queued"}
           </span>
         </div>
@@ -376,7 +376,7 @@ function ResultRow({
   return (
     <>
       <tr
-        className={`border-b border-[#e5e1d8] ${isExpanded ? "bg-[#f7f9ff]" : "hover:bg-[#faf9f6]"}`}
+        className={`border-b border-[#e7e3db] ${isExpanded ? "bg-[#f7f9ff]" : "hover:bg-[#faf9f6]"}`}
         data-testid="result-row"
       >
         <td className="px-[8px] py-[6px] align-middle">
@@ -386,31 +386,31 @@ function ResultRow({
             aria-expanded={isExpanded}
             aria-label={`${isExpanded ? "Collapse" : "Expand"} ${record.label}`}
             data-testid="expand-record"
-            className="flex h-[20px] w-[20px] items-center justify-center rounded-[5px] border border-[#dedad2] text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+            className="flex h-[20px] w-[20px] items-center justify-center rounded-[5px] border border-[#e7e3db] text-[#666055] transition-colors hover:bg-[#f5f3ee] hover:text-[#1c1b19]"
           >
             {isExpanded ? <ChevronDown className="h-[13px] w-[13px]" /> : <ChevronRight className="h-[13px] w-[13px]" />}
           </button>
         </td>
-        <td className="px-[12px] py-[6px] align-top font-medium text-[#3a352e]">
+        <td className="px-[12px] py-[6px] align-top font-medium text-[#3d382f]">
           <div className="flex min-w-0 items-start gap-[6px]">
             <span className="line-clamp-3 min-w-0 break-words" title={record.label}>
               {record.label}
             </span>
             {isException ? (
-              <span className="mt-[2px] inline-block shrink-0 rounded-[4px] bg-[#fdf3e3] px-[5px] py-[1px] text-[10px] font-semibold text-[#9b6215]">
+              <span className="mt-[2px] inline-block shrink-0 rounded-[4px] bg-[#f6e9d8] px-[5px] py-[1px] text-[10px] font-semibold text-[#8a5a1d]">
                 Exception
               </span>
             ) : null}
           </div>
         </td>
         {columnKeys.map((key) => (
-          <td key={key} className="px-[12px] py-[6px] align-top text-[#3a352e]">
+          <td key={key} className="px-[12px] py-[6px] align-top text-[#3d382f]">
             <ValueCell record={record} field={fieldValue(record, key)} onInfo={onInfo} />
           </td>
         ))}
       </tr>
       {isExpanded ? (
-        <tr className="border-b border-[#e5e1d8] bg-[#fbfaf7]" data-testid="result-row-detail">
+        <tr className="border-b border-[#e7e3db] bg-[#fbfaf7]" data-testid="result-row-detail">
           <td colSpan={columnCount} className="p-0">
             <div
               className="sticky left-0 w-full px-[16px] py-[14px]"
@@ -459,10 +459,10 @@ function RecordDetail({
   return (
     <div className="flex flex-col gap-[14px]">
       <div className="flex flex-wrap items-baseline gap-x-[10px] gap-y-[2px]">
-        <h4 className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#6d6a65]">
+        <h4 className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#666055]">
           {record.label}
         </h4>
-        <span className="text-[11px] text-[#8a857c]">
+        <span className="text-[11px] text-[#736d5f]">
           {Math.round(aggregateConfidence(record) * 100)}% overall confidence
         </span>
       </div>
@@ -472,7 +472,7 @@ function RecordDetail({
           data-testid="record-exception-detail"
           className="rounded-[8px] border border-[#f0d9ae] bg-[#fdf8ee] px-[12px] py-[10px]"
         >
-          <h5 className="flex items-center gap-[6px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#9b6215]">
+          <h5 className="flex items-center gap-[6px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#8a5a1d]">
             <AlertTriangle className="h-[12px] w-[12px] shrink-0" />
             Why this is an exception
           </h5>
@@ -485,23 +485,23 @@ function RecordDetail({
       ) : null}
 
       <div>
-        <h5 className="mb-[6px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#8a857c]">
+        <h5 className="mb-[6px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#736d5f]">
           Source files
         </h5>
         {sources.length === 0 ? (
-          <p className="text-[12px] text-[#8a857c]">No source files recorded for this record.</p>
+          <p className="text-[12px] text-[#736d5f]">No source files recorded for this record.</p>
         ) : (
           <ul className="flex flex-col gap-[4px]">
             {sources.map((document) => (
               <li key={document.id} className="flex flex-wrap items-center gap-[6px] text-[12px]">
-                <span className="font-medium text-[#3a352e]">{document.filename}</span>
-                <span className="text-[#8a857c]">{document.treePath}</span>
+                <span className="font-medium text-[#3d382f]">{document.filename}</span>
+                <span className="text-[#736d5f]">{document.treePath}</span>
                 {options.documentHref ? (
                   <a
                     href={options.documentHref(document.id)}
                     download
                     aria-label={`Download ${document.filename}`}
-                    className="text-[#8a857c] hover:text-[#3a5fd9]"
+                    className="text-[#736d5f] hover:text-[#2f56d3]"
                   >
                     <Download className="h-[12px] w-[12px]" />
                   </a>
@@ -512,7 +512,7 @@ function RecordDetail({
                   </span>
                 ) : null}
                 {exceptionFileIds.includes(document.id) ? (
-                  <span className="rounded-[4px] bg-[#fdf3e3] px-[5px] py-[1px] text-[10px] font-semibold text-[#9b6215]">
+                  <span className="rounded-[4px] bg-[#f6e9d8] px-[5px] py-[1px] text-[10px] font-semibold text-[#8a5a1d]">
                     No record
                   </span>
                 ) : null}
@@ -523,7 +523,7 @@ function RecordDetail({
       </div>
 
       <div>
-        <h5 className="mb-[6px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#8a857c]">
+        <h5 className="mb-[6px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#736d5f]">
           Extracted fields
         </h5>
         <div className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-[12px] gap-y-[6px] sm:grid-cols-[max-content_minmax(0,1fr)_max-content_minmax(0,1fr)]">
@@ -590,20 +590,20 @@ function DetailField({
 }) {
   return (
     <>
-      <span className="text-[12px] text-[#8a857c]">{field.key}</span>
-      <span className="flex min-w-0 items-start gap-[6px] text-[12px] text-[#3a352e]">
+      <span className="text-[12px] text-[#736d5f]">{field.key}</span>
+      <span className="flex min-w-0 items-start gap-[6px] text-[12px] text-[#3d382f]">
         <span className="mt-[4px]">
           <ConfidenceDot field={field} recordLabel={record.label} onInfo={() => onInfo(field)} />
         </span>
         <span className="min-w-0 break-words">
-          {field.value || <span className="text-[#b6b1a8]">—</span>}
+          {field.value || <span className="text-[#c9c3b5]">—</span>}
         </span>
         {options.editing ? (
           <button
             type="button"
             aria-label={`Edit ${field.key} on ${record.label}`}
             onClick={() => onEdit(record, field)}
-            className="mt-[2px] shrink-0 text-[#8a857c] hover:text-[#3a352e]"
+            className="mt-[2px] shrink-0 text-[#736d5f] hover:text-[#3d382f]"
           >
             <Pencil className="h-[12px] w-[12px]" />
           </button>

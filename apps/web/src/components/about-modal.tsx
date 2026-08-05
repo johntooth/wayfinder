@@ -22,9 +22,9 @@ function AboutLinkButton({ link }: { link: AboutLink }) {
     <a
       href={link.url}
       {...(isExternal ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-      className="flex items-center gap-2 rounded-[8px] border border-[#dedad2] bg-white px-3 py-2 text-[13px] font-medium text-[#1a1814] transition-colors hover:border-[#3a5fd9] hover:bg-[#eef1fc] hover:text-[#3a5fd9]"
+      className="flex items-center gap-2 rounded-[8px] border border-[#e7e3db] bg-white px-3 py-2 text-[13px] font-medium text-[#1c1b19] transition-colors hover:border-[#2f56d3] hover:bg-[#eaeefb] hover:text-[#2f56d3]"
     >
-      <Icon className="h-[14px] w-[14px] shrink-0 text-[#6d6a65]" />
+      <Icon className="h-[14px] w-[14px] shrink-0 text-[#666055]" />
       {link.label}
     </a>
   );
@@ -42,23 +42,23 @@ export function AboutModal({ open, onClose }: { open: boolean; onClose: () => vo
         </DialogHeader>
         <DialogBody>
           <div className="flex items-center gap-3">
-            <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[11px] bg-[#3a5fd9] text-[18px] font-bold text-white">
+            <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[11px] bg-[#2f56d3] text-[18px] font-bold text-white">
               W
             </div>
             <div>
-              <p className="text-[14px] font-semibold text-[#1a1814]">Wayfinder</p>
-              <p className="font-mono text-[12px] text-[#6d6a65]">Version {APP_VERSION}</p>
+              <p className="text-[14px] font-semibold text-[#1c1b19]">Wayfinder</p>
+              <p className="font-mono text-[12px] text-[#666055]">Version {APP_VERSION}</p>
             </div>
           </div>
 
-          <p className="text-[13px] leading-[1.55] text-[#5a5650]">
+          <p className="text-[13px] leading-[1.55] text-[#5c574c]">
             Wayfinder is an AI-guided workflow agent for document-heavy processes. It walks you
             through a defined process step by step, gathering what it needs, producing the documents
             the process calls for, and recording confidence and an audit trail as it goes.
           </p>
 
           {links.length > 0 && (
-            <div className="flex flex-wrap gap-2 border-t border-[#dedad2] pt-3">
+            <div className="flex flex-wrap gap-2 border-t border-[#e7e3db] pt-3">
               {links.map((link) => (
                 <AboutLinkButton key={`${link.label}-${link.url}`} link={link} />
               ))}

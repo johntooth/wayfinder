@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/empty-state";
 import { TableSkeletonRows } from "@/components/skeleton/card-skeleton";
 import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/flow-metadata-dialog";
 import { ShareFlowDialog } from "@/components/flow/share-flow-dialog";
+import { AppHeader } from "@/components/layout/app-header";
 import { usePermissions } from "@/lib/use-permissions";
 import { trpc } from "@/trpc/client";
 
@@ -72,10 +73,16 @@ export function UserFlowsContent() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#dedad2] bg-white pl-5 pr-[52px]">
-        <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1a1814]">Flows</h1>
-        {canCreate && <Button onClick={() => setCreating(true)}>New Flow</Button>}
-      </header>
+      <AppHeader
+        title="Flows"
+        actions={
+          canCreate ? (
+            <Button size="sm" onClick={() => setCreating(true)}>
+              New flow
+            </Button>
+          ) : undefined
+        }
+      />
 
       <div className="flex-1 overflow-auto">
         <div className="container py-8">
@@ -109,7 +116,7 @@ export function UserFlowsContent() {
                         {flow.icon && <span className="mr-1">{flow.icon}</span>}
                         {flow.name}
                       </TableCell>
-                      <TableCell className="max-w-xs truncate text-[#6d6a65]">
+                      <TableCell className="max-w-xs truncate text-[#666055]">
                         {flow.description ?? "—"}
                       </TableCell>
                       <TableCell>
@@ -117,7 +124,7 @@ export function UserFlowsContent() {
                           {flow.status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-[13px] text-[#6d6a65]">
+                      <TableCell className="text-[13px] text-[#666055]">
                         {new Date(flow.updatedAt).toLocaleDateString()}
                       </TableCell>
                       <TableCell className="space-x-2 text-right">

@@ -68,7 +68,7 @@ export interface NodeConfigModalAutoProps {
 }
 
 const EXECUTOR_SELECT_CLASS =
-  "flex h-10 w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#3a5fd9] focus:bg-white focus:outline-none";
+  "flex h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none";
 
 export function NodeConfigModalAuto({
   values,
@@ -120,8 +120,8 @@ export function NodeConfigModalAuto({
               key={executor}
               className={`flex flex-1 cursor-pointer items-center justify-center rounded-[9px] border px-3 py-2 text-[13px] transition-colors ${
                 values.executor === executor
-                  ? "border-[#7c3aed] bg-[#f3eefc] font-medium text-[#7c3aed]"
-                  : "border-[#dedad2] text-[#5a5650] hover:bg-[#efede8]"
+                  ? "border-[#5b3fa8] bg-[#f3eefc] font-medium text-[#5b3fa8]"
+                  : "border-[#e7e3db] text-[#5c574c] hover:bg-[#f5f3ee]"
               }`}
             >
               <input
@@ -141,9 +141,9 @@ export function NodeConfigModalAuto({
         <div className="space-y-1">
           <Label htmlFor="auto-workflow">n8n workflow</Label>
           {workflowsQuery.isLoading ? (
-            <p className="text-[12px] text-[#6d6a65]">Loading workflows…</p>
+            <p className="text-[12px] text-[#666055]">Loading workflows…</p>
           ) : workflowsQuery.error ? (
-            <p className="text-[12px] text-[#c2385a]">
+            <p className="text-[12px] text-[#a8324c]">
               Could not load workflows. Configure an n8n instance in Admin → Settings.
             </p>
           ) : (
@@ -163,7 +163,7 @@ export function NodeConfigModalAuto({
             </select>
           )}
           {selectedWorkflow && !selectedWorkflow.webhookUrl && (
-            <p className="text-[12px] text-[#c2385a]">
+            <p className="text-[12px] text-[#a8324c]">
               This workflow has no webhook trigger and cannot be called automatically.
             </p>
           )}
@@ -174,11 +174,11 @@ export function NodeConfigModalAuto({
         <>
           <div className="space-y-2" role="group" aria-labelledby="ncm-request-fields">
             <FieldGroupLabel id="ncm-request-fields">Add request fields</FieldGroupLabel>
-            <p className="text-[12px] text-[#6d6a65]">
+            <p className="text-[12px] text-[#666055]">
               Choose where each value comes from: the AI, an earlier step, a typed value, or none.
             </p>
             {schemaQuery.isLoading ? (
-              <p className="text-[12px] text-[#6d6a65]">Reading the workflow schema…</p>
+              <p className="text-[12px] text-[#666055]">Reading the workflow schema…</p>
             ) : (
               <>
                 <FieldValueList
@@ -188,12 +188,12 @@ export function NodeConfigModalAuto({
                   priorStepFields={priorStepFields}
                 />
                 {derivedInputs.length === 0 && (
-                  <p className="rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3 text-[12px] text-[#6d6a65]">
+                  <p className="rounded-[9px] border border-dashed border-[#e7e3db] bg-[#faf9f7] p-3 text-[12px] text-[#666055]">
                     No inputs found for this workflow
                     {schema && !schema.hasExecutions ? " (it hasn't run yet)" : ""}.{" "}
                     <button
                       type="button"
-                      className="font-medium text-[#3a5fd9] underline"
+                      className="font-medium text-[#2f56d3] underline"
                       onClick={() => openInfo("inputs")}
                     >
                       More info
@@ -219,7 +219,7 @@ export function NodeConfigModalAuto({
                     <button
                       type="button"
                       aria-label="Remove field"
-                      className="mt-1 flex h-7 w-7 items-center justify-center rounded-md text-[#c2385a] transition-colors hover:bg-[#fdf3f5]"
+                      className="mt-1 flex h-7 w-7 items-center justify-center rounded-md text-[#a8324c] transition-colors hover:bg-[#fdf3f5]"
                       onClick={() => removeCustomField(field.id)}
                     >
                       <X size={14} />
@@ -228,18 +228,18 @@ export function NodeConfigModalAuto({
                 ))}
                 <button
                   type="button"
-                  className="text-[13px] font-medium text-[#3a5fd9] hover:underline"
+                  className="text-[13px] font-medium text-[#2f56d3] hover:underline"
                   onClick={addCustomField}
                 >
                   + Add field
                 </button>
                 {advancedDerivedInputs.length > 0 && (
                   <details className="group mt-1">
-                    <summary className="cursor-pointer list-none text-[13px] font-medium text-[#6d6a65] hover:text-[#605c57] [&::-webkit-details-marker]:hidden">
+                    <summary className="cursor-pointer list-none text-[13px] font-medium text-[#666055] hover:text-[#605c57] [&::-webkit-details-marker]:hidden">
                       <span className="group-open:hidden">▶ Advanced fields</span>
                       <span className="hidden group-open:inline">▼ Advanced fields</span>
                     </summary>
-                    <div className="mt-2 space-y-2 rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] p-3">
+                    <div className="mt-2 space-y-2 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] p-3">
                       <FieldValueList
                         fields={advancedDerivedInputs}
                         values={values.requestFieldValues}
@@ -255,20 +255,20 @@ export function NodeConfigModalAuto({
 
           <div className="space-y-1" role="group" aria-labelledby="ncm-expected-outputs">
             <FieldGroupLabel id="ncm-expected-outputs">Expected outputs (from n8n)</FieldGroupLabel>
-            <p className="text-[12px] text-[#6d6a65]">
+            <p className="text-[12px] text-[#666055]">
               Returned by the workflow and stored as this step&apos;s output.
             </p>
             {schemaQuery.isLoading ? (
-              <p className="text-[12px] text-[#6d6a65]">Reading the workflow schema…</p>
+              <p className="text-[12px] text-[#666055]">Reading the workflow schema…</p>
             ) : derivedOutputs.length > 0 ? (
               <ReadOnlyFieldList fields={derivedOutputs} emptyText="" />
             ) : (
-              <p className="rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3 text-[12px] text-[#6d6a65]">
+              <p className="rounded-[9px] border border-dashed border-[#e7e3db] bg-[#faf9f7] p-3 text-[12px] text-[#666055]">
                 No outputs found for this workflow
                 {schema && !schema.hasExecutions ? " (it hasn't run yet)" : ""}.{" "}
                 <button
                   type="button"
-                  className="font-medium text-[#3a5fd9] underline"
+                  className="font-medium text-[#2f56d3] underline"
                   onClick={() => openInfo("outputs")}
                 >
                   More info

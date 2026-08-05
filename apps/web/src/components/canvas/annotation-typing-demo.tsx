@@ -32,28 +32,28 @@ export function AnnotationTypingDemo() {
   }, [state]);
 
   return (
-    <div className="overflow-hidden rounded-[9px] border border-[#dedad2] bg-white shadow-sm">
-      <div className="flex items-center gap-1.5 border-b border-[#e6e3dc] bg-[#f7f6f3] px-3 py-1.5">
-        <span className="h-2 w-2 rounded-full bg-[#dedad2]" />
-        <span className="h-2 w-2 rounded-full bg-[#dedad2]" />
-        <span className="h-2 w-2 rounded-full bg-[#dedad2]" />
-        <span className="ml-1 text-[11px] text-[#6d6a65]">your-template.docx</span>
+    <div className="overflow-hidden rounded-[9px] border border-[#e7e3db] bg-white shadow-sm">
+      <div className="flex items-center gap-1.5 border-b border-[#ebe8e0] bg-[#faf9f7] px-3 py-1.5">
+        <span className="h-2 w-2 rounded-full bg-[#e7e3db]" />
+        <span className="h-2 w-2 rounded-full bg-[#e7e3db]" />
+        <span className="h-2 w-2 rounded-full bg-[#e7e3db]" />
+        <span className="ml-1 text-[11px] text-[#666055]">your-template.docx</span>
       </div>
 
       <div className="space-y-2 p-4">
-        <p className="text-[13px] font-semibold text-[#1a1814]">Supplier Agreement</p>
+        <p className="text-[13px] font-semibold text-[#1c1b19]">Supplier Agreement</p>
         {DEMO_LINES.map((line, index) => {
           const typed = animate ? typedTagFor(state, index) : line.tag;
           const isTyping = animate && index === state.lineIndex;
           return (
             <p key={line.caption} className="flex items-baseline gap-2 text-[12px]">
-              <span className="w-[7.5rem] shrink-0 text-[#5a5650]">{line.caption}</span>
-              <span className="min-w-0 font-mono text-[#3a5fd9]">
+              <span className="w-[7.5rem] shrink-0 text-[#5c574c]">{line.caption}</span>
+              <span className="min-w-0 font-mono text-[#2f56d3]">
                 {typed}
                 {isTyping && (
                   <span
                     aria-hidden
-                    className="ml-px inline-block h-[1em] w-[1px] animate-pulse bg-[#3a5fd9] align-text-bottom"
+                    className="ml-px inline-block h-[1em] w-[1px] animate-pulse bg-[#2f56d3] align-text-bottom"
                   />
                 )}
               </span>

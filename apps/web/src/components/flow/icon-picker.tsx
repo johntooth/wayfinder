@@ -166,7 +166,7 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
           setQuery("");
           setOpen((prev) => !prev);
         }}
-        className="text-[12px] font-medium text-[#3a5fd9] transition-colors hover:text-[#2e4bb0]"
+        className="text-[12px] font-medium text-[#2f56d3] transition-colors hover:text-[#1f3ea8]"
       >
         More…
       </button>
@@ -177,7 +177,7 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
         // overflow-hidden, and the icon field is the last row, so a downward
         // panel would be cut off. Right-aligned so the "More…" trigger sits at
         // the panel's bottom-right corner.
-        <div className="absolute right-0 bottom-full z-50 mb-1.5 w-[280px] rounded-[12px] border border-[#dedad2] bg-white p-2 shadow-[0_6px_24px_rgba(0,0,0,.14)]">
+        <div className="absolute right-0 bottom-full z-50 mb-1.5 w-[280px] rounded-[12px] border border-[#e7e3db] bg-white p-2 shadow-[0_6px_24px_rgba(0,0,0,.14)]">
           <div className="relative mb-2">
             <Search
               size={13}
@@ -189,11 +189,11 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search icons…"
-              className="h-8 w-full rounded-[8px] border border-[#dedad2] bg-[#f7f6f3] pl-7 pr-2 text-[12px] text-[#1a1814] focus:border-[#3a5fd9] focus:bg-white focus:outline-none"
+              className="h-8 w-full rounded-[8px] border border-[#e7e3db] bg-[#faf9f7] pl-7 pr-2 text-[12px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none"
             />
           </div>
           {results.length === 0 ? (
-            <p className="px-2 py-4 text-center text-[12px] text-[#6d6a65]">No icons match “{query}”.</p>
+            <p className="px-2 py-4 text-center text-[12px] text-[#666055]">No icons match “{query}”.</p>
           ) : (
             <div className="grid max-h-[200px] grid-cols-7 gap-1 overflow-y-auto">
               {results.map((entry) => (
@@ -206,7 +206,7 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
                     setOpen(false);
                   }}
                   className={`flex h-8 w-8 items-center justify-center rounded-[8px] text-lg transition-colors ${
-                    value === entry.icon ? "bg-[#eef1fc] ring-1 ring-[#3a5fd9]" : "hover:bg-[#efede8]"
+                    value === entry.icon ? "bg-[#eaeefb] ring-1 ring-[#2f56d3]" : "hover:bg-[#f5f3ee]"
                   }`}
                 >
                   {entry.icon}

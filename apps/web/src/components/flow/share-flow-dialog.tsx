@@ -44,7 +44,7 @@ export function ShareFlowDialog({ open, flowId, flowName, onClose }: ShareFlowDi
           <DialogCloseButton />
         </DialogHeader>
         <DialogBody>
-          <p className="text-[13px] leading-[1.55] text-[#5a5650]">
+          <p className="text-[13px] leading-[1.55] text-[#5c574c]">
             Send this link to anyone with access to start a new chat using this flow.
           </p>
           <div className="mt-3 flex items-center gap-2">
@@ -52,7 +52,7 @@ export function ShareFlowDialog({ open, flowId, flowName, onClose }: ShareFlowDi
               type="text"
               readOnly
               value={url}
-              className="flex h-10 flex-1 rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 text-[13px] text-[#1a1814]"
+              className="flex h-10 flex-1 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 text-[13px] text-[#1c1b19]"
             />
             <Button type="button" variant="outline" onClick={handleCopy}>
               {copied ? <Check className="mr-1 h-3 w-3" /> : <Copy className="mr-1 h-3 w-3" />}

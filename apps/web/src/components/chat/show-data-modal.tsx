@@ -36,37 +36,37 @@ export function ShowDataModal({ open, sessionId, onClose }: ShowDataModalProps) 
         </DialogHeader>
         <DialogBody className="max-h-[70vh] space-y-2 overflow-y-auto">
           {stepDataQuery.isLoading ? (
-            <p className="text-[13px] text-[#6d6a65]">Loading…</p>
+            <p className="text-[13px] text-[#666055]">Loading…</p>
           ) : steps.length === 0 ? (
-            <p className="rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-4 text-center text-[13px] text-[#6d6a65]">
+            <p className="rounded-[9px] border border-dashed border-[#e7e3db] bg-[#faf9f7] p-4 text-center text-[13px] text-[#666055]">
               No steps have been completed yet.
             </p>
           ) : (
             steps.map((step) => (
               <details
                 key={step.nodeId}
-                className="group rounded-[9px] border border-[#dedad2] bg-white"
+                className="group rounded-[9px] border border-[#e7e3db] bg-white"
               >
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
                   <span className="flex min-w-0 items-center gap-2">
-                    <span className="text-[#6d6a65] transition-transform group-open:rotate-90">▶</span>
-                    <span className="truncate text-[13px] font-medium text-[#1a1814]">
+                    <span className="text-[#666055] transition-transform group-open:rotate-90">▶</span>
+                    <span className="truncate text-[13px] font-medium text-[#1c1b19]">
                       {step.stepNumber}. {step.stepName}
                     </span>
                   </span>
-                  <span className="shrink-0 text-[12px] text-[#6d6a65]">
+                  <span className="shrink-0 text-[12px] text-[#666055]">
                     {formatDate(step.completedAt)}
                   </span>
                 </summary>
-                <div className="border-t border-[#ece9e3] px-3 py-2.5">
+                <div className="border-t border-[#f0ede8] px-3 py-2.5">
                   {step.fields.length === 0 ? (
-                    <p className="text-[12px] text-[#6d6a65]">No data outputs for this step.</p>
+                    <p className="text-[12px] text-[#666055]">No data outputs for this step.</p>
                   ) : (
                     <table className="w-full border-collapse text-[12px]">
                       <thead>
-                        <tr className="text-left text-[#6d6a65]">
-                          <th className="border-b border-[#ece9e3] py-1.5 pr-3 font-medium">Field</th>
-                          <th className="border-b border-[#ece9e3] py-1.5 font-medium">Value</th>
+                        <tr className="text-left text-[#666055]">
+                          <th className="border-b border-[#f0ede8] py-1.5 pr-3 font-medium">Field</th>
+                          <th className="border-b border-[#f0ede8] py-1.5 font-medium">Value</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -79,10 +79,10 @@ export function ShowDataModal({ open, sessionId, onClose }: ShowDataModalProps) 
                             </tr>
                           ) : (
                             <tr key={field.key} className="align-top">
-                              <td className="border-b border-[#f1efea] py-1.5 pr-3 text-[#5a5650]">
+                              <td className="border-b border-[#f1efea] py-1.5 pr-3 text-[#5c574c]">
                                 {field.label}
                               </td>
-                              <td className="border-b border-[#f1efea] py-1.5 whitespace-pre-wrap text-[#1a1814]">
+                              <td className="border-b border-[#f1efea] py-1.5 whitespace-pre-wrap text-[#1c1b19]">
                                 {field.value || "—"}
                               </td>
                             </tr>
@@ -106,22 +106,22 @@ function GroupCell({ label, items }: { label: string; items: Array<Record<string
   return (
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[#5a5650]">{label}</span>
-        <span className="text-[11px] text-[#6d6a65]">
+        <span className="text-[#5c574c]">{label}</span>
+        <span className="text-[11px] text-[#666055]">
           {items.length} {items.length === 1 ? "item" : "items"}
         </span>
       </div>
       {table.columns.length === 0 ? (
-        <p className="text-[12px] text-[#6d6a65]">No items.</p>
+        <p className="text-[12px] text-[#666055]">No items.</p>
       ) : (
-        <div className="overflow-x-auto rounded-[7px] border border-[#ece9e3]">
+        <div className="overflow-x-auto rounded-[7px] border border-[#f0ede8]">
           <table className="w-full border-collapse text-[12px]">
             <thead>
-              <tr className="text-left text-[#6d6a65]">
+              <tr className="text-left text-[#666055]">
                 {table.columns.map((column) => (
                   <th
                     key={column.key}
-                    className="whitespace-nowrap border-b border-[#ece9e3] bg-[#f7f6f3] px-2 py-1.5 font-medium"
+                    className="whitespace-nowrap border-b border-[#f0ede8] bg-[#faf9f7] px-2 py-1.5 font-medium"
                   >
                     {column.label}
                   </th>
@@ -134,7 +134,7 @@ function GroupCell({ label, items }: { label: string; items: Array<Record<string
                   {row.map((cell, cellIndex) => (
                     <td
                       key={table.columns[cellIndex]!.key}
-                      className="whitespace-pre-wrap border-b border-[#f1efea] px-2 py-1.5 text-[#1a1814] last:border-b-0"
+                      className="whitespace-pre-wrap border-b border-[#f1efea] px-2 py-1.5 text-[#1c1b19] last:border-b-0"
                     >
                       {cell || "—"}
                     </td>

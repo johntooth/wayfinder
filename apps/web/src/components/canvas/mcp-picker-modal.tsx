@@ -57,14 +57,14 @@ export function McpPickerModal({
           <DialogCloseButton />
         </DialogHeader>
         <DialogBody className="space-y-3">
-          <p className="text-[12px] text-[#857f76]">
+          <p className="text-[12px] text-[#736d5f]">
             Let the AI call these tools mid-conversation. Register servers on the MCP Servers page.
           </p>
           {servers.length > 0 && (
             <div className="relative">
               <Search
                 size={14}
-                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#918d87]"
+                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#736d5f]"
               />
               <Input
                 value={query}
@@ -75,16 +75,16 @@ export function McpPickerModal({
             </div>
           )}
           {servers.length === 0 ? (
-            <p className="text-[13px] text-[#857f76]">No MCP servers available.</p>
+            <p className="text-[13px] text-[#736d5f]">No MCP servers available.</p>
           ) : filtered.length === 0 ? (
-            <p className="text-[13px] text-[#857f76]">No tools match “{query}”.</p>
+            <p className="text-[13px] text-[#736d5f]">No tools match “{query}”.</p>
           ) : (
-            <div className="max-h-[46vh] space-y-3 overflow-y-auto rounded-[9px] border border-[#dedad2] p-2.5">
+            <div className="max-h-[46vh] space-y-3 overflow-y-auto rounded-[9px] border border-[#e7e3db] p-2.5">
               {filtered.map((entry) => (
                 <div key={entry.server.id} className="space-y-1.5">
-                  <p className="text-[12px] font-medium text-[#5a5650]">{entry.server.label}</p>
+                  <p className="text-[12px] font-medium text-[#5c574c]">{entry.server.label}</p>
                   {entry.tools.length === 0 ? (
-                    <p className="text-[12px] text-[#857f76]">No tools discovered.</p>
+                    <p className="text-[12px] text-[#736d5f]">No tools discovered.</p>
                   ) : (
                     entry.tools.map((tool) => (
                       <label
@@ -100,7 +100,7 @@ export function McpPickerModal({
                         <span>
                           <span className="font-medium">{tool.name}</span>
                           {tool.description ? (
-                            <span className="text-[#857f76]"> — {tool.description}</span>
+                            <span className="text-[#736d5f]"> — {tool.description}</span>
                           ) : null}
                         </span>
                       </label>

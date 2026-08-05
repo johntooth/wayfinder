@@ -24,7 +24,7 @@ export function AdminOrganisationsContent() {
     <div className="h-full overflow-auto">
       <div className="container space-y-8 py-8">
         {enabledQuery.data === false && (
-          <div className="rounded-[10px] border border-[#f5d0a9] bg-[#fdf3e3] px-4 py-3 text-[13px] text-[#9b6215]">
+          <div className="rounded-[10px] border border-[#e6d0ab] bg-[#f6e9d8] px-4 py-3 text-[13px] text-[#8a5a1d]">
             Organisations are turned off. Enable them under{" "}
             <span className="font-medium">Configuration → Organisations</span> to surface these
             settings to your users.
@@ -75,11 +75,11 @@ function OrganisationsManagementCard() {
         ) : organisations.length === 0 ? (
           <p className="text-sm text-muted-foreground">No organisations yet.</p>
         ) : (
-          <ul className="divide-y divide-[#ece9e3]">
+          <ul className="divide-y divide-[#f0ede8]">
             {organisations.map((organisation) => (
               <li key={organisation.id} className="flex items-center justify-between gap-3 py-3">
                 <div className="min-w-0">
-                  <span className="font-medium text-[#1a1814]">{organisation.name}</span>
+                  <span className="font-medium text-[#1c1b19]">{organisation.name}</span>
                   <p className="text-xs text-muted-foreground">
                     {organisation.emailDomain
                       ? `Email domain: ${organisation.emailDomain}`
@@ -238,16 +238,16 @@ function MembershipAssignmentCard() {
         {users.length === 0 ? (
           <p className="text-sm text-muted-foreground">No users yet.</p>
         ) : (
-          <ul className="divide-y divide-[#ece9e3]">
+          <ul className="divide-y divide-[#f0ede8]">
             {users.map((user) => (
               <li key={user.id} className="flex items-center justify-between gap-3 py-2">
                 <div className="min-w-0">
-                  <span className="font-medium text-[#1a1814]">{user.name ?? user.email}</span>
+                  <span className="font-medium text-[#1c1b19]">{user.name ?? user.email}</span>
                   <p className="text-xs text-muted-foreground">{user.email}</p>
                 </div>
                 <select
                   aria-label={`Organisation for ${user.name ?? user.email}`}
-                  className="rounded-md border border-[#d6d2ca] bg-white px-2 py-1 text-sm"
+                  className="rounded-md border border-[#dedad2] bg-white px-2 py-1 text-sm"
                   value={user.organisationId ?? ""}
                   disabled={assignUser.isPending}
                   onChange={(event) =>
@@ -359,7 +359,7 @@ function ResolutionStrategyCard() {
           </label>
           <select
             id="resolution-strategy"
-            className="max-w-[320px] rounded-md border border-[#d6d2ca] bg-white px-2 py-1 text-sm"
+            className="max-w-[320px] rounded-md border border-[#dedad2] bg-white px-2 py-1 text-sm"
             value={strategy}
             onChange={(event) => setStrategy(event.target.value as Strategy)}
           >
@@ -393,7 +393,7 @@ function ResolutionStrategyCard() {
               </label>
               <select
                 id="on-unmatched"
-                className="max-w-[320px] rounded-md border border-[#d6d2ca] bg-white px-2 py-1 text-sm"
+                className="max-w-[320px] rounded-md border border-[#dedad2] bg-white px-2 py-1 text-sm"
                 value={onUnmatched}
                 onChange={(event) => setOnUnmatched(event.target.value as "unaffiliated" | "nominate")}
               >
@@ -420,7 +420,7 @@ function ResolutionStrategyCard() {
                   />
                   <select
                     aria-label={`Organisation for domain ${index + 1}`}
-                    className="rounded-md border border-[#d6d2ca] bg-white px-2 py-1 text-sm"
+                    className="rounded-md border border-[#dedad2] bg-white px-2 py-1 text-sm"
                     value={entry.organisationId}
                     onChange={(event) =>
                       setDomainMap((current) =>
@@ -467,7 +467,7 @@ function ResolutionStrategyCard() {
               </label>
               <select
                 id="nomination-mode"
-                className="max-w-[320px] rounded-md border border-[#d6d2ca] bg-white px-2 py-1 text-sm"
+                className="max-w-[320px] rounded-md border border-[#dedad2] bg-white px-2 py-1 text-sm"
                 value={nominationMode}
                 onChange={(event) =>
                   setNominationMode(event.target.value as "create_or_join" | "join_existing")

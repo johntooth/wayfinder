@@ -54,12 +54,12 @@ export function FlowSelector({
             onClick={() => onSelect(flow.flowId)}
             className={`rounded-[9px] border px-3 py-2 text-left transition-colors ${
               selected
-                ? "border-[#3a5fd9] bg-[#eef2fd]"
-                : "border-[#dedad2] bg-white hover:bg-[#f7f6f3]"
+                ? "border-[#2f56d3] bg-[#eef2fd]"
+                : "border-[#e7e3db] bg-white hover:bg-[#faf9f7]"
             }`}
           >
-            <span className="block text-[13px] font-medium text-[#1a1814]">{flow.flowName}</span>
-            <span className="block text-[12px] text-[#6d6a65]">
+            <span className="block text-[13px] font-medium text-[#1c1b19]">{flow.flowName}</span>
+            <span className="block text-[12px] text-[#666055]">
               {flow.sessionCount} session{flow.sessionCount === 1 ? "" : "s"}
             </span>
           </button>
@@ -87,9 +87,9 @@ export function FlowSelector({
           <button
             type="button"
             onClick={() => setShowSearch(true)}
-            className="rounded-[9px] border border-[#dedad2] bg-white px-3 py-2 text-left transition-colors hover:bg-[#f7f6f3]"
+            className="rounded-[9px] border border-[#e7e3db] bg-white px-3 py-2 text-left transition-colors hover:bg-[#faf9f7]"
           >
-            <span className="block text-[13px] font-medium text-[#6d6a65]">Search for more</span>
+            <span className="block text-[13px] font-medium text-[#666055]">Search for more</span>
           </button>
         ))}
     </div>
@@ -129,10 +129,10 @@ function FlowSearchInput({
           if (event.key === "Escape") onDismiss();
         }}
         placeholder="Search flows…"
-        className="rounded-[9px] border border-[#3a5fd9] bg-white px-3 py-2 text-[13px] text-[#1a1814] outline-none placeholder:text-[#726f6b]"
+        className="rounded-[9px] border border-[#2f56d3] bg-white px-3 py-2 text-[13px] text-[#1c1b19] outline-none placeholder:text-[#726f6b]"
       />
       {filtered.length > 0 && (
-        <ul className="absolute left-0 top-full z-10 mt-1 w-[240px] overflow-hidden rounded-[9px] border border-[#dedad2] bg-white shadow-md">
+        <ul className="absolute left-0 top-full z-10 mt-1 w-[240px] overflow-hidden rounded-[9px] border border-[#e7e3db] bg-white shadow-md">
           {filtered.map((flow) => (
             <li key={flow.flowId}>
               <button
@@ -143,10 +143,10 @@ function FlowSearchInput({
                   event.preventDefault();
                   onSelect(flow.flowId);
                 }}
-                className="w-full px-3 py-2 text-left hover:bg-[#f7f6f3]"
+                className="w-full px-3 py-2 text-left hover:bg-[#faf9f7]"
               >
-                <span className="block text-[13px] font-medium text-[#1a1814]">{flow.flowName}</span>
-                <span className="block text-[12px] text-[#6d6a65]">
+                <span className="block text-[13px] font-medium text-[#1c1b19]">{flow.flowName}</span>
+                <span className="block text-[12px] text-[#666055]">
                   {flow.sessionCount} session{flow.sessionCount === 1 ? "" : "s"}
                 </span>
               </button>

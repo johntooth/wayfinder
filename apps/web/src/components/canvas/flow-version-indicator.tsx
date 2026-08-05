@@ -23,7 +23,7 @@ export function FlowVersionIndicator({
           : `Version ${latestPublishedNumber} · published`}
       </Badge>
       <div className="h-4 w-px bg-border" />
-      <span className="text-[12px] text-[#5a5650]">Published: Version {latestPublishedNumber}</span>
+      <span className="text-[12px] text-[#5c574c]">Published: Version {latestPublishedNumber}</span>
     </div>
   );
 }

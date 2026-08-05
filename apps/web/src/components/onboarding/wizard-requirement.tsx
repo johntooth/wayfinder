@@ -30,10 +30,10 @@ export function WizardRequirement({
     >
       {satisfied ? (
         <>
-          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#1f8a4c] text-white">
+          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#1f6b4d] text-white">
             <Check className="h-3 w-3" />
           </span>
-          <span className="text-[#1f8a4c]">
+          <span className="text-[#1f6b4d]">
             {label} {REQUIREMENT_HINT[state]}
           </span>
         </>

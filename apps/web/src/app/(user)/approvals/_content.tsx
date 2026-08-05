@@ -6,6 +6,7 @@ import { ChevronRight, Stamp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DecisionModal } from "@/components/approvals/decision-modal";
 import { isDecided } from "@/components/approvals/approval-outcome";
+import { AppHeader } from "@/components/layout/app-header";
 import {
   ApprovalSubject,
   ApproverStage,
@@ -53,18 +54,18 @@ function ApprovalRow({
     <div
       data-approval-id={approval.approval.id}
       data-approval-status="pending"
-      className="flex flex-col gap-3 rounded-[14px] border-[1.5px] border-[#dedad2] bg-white p-[16px_18px]"
+      className="flex flex-col gap-3 rounded-[14px] border-[1.5px] border-[#e7e3db] bg-white p-[16px_18px]"
     >
       <div className="flex items-center gap-[14px]">
         <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[11px] bg-[#fef3e2] text-[#a65b05]">
           <Stamp size={18} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-semibold text-[#1a1814]">{approval.chatName}</p>
-          <p className="mt-[3px] truncate text-[12.5px] text-[#6d6a65]">
+          <p className="truncate text-[14px] font-semibold text-[#1c1b19]">{approval.chatName}</p>
+          <p className="mt-[3px] truncate text-[12.5px] text-[#666055]">
             {approval.originatorName ? <>From {approval.originatorName} · </> : null}
             Raised {new Date(approval.approval.createdAt).toLocaleString()} ·{" "}
-            <Link href={`/chats/${approval.sessionId}`} className="font-medium text-[#3a5fd9]">
+            <Link href={`/chats/${approval.sessionId}`} className="font-medium text-[#2f56d3]">
               Open session
             </Link>
           </p>
@@ -112,18 +113,18 @@ function DecidedRow({ approval }: { approval: ApprovalContext }) {
       href={`/approvals/${approval.approval.id}`}
       data-approval-id={approval.approval.id}
       data-approval-status={approval.approval.status}
-      className="flex items-center gap-3 rounded-[12px] border border-[#dedad2] bg-white px-4 py-3 hover:border-[#c9c4b9]"
+      className="flex items-center gap-3 rounded-[12px] border border-[#e7e3db] bg-white px-4 py-3 hover:border-[#c9c4b9]"
     >
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13.5px] font-semibold text-[#1a1814]">{approval.chatName}</p>
-        <p className="mt-[3px] truncate text-[12px] text-[#6d6a65]">
+        <p className="truncate text-[13.5px] font-semibold text-[#1c1b19]">{approval.chatName}</p>
+        <p className="mt-[3px] truncate text-[12px] text-[#666055]">
           {approval.approvalStepName}
           {decidedAt ? <> · {new Date(decidedAt).toLocaleString()}</> : null}
           {approval.decidedByName ? <> · by {approval.decidedByName}</> : null}
         </p>
       </div>
       <OutcomeChip approval={approval} />
-      <ChevronRight className="h-4 w-4 shrink-0 text-[#6d6a65]" />
+      <ChevronRight className="h-4 w-4 shrink-0 text-[#666055]" />
     </Link>
   );
 }
@@ -139,11 +140,9 @@ export function ApprovalsContent() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#dedad2] bg-white px-5">
-        <h1 className="text-[16px] font-bold text-[#1a1814]">Approvals</h1>
-      </header>
+      <AppHeader title="Approvals" />
 
-      <div className="flex shrink-0 gap-1 border-b border-[#dedad2] px-5">
+      <div className="flex shrink-0 gap-1 border-b border-[#e7e3db] px-5">
         {TABS.map(({ key, label }) => (
           <button
             key={key}
@@ -152,8 +151,8 @@ export function ApprovalsContent() {
             aria-current={tab === key ? "page" : undefined}
             className={`px-3 py-[10px] text-[13px] font-medium transition-colors ${
               tab === key
-                ? "border-b-2 border-[#3a5fd9] text-[#3a5fd9]"
-                : "text-[#6d6a65] hover:text-[#5a5650]"
+                ? "border-b-2 border-[#2f56d3] text-[#2f56d3]"
+                : "text-[#666055] hover:text-[#5c574c]"
             }`}
           >
             {label}
@@ -164,11 +163,11 @@ export function ApprovalsContent() {
       <div className="flex-1 overflow-auto">
         <div className="container py-6">
           {approvalsQuery.isPending ? (
-            <p className="text-[13px] text-[#6d6a65]">Loading…</p>
+            <p className="text-[13px] text-[#666055]">Loading…</p>
           ) : approvals.length === 0 ? (
-            <div className="rounded-[14px] border border-dashed border-[#dedad2] bg-white p-8 text-center">
-              <p className="text-[14px] font-semibold text-[#1a1814]">{EMPTY_COPY[tab].heading}</p>
-              <p className="mt-1 text-[13px] text-[#6d6a65]">{EMPTY_COPY[tab].body}</p>
+            <div className="rounded-[14px] border border-dashed border-[#e7e3db] bg-white p-8 text-center">
+              <p className="text-[14px] font-semibold text-[#1c1b19]">{EMPTY_COPY[tab].heading}</p>
+              <p className="mt-1 text-[13px] text-[#666055]">{EMPTY_COPY[tab].body}</p>
             </div>
           ) : (
             <div className="flex flex-col gap-3">

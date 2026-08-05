@@ -173,7 +173,7 @@ export function EmailCard({ connectivity }: { connectivity: ConnectivityControll
         )}
 
         {isConfigured && (
-          <div className="flex items-end gap-2 border-t border-[#ece9e3] pt-3">
+          <div className="flex items-end gap-2 border-t border-[#f0ede8] pt-3">
             <div className="flex-1 space-y-1">
               <Label htmlFor="email-test-to">Send a test email to</Label>
               <Input
@@ -252,7 +252,7 @@ export function EmailCard({ connectivity }: { connectivity: ConnectivityControll
               </>
             ) : (
               <>
-                <p className="rounded-md border border-[#dedad2] bg-[#f7f6f3] p-3 text-xs text-muted-foreground">
+                <p className="rounded-md border border-[#e7e3db] bg-[#faf9f7] p-3 text-xs text-muted-foreground">
                   Sends via Exchange Online using a Microsoft 365 app registration
                   (client-credentials OAuth2). Grant the app the <code>SMTP.SendAsApp</code> /
                   mail send permission and admin consent. Mail is sent as the mailbox below.

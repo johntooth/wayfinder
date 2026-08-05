@@ -135,7 +135,7 @@ export function DocumentGenerationCard() {
           </DialogHeader>
           <DialogBody className="space-y-4">
             {model && (
-              <p className="rounded-md border border-[#dedad2] bg-[#f7f6f3] p-3 text-xs text-muted-foreground">
+              <p className="rounded-md border border-[#e7e3db] bg-[#faf9f7] p-3 text-xs text-muted-foreground">
                 Active model <code>{model.model}</code> has a context window of{" "}
                 {model.contextWindowTokens.toLocaleString()} tokens
                 {model.estimated ? " (estimated — model not in the known list)" : ""}.

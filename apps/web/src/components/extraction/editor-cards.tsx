@@ -309,7 +309,7 @@ export function EditorCards({
         aria-label="View system prompt"
         title="View the system prompt each extraction is given"
         onClick={() => void handleViewSystemPrompt()}
-        className="rounded-md p-1 text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+        className="rounded-md p-1 text-[#666055] transition-colors hover:bg-[#f5f3ee] hover:text-[#1c1b19]"
       >
         <Eye size={15} />
       </button>
@@ -319,16 +319,16 @@ export function EditorCards({
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#dedad2] bg-white pl-5 pr-[52px]">
+      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#e7e3db] bg-white pl-5 pr-[52px]">
         <div className="flex items-center gap-2">
           <Link
             href="/synthesise"
             aria-label="Back to Synthesise Information"
-            className="flex h-7 w-7 items-center justify-center rounded-[7px] text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+            className="flex h-7 w-7 items-center justify-center rounded-[7px] text-[#666055] transition-colors hover:bg-[#f5f3ee] hover:text-[#1c1b19]"
           >
             <ChevronLeft size={16} />
           </Link>
-          <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1a1814]">Edit synthesis</h1>
+          <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1c1b19]">Edit synthesis</h1>
         </div>
         <div className="flex items-center gap-2">
           {/* Publish is intentionally disabled until its behaviour is defined. */}
@@ -350,18 +350,18 @@ export function EditorCards({
               <MoreHorizontal size={16} />
             </Button>
             {menuOpen && (
-              <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-[9px] border border-[#dedad2] bg-white py-1 shadow-md">
+              <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-[9px] border border-[#e7e3db] bg-white py-1 shadow-md">
                 <Link
                   href={`/synthesise/${flowId}/runs`}
-                  className="block px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                  className="block px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
                   onClick={() => setMenuOpen(false)}
                 >
                   Runs
                 </Link>
-                <div className="my-1 border-t border-[#dedad2]" />
+                <div className="my-1 border-t border-[#e7e3db]" />
                 <button
                   type="button"
-                  className="w-full px-3 py-2 text-left text-[13px] text-[#c2385a] hover:bg-[#fdf3f5]"
+                  className="w-full px-3 py-2 text-left text-[13px] text-[#a8324c] hover:bg-[#fdf3f5]"
                   onClick={() => {
                     setMenuOpen(false);
                     setDeleteOpen(true);
@@ -378,7 +378,7 @@ export function EditorCards({
       <div className="flex-1 overflow-auto">
         <div className="mx-auto max-w-[1200px] px-5 py-6">
           {isLoading ? (
-            <p className="text-[13px] text-[#8a857c]">Loading…</p>
+            <p className="text-[13px] text-[#736d5f]">Loading…</p>
           ) : (
             <>
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
@@ -428,11 +428,11 @@ export function EditorCards({
                         htmlFor="sample-upload"
                         className="flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-[10px] border-2 border-dashed border-[#d7d2c8] bg-[#faf9f6] px-3 py-6 text-center"
                       >
-                        <Upload className="h-[18px] w-[18px] text-[#8a857c]" />
-                        <span className="text-[13px] font-medium text-[#5a5650]">
+                        <Upload className="h-[18px] w-[18px] text-[#736d5f]" />
+                        <span className="text-[13px] font-medium text-[#5c574c]">
                           Upload documents or a zip
                         </span>
-                        <span className="text-[11px] text-[#8a857c]">Folder structure is preserved.</span>
+                        <span className="text-[11px] text-[#736d5f]">Folder structure is preserved.</span>
                         <input
                           id="sample-upload"
                           type="file"
@@ -468,19 +468,19 @@ export function EditorCards({
                       <ExtractionFieldEditor fields={manualFields} onChange={setManualFields} />
                     ) : (
                       <div className="space-y-3">
-                        <p className="rounded-[9px] border border-[#c5d0f7] bg-[#eef1fc] px-3 py-2 text-[12px] text-[#3a5fd9]">
+                        <p className="rounded-[9px] border border-[#c3cef2] bg-[#eaeefb] px-3 py-2 text-[12px] text-[#2f56d3]">
                           Spreadsheets should include a header row naming each field. Word templates use{" "}
                           <code className="font-mono">{"{{ tags }}"}</code>. Those become the fields to extract.
                         </p>
                         {outputTemplate ? (
                           <div className="space-y-1.5">
-                            <div className="flex items-center gap-2 rounded-[9px] border border-[#c0e8d5] bg-[#eaf6f0] px-3 py-2">
-                              <span className="flex-1 truncate text-[12px] text-[#247c53]">
+                            <div className="flex items-center gap-2 rounded-[9px] border border-[#c0e8d5] bg-[#e3efe5] px-3 py-2">
+                              <span className="flex-1 truncate text-[12px] text-[#1f6b4d]">
                                 {outputTemplate.filename}
                               </span>
                               <button
                                 type="button"
-                                className="shrink-0 text-[12px] text-[#6d6a65] hover:text-[#5a5650]"
+                                className="shrink-0 text-[12px] text-[#666055] hover:text-[#5c574c]"
                                 onClick={() => templateInputRef.current?.click()}
                                 disabled={parseTemplateMutation.isPending}
                               >
@@ -488,7 +488,7 @@ export function EditorCards({
                               </button>
                               <button
                                 type="button"
-                                className="shrink-0 text-[12px] text-[#c2385a] hover:text-[#a02e4b]"
+                                className="shrink-0 text-[12px] text-[#a8324c] hover:text-[#a02e4b]"
                                 onClick={() => {
                                   setOutputTemplate(null);
                                   setTemplateFields([]);
@@ -501,9 +501,9 @@ export function EditorCards({
                               </button>
                             </div>
                             {templateFormat === "xlsx" && templateMode && (
-                              <p className="text-[12px] text-[#6d6a65]">
+                              <p className="text-[12px] text-[#666055]">
                                 Spreadsheet detected —{" "}
-                                <span className="font-medium text-[#247c53]">
+                                <span className="font-medium text-[#1f6b4d]">
                                   {templateMode === "tags" ? "Tag mode" : "Header-row mode"}
                                 </span>
                                 {templateMode === "tags"
@@ -515,7 +515,7 @@ export function EditorCards({
                         ) : (
                           <button
                             type="button"
-                            className="w-full rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-4 text-center text-[13px] text-[#6d6a65] transition-colors hover:border-[#c5d0f7] hover:bg-[#eef1fc] hover:text-[#3a5fd9] disabled:opacity-50"
+                            className="w-full rounded-[9px] border border-dashed border-[#e7e3db] bg-[#faf9f7] p-4 text-center text-[13px] text-[#666055] transition-colors hover:border-[#c3cef2] hover:bg-[#eaeefb] hover:text-[#2f56d3] disabled:opacity-50"
                             onClick={() => templateInputRef.current?.click()}
                             disabled={parseTemplateMutation.isPending}
                           >
@@ -531,7 +531,7 @@ export function EditorCards({
                           className="sr-only"
                           onChange={(event) => void handleUploadTemplate(event.target.files?.[0])}
                         />
-                        {templateError && <p className="text-[12px] text-[#c2385a]">{templateError}</p>}
+                        {templateError && <p className="text-[12px] text-[#a8324c]">{templateError}</p>}
                         {outputTemplate && (
                           <ExtractionFieldEditor fields={templateFields} onChange={setTemplateFields} derived />
                         )}
@@ -554,8 +554,8 @@ export function EditorCards({
                           for> at the upload button would override its accessible
                           name (a button is labelable, and the label wins over the
                           button's own text). */}
-                      <span className="text-[13px] font-medium text-[#3a352e]">Context material</span>
-                      <p className="text-[12px] text-[#6d6a65]">
+                      <span className="text-[13px] font-medium text-[#3d382f]">Context material</span>
+                      <p className="text-[12px] text-[#666055]">
                         Reference documents every extraction is grounded on — e.g. evaluation
                         criteria or a scoring rubric. The equivalent of whole-flow context.
                       </p>
@@ -564,18 +564,18 @@ export function EditorCards({
                           {contextDocs.map((doc) => (
                             <li
                               key={doc.id}
-                              className="flex items-center gap-2 rounded-[9px] border border-[#e5e1d8] bg-[#faf9f6] px-3 py-2"
+                              className="flex items-center gap-2 rounded-[9px] border border-[#e7e3db] bg-[#faf9f6] px-3 py-2"
                             >
-                              <span className="flex-1 truncate text-[12px] text-[#5a5650]">
+                              <span className="flex-1 truncate text-[12px] text-[#5c574c]">
                                 {doc.filename}
                               </span>
                               {doc.extractionStatus === "failed" && (
-                                <span className="shrink-0 text-[11px] text-[#9b6215]">no text</span>
+                                <span className="shrink-0 text-[11px] text-[#8a5a1d]">no text</span>
                               )}
                               <button
                                 type="button"
                                 aria-label={`Remove ${doc.filename}`}
-                                className="shrink-0 text-[12px] text-[#c2385a] hover:text-[#a02e4b]"
+                                className="shrink-0 text-[12px] text-[#a8324c] hover:text-[#a02e4b]"
                                 onClick={() =>
                                   setContextDocs((current) => current.filter((entry) => entry.id !== doc.id))
                                 }
@@ -588,7 +588,7 @@ export function EditorCards({
                       )}
                       <button
                         type="button"
-                        className="w-full rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3 text-center text-[13px] text-[#6d6a65] transition-colors hover:border-[#c5d0f7] hover:bg-[#eef1fc] hover:text-[#3a5fd9] disabled:opacity-50"
+                        className="w-full rounded-[9px] border border-dashed border-[#e7e3db] bg-[#faf9f7] p-3 text-center text-[13px] text-[#666055] transition-colors hover:border-[#c3cef2] hover:bg-[#eaeefb] hover:text-[#2f56d3] disabled:opacity-50"
                         onClick={() => contextInputRef.current?.click()}
                         disabled={parseContextDocMutation.isPending}
                       >
@@ -617,7 +617,7 @@ export function EditorCards({
                 </FocusCard>
               </div>
 
-              <p className="mt-3 text-[12px] text-[#8a857c]">
+              <p className="mt-3 text-[12px] text-[#736d5f]">
                 Preview is {previewOn ? "on" : "off"} by default
                 {uploads.length > 0 ? ` (${uploads.length} file${uploads.length === 1 ? "" : "s"})` : ""}. A
                 sample processes the first few documents and pauses; open the run to see results and
@@ -636,18 +636,18 @@ export function EditorCards({
           </DialogHeader>
           <DialogBody className="max-h-[70vh] overflow-hidden">
             {promptLoading ? (
-              <p className="text-[13px] text-[#8a857c]">Building…</p>
+              <p className="text-[13px] text-[#736d5f]">Building…</p>
             ) : promptError ? (
-              <p className="text-[13px] text-[#c2385a]">{promptError}</p>
+              <p className="text-[13px] text-[#a8324c]">{promptError}</p>
             ) : (
               <>
                 <div className="flex items-center justify-between">
-                  <p className="text-[12px] text-[#6d6a65]">
+                  <p className="text-[12px] text-[#666055]">
                     System prompt given to the AI for each document extraction (read-only)
                   </p>
                   <CopyButton text={systemPrompt ?? ""} />
                 </div>
-                <pre className="max-h-[56vh] flex-1 overflow-y-auto whitespace-pre-wrap rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] p-3 font-mono text-[12px] leading-[1.6] text-[#1a1814]">
+                <pre className="max-h-[56vh] flex-1 overflow-y-auto whitespace-pre-wrap rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] p-3 font-mono text-[12px] leading-[1.6] text-[#1c1b19]">
                   {systemPrompt}
                 </pre>
               </>

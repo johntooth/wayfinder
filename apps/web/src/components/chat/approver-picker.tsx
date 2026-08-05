@@ -159,7 +159,7 @@ export function ApproverPicker({
   const noticeButton = (notice: SetupNotice) => (
     <button
       type="button"
-      className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[12px] text-[#6d6a65] hover:bg-[#f3ede2] hover:text-[#1a1814]"
+      className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[12px] text-[#666055] hover:bg-[#f3ede2] hover:text-[#1c1b19]"
       aria-expanded={showNotice}
       onClick={() => setShowNotice((open) => !open)}
       data-approval-setup-notice
@@ -173,7 +173,7 @@ export function ApproverPicker({
     showNotice && (
       <div className="space-y-2 rounded-[10px] border border-[#e8d4b0] bg-white px-3 py-2">
         {notice.paragraphs.map((paragraph) => (
-          <p key={paragraph} className="text-[12.5px] text-[#5a5650]">
+          <p key={paragraph} className="text-[12.5px] text-[#5c574c]">
             {paragraph}
           </p>
         ))}
@@ -184,9 +184,9 @@ export function ApproverPicker({
   // first supervisor, second supervisor, or a policy-named role — is the first
   // thing both the operator and the approver need to know.
   const stageLine = (
-    <p className="text-[13px] text-[#5a5650]" data-approver-stage>
-      Approver: <span className="font-medium text-[#1a1814]">{approverStageLabel({ approverSource, roleHint })}</span>
-      <span className="text-[#6d6a65]"> · {nodeName}</span>
+    <p className="text-[13px] text-[#5c574c]" data-approver-stage>
+      Approver: <span className="font-medium text-[#1c1b19]">{approverStageLabel({ approverSource, roleHint })}</span>
+      <span className="text-[#666055]"> · {nodeName}</span>
     </p>
   );
 
@@ -197,7 +197,7 @@ export function ApproverPicker({
   const requestResolved = suggest.isSuccess || suggest.isError;
   if (!requestResolved) {
     return (
-      <div className="flex items-center gap-2 text-[13px] text-[#6d6a65]">
+      <div className="flex items-center gap-2 text-[13px] text-[#666055]">
         <Loader2 className="h-4 w-4 animate-spin text-[#a65b05]" />
         Loading approval…
       </div>
@@ -257,7 +257,7 @@ export function ApproverPicker({
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <Stamp className="h-5 w-5 text-[#a65b05]" />
-          <p className="text-[14px] font-semibold text-[#1a1814]">
+          <p className="text-[14px] font-semibold text-[#1c1b19]">
             {chosen ? "Confirm the approver" : "Choose the approver"}
           </p>
         </div>
@@ -269,29 +269,29 @@ export function ApproverPicker({
       {/* The subject the approver will see and the record will lock, shown
           here first so the operator can catch a wrong one before it is sent. */}
       {suggest.data?.subject?.description && (
-        <p className="text-[13px] text-[#1a1814]" data-approval-subject>
+        <p className="text-[13px] text-[#1c1b19]" data-approval-subject>
           <span className="font-semibold">You are requesting approval of:</span>{" "}
           {suggest.data.subject.description}
         </p>
       )}
 
-      {instructions && <p className="text-[13px] text-[#5a5650]">{instructions}</p>}
+      {instructions && <p className="text-[13px] text-[#5c574c]">{instructions}</p>}
 
       {stageLine}
 
       {chosen && (
         <div className="rounded-[10px] border border-[#e8d4b0] bg-white px-3 py-2">
-          <p className="text-[13px] text-[#1a1814]">
+          <p className="text-[13px] text-[#1c1b19]">
             Suggested: <span className="font-medium">{chosen.label}</span>
             {chosen.email && chosen.label !== chosen.email && (
-              <span className="text-[#6d6a65]"> ({chosen.email})</span>
+              <span className="text-[#666055]"> ({chosen.email})</span>
             )}
           </p>
         </div>
       )}
 
       {showSearch && (
-        <div className="space-y-2 rounded-[10px] border border-[#dedad2] bg-white p-3">
+        <div className="space-y-2 rounded-[10px] border border-[#e7e3db] bg-white p-3">
           <Input
             ref={searchInputRef}
             value={query}
@@ -303,7 +303,7 @@ export function ApproverPicker({
               <button
                 key={`${person.source}:${person.email}`}
                 type="button"
-                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[13px] text-[#1a1814] hover:bg-[#f7f6f3]"
+                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[13px] text-[#1c1b19] hover:bg-[#faf9f7]"
                 onClick={() => {
                   setChosen({
                     userId: person.userId,
@@ -314,13 +314,13 @@ export function ApproverPicker({
                 }}
               >
                 <span className="truncate">{person.displayName ?? person.email}</span>
-                <span className="ml-2 shrink-0 text-[11px] uppercase text-[#6d6a65]">
+                <span className="ml-2 shrink-0 text-[11px] uppercase text-[#666055]">
                   {person.source}
                 </span>
               </button>
             ))}
             {searchQuery.data?.length === 0 && query.trim().length > 1 && (
-              <p className="px-2 py-1 text-[12px] text-[#6d6a65]">No matches.</p>
+              <p className="px-2 py-1 text-[12px] text-[#666055]">No matches.</p>
             )}
           </div>
         </div>

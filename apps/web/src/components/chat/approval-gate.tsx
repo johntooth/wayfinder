@@ -36,7 +36,7 @@ export function ApprovalGate({
   const emailConfigured = emailStatusQuery.data?.configured ?? true;
 
   return (
-    <div className="border-t border-[#dedad2] bg-[#fffaf2] px-5 py-4" data-approval-gate>
+    <div className="border-t border-[#e7e3db] bg-[#fffaf2] px-5 py-4" data-approval-gate>
       <div className="mx-auto max-w-2xl">
         <ApproverPicker
           sessionId={sessionId}

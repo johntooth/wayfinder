@@ -18,9 +18,9 @@ import {
 import type { ApproverSourceMode, NodeConfigValues } from "./node-config-modal";
 
 const SELECT_CLASS =
-  "flex h-10 w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#1f8a4c] focus:bg-white focus:outline-none";
+  "flex h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-[#1f6b4d] focus:bg-white focus:outline-none";
 
-const HINT_CLASS = "text-[12px] text-[#6d6a65]";
+const HINT_CLASS = "text-[12px] text-[#666055]";
 const WARNING_CLASS = "text-[12px] text-[#a8601a]";
 
 export interface NodeConfigModalApprovalProps {

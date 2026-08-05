@@ -6,12 +6,12 @@ import type { FieldValueSource } from "@rbrasier/domain";
 import type { NodeConfigValues } from "./node-config-modal";
 
 export const COLOURS = [
-  { hex: "#3a5fd9", label: "Indigo" },
-  { hex: "#2e9e6a", label: "Green" },
-  { hex: "#c17a1a", label: "Amber" },
-  { hex: "#c2385a", label: "Rose" },
-  { hex: "#7c3aed", label: "Purple" },
-  { hex: "#0e8a7a", label: "Teal" },
+  { hex: "#2f56d3", label: "Indigo" },
+  { hex: "#1f6b4d", label: "Green" },
+  { hex: "#8a5a1d", label: "Amber" },
+  { hex: "#a8324c", label: "Rose" },
+  { hex: "#5b3fa8", label: "Purple" },
+  { hex: "#14312e", label: "Teal" },
 ];
 
 // Field keys that are low-level HTTP concerns and should be hidden from the
@@ -47,7 +47,7 @@ export function CopyButton({ text }: { text: string }) {
     <button
       type="button"
       onClick={handleCopy}
-      className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+      className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[#666055] transition-colors hover:bg-[#f5f3ee] hover:text-[#1c1b19]"
     >
       {copied ? <Check size={12} /> : <Copy size={12} />}
       {copied ? "Copied!" : "Copy"}
@@ -93,7 +93,7 @@ export function StepColourPicker({
         style={{ background: value }}
       />
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1.5 flex gap-1.5 rounded-[10px] border border-[#dedad2] bg-white p-2 shadow-[0_4px_16px_rgba(0,0,0,.12)]">
+        <div className="absolute right-0 top-full z-50 mt-1.5 flex gap-1.5 rounded-[10px] border border-[#e7e3db] bg-white p-2 shadow-[0_4px_16px_rgba(0,0,0,.12)]">
           {COLOURS.map((colour) => (
             <button
               key={colour.hex}
@@ -105,7 +105,7 @@ export function StepColourPicker({
                 setOpen(false);
               }}
               className={`h-5 w-5 rounded-full transition-transform hover:scale-110 ${
-                value === colour.hex ? "ring-2 ring-[#1a1814] ring-offset-1" : ""
+                value === colour.hex ? "ring-2 ring-[#1c1b19] ring-offset-1" : ""
               }`}
               style={{ background: colour.hex }}
             />

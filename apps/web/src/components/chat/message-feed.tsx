@@ -55,7 +55,6 @@ interface MessageFeedProps {
   canEditDocuments?: boolean;
   onDocumentEdited?: () => void;
   expertRole?: string | null;
-  userFirstInitial?: string;
   senderNamesById?: Record<string, string>;
   // The step held open awaiting operator confirmation. Its milestone pill is
   // suppressed because the step has not actually completed yet (ADR-026).
@@ -90,6 +89,28 @@ const getRoleInitials = (role: string | null | undefined, fallback: string): str
   return initials || fallback;
 };
 
+// Marks the boundary between flow steps in the transcript: a hairline, the step
+// name as a mono eyebrow, another hairline.
+function FeedDivider({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3 py-[2px]">
+      <span className="h-px flex-1 bg-[#e7e3db]" />
+      <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[#736d5f]">
+        {label}
+      </span>
+      <span className="h-px flex-1 bg-[#e7e3db]" />
+    </div>
+  );
+}
+
+function AgentMark({ initials }: { initials: string }) {
+  return (
+    <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[8px] bg-[#2f56d3] text-[11px] font-semibold text-white">
+      {initials}
+    </div>
+  );
+}
+
 // An approval decision, rendered as what it is: a person's decision, signed and
 // timed. The name and email come from the message itself rather than the
 // participant list, because an approver is often not a participant — and the
@@ -97,13 +118,13 @@ const getRoleInitials = (role: string | null | undefined, fallback: string): str
 function ApprovalDecisionBubble({ decision }: { decision: ParsedApprovalDecision }) {
   return (
     <div className="flex flex-col gap-1" data-approval-decision>
-      <p className="text-[13px] font-semibold leading-[1.55] text-white">{decision.outcome}</p>
+      <p className="text-[13px] font-semibold leading-[1.55] text-[#1c1b19]">{decision.outcome}</p>
       {decision.body && (
-        <p className="whitespace-pre-wrap text-[13px] leading-[1.55] text-white/90">
+        <p className="whitespace-pre-wrap text-[13px] leading-[1.55] text-[#3d382f]">
           {decision.body}
         </p>
       )}
-      <p className="text-[11px] leading-[1.5] text-white/70">
+      <p className="text-[11px] leading-[1.5] text-[#666055]">
         {decision.approverName ?? decision.approverEmail ?? "Approver"}
         {decision.approverName && decision.approverEmail && (
           <span> · {decision.approverEmail}</span>
@@ -134,7 +155,6 @@ export function MessageFeed({
   canEditDocuments,
   onDocumentEdited,
   expertRole,
-  userFirstInitial,
   senderNamesById,
   awaitingConfirmationNodeId,
   currentNodeId,
@@ -165,13 +185,15 @@ export function MessageFeed({
   const nodeById = Object.fromEntries(nodes.map((n) => [n.id, n]));
   const showStreaming = isStreaming || streamingMessages.length > dbMessages.length;
   const botInitials = getRoleInitials(expertRole ?? null, "AI");
-  const userInitials = userFirstInitial ?? "U";
 
   return (
     <div
       ref={containerRef}
       onScroll={handleScroll}
-      className="flex flex-1 flex-col gap-5 overflow-y-auto bg-[#f7f6f3] px-5 py-6"
+      // The conversation reads as a single centred column on the canvas rather
+      // than a full-bleed list — long lines are the main legibility cost at
+      // desktop widths.
+      className="mx-auto flex w-full max-w-[808px] flex-1 flex-col gap-5 overflow-y-auto px-6 pb-2 pt-7"
     >
       {!showStreaming &&
         dbMessages.map((msg, index) => {
@@ -189,7 +211,6 @@ export function MessageFeed({
             (msg.role === "user" && msg.senderUserId
               ? senderNamesById?.[msg.senderUserId] ?? null
               : null);
-          const messageUserInitials = senderName ? getRoleInitials(senderName, userInitials) : userInitials;
 
           const scheduled = msg.role === "system" ? parseScheduledMessage(msg.content) : null;
           const displayContent = scheduled
@@ -231,62 +252,50 @@ export function MessageFeed({
 
           return (
             <div key={msg.id}>
-              {isNewStep && node && (
-                <div className="my-1 text-center font-mono text-[10px] text-[#6d6a65]">
-                  — {node.name} —
-                </div>
-              )}
-              <div className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                {msg.role !== "user" && (
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#3a5fd9] text-[10px] font-bold text-white">
-                    {botInitials}
-                  </div>
-                )}
-                <div
-                  className={`relative max-w-[68%] rounded-[14px] px-4 py-3 ${
-                    msg.role === "user"
-                      ? "rounded-br-[4px] bg-[#3a5fd9]"
-                      : "rounded-bl-[4px] border border-[#dedad2] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
-                  }`}
-                >
-                  {decision ? (
-                    <ApprovalDecisionBubble decision={decision} />
-                  ) : msg.role === "user" ? (
-                    <p className="whitespace-pre-wrap text-[13px] leading-[1.55] text-white/90">
-                      {displayContent}
-                    </p>
-                  ) : (
-                    <MarkdownText
-                      content={displayContent}
-                      className="text-[13px] leading-[1.55] text-[#1a1814]"
-                    />
-                  )}
-                  <p
-                    className={`mt-1 text-right font-mono text-[10px] ${
-                      showsInfoButton && !showsConfidenceBar ? "pr-6" : ""
-                    } ${msg.role === "user" ? "text-white/50" : "text-[#6d6a65]"}`}
-                  >
-                    {formatRelativeTime(msg.createdAt)}
-                  </p>
-                  {showsConfidenceBar && <ConfidenceBar score={msg.confidence} />}
-                  {showsInfoButton && (
-                    <MessageInfoModal
-                      message={msg}
-                      allMessages={dbMessages}
-                      sessionId={sessionId}
-                      canSubmitFeedback={canSubmitFeedback}
-                    />
-                  )}
-                </div>
-                {msg.role === "user" && (
+              {isNewStep && node && <FeedDivider label={node.name} />}
+              {msg.role === "user" ? (
+                <div className="flex justify-end">
                   <div
                     title={senderName ?? undefined}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#e6e3dc] text-[10px] font-bold text-[#1a1814]"
+                    className="max-w-[460px] rounded-[14px] rounded-br-[4px] bg-[#ebe8e0] px-4 py-3"
                   >
-                    {messageUserInitials}
+                    {decision ? (
+                      <ApprovalDecisionBubble decision={decision} />
+                    ) : (
+                      <p className="whitespace-pre-wrap text-[14px] leading-[1.5] text-[#1c1b19]">
+                        {displayContent}
+                      </p>
+                    )}
+                    <p className="mt-1 text-right font-mono text-[10px] text-[#666055]">
+                      {formatRelativeTime(msg.createdAt)}
+                    </p>
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="flex gap-[14px]">
+                  <AgentMark initials={botInitials} />
+                  <div className="relative min-w-0 flex-1">
+                    <MarkdownText
+                      content={displayContent}
+                      className="text-[14px] leading-[1.6] text-[#26241f]"
+                    />
+                    <div className="mt-[6px] flex items-center gap-3">
+                      <span className="font-mono text-[10px] text-[#736d5f]">
+                        {formatRelativeTime(msg.createdAt)}
+                      </span>
+                      {showsConfidenceBar && <ConfidenceBar score={msg.confidence} />}
+                      {showsInfoButton && (
+                        <MessageInfoModal
+                          message={msg}
+                          allMessages={dbMessages}
+                          sessionId={sessionId}
+                          canSubmitFeedback={canSubmitFeedback}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* Read-only: the author is being shown what the approver did,
                   and the record is locked while an approval is pending. */}
               {approverEditDocument?.document && (
@@ -359,58 +368,42 @@ export function MessageFeed({
 
             return (
               <div key={msg.id} className="flex flex-col gap-5">
-              {segments.map((segment, segmentIndex) => (
-                <div
-                  key={segmentIndex}
-                  className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                >
-                  {msg.role !== "user" && (
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#3a5fd9] text-[10px] font-bold text-white">
-                      {botInitials}
-                    </div>
-                  )}
-                  <div
-                    className={`max-w-[68%] rounded-[14px] px-4 py-3 ${
-                      msg.role === "user"
-                        ? "rounded-br-[4px] bg-[#3a5fd9]"
-                        : "rounded-bl-[4px] border border-[#dedad2] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
-                    }`}
-                  >
-                    {msg.role === "user" ? (
-                      <p className="whitespace-pre-wrap text-[13px] leading-[1.55] text-white/90">
+              {segments.map((segment, segmentIndex) =>
+                msg.role === "user" ? (
+                  <div key={segmentIndex} className="flex justify-end">
+                    <div className="max-w-[460px] rounded-[14px] rounded-br-[4px] bg-[#ebe8e0] px-4 py-3">
+                      <p className="whitespace-pre-wrap text-[14px] leading-[1.5] text-[#1c1b19]">
                         {segment}
                       </p>
-                    ) : (
+                    </div>
+                  </div>
+                ) : (
+                  <div key={segmentIndex} className="flex gap-[14px]">
+                    <AgentMark initials={botInitials} />
+                    <div className="min-w-0 flex-1">
                       <MarkdownText
                         content={segment}
-                        className="text-[13px] leading-[1.55] text-[#1a1814]"
+                        className="text-[14px] leading-[1.6] text-[#26241f]"
                       />
-                    )}
-                    {msg.role === "assistant" && segmentIndex === 0 && !streamingIsNeverDone && (
-                      <ConfidenceBar
-                        score={confidenceAnnotation?.score ?? null}
-                        evaluating={isStreaming && !confidenceAnnotation}
-                      />
-                    )}
-                  </div>
-                  {msg.role === "user" && (
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#e6e3dc] text-[10px] font-bold text-[#1a1814]">
-                      {userInitials}
+                      {segmentIndex === 0 && !streamingIsNeverDone && (
+                        <ConfidenceBar
+                          score={confidenceAnnotation?.score ?? null}
+                          evaluating={isStreaming && !confidenceAnnotation}
+                        />
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
+                  </div>
+                ),
+              )}
               {isCrossChecking && <CrossCheckingBadge documents={crossCheckingState.documents} />}
               {isGeneratingDocument && <GeneratingDocumentBadge />}
               </div>
             );
           })}
           {isStreaming && streamingMessages.at(-1)?.role !== "assistant" && (
-            <div className="flex gap-3 justify-start">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#3a5fd9] text-[10px] font-bold text-white">
-                {botInitials}
-              </div>
-              <div className="rounded-[14px] rounded-bl-[4px] border border-[#dedad2] bg-white px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]">
+            <div className="flex gap-[14px]">
+              <AgentMark initials={botInitials} />
+              <div className="flex items-center">
                 <TypingIndicator />
               </div>
             </div>
@@ -444,7 +437,7 @@ export function MessageFeed({
       {isComplete && !isStreaming && <FlowCompletePill />}
 
       {dbMessages.length === 0 && !isStreaming && !error && (
-        <div className="flex flex-1 items-center justify-center text-center text-[13px] text-[#6d6a65]">
+        <div className="flex flex-1 items-center justify-center text-center text-[13px] text-[#666055]">
           <p>The conversation will begin once you send your first message.</p>
         </div>
       )}

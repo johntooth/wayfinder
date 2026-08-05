@@ -141,7 +141,7 @@ function SetupForm() {
 
 export default function SetupPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#f7f6f3] p-4">
+    <main className="flex min-h-screen items-center justify-center bg-[#faf9f7] p-4">
       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
         <SetupForm />
       </Suspense>

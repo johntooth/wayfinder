@@ -104,11 +104,11 @@ export function DocumentEditDialog({
 
         <DialogBody className="max-h-[60vh] overflow-y-auto">
           {fieldsQuery.isLoading ? (
-            <p className="text-[13px] text-[#6d6a65]">Loading fields…</p>
+            <p className="text-[13px] text-[#666055]">Loading fields…</p>
           ) : !data ? (
-            <p className="text-[13px] text-[#c2385a]">Could not load document fields.</p>
+            <p className="text-[13px] text-[#a8324c]">Could not load document fields.</p>
           ) : !isEditable ? (
-            <p className="rounded-[9px] border border-[#f5d0a9] bg-[#fdf3e3] px-3 py-2 text-[12px] text-[#9b6215]">
+            <p className="rounded-[9px] border border-[#e6d0ab] bg-[#f6e9d8] px-3 py-2 text-[12px] text-[#8a5a1d]">
               {data.reason ?? "This document can no longer be edited."}
             </p>
           ) : (
@@ -122,7 +122,7 @@ export function DocumentEditDialog({
                     onChange={(items) => setItems(field.key, items)}
                   />
                   {fieldErrors[field.key] && (
-                    <p className="text-[12px] text-[#c2385a]">{fieldErrors[field.key]}</p>
+                    <p className="text-[12px] text-[#a8324c]">{fieldErrors[field.key]}</p>
                   )}
                 </div>
               ) : (
@@ -162,17 +162,17 @@ interface FieldInputProps {
 }
 
 const SELECT_CLASS =
-  "flex h-10 w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#3a5fd9] focus:bg-white focus:outline-none";
+  "flex h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none";
 
 function FieldInput({ field, value, error, onChange }: FieldInputProps) {
   return (
     <div className="space-y-1">
       <Label htmlFor={`field-${field.key}`}>
         {field.label}
-        {field.optional && <span className="ml-1 text-[11px] text-[#6d6a65]">(optional)</span>}
+        {field.optional && <span className="ml-1 text-[11px] text-[#666055]">(optional)</span>}
       </Label>
       <FieldControl field={field} value={value} onChange={onChange} />
-      {error && <p className="text-[12px] text-[#c2385a]">{error}</p>}
+      {error && <p className="text-[12px] text-[#a8324c]">{error}</p>}
     </div>
   );
 }
@@ -204,21 +204,21 @@ function GroupFieldEditor({ field, items, onChange }: GroupFieldEditorProps) {
   return (
     <div className="space-y-2">
       {items.length === 0 && (
-        <p className="text-[12px] text-[#6d6a65]">No items yet — add one below.</p>
+        <p className="text-[12px] text-[#666055]">No items yet — add one below.</p>
       )}
       {items.map((item, index) => (
         <div
           key={index}
-          className="space-y-2 rounded-[9px] border border-[#dedad2] bg-[#faf9f7] p-3"
+          className="space-y-2 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] p-3"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-[#6d6a65]">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-[#666055]">
               Item {index + 1}
             </span>
             <button
               type="button"
               onClick={() => removeItem(index)}
-              className="text-[12px] text-[#c2385a] hover:underline"
+              className="text-[12px] text-[#a8324c] hover:underline"
             >
               Remove
             </button>
@@ -250,11 +250,11 @@ function FieldControl({ field, value, onChange }: Omit<FieldInputProps, "error">
         role="switch"
         aria-checked={included}
         onClick={() => onChange(included ? "No" : "Yes")}
-        className="flex items-center gap-2 text-[13px] text-[#5a5650]"
+        className="flex items-center gap-2 text-[13px] text-[#5c574c]"
       >
         <span
           className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-            included ? "bg-[#1f8a4c]" : "bg-[#d7d3cc]"
+            included ? "bg-[#1f6b4d]" : "bg-[#dedad2]"
           }`}
         >
           <span
@@ -306,7 +306,7 @@ function FieldControl({ field, value, onChange }: Omit<FieldInputProps, "error">
       return (
         <div className="space-y-1.5">
           {field.options.map((option) => (
-            <label key={option} className="flex items-center gap-2 text-[13px] text-[#1a1814]">
+            <label key={option} className="flex items-center gap-2 text-[13px] text-[#1c1b19]">
               <input
                 type="checkbox"
                 checked={selected.has(option)}

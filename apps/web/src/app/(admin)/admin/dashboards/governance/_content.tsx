@@ -16,15 +16,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { SpendCapsCard } from "@/components/admin/spend-caps-card";
 import { trpc } from "@/trpc/client";
 
-const BAR_COLOURS = ["#3a5fd9", "#2e9e6a", "#d98a3a", "#8a4fd9", "#d93a6f", "#3ab6d9", "#9ea83a"];
-const AXIS_STYLE = { fontSize: 11, fill: "#918d87" };
+const BAR_COLOURS = ["#2f56d3", "#1f6b4d", "#d98a3a", "#8a4fd9", "#d93a6f", "#3ab6d9", "#9ea83a"];
+const AXIS_STYLE = { fontSize: 11, fill: "#736d5f" };
 
 const money = (value: number): string => `$${value.toFixed(2)}`;
 
 const STATUS_VARIANT: Record<string, { label: string; className: string }> = {
-  ok: { label: "ok", className: "bg-[#2e9e6a] text-white" },
+  ok: { label: "ok", className: "bg-[#1f6b4d] text-white" },
   warn: { label: "warn", className: "bg-[#d98a3a] text-white" },
-  blocked: { label: "blocked", className: "bg-[#c2385a] text-white" },
+  blocked: { label: "blocked", className: "bg-[#a8324c] text-white" },
 };
 
 function ChartCard({ title, children }: { title: string; children: React.ReactElement }) {

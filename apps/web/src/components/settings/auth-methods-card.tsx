@@ -218,8 +218,8 @@ export function AuthMethodsCard({ connectivity }: { connectivity?: ConnectivityC
 
             {entraEnabled && (
               <>
-                <hr className="border-[#dedad2]" />
-                <p className="rounded-md border border-[#dedad2] bg-[#f7f6f3] p-3 text-xs text-muted-foreground">
+                <hr className="border-[#e7e3db]" />
+                <p className="rounded-md border border-[#e7e3db] bg-[#faf9f7] p-3 text-xs text-muted-foreground">
                   Create an app registration in the Azure portal and paste the redirect URI below
                   into its <code>Web</code> platform redirect URIs.
                 </p>

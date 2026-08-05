@@ -50,7 +50,7 @@ export function MessageInfoModal({
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Show AI reasoning"
-        className="absolute bottom-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#5a5650]"
+        className="absolute bottom-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[#666055] transition-colors hover:bg-[#f5f3ee] hover:text-[#5c574c]"
       >
         <Info className="h-3 w-3" strokeWidth={1.8} />
       </button>
@@ -61,29 +61,29 @@ export function MessageInfoModal({
         </DialogHeader>
         <DialogBody>
           <div>
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#6d6a65]">
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#666055]">
               Confidence rationale
             </p>
-            <p className="whitespace-pre-wrap text-[13px] leading-[1.55] text-[#1a1814]">
+            <p className="whitespace-pre-wrap text-[13px] leading-[1.55] text-[#1c1b19]">
               {payload.rationale}
             </p>
             <ConfidenceBar score={message.confidence} />
           </div>
 
-          <details className="rounded-[10px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 [&_summary]:cursor-pointer">
-            <summary className="text-[12px] font-semibold text-[#1a1814]">
+          <details className="rounded-[10px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 [&_summary]:cursor-pointer">
+            <summary className="text-[12px] font-semibold text-[#1c1b19]">
               Insights gathered so far ({insights.length})
             </summary>
             {insights.length === 0 ? (
-              <p className="mt-2 text-[12px] text-[#6d6a65]">No insights gathered yet.</p>
+              <p className="mt-2 text-[12px] text-[#666055]">No insights gathered yet.</p>
             ) : (
               <dl className="mt-2 space-y-1.5">
                 {insights.map((insight) => (
                   <div key={insight.key} className="flex flex-col gap-0.5">
-                    <dt className="font-mono text-[10px] uppercase tracking-[0.06em] text-[#6d6a65]">
+                    <dt className="font-mono text-[10px] uppercase tracking-[0.06em] text-[#666055]">
                       {insight.key}
                     </dt>
-                    <dd className="text-[12px] text-[#1a1814]">{insight.value}</dd>
+                    <dd className="text-[12px] text-[#1c1b19]">{insight.value}</dd>
                   </div>
                 ))}
               </dl>

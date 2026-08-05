@@ -730,7 +730,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
             <DialogCloseButton />
           </DialogHeader>
           <DialogBody>
-            <p className="text-[13px] leading-[1.55] text-[#5a5650]">
+            <p className="text-[13px] leading-[1.55] text-[#5c574c]">
               This flow will be deleted. Existing chats can still be viewed but no new messages
               can be sent. This action cannot be undone.
             </p>

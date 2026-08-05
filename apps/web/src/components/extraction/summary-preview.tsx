@@ -51,9 +51,9 @@ export function SummaryPreview({ markdown, downloadHref }: SummaryPreviewProps) 
   const collapsed = !expanded && overflows;
 
   return (
-    <section className="rounded-[10px] border border-[#e5e1d8] bg-white p-[16px]">
+    <section className="rounded-[10px] border border-[#e7e3db] bg-white p-[16px]">
       <div className="mb-[8px] flex items-center justify-between">
-        <h2 className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#6d6a65]">
+        <h2 className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#666055]">
           Summary
         </h2>
         {downloadHref ? (
@@ -67,7 +67,7 @@ export function SummaryPreview({ markdown, downloadHref }: SummaryPreviewProps) 
           ref={contentRef}
           data-testid="summary-content"
           data-collapsed={collapsed ? "true" : "false"}
-          className="flex flex-col gap-[6px] overflow-hidden text-[13px] leading-[1.55] text-[#3a352e]"
+          className="flex flex-col gap-[6px] overflow-hidden text-[13px] leading-[1.55] text-[#3d382f]"
           style={expanded ? undefined : { maxHeight: `${COLLAPSED_LINES * LINE_HEIGHT_EM}em` }}
         >
           {renderMarkdown(markdown)}
@@ -83,7 +83,7 @@ export function SummaryPreview({ markdown, downloadHref }: SummaryPreviewProps) 
             onClick={() => setExpanded((open) => !open)}
             aria-expanded={expanded}
             data-testid="summary-toggle"
-            className="text-[12px] font-medium text-[#3a5fd9] hover:underline"
+            className="text-[12px] font-medium text-[#2f56d3] hover:underline"
           >
             {expanded ? "Show less" : "Show more"}
           </button>
