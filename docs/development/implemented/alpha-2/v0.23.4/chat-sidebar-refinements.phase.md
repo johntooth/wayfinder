@@ -1,6 +1,6 @@
 # Phase — Chat & Sidebar Refinements
 
-- **Status**: To be implemented
+- **Status**: Implemented
 - **Version**: 0.23.4 (**PATCH** — presentation only; no schema change, no
   migration, no port signature change, no `packages/*` change)
 - **Base branch**: `release/alpha-2`, delivered on

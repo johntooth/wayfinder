@@ -299,24 +299,6 @@
       color: var(--text3); border: 1px solid var(--border-strong);
       padding: 2px 5px; border-radius: 4px;
     }
-    /* New chat button (from option 1b) */
-    .new-chat-btn {
-      display: flex; align-items: center; gap: 8px;
-      padding: 9px 12px;
-      border: 1px solid var(--border-strong); border-radius: var(--radius);
-      background: var(--surface);
-      font-size: 13.5px; font-weight: 500; color: var(--text);
-      cursor: pointer; font-family: var(--font);
-      box-shadow: var(--sh);
-      transition: border-color .12s, background .12s;
-    }
-    .new-chat-btn:hover { border-color: var(--primary-dim); background: var(--primary-light); }
-    .new-chat-btn .plus { color: var(--primary); font-size: 15px; line-height: 1; }
-    .new-chat-btn kbd {
-      margin-left: auto; font-family: var(--font-mono); font-size: 10px;
-      color: var(--text4); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px;
-      background: var(--bg2);
-    }
     .inapp-nav { display: flex; flex-direction: column; gap: 2px; }
     .inapp-nav-item {
       display: flex; align-items: center; gap: 10px;
@@ -328,6 +310,12 @@
     .inapp-nav-item.active { background: var(--bg3); color: var(--text); font-weight: 600; }
     .inapp-nav-item .dot { width: 6px; height: 6px; border-radius: 50%; background: #c9c3b5; flex-shrink: 0; }
     .inapp-nav-item.active .dot { background: var(--primary); }
+    .inapp-nav-item .plus { width: 6px; display: flex; align-items: center; justify-content: center; color: var(--primary); font-size: 15px; line-height: 1; flex-shrink: 0; }
+    .inapp-nav-item.new kbd {
+      margin-left: auto; border: 1px solid var(--border); background: var(--bg2);
+      border-radius: 4px; padding: 1px 4px; font-family: var(--font-mono); font-size: 10px;
+      font-weight: 400; color: var(--text4);
+    }
     .inapp-nav-item .count { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--text3); }
     .inapp-section-label {
       font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em;
@@ -998,7 +986,7 @@
   <!-- ═══════════ 5 — SIDEBAR ═══════════ -->
   <section class="section" id="sidebar">
     <div class="section-head"><h2 class="section-title">Sidebar</h2><span class="section-rule"></span></div>
-    <p class="section-desc">246px rail on <code>--bg2</code>, separated from the canvas by a single hairline — no white panel, no shadow. Nav items use a 6px dot rather than an icon set. A bordered <strong>New chat</strong> button sits directly under the wordmark. Recent chats are two-line cards; the active one is the only white surface in the rail. Below 640px the rail becomes a drawer.</p>
+    <p class="section-desc">246px rail on <code>--bg2</code>, separated from the canvas by a single hairline — no white panel, no shadow. Nav items use a 6px dot rather than an icon set. <strong>New chat</strong> leads the same nav list, marked with a plus rather than a dot. Recent chats are two-line cards; the active one is the only white surface in the rail. Below 640px the rail becomes a drawer.</p>
 
     <div class="story">
       <div class="story-label">Rail — user routes, My Chats active</div>
@@ -1010,8 +998,8 @@
               <span class="name">Wayfinder</span>
               <span class="alpha-tag">ALPHA</span>
             </div>
-            <button class="new-chat-btn"><span class="plus">+</span>New chat<kbd>⌘K</kbd></button>
             <div class="inapp-nav">
+              <div class="inapp-nav-item new"><span class="plus">+</span>New chat<kbd>⌘K</kbd></div>
               <div class="inapp-nav-item active"><span class="dot"></span>My Chats</div>
               <div class="inapp-nav-item"><span class="dot"></span>Flows</div>
               <div class="inapp-nav-item"><span class="dot"></span>Approvals<span class="count">2</span></div>
@@ -1055,8 +1043,8 @@
               <span class="name">Wayfinder</span>
               <span class="alpha-tag">ADMIN</span>
             </div>
-            <button class="new-chat-btn"><span class="plus">+</span>New chat<kbd>⌘K</kbd></button>
             <div class="inapp-nav">
+              <div class="inapp-nav-item new"><span class="plus">+</span>New chat<kbd>⌘K</kbd></div>
               <div class="inapp-nav-item"><span class="dot"></span>All Chats<span class="count">128</span></div>
               <div class="inapp-nav-item active"><span class="dot"></span>Flows</div>
               <div class="inapp-nav-item"><span class="dot"></span>Approvals<span class="count">9</span></div>
@@ -1100,8 +1088,8 @@
               <span class="name">Wayfinder</span>
               <button class="modal-close" id="drawer-close" style="margin-left:auto">×</button>
             </div>
-            <button class="new-chat-btn"><span class="plus">+</span>New chat</button>
             <div class="inapp-nav">
+              <div class="inapp-nav-item new"><span class="plus">+</span>New chat</div>
               <div class="inapp-nav-item active"><span class="dot"></span>My Chats</div>
               <div class="inapp-nav-item"><span class="dot"></span>Flows</div>
               <div class="inapp-nav-item"><span class="dot"></span>Approvals<span class="count">2</span></div>

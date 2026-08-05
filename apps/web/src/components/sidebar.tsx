@@ -18,6 +18,7 @@ import {
   MessageSquare,
   PieChart,
   Plug,
+  Plus,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -31,18 +32,30 @@ import {
 import { HelpMenu } from "@/components/help-menu";
 import { NewChatModal } from "@/components/chat/new-chat-modal";
 import { useSidebar } from "@/components/sidebar-context";
-import { formatRecentChatMeta, isNewChatShortcut } from "@/components/sidebar-model";
+import {
+  formatRecentChatMeta,
+  isNewChatShortcut,
+  resolveActiveHref,
+} from "@/components/sidebar-model";
 import { UsageMeter, UsageRing } from "@/components/usage-meter";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/trpc/client";
 
 interface NavItem {
-  href: string;
+  // Omitted for an action row (New chat), which opens a modal rather than
+  // navigating. Exactly one of `href` / `onSelect` is set.
+  href?: string;
+  onSelect?: () => void;
   icon: React.ElementType;
   label: string;
   // Count of items awaiting the user on that surface. Rendered as a pill on the
   // right of the link; omitted or zero renders nothing.
   badgeCount?: number;
+  // Overrides the group's mark for this row alone — New chat takes a plus where
+  // its siblings take dots.
+  mark?: NavMark;
+  // Rendered hard right. Carries New chat's ⌘K hint.
+  trailing?: React.ReactNode;
 }
 
 interface NavGroup {
@@ -54,9 +67,26 @@ interface NavGroup {
 
 // Synthesise Information sits directly under Approvals when the extraction_flows
 // flag resolves (ADR-033 §7) — inline in the main group, no separate rule.
-const buildUserNav = (extractionEnabled: boolean, pendingApprovals: number): NavGroup[] => [
+const buildUserNav = (
+  extractionEnabled: boolean,
+  pendingApprovals: number,
+  onNewChat: () => void,
+): NavGroup[] => [
   {
     items: [
+      // New chat leads the same list rather than sitting above it as a separate
+      // button, distinguished by a plus in place of the dot.
+      {
+        onSelect: onNewChat,
+        icon: Plus,
+        label: "New chat",
+        mark: "plus",
+        trailing: (
+          <kbd className="rounded-[4px] border border-[#e7e3db] bg-[#f5f3ee] px-[4px] py-[1px] font-mono text-[10px] font-normal text-[#736d5f]">
+            ⌘K
+          </kbd>
+        ),
+      },
       { href: "/chats", icon: MessageSquare, label: "My Chats" },
       { href: "/flows", icon: GitBranch, label: "Flows" },
       { href: "/approvals", icon: Stamp, label: "Approvals", badgeCount: pendingApprovals },
@@ -152,7 +182,7 @@ interface AppSidebarProps {
 // The user rail carries four items and uses the design system's 6px dot. The
 // admin rail carries around twenty across four groups, where twenty identical
 // dots stop being scannable — so it keeps per-item icons.
-type NavMark = "dot" | "icon";
+type NavMark = "dot" | "icon" | "plus";
 
 const SECTION_LABEL_CLASS =
   "px-[10px] pb-[6px] pt-[8px] font-mono text-[10px] uppercase tracking-[0.1em] text-[#736d5f]";
@@ -160,17 +190,20 @@ const SECTION_LABEL_CLASS =
 function NavGroups({
   groups,
   mark,
-  isActive,
+  activeHref,
   onNavigate,
 }: {
   groups: NavGroup[];
   mark: NavMark;
-  isActive: (href: string) => boolean;
+  // The single active row, resolved across every candidate at once. Passing a
+  // predicate is what let /chats and /chats/<id> both light up.
+  activeHref: string | null;
   onNavigate: () => void;
 }) {
   // A collapsible group auto-expands when it holds the active route so the
   // current page is never hidden behind a collapsed header.
-  const groupHoldsActive = (group: NavGroup): boolean => group.items.some((item) => isActive(item.href));
+  const groupHoldsActive = (group: NavGroup): boolean =>
+    group.items.some((item) => item.href !== undefined && item.href === activeHref);
 
   // Tracks only groups the user has explicitly toggled. Groups appear
   // asynchronously (Skills/MCP/Knowledge depend on feature-flag queries that
@@ -209,27 +242,36 @@ function NavGroups({
               ))}
 
             {!isCollapsed &&
-              group.items.map(({ href, icon: Icon, label, badgeCount }) => {
-                const active = isActive(href);
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={onNavigate}
-                    className={`flex items-center gap-[10px] rounded-[8px] px-[10px] py-[6.5px] text-[13px] transition-colors ${
-                      active
-                        ? "bg-[#ebe8e0] font-semibold text-[#1c1b19]"
-                        : "text-[#5c574c] hover:bg-[#efece5] hover:text-[#1c1b19]"
-                    }`}
-                  >
-                    {mark === "dot" ? (
+              group.items.map((item) => {
+                const { href, onSelect, icon: Icon, label, badgeCount, trailing } = item;
+                const active = href !== undefined && href === activeHref;
+                const rowMark = item.mark ?? mark;
+
+                const rowClass = `flex w-full items-center gap-[10px] rounded-[8px] px-[10px] py-[6.5px] text-left text-[13px] transition-colors ${
+                  active
+                    ? "bg-[#ebe8e0] font-semibold text-[#1c1b19]"
+                    : "text-[#5c574c] hover:bg-[#efece5] hover:text-[#1c1b19]"
+                }`;
+
+                const body = (
+                  <>
+                    {rowMark === "dot" && (
                       <span
                         aria-hidden="true"
                         className={`h-[6px] w-[6px] shrink-0 rounded-full ${
                           active ? "bg-[#2f56d3]" : "bg-[#c9c3b5]"
                         }`}
                       />
-                    ) : (
+                    )}
+                    {rowMark === "plus" && (
+                      <span
+                        aria-hidden="true"
+                        className="flex h-[6px] w-[6px] shrink-0 items-center justify-center text-[15px] leading-none text-[#2f56d3]"
+                      >
+                        +
+                      </span>
+                    )}
+                    {rowMark === "icon" && (
                       <span className="flex h-[16px] w-[16px] shrink-0 items-center justify-center">
                         <Icon className="h-[14px] w-[14px]" />
                       </span>
@@ -243,6 +285,34 @@ function NavGroups({
                         {badgeCount > 99 ? "99+" : badgeCount}
                       </span>
                     )}
+                    {trailing}
+                  </>
+                );
+
+                if (href === undefined) {
+                  return (
+                    <button
+                      key={label}
+                      type="button"
+                      data-nav-row
+                      onClick={onSelect}
+                      className={rowClass}
+                    >
+                      {body}
+                    </button>
+                  );
+                }
+
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    data-nav-row
+                    data-nav-active={active || undefined}
+                    onClick={onNavigate}
+                    className={rowClass}
+                  >
+                    {body}
                   </Link>
                 );
               })}
@@ -340,7 +410,10 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   });
   const nav: NavGroup[] = isAdmin
     ? adminNav
-    : buildUserNav(extractionEnabled, pendingApprovalsQuery.data?.length ?? 0);
+    : buildUserNav(extractionEnabled, pendingApprovalsQuery.data?.length ?? 0, () => {
+        closeMobile();
+        setNewChatOpen(true);
+      });
   const homeHref = isAdmin ? "/admin/flows" : "/chats";
 
   const recentChats = isAdmin
@@ -366,8 +439,15 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     .slice(0, 2)
     .toUpperCase() || (user?.email?.slice(0, 2).toUpperCase() ?? "?");
 
-  const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(href + "/");
+  // One active row across the whole rail — nav items and recent chats resolved
+  // together, so an open chat no longer lights up its parent as well.
+  const navHrefs = nav.flatMap((group) =>
+    group.items.map((item) => item.href).filter((href): href is string => href !== undefined),
+  );
+  const activeHref = resolveActiveHref(pathname, [
+    ...navHrefs,
+    ...recentChats.map((chat) => `/chats/${chat.id}`),
+  ]);
 
   const brand = (trailing?: React.ReactNode) => (
     <div className="flex items-center gap-[9px] px-[6px]">
@@ -384,34 +464,16 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     </div>
   );
 
-  const newChatButton = !isAdmin && (
-    <button
-      type="button"
-      onClick={() => {
-        closeMobile();
-        setNewChatOpen(true);
-      }}
-      className="flex items-center gap-[8px] rounded-[9px] border border-[#dedad2] bg-white px-[12px] py-[8px] text-[13px] font-medium text-[#1c1b19] shadow-[0_1px_2px_rgba(28,27,25,0.04)] transition-colors hover:border-[#c3cef2] hover:bg-[#eaeefb]"
-    >
-      <span aria-hidden="true" className="text-[15px] leading-none text-[#2f56d3]">
-        +
-      </span>
-      New chat
-      <kbd className="ml-auto rounded-[4px] border border-[#e7e3db] bg-[#f5f3ee] px-[4px] py-[1px] font-mono text-[10px] font-normal text-[#736d5f]">
-        ⌘K
-      </kbd>
-    </button>
-  );
-
   const recentChatsBlock = recentChats.length > 0 && (
     <div className="flex flex-col gap-[3px]">
       <div className={SECTION_LABEL_CLASS}>Recent</div>
       {recentChats.map((chat) => {
-        const active = isActive(`/chats/${chat.id}`);
+        const active = activeHref === `/chats/${chat.id}`;
         return (
           <Link
             key={chat.id}
             href={`/chats/${chat.id}`}
+            data-nav-active={active || undefined}
             onClick={closeMobile}
             className={`flex flex-col gap-[3px] rounded-[8px] px-[10px] py-[7.5px] transition-colors ${
               active
@@ -524,12 +586,11 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
 
   const railBody = (
     <>
-      {newChatButton}
       <nav className="flex flex-col gap-[2px]">
         <NavGroups
           groups={nav}
           mark={isAdmin ? "icon" : "dot"}
-          isActive={isActive}
+          activeHref={activeHref}
           onNavigate={closeMobile}
         />
       </nav>

@@ -4,6 +4,7 @@ import {
   isNewChatShortcut,
   recentChatStatusLabel,
   relativeAge,
+  resolveActiveHref,
 } from "./sidebar-model";
 
 const NOW = new Date("2026-08-05T12:00:00Z");
@@ -95,5 +96,44 @@ describe("isNewChatShortcut", () => {
 
   it("still fires when focus is on a non-editable element", () => {
     expect(isNewChatShortcut(event({ target: { tagName: "DIV" } }))).toBe(true);
+  });
+});
+
+describe("resolveActiveHref", () => {
+  const NAV = ["/chats", "/flows", "/approvals", "/synthesise"];
+
+  it("activates the chat itself, not its parent, on a chat detail route", () => {
+    // The reported defect: /chats and /chats/<id> both highlighted, so the rail
+    // claimed the user was in two places at once.
+    const candidates = [...NAV, "/chats/abc"];
+    expect(resolveActiveHref("/chats/abc", candidates)).toBe("/chats/abc");
+  });
+
+  it("activates the parent when no more specific candidate exists", () => {
+    // A chat not in the recent list still has to light *something* up.
+    expect(resolveActiveHref("/chats/unlisted", NAV)).toBe("/chats");
+  });
+
+  it("prefers an exact match over any prefix", () => {
+    expect(resolveActiveHref("/chats", [...NAV, "/chats/abc"])).toBe("/chats");
+  });
+
+  it("returns null when nothing matches", () => {
+    expect(resolveActiveHref("/settings", NAV)).toBeNull();
+  });
+
+  it("does not treat a shared name prefix as a parent", () => {
+    // "/chat" must not claim "/chats" — the boundary is a path segment, not a
+    // string prefix.
+    expect(resolveActiveHref("/chats", ["/chat"])).toBeNull();
+  });
+
+  it("never lets a bare root swallow every route", () => {
+    expect(resolveActiveHref("/chats/abc", ["/", "/chats"])).toBe("/chats");
+  });
+
+  it("picks the longest of several matching ancestors", () => {
+    const candidates = ["/admin", "/admin/flows", "/admin/flows/nested"];
+    expect(resolveActiveHref("/admin/flows/nested/deep", candidates)).toBe("/admin/flows/nested");
   });
 });

@@ -32,6 +32,23 @@ export const formatRecentChatMeta = (
   now: Date = new Date(),
 ): string => `${recentChatStatusLabel(status)} · ${relativeAge(updatedAt, now)}`;
 
+// Which single rail item is active. Resolved across the whole candidate set
+// rather than per-item, because "is this href a prefix of the path" is true for
+// every ancestor at once — which is how /chats and /chats/<id> both came to
+// highlight. The most specific match wins, and only it.
+//
+// Matching is segment-boundary aware, so /chat never claims /chats.
+export const resolveActiveHref = (
+  pathname: string,
+  candidates: readonly string[],
+): string | null => {
+  const matches = candidates.filter(
+    (href) => pathname === href || pathname.startsWith(href.endsWith("/") ? href : `${href}/`),
+  );
+  if (matches.length === 0) return null;
+  return matches.reduce((longest, href) => (href.length > longest.length ? href : longest));
+};
+
 // Structural subset of KeyboardEvent — enough to decide the binding without
 // requiring a DOM in the tests.
 interface ShortcutEvent {

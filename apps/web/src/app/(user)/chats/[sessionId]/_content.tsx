@@ -453,6 +453,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         onDocumentEdited={() => void utils.session.get.invalidate({ sessionId })}
         expertRole={flow.expertRole ?? null}
         senderNamesById={senderNamesById}
+        currentUserId={myUserId}
         awaitingConfirmationNodeId={awaitingConfirmationNodeId}
         currentNodeId={currentNodeId}
         sessionId={sessionId}
