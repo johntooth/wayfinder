@@ -99,6 +99,10 @@ State: the new current release branch, the new `Next release line` value, and
 the link to the PR. Remind the user the previous release branch is now retired
 (critical fixes only).
 
+Then offer **`/publish`** for a first image on the new line. Cutting a line does
+not tag anything by itself, so this is a secondary offer — take it only if the
+user wants a published artifact for the new line straight away.
+
 ---
 
 ## Operation B — Tag a build
@@ -116,6 +120,17 @@ the link to the PR. Remind the user the previous release branch is now retired
    the previous tag on the branch (`git log <previous-tag>..HEAD --oneline`).
    Because the version no longer encodes the stage, title the release
    `vX.Y.Z — <line>` (e.g. `v0.19.4 — alpha-2`).
+
+5. **Offer to publish the container image**, then hand off to **`/publish`**.
+
+   Pushing the tag starts `publish.yml` on its own, so this is usually a matter
+   of following the run rather than starting one — but ask, because a tag whose
+   image was never published is a release nobody can deploy.
+
+   Do **not** publish inline from this skill. A registry failure part-way
+   through `/release` would leave a release half-finished, with a pushed tag and
+   no image and no obvious way back in. `/publish` is separately re-runnable and
+   safe to retry, which is the whole reason it is its own skill.
 
 ---
 

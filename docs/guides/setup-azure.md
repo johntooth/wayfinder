@@ -45,59 +45,48 @@ the n8n callback webhook (`/v1/webhooks`), if you use it.
 
 ---
 
-## 2. Build a container image
+## 2. Get the container image
 
-The repo ships no Dockerfile. Add one at the repo root — this builds both
-processes into a single image, and each Container App chooses which one runs:
+Wayfinder publishes a container image, so there is nothing to build:
 
-```dockerfile
-# syntax=docker/dockerfile:1
-FROM node:20-bookworm-slim AS base
-# Not alpine: the local embeddings path pulls onnxruntime-node, a glibc-linked
-# native binary with no musl build.
-ENV PNPM_HOME=/pnpm
-ENV PATH=$PNPM_HOME:$PATH
-RUN corepack enable
-WORKDIR /app
-
-FROM base AS build
-COPY . .
-RUN pnpm install --frozen-lockfile
-RUN pnpm build
-
-FROM base AS runtime
-ENV NODE_ENV=production
-COPY --from=build /app /app
-EXPOSE 3000 3001
-CMD ["pnpm", "--filter", "@wayfinder/web", "start"]
+```
+ghcr.io/rbrasier/wayfinder:0.24.0
 ```
 
-**Do not prune dev dependencies.** `drizzle-kit` — which the web app's `start`
-script invokes to run migrations — is a devDependency of `@rbrasier/adapters`,
-and the framework's runtime libraries (`drizzle-orm`, `better-auth`, `ai`, the
-`@ai-sdk/*` packages) are peer dependencies. A `--prod` install produces an image
-that fails on boot.
+It is public — no registry credential and no pull secret on the Container App.
+One image contains both processes; each Container App picks which one runs by
+setting the command (`web`, `api` or `migrate`). Pin the version rather than
+using `latest`, so a scale event can never pull a different build than the one
+you tested.
 
-Air-gapped or egress-restricted? Vendor the embedding model at build time so the
-running container never reaches the Hugging Face hub:
-
-```dockerfile
-RUN EMBEDDINGS_CACHE_DIR=/app/.embeddings-cache node scripts/fetch-embeddings-model.mjs
-```
-
-then set `EMBEDDINGS_CACHE_DIR=/app/.embeddings-cache` and
-`EMBEDDINGS_ALLOW_REMOTE_MODELS=false` at runtime.
-
-Build and push with ACR — no local Docker needed:
+**Optional: import it into ACR.** Pulling from GHCR works, but a copy in ACR
+gives lower pull latency, no cross-internet egress on every scale event, and
+scanning in your own subscription:
 
 ```bash
 RG=wayfinder-rg
 ACR=wayfinderacr
 
 az group create --name "$RG" --location uksouth
-az acr create --resource-group "$RG" --name "$ACR" --sku Basic --admin-enabled true
-az acr build --registry "$ACR" --image "wayfinder:$(cat VERSION)" .
+az acr create --resource-group "$RG" --name "$ACR" --sku Basic
+az acr import --name "$ACR" \
+  --source ghcr.io/rbrasier/wayfinder:0.24.0 \
+  --image wayfinder:0.24.0
 ```
+
+`az acr import` copies registry-to-registry — no local Docker, and nothing
+transits your machine.
+
+**Air-gapped or egress-restricted?** The published image fetches the local
+embedding model on first use. To avoid that, build your own from the repo's
+`Dockerfile` with the model vendored in — `az acr build` does it in Azure:
+
+```bash
+az acr build --registry "$ACR" --image wayfinder:offline \
+  --build-arg VENDOR_EMBEDDINGS_MODEL=true .
+```
+
+then set `EMBEDDINGS_ALLOW_REMOTE_MODELS=false` at runtime.
 
 ## 3. Create the database
 
@@ -201,7 +190,7 @@ One environment, two apps off the same image:
 
 | | `web` | `api` |
 |---|---|---|
-| Command | `pnpm --filter @wayfinder/web start` | `pnpm --filter @wayfinder/api start` |
+| Command | `web` | `api` |
 | Target port | 3000 | 3001 |
 | Ingress | External | Internal |
 | Suggested size | 1 vCPU / 2 GB | 0.5 vCPU / 1 GB |
@@ -221,18 +210,23 @@ extraction workers live. Scaled to zero, it stops receiving HTTP traffic — whi
 it barely has — and stops ticking, so scheduled sessions and unattended
 extraction runs silently stall.
 
-**Migrations run on `web` start.** The `start` script runs `pnpm db:migrate`
-before `next start`. That is fine for a single replica, but a rolling update
-across several would run them concurrently. For a multi-replica deployment, run
-migrations once as a job first:
+**Run migrations as their own job, before rolling the apps.** The image sets
+`RUN_MIGRATIONS_ON_START=false`, so the web app never migrates on boot — a
+migration is a discrete step that either succeeds or fails visibly, rather than
+something several replicas race to do during a rolling update:
 
 ```bash
 az containerapp job create \
   --name wayfinder-migrate --resource-group "$RG" --environment wayfinder-env \
   --trigger-type Manual --replica-timeout 600 \
-  --image "$ACR.azurecr.io/wayfinder:$(cat VERSION)" \
-  --command pnpm --args "db:migrate"
+  --image ghcr.io/rbrasier/wayfinder:0.24.0 \
+  --command migrate
 ```
+
+It is safe to re-run — an already-current database is a no-op — and safe to run
+concurrently, since instances serialise on an advisory lock. Wait for it to
+complete before updating the apps. See [`upgrading.md`](upgrading.md) for the
+full upgrade sequence.
 
 **Scaling `api` beyond one replica is safe.** The workers claim work with
 `FOR UPDATE SKIP LOCKED`, so concurrent ticks never double-fire.
@@ -287,9 +281,10 @@ may create the admin.
   `web` and `api` are the same code.
 - **AKS** is the right answer only if you already run AKS. Container Apps gives
   you the same isolation without the cluster.
-- **A single Azure VM with Docker Compose** — the repo's `docker-compose.yml` for
-  Postgres and MinIO, plus `./restart.sh` — is the smallest possible footprint for
-  a pilot, at the cost of owning patching, backups and TLS.
+- **A single Azure VM with Docker Compose** — the repo's
+  `docker-compose.prod.yml` brings up web, api, Postgres and MinIO off the same
+  published image. The smallest possible footprint for a pilot, at the cost of
+  owning patching, backups and TLS.
 
 ---
 
@@ -305,5 +300,6 @@ may create the admin.
 | `Scheduler enabled but not started` in the api log | `SCHEDULER_TICK_SECRET` is unset; set the same value on both apps |
 | Scheduled sessions fire only sometimes | The api app is scaling to zero — set its min replicas to 1 |
 | Real-time session updates stop arriving | `DATABASE_URL` points at PgBouncer; set `DATABASE_LISTEN_URL` to the direct 5432 endpoint |
-| `drizzle-kit: not found` on boot | The image was built with dev dependencies pruned — rebuild with a full `pnpm install` |
+| Web app starts but every query fails | Migrations were never run for this version — run the `migrate` command (see [`upgrading.md`](upgrading.md)) |
+| `Timed out … waiting for another process to finish migrating` | Another migration is running, or one died holding the lock — check for idle database connections |
 | Storage test fails against MinIO | `MINIO_PATH_STYLE` must be `true` for MinIO; `MINIO_REGION` is ignored by it |

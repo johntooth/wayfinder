@@ -13,6 +13,10 @@
     "./bootstrap": {
       "types": "./src/bootstrap.ts",
       "default": "./src/bootstrap.ts"
+    },
+    "./db": {
+      "types": "./src/db/index.ts",
+      "default": "./src/db/index.ts"
     }
   },
   "scripts": {

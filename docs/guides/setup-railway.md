@@ -74,3 +74,17 @@ email step.
 - Upload a test document template via a `generate_document` node
 - Check the MinIO / S3 bucket — the file should appear under `templates/`
 - Check the `api` service log for `scheduler heartbeat started`
+
+---
+
+## Upgrading
+
+Railway redeploys on push. When a release includes a migration, run it as its
+own step rather than letting a redeploy race it — see
+[`upgrading.md`](upgrading.md).
+
+## If you would rather own one VM
+
+`docker-compose.prod.yml` in the repo root brings up web, api, Postgres and
+MinIO off the published image on a single host. It trades Railway's managed
+platform for full control of patching, backups and TLS.

@@ -42,50 +42,22 @@ callback webhook (`/v1/webhooks`), which is the one route an outside caller hits
 
 ---
 
-## 2. Build a container image
+## 2. Get the container image
 
-The repo ships no Dockerfile. Add one at the repo root — this builds both
-processes into a single image, and the task definition chooses which one runs:
+Wayfinder publishes a container image, so there is nothing to build:
 
-```dockerfile
-# syntax=docker/dockerfile:1
-FROM node:20-bookworm-slim AS base
-# Not alpine: the local embeddings path pulls onnxruntime-node, a glibc-linked
-# native binary with no musl build.
-ENV PNPM_HOME=/pnpm
-ENV PATH=$PNPM_HOME:$PATH
-RUN corepack enable
-WORKDIR /app
-
-FROM base AS build
-COPY . .
-RUN pnpm install --frozen-lockfile
-RUN pnpm build
-
-FROM base AS runtime
-ENV NODE_ENV=production
-COPY --from=build /app /app
-EXPOSE 3000 3001
-CMD ["pnpm", "--filter", "@wayfinder/web", "start"]
+```
+ghcr.io/rbrasier/wayfinder:0.24.0
 ```
 
-**Do not prune dev dependencies.** `drizzle-kit` — which the web app's `start`
-script invokes to run migrations — is a devDependency of `@rbrasier/adapters`,
-and the framework's runtime libraries (`drizzle-orm`, `better-auth`, `ai`, the
-`@ai-sdk/*` packages) are peer dependencies. A `--prod` install produces an image
-that fails on boot.
+It is public — no credential, no `imagePullSecret`. One image contains both
+processes; the ECS task definition picks which one runs by setting the command
+(`web`, `api` or `migrate`). Pin the version rather than using `latest`, so a
+scale-out event can never pull a different build than the one you tested.
 
-Air-gapped or egress-restricted? Vendor the embedding model at build time so the
-running container never reaches the Hugging Face hub:
-
-```dockerfile
-RUN EMBEDDINGS_CACHE_DIR=/app/.embeddings-cache node scripts/fetch-embeddings-model.mjs
-```
-
-then set `EMBEDDINGS_CACHE_DIR=/app/.embeddings-cache` and
-`EMBEDDINGS_ALLOW_REMOTE_MODELS=false` at runtime.
-
-Push to ECR:
+**Optional: mirror it into ECR.** Pulling from GHCR works, but a copy in ECR
+gives you lower pull latency, no cross-internet egress on every scale-out, and
+scanning in your own account:
 
 ```bash
 AWS_REGION=eu-west-2
@@ -96,9 +68,20 @@ aws ecr create-repository --repository-name wayfinder --region "$AWS_REGION"
 aws ecr get-login-password --region "$AWS_REGION" \
   | docker login --username AWS --password-stdin "$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com"
 
-docker build -t "$REPO:$(cat VERSION)" .
-docker push "$REPO:$(cat VERSION)"
+docker pull ghcr.io/rbrasier/wayfinder:0.24.0
+docker tag ghcr.io/rbrasier/wayfinder:0.24.0 "$REPO:0.24.0"
+docker push "$REPO:0.24.0"
 ```
+
+**Air-gapped or egress-restricted?** The published image fetches the local
+embedding model on first use. To avoid that, build your own from the repo's
+`Dockerfile` with the model vendored in:
+
+```bash
+docker build --build-arg VENDOR_EMBEDDINGS_MODEL=true -t wayfinder:offline .
+```
+
+then set `EMBEDDINGS_ALLOW_REMOTE_MODELS=false` at runtime.
 
 ## 3. Create the database
 
@@ -225,7 +208,7 @@ CloudWatch:
 
 | | `web` | `api` |
 |---|---|---|
-| Command | `pnpm --filter @wayfinder/web start` | `pnpm --filter @wayfinder/api start` |
+| Command | `web` | `api` |
 | Port | 3000 | 3001 |
 | Behind the ALB | yes | no |
 | Suggested size | 1 vCPU / 2 GB | 0.5 vCPU / 1 GB |
@@ -234,15 +217,20 @@ CloudWatch:
 Give both tasks a security group that can reach RDS on 5432, and `api` egress to
 the ALB so its heartbeat can reach `WEB_BASE_URL`.
 
-**Migrations run on `web` start.** The `start` script runs `pnpm db:migrate`
-before `next start`. That is fine for a single task, but with several web tasks
-a rolling deploy would run them concurrently. For a multi-task deployment, run
-migrations as a one-off ECS task first:
+**Run migrations as their own task, before rolling the services.** The image
+sets `RUN_MIGRATIONS_ON_START=false`, so the web task never migrates on boot —
+a migration is a discrete step that either succeeds or fails visibly, rather
+than something several tasks race to do during a rolling deploy:
 
 ```bash
 aws ecs run-task --cluster wayfinder --task-definition wayfinder-web \
-  --overrides '{"containerOverrides":[{"name":"web","command":["pnpm","db:migrate"]}]}'
+  --overrides '{"containerOverrides":[{"name":"web","command":["migrate"]}]}'
 ```
+
+It is safe to re-run — an already-current database is a no-op — and safe to run
+concurrently, since instances serialise on an advisory lock. Wait for it to exit
+`0` before updating the services. See
+[`upgrading.md`](upgrading.md) for the full upgrade sequence.
 
 **Scaling `api` is safe.** The scheduler, retention and extraction workers claim
 work with `FOR UPDATE SKIP LOCKED`, so concurrent ticks never double-fire.
@@ -290,9 +278,10 @@ the `SMTP_*` and `M365_*` variables in [`.env.example`](../../.env.example).
   closer to the Railway experience. It reads a single `apprunner.yaml` at the repo
   root, so running both `web` and `api` from one repo means either a container
   image per service or a second config path — at which point ECS is simpler.
-- **EC2 with Docker Compose** is the smallest possible footprint: one instance,
-  the repo's `docker-compose.yml` for Postgres and MinIO, and `./restart.sh`. Fine
-  for a pilot, but you own patching, backups and TLS.
+- **EC2 with Docker Compose** is the smallest possible footprint: one instance
+  running the repo's `docker-compose.prod.yml`, which brings up web, api, Postgres
+  and MinIO off the same published image. Fine for a pilot, but you own patching,
+  backups and TLS.
 - **Elastic Beanstalk** on the Node platform works, but the pnpm workspace build
   needs custom `.platform` hooks and you still need Postgres and S3 separately.
 
@@ -309,5 +298,6 @@ the `SMTP_*` and `M365_*` variables in [`.env.example`](../../.env.example).
 | `Scheduler enabled but not started` in the api log | `SCHEDULER_TICK_SECRET` is unset; set the same value on both services |
 | Scheduled sessions still never fire | The api cannot reach `WEB_BASE_URL` — check egress from the api security group to the ALB |
 | Storage test fails with a signing or region error | On real S3 set `MINIO_PATH_STYLE=false` and `MINIO_REGION` to the bucket's region |
-| `drizzle-kit: not found` on boot | The image was built with dev dependencies pruned — rebuild with a full `pnpm install` |
+| Web app starts but every query fails | Migrations were never run for this version — run the `migrate` command (see [`upgrading.md`](upgrading.md)) |
+| `Timed out … waiting for another process to finish migrating` | Another migration is running, or one died holding the lock — check for idle database connections |
 | Chat streams cut off after a fixed interval | ALB idle timeout is below `SSE_HEARTBEAT_MS`; raise the timeout or lower the heartbeat |

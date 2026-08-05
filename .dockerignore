@@ -1,0 +1,30 @@
+# Never ship configuration or secrets — the image is environment-agnostic and a
+# deployment's integrations are configured in the setup wizard (ADR-041).
+.env
+.env.*
+!.env.example
+!.env.min.example.*
+
+# Build output and caches: rebuilt inside the image, and copying host artifacts
+# in would silently mix architectures.
+node_modules
+**/node_modules
+.next
+**/.next
+dist
+**/dist
+.turbo
+**/.turbo
+coverage
+**/coverage
+
+# Repository and tooling noise that only slows the build context transfer.
+.git
+.github
+.claude
+docs
+*.md
+!README.md
+test-results
+playwright-report
+**/*.tsbuildinfo

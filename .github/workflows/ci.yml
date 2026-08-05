@@ -69,6 +69,85 @@ jobs:
       - name: Validate
         run: ./validate.sh
 
+  # The first job in this repository to run `pnpm build`. Before it, a broken
+  # production build was discovered by whoever deployed next (ADR-046 §3).
+  docker-image:
+    name: Build container image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: wayfinder:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Report image size
+        run: docker image inspect wayfinder:ci --format 'image size: {{.Size}} bytes'
+
+  # Exercises the one deployment artifact CI can run end to end, on the runner
+  # itself: the whole stack comes up, migrations apply as their own service, and
+  # the web app answers.
+  compose-smoke:
+    name: Compose stack smoke test
+    runs-on: ubuntu-latest
+    needs: docker-image
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ghcr.io/rbrasier/wayfinder:ci
+          cache-from: type=gha
+
+      - name: Bring the stack up
+        env:
+          WAYFINDER_VERSION: ci
+          POSTGRES_PASSWORD: postgres
+          BETTER_AUTH_URL: http://localhost:3000
+          BETTER_AUTH_SECRET: ci-test-secret-must-be-at-least-16-chars
+          SETTINGS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+          SCHEDULER_TICK_SECRET: ci-scheduler-tick-secret
+        run: docker compose -f docker-compose.prod.yml up -d --wait --wait-timeout 300
+
+      - name: Assert migrations ran as their own step
+        run: |
+          docker compose -f docker-compose.prod.yml logs migrate
+          docker compose -f docker-compose.prod.yml logs migrate | grep -q "\[migrate\]"
+
+      - name: Assert the web app serves the first-run setup page
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:3000/setup > /dev/null; then
+              echo "web app answered on attempt $attempt"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "web app never answered"
+          docker compose -f docker-compose.prod.yml logs web
+          exit 1
+
+      - name: Assert the api started its workers
+        run: docker compose -f docker-compose.prod.yml logs api | grep -q "scheduler heartbeat started"
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.prod.yml down -v
+
   security:
     name: Security scan
     runs-on: ubuntu-latest

@@ -118,3 +118,15 @@ You are automatically promoted to admin.
 | `DATABASE_URL is required` | Ensure `.env` exists and `DATABASE_URL` is set |
 | `ECONNREFUSED 5432` | Postgres is not running — start it or check the host/port |
 | `NoSuchBucket` error | MinIO is running but the bucket does not exist — the app creates it on start; check `MINIO_ENDPOINT`/`MINIO_PORT` |
+
+---
+
+## Not for local development: `docker-compose.prod.yml`
+
+The repo has a second compose file. `docker-compose.yml` — the one this guide
+uses — runs **infrastructure only** (Postgres, MinIO, Langfuse) so the app can
+run on your host with hot reload, and `./restart.sh` depends on it.
+
+`docker-compose.prod.yml` is a **deployment** artifact: it runs the app itself
+from the published container image, with no source checkout and no hot reload.
+Use it to try a production-shaped install, not to develop against.

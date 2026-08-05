@@ -1,6 +1,6 @@
 # Phase — Container Distribution and Release Artifacts
 
-- **Status**: Awaiting review (`/doc-review`)
+- **Status**: Implemented in v0.24.0 — see `container-distribution.summary.md`
 - **Date**: 2026-08-04
 - **Target version**: **0.24.0** (MINOR — new build, CI and release capability;
   no schema change, no behaviour change for an existing install)
@@ -16,10 +16,10 @@
     a distinct long-lived process that must not scale to zero
   - ADR-041 (first-run wizard, DB-first config) — why the image ships no
     credentials, and the zero-config local promise slice 2 must not break
-  - [`scaling-new-infrastructure.phase.md`](./scaling-new-infrastructure.phase.md)
-    lists "Dockerfiles + object-storage parametrisation: **MINOR**" as a future
-    slice. **This phase claims the Dockerfile half**; object-storage
-    parametrisation stays there. Update that doc to point here.
+  - The scaling-with-new-infrastructure phase doc listed "Dockerfiles +
+    object-storage parametrisation" as a future slice. **This phase claimed the
+    Dockerfile half**; object-storage parametrisation stays there, and that doc
+    now points at this one.
 
 ---
 
@@ -76,11 +76,12 @@ explicitly in that slice and record the reasoning; do not let it drift in.
 
 New feature → base branch `main`, per **Release Branching** in `CLAUDE.md`.
 
-> **Note for whoever picks this up:** these planning docs were written on a
-> branch based on `release/alpha-2` (PR #225) at the author's request. They must
-> reach `main` — via the normal forward-merge — before `/build` implements this
-> phase. Implementation targets `main`; nothing in this phase belongs on a
-> release branch.
+> **How this actually landed:** the planning docs and the implementation were
+> both written on a branch based on `release/alpha-2` (PR #225), at the author's
+> explicit direction after being offered a branch from `main`. The pull request
+> targets `main`, so the feature reaches the next release line as the branching
+> rules require — but the branch also carries three alpha-2 fix commits that had
+> not yet been forward-merged. Reviewers should expect them in the diff.
 
 ---
 
@@ -312,7 +313,7 @@ Named so `/doc-review` can weigh them rather than rediscover them:
 - **Infrastructure-as-code** (CDK, Bicep, Terraform) — every option gets shorter
   once the build section disappears from the guides
 - **A preflight/doctor script** for validating a target environment
-- **Object-storage parametrisation** — stays in `scaling-new-infrastructure.phase.md`
+- **Object-storage parametrisation** — stays with the scaling-with-new-infrastructure phase
 
 ---
 
