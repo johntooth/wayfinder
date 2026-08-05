@@ -15,7 +15,10 @@
  */
 
 import "dotenv/config";
-import { runMigrations } from "@rbrasier/adapters";
+// The narrow `/db` subpath, not the package barrel. The barrel pulls the AI and
+// embeddings adapters — onnxruntime and transformers — which migrating has no
+// use for. Loading them here cost seconds on every dev and e2e boot.
+import { runMigrations } from "@rbrasier/adapters/db";
 
 async function main(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;

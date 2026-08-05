@@ -101,6 +101,18 @@ jobs:
     name: Compose stack smoke test
     runs-on: ubuntu-latest
     needs: docker-image
+
+    # Job-scoped, not step-scoped: every `docker compose` invocation interpolates
+    # the compose file, so a step without these fails to read it at all — even
+    # `logs` and `down`.
+    env:
+      WAYFINDER_VERSION: ci
+      POSTGRES_PASSWORD: postgres
+      BETTER_AUTH_URL: http://localhost:3000
+      BETTER_AUTH_SECRET: ci-test-secret-must-be-at-least-16-chars
+      SETTINGS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      SCHEDULER_TICK_SECRET: ci-scheduler-tick-secret
+
     steps:
       - uses: actions/checkout@v4
 
@@ -116,30 +128,38 @@ jobs:
           cache-from: type=gha
 
       - name: Bring the stack up
-        env:
-          WAYFINDER_VERSION: ci
-          POSTGRES_PASSWORD: postgres
-          BETTER_AUTH_URL: http://localhost:3000
-          BETTER_AUTH_SECRET: ci-test-secret-must-be-at-least-16-chars
-          SETTINGS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
-          SCHEDULER_TICK_SECRET: ci-scheduler-tick-secret
         # Deliberately not `--wait`: the migrate service runs to completion and
         # exits, which `--wait` treats as a service that failed to stay up. The
         # polling below is the real readiness check anyway.
         run: docker compose -f docker-compose.prod.yml up -d
 
-      - name: Assert migrations ran as their own step
+      - name: Assert migrations ran as their own step and succeeded
         run: |
+          set -o pipefail
+          MIGRATE_CONTAINER=$(docker compose -f docker-compose.prod.yml ps -aq migrate)
+          if [ -z "$MIGRATE_CONTAINER" ]; then
+            echo "no migrate container was created"
+            exit 1
+          fi
+
+          # It runs to completion, so wait for it to actually be gone rather than
+          # assuming the logs are already complete.
           for attempt in $(seq 1 40); do
-            if docker compose -f docker-compose.prod.yml logs migrate 2>/dev/null | grep -qE "Applied [0-9]+ migration|already up to date"; then
-              docker compose -f docker-compose.prod.yml logs migrate
-              exit 0
-            fi
+            STATE=$(docker inspect -f '{{.State.Status}}' "$MIGRATE_CONTAINER")
+            [ "$STATE" = "exited" ] && break
             sleep 5
           done
-          echo "migrate service never reported a result"
+
           docker compose -f docker-compose.prod.yml logs migrate
-          exit 1
+
+          EXIT_CODE=$(docker inspect -f '{{.State.ExitCode}}' "$MIGRATE_CONTAINER")
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "migrate exited $EXIT_CODE"
+            exit 1
+          fi
+
+          docker compose -f docker-compose.prod.yml logs migrate \
+            | grep -qE "Applied [0-9]+ migration|already up to date"
 
       - name: Assert the web app serves the first-run setup page
         run: |
