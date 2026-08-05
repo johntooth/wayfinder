@@ -27,6 +27,13 @@ jobs:
   # machines. Each shard is a fully independent job with its own Postgres +
   # MinIO + app, so there is no cross-shard data contention. Playwright reruns
   # the setup/seed/cleanup project dependencies inside every shard.
+  #
+  # Six shards. Playwright balances a `--shard=i/n` split by test count (not
+  # file count), so the specs land roughly evenly across the six without any
+  # manual grouping here. Every extra shard also re-pays the same fixed setup —
+  # install, migrate, browser download, embedding warm-up, app boot — so shards
+  # buy less wall-clock the further you push them; six is where the remaining
+  # per-shard test time still dominates that fixed cost.
   e2e:
     name: Playwright E2E (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
@@ -34,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
 
     services:
       postgres:
