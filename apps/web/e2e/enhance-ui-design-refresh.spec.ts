@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { test, expect } from "./helpers/base";
+import { openAccountMenu } from "./helpers/account-menu";
 
 // E2E for the UI design refresh.
 // (docs/development/implemented/alpha-2/v0.23.3/ui-design-refresh.phase.md)
@@ -61,9 +62,7 @@ test.describe("UI design refresh", () => {
   test("sign out is reachable from the user chip's account menu", async ({ page }) => {
     await page.goto("/chats");
 
-    const accountButton = page.getByRole("button", { name: /account menu/i });
-    await expect(accountButton).toBeVisible();
-    await accountButton.click();
+    await openAccountMenu(page);
 
     // Asserted, not clicked — signing out here would invalidate the shared
     // storageState the rest of the chromium project depends on.

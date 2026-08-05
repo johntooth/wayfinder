@@ -136,6 +136,14 @@ behaviour that moved:
    `accessibility.spec.ts` runs under the authenticated project, so `/login` was
    never covered — this closes that gap rather than assuming it was closed
 
+Two existing specs were updated rather than the behaviour reverted, because
+moving Settings and Sign out behind the chip menu was the requested change:
+`fix-logout-and-register-sidebar.spec.ts` and
+`enhance-synthesis-flow-ui-fixes.spec.ts` now open the account menu first, via a
+shared `helpers/account-menu.ts`. Both still assert the same end behaviour — that
+sign-out reaches `/login` and that the block reaches `/settings` — so the
+coverage they were written for is intact; only the path to the control moved.
+
 Deliberately **not** asserted: hex values or font families. Pinning those in e2e
 would make every future design tweak a test failure, and contrast is already
 covered numerically by the unit test and at runtime by axe.

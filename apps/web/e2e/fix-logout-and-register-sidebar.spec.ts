@@ -5,7 +5,8 @@
  * fix-logout-and-register-sidebar.md:
  *
  *   1. A signed-in user can sign out from the sidebar footer and lands on
- *      /login.
+ *      /login. (v0.23.3 moved the control itself into the user chip's account
+ *      menu; the behaviour it guards is unchanged.)
  *   2. A fresh visitor to /register sees a bare registration screen with
  *      no admin navigation sidebar.
  *   3. A signed-in admin who navigates to /register is redirected to
@@ -16,13 +17,17 @@
  */
 
 import { test, expect } from './helpers/base';
+import { openAccountMenu } from './helpers/account-menu';
 
 test.describe('Logout', () => {
-  test('sidebar exposes a Sign out button that ends the session', async ({ page }) => {
+  test('the account menu exposes a Sign out item that ends the session', async ({ page }) => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
-    const signOut = page.getByRole('button', { name: /sign out/i });
+    // v0.23.3 moved Sign out off the rail and behind the user chip.
+    await openAccountMenu(page);
+
+    const signOut = page.getByRole('menuitem', { name: /sign out/i });
     await expect(signOut).toBeVisible();
 
     await signOut.click();
