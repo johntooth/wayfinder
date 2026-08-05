@@ -56,6 +56,11 @@ absent, and has no operator-facing entry point.
   `image:` reference.
 - `docker compose -f docker-compose.prod.yml up -d` brings up the whole stack —
   web, api, Postgres, MinIO — on one host.
+- **Every deployment guide asks for the same minimal environment set** — the six
+  variables in `.env.min.example.prod` — and no more. Object storage, the AI
+  provider, mail and sign-in are configured by the administrator in the setup
+  wizard (ADR-041) and stored encrypted, never handed to a cloud platform's
+  secret store as a deployment concern.
 - Migrations can be run as an explicit command, so a production image no longer
   needs `drizzle-kit` and a multi-instance deploy no longer races.
 - Publishing is invoked through its own `/publish` skill, separate from
@@ -114,6 +119,8 @@ affected are operational:
   image reference; the "do not prune dev dependencies" warning is removed once
   ADR-047 lands; the one-off migration task becomes the documented default.
 - `docs/guides/setup-azure.md` — the same three changes.
+- `docs/guides/setup-railway.md` — brought onto the same minimal env set as the
+  other two guides, and pointed at the compose path as an alternative.
 - `docs/guides/setup-local.md`, `README.md` — gain the single-host compose path.
 - `docs/guides/managing-releases.md` — records where publishing sits.
 - `docs/guides/skills.md` — documents `/publish`.
@@ -182,6 +189,13 @@ Related planning docs:
 - [ ] `/release` Operation B offers to hand off to `/publish` after tagging, and
       Operation A offers it after cutting a line.
 - [ ] `setup-aws.md` and `setup-azure.md` contain no inline Dockerfile.
+- [ ] Every deployment guide's required environment table lists only the
+      variables in `.env.min.example.prod`. Storage and AI provider variables
+      appear only under an explicitly-labelled env-only-install heading, if at
+      all.
+- [ ] `docker-compose.prod.yml` sets no AI provider key and no storage
+      credential the operator chose — a fresh stack reaches `/setup` and the
+      wizard configures both.
 - [ ] `./validate.sh` passes.
 
 ## 11. Out of scope / future work

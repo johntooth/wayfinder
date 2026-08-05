@@ -35,6 +35,43 @@ production build is unverified until someone deploys.
 
 ---
 
+## Standing constraint — the minimal environment surface
+
+Every artifact this phase produces, and every guide it touches, asks for the
+**same six variables** and no more. `.env.min.example.prod` is the authority:
+
+```
+NODE_ENV  DATABASE_URL  BETTER_AUTH_SECRET  SETTINGS_ENCRYPTION_KEY
+BETTER_AUTH_URL / WEB_BASE_URL  SCHEDULER_TICK_SECRET
+```
+
+Everything else has a working default. Object storage, the AI provider, mail and
+sign-in are **configured by the administrator in the setup wizard** (ADR-041),
+which tests each connection before accepting it and stores the credential
+encrypted with `SETTINGS_ENCRYPTION_KEY`. They are deliberately not deployment
+inputs: a platform engineer should not need an Anthropic key to stand the app up,
+and an admin rotating an S3 key should not need a redeploy.
+
+`MINIO_*` and the provider keys remain supported as an env-only fallback for
+automated provisioning — a stored config always wins over them — but no guide
+presents them as the normal path.
+
+Current state, verified while writing this doc:
+
+| Guide | Aligned? |
+| --- | --- |
+| `setup-aws.md` | Yes — minimal table, wizard-first, env-only under its own heading |
+| `setup-azure.md` | Yes — same shape |
+| `setup-railway.md` | **Fixed on this branch** — it listed `ANTHROPIC_API_KEY` and six `MINIO_*` vars as required while linking to the file that says otherwise |
+
+**The one place this needs a decision is slice 4.** `docker-compose.prod.yml`
+bundles its own MinIO, so its credentials are not a credential the operator
+chose — presetting `MINIO_*` there is defensible, and asking an evaluator to
+paste `minioadmin` into a wizard is friction with no security benefit. Decide it
+explicitly in that slice and record the reasoning; do not let it drift in.
+
+---
+
 ## Branch and base
 
 New feature → base branch `main`, per **Release Branching** in `CLAUDE.md`.
@@ -214,10 +251,16 @@ Watch the details that differ from local:
 
 - Service-name hostnames, not `localhost` — `postgres:5432` (not the `5433` host
   mapping) and `storage:9000`
-- `MINIO_PATH_STYLE=true` for MinIO
 - Secrets via `.env` file reference, never inline
 - `RUN_MIGRATIONS_ON_START=false`, with the migrate service owning it
 - No Langfuse — optional, and not part of a minimal production stack
+- **No AI provider key.** The stack comes up without one and the wizard
+  configures it. An evaluator gets to `/setup` before choosing a provider.
+- **Bundled MinIO is the one presetting decision** (see the standing constraint
+  above): `MINIO_ENDPOINT=storage`, `MINIO_PATH_STYLE=true` and the compose
+  file's own root credentials. Recommended, because those are the compose file's
+  own credentials rather than the operator's — but make the call explicitly and
+  put the reason in a comment in the file.
 
 This slice is also **the only deployment artifact CI can fully exercise**, since
 it runs on the runner itself. Bring the stack up, assert the web app serves
@@ -233,13 +276,24 @@ it runs on the runner itself. Bring the stack up, assert the web app serves
 - [ ] `docker compose down -v` then `up -d` again reaches the same state
 - [ ] The CI smoke test fails when the stack does not come up
 - [ ] The existing `docker-compose.yml` and `./restart.sh` are untouched
+- [ ] The stack comes up with **no AI provider key set anywhere**, and the wizard
+      configures one
+- [ ] Every environment variable in the file is either one of the six minimal
+      vars or carries a comment saying why it is there
 
 **Docs updated in this slice**
 
 - `README.md` — single-host deployment alongside the local quickstart
 - `setup-aws.md` / `setup-azure.md` — the "single VM with Docker Compose"
   alternative points at a real file instead of describing one
+- `setup-railway.md` — the compose path as an alternative for anyone who would
+  rather own one VM than a platform
 - `setup-local.md` — note the prod compose exists and what it is for
+
+**Sweep before closing the phase:** re-read the required-environment table in all
+three deployment guides against `.env.min.example.prod`. They must agree
+variable-for-variable. This is the check that failed silently before — the
+Railway guide drifted while linking to the file that contradicted it.
 
 ---
 
@@ -273,3 +327,4 @@ Named so `/doc-review` can weigh them rather than rediscover them:
 | CI slows down on every PR | Layer caching; accept — it buys the first `pnpm build` coverage the repo has ever had |
 | A mistaken public publish is effectively permanent | `/publish` verifies tag and CI green before pushing; versions are immutable, mistakes get a new PATCH |
 | These docs are on a `release/alpha-2` branch but implementation targets `main` | Flagged above; forward-merge before `/build` |
+| Guides drift back to listing storage/AI vars as required, because a platform's own docs are written that way | The standing constraint above, the slice 4 sweep, and `.env.min.example.prod` as the single authority |
