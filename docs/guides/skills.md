@@ -33,6 +33,7 @@ If the prompt doesn't clearly match a skill, Claude asks:
 | Enhancement / Revision      | "change…", "extend…", "tweak…"                                     | Updated phase doc → routed to Review     |
 | Bug Fix                     | "broken", "not working", "should be doing"                         | Fix doc + code + impl summary + PATCH    |
 | Release                     | "cut the next alpha", "tag a build", "merge fixes forward"         | Release branch / tag / forward-merge (maintainers — see `managing-releases.md`) |
+| Publish                     | "publish the image", "push the release artifact"                   | A published `ghcr.io/rbrasier/wayfinder:<version>` image. Drives the CI workflow — never builds or pushes locally. `/release` hands off to it after tagging |
 
 ## Adding a new skill
 

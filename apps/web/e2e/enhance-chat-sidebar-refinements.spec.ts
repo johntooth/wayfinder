@@ -1,7 +1,7 @@
 import { test, expect } from "./helpers/base";
 
 // E2E for the chat and sidebar refinements.
-// (docs/development/implemented/alpha-2/v0.23.4/chat-sidebar-refinements.phase.md)
+// (docs/development/implemented/alpha-2/v0.24.1/chat-sidebar-refinements.phase.md)
 //
 // Covers the four behaviours that changed. Colours are not asserted — the
 // participant tints are guarded numerically by

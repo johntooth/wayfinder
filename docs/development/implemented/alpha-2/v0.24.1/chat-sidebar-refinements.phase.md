@@ -1,7 +1,7 @@
 # Phase — Chat & Sidebar Refinements
 
 - **Status**: Implemented
-- **Version**: 0.23.4 (**PATCH** — presentation only; no schema change, no
+- **Version**: 0.24.1 (**PATCH** — presentation only; no schema change, no
   migration, no port signature change, no `packages/*` change)
 - **Base branch**: `release/alpha-2`, delivered on
   `claude/ui-design-refresh-mockup-hfl9zt` (PR #227) because every item builds on
