@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildApprovalDecisionMessage } from "@rbrasier/domain";
-import { formatDecisionMoment, parseApprovalDecisionMessage } from "./approval-decision-message";
+import {
+  decisionVerbPhrase,
+  formatDecisionMoment,
+  parseApprovalDecisionMessage,
+} from "./approval-decision-message";
 
 const decidedAt = new Date("2026-08-02T10:14:00.000Z");
 
@@ -73,5 +77,29 @@ describe("formatDecisionMoment", () => {
   // against toLocaleString keeps this true under whatever timezone CI runs in.
   it("renders the decision moment in the viewer's local time", () => {
     expect(formatDecisionMoment(decidedAt)).toBe(decidedAt.toLocaleString());
+  });
+});
+
+describe("decisionVerbPhrase", () => {
+  // The feed renders "<b>Ada Lovelace</b> granted approval, with edits." — the
+  // name leads, so the outcome has to follow it as a verb phrase rather than as
+  // the domain's standalone sentence.
+  it.each([
+    ["Approval granted.", "granted approval."],
+    ["Approval granted, with edits made by the approver.", "granted approval, with edits."],
+    ["Changes requested by the approver.", "requested a change."],
+    [
+      "Approval rejected — routed back to the originator.",
+      "rejected approval — routed back to the originator.",
+    ],
+    ["Approval rejected — the request was closed.", "rejected approval — the request was closed."],
+  ])("turns %j into %j", (outcome, expected) => {
+    expect(decisionVerbPhrase(outcome)).toBe(expected);
+  });
+
+  it("passes an unrecognised sentence through untouched", () => {
+    // A domain wording change must degrade to the old sentence, never to a
+    // blank or a wrong verb.
+    expect(decisionVerbPhrase("Something new happened.")).toBe("Something new happened.");
   });
 });

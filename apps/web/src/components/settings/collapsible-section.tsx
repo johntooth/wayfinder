@@ -29,19 +29,19 @@ export function CollapsibleSection({
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((previous) => !previous)}
-        className={`flex w-full cursor-pointer items-center justify-between gap-3 rounded-[12px] px-4 py-3 text-left transition-colors hover:bg-[#efede8] ${
+        className={`flex w-full cursor-pointer items-center justify-between gap-3 rounded-[12px] px-4 py-3 text-left transition-colors hover:bg-[#f5f3ee] ${
           open ? "rounded-b-none" : ""
         }`}
       >
         <div className="space-y-0.5">
-          <h2 className="text-sm font-semibold tracking-tight text-[#1a1814]">{title}</h2>
+          <h2 className="text-sm font-semibold tracking-tight text-[#1c1b19]">{title}</h2>
           {description && <p className="text-xs text-muted-foreground">{description}</p>}
         </div>
-        <span className="flex items-center gap-2 text-xs font-medium text-[#6d6a65]">
+        <span className="flex items-center gap-2 text-xs font-medium text-[#666055]">
           <span className="hidden sm:inline">{open ? "Hide" : "Show"}</span>
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] border border-[#dedad2] bg-white">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] border border-[#e7e3db] bg-white">
             <ChevronDown
-              className={`h-4 w-4 shrink-0 text-[#6d6a65] transition-transform ${open ? "" : "-rotate-90"}`}
+              className={`h-4 w-4 shrink-0 text-[#666055] transition-transform ${open ? "" : "-rotate-90"}`}
             />
           </span>
         </span>

@@ -6,11 +6,11 @@ export type StepType = "conversational" | "auto" | "scheduled" | "approval" | "m
 // modal so a step's type reads the same everywhere: conversational = blue,
 // automated (n8n) = purple, scheduled = green, approval = amber, MCP = teal.
 export const STEP_TYPE_ACCENT: Record<StepType, string> = {
-  conversational: "#3a5fd9",
-  auto: "#7c3aed",
-  scheduled: "#1f8a4c",
+  conversational: "#2f56d3",
+  auto: "#5b3fa8",
+  scheduled: "#1f6b4d",
   approval: "#d97706",
-  mcp: "#0e8a7a",
+  mcp: "#14312e",
 };
 
 const ICONS = {

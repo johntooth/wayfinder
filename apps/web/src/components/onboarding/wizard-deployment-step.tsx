@@ -29,7 +29,7 @@ function ChoiceButton({
       onClick={onSelect}
       className={`flex-1 rounded-md border p-3 text-left transition-colors ${
         selected
-          ? "border-[#1f8a4c] bg-[#f2f8f4]"
+          ? "border-[#1f6b4d] bg-[#f2f8f4]"
           : "border-border bg-background hover:border-[#c9c4bb]"
       }`}
     >
@@ -105,7 +105,7 @@ export function WizardDeploymentStep({
               />
             </div>
             {organisationCreated && (
-              <p data-testid="wizard-org-created" className="text-xs text-[#1f8a4c]">
+              <p data-testid="wizard-org-created" className="text-xs text-[#1f6b4d]">
                 Organisation created.
               </p>
             )}

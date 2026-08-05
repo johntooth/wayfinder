@@ -33,5 +33,5 @@ export const OUTCOME_CLASSES: Record<OutcomeTone, string> = {
   approved: "bg-[#e7f5ec] text-[#1d6b3c]",
   rejected: "bg-[#fdeaea] text-[#a32020]",
   changes: "bg-[#fef3e2] text-[#a65b05]",
-  pending: "bg-[#eef1fc] text-[#3a5fd9]",
+  pending: "bg-[#eaeefb] text-[#2f56d3]",
 };

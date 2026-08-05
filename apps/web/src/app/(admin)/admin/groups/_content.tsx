@@ -72,11 +72,11 @@ function GroupsManagementCard() {
           ) : groups.length === 0 ? (
             <p className="text-sm text-muted-foreground">No groups yet.</p>
           ) : (
-            <ul className="divide-y divide-[#ece9e3]">
+            <ul className="divide-y divide-[#f0ede8]">
               {groups.map((group) => (
                 <li key={group.id} className="flex items-center justify-between gap-3 py-2">
                   <div className="min-w-0">
-                    <span className="font-medium text-[#1a1814]">{group.name}</span>
+                    <span className="font-medium text-[#1c1b19]">{group.name}</span>
                     {group.description && (
                       <p className="text-xs text-muted-foreground">{group.description}</p>
                     )}
@@ -223,7 +223,7 @@ function GroupModal({
               <Label htmlFor="group-org">Organisation</Label>
               <select
                 id="group-org"
-                className="flex h-10 w-full rounded-md border border-[#d6d2ca] bg-white px-2 text-sm"
+                className="flex h-10 w-full rounded-md border border-[#dedad2] bg-white px-2 text-sm"
                 value={organisationId}
                 onChange={(event) => setOrganisationId(event.target.value)}
               >

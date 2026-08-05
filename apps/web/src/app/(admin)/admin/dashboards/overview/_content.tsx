@@ -19,8 +19,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/trpc/client";
 
-const DONUT_COLOURS = ["#3a5fd9", "#2e9e6a", "#d98a3a", "#8a4fd9", "#d93a6f", "#3ab6d9", "#9ea83a"];
-const AXIS_STYLE = { fontSize: 11, fill: "#918d87" };
+const DONUT_COLOURS = ["#2f56d3", "#1f6b4d", "#d98a3a", "#8a4fd9", "#d93a6f", "#3ab6d9", "#9ea83a"];
+const AXIS_STYLE = { fontSize: 11, fill: "#736d5f" };
 
 interface MetricWithDelta {
   value: number;
@@ -31,7 +31,7 @@ interface MetricWithDelta {
 function DeltaBadge({ deltaPct }: { deltaPct: number | null }) {
   if (deltaPct === null) {
     return (
-      <span className="inline-flex items-center gap-1 text-[12px] text-[#6d6a65]">
+      <span className="inline-flex items-center gap-1 text-[12px] text-[#666055]">
         <Minus size={12} /> no prior data
       </span>
     );
@@ -39,7 +39,7 @@ function DeltaBadge({ deltaPct }: { deltaPct: number | null }) {
   const rounded = Math.round(deltaPct);
   if (rounded === 0) {
     return (
-      <span className="inline-flex items-center gap-1 text-[12px] text-[#6d6a65]">
+      <span className="inline-flex items-center gap-1 text-[12px] text-[#666055]">
         <Minus size={12} /> 0%
       </span>
     );
@@ -48,7 +48,7 @@ function DeltaBadge({ deltaPct }: { deltaPct: number | null }) {
   return (
     <span
       className={`inline-flex items-center gap-1 text-[12px] font-medium ${
-        positive ? "text-[#247c53]" : "text-[#c2385a]"
+        positive ? "text-[#1f6b4d]" : "text-[#a8324c]"
       }`}
     >
       {positive ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
@@ -115,8 +115,8 @@ export function AdminOverviewDashboard() {
     <div className="h-full overflow-auto">
       <div className="container space-y-4 py-8">
         <div>
-          <h1 className="text-lg font-semibold text-[#1a1814]">Overview</h1>
-          <p className="text-[13px] text-[#6d6a65]">
+          <h1 className="text-lg font-semibold text-[#1c1b19]">Overview</h1>
+          <p className="text-[13px] text-[#666055]">
             Last {data.periodDays} days, compared with the prior {data.periodDays} days.
           </p>
         </div>
@@ -133,13 +133,13 @@ export function AdminOverviewDashboard() {
               {hasActivity ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={data.activity} margin={{ top: 8, right: 12, bottom: 0, left: -16 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#efede8" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f5f3ee" />
                     <XAxis dataKey="date" tick={AXIS_STYLE} tickFormatter={(value: string) => value.slice(5)} />
                     <YAxis tick={AXIS_STYLE} allowDecimals={false} />
                     <Tooltip />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Line type="monotone" dataKey="started" name="Started" stroke="#3a5fd9" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="completed" name="Completed" stroke="#2e9e6a" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="started" name="Started" stroke="#2f56d3" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="completed" name="Completed" stroke="#1f6b4d" strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
@@ -183,11 +183,11 @@ export function AdminOverviewDashboard() {
               >
                 <defs>
                   <linearGradient id="confidenceFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#3a5fd9" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="#3a5fd9" stopOpacity={0.02} />
+                    <stop offset="0%" stopColor="#2f56d3" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="#2f56d3" stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#efede8" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#f5f3ee" />
                 <XAxis
                   dataKey="positionPct"
                   tick={AXIS_STYLE}
@@ -201,7 +201,7 @@ export function AdminOverviewDashboard() {
                 <Area
                   type="monotone"
                   dataKey="averageConfidence"
-                  stroke="#3a5fd9"
+                  stroke="#2f56d3"
                   strokeWidth={2}
                   fill="url(#confidenceFill)"
                 />
@@ -218,7 +218,7 @@ export function AdminOverviewDashboard() {
 
 function EmptyChart() {
   return (
-    <div className="flex h-full items-center justify-center text-[13px] text-[#6d6a65]">
+    <div className="flex h-full items-center justify-center text-[13px] text-[#666055]">
       Not enough data yet.
     </div>
   );

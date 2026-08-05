@@ -69,27 +69,27 @@ export function DocumentCard({
 
   return (
     <div className="my-3 flex justify-center">
-      <div className="relative w-full max-w-sm rounded-[10px] border border-[#dedad2] bg-white p-[12px_14px] shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]">
+      <div className="relative w-full max-w-sm rounded-[10px] border border-[#e7e3db] bg-white p-[12px_14px] shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]">
         {documentGenerationConfidence && (
           <DocumentInfoModal confidence={documentGenerationConfidence} />
         )}
         <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#eef1fc] text-[#3a5fd9]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#eaeefb] text-[#2f56d3]">
             <FileText className="h-[18px] w-[18px] stroke-[1.8]" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-semibold text-[#1a1814]">{document.filename}</p>
+            <p className="truncate text-[13px] font-semibold text-[#1c1b19]">{document.filename}</p>
             {document.summary && (
-              <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-[#6d6a65]">
+              <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-[#666055]">
                 {document.summary}
               </p>
             )}
-            <p className="mt-1 font-mono text-[10px] text-[#6d6a65]">
+            <p className="mt-1 font-mono text-[10px] text-[#666055]">
               Generated {new Date(document.generatedAt).toLocaleDateString()}
             </p>
             {document.editedAt && (
               <div className="mt-0.5 flex items-center gap-1">
-                <p className="text-[10px] font-medium text-[#9b6215]">
+                <p className="text-[10px] font-medium text-[#8a5a1d]">
                   Edited {new Date(document.editedAt).toLocaleDateString()}
                 </p>
                 <DocumentEditHistoryModal messageId={messageId} />
@@ -101,7 +101,7 @@ export function DocumentCard({
         <div className="mt-3 flex gap-2">
           {isUnavailable ? (
             <div className="flex-1 space-y-2">
-              <p className="text-[12px] text-[#9b6215]">File no longer available. Try regenerating.</p>
+              <p className="text-[12px] text-[#8a5a1d]">File no longer available. Try regenerating.</p>
               {onRegenerate && (
                 <Button size="sm" variant="secondary" onClick={handleRegenerate} className="w-full">
                   Regenerate

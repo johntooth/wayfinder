@@ -87,7 +87,7 @@ const REFERENCE: ReferenceGroup[] = [
 export function AnnotationReference() {
   return (
     <div className="space-y-4">
-      <p className="text-[13px] text-[#5a5650]">
+      <p className="text-[13px] text-[#5c574c]">
         Type these into your document wherever a value should be filled in, then upload it again —
         the flow picks up where it left off. The name between the braces is what the person running
         the flow is asked for.
@@ -95,19 +95,19 @@ export function AnnotationReference() {
 
       {REFERENCE.map((group) => (
         <div key={group.title} className="space-y-1.5">
-          <p className="text-[12px] font-medium text-[#1a1814]">{group.title}</p>
-          {group.note && <p className="text-[11px] text-[#6d6a65]">{group.note}</p>}
+          <p className="text-[12px] font-medium text-[#1c1b19]">{group.title}</p>
+          {group.note && <p className="text-[11px] text-[#666055]">{group.note}</p>}
           <div className="overflow-x-auto">
             <table className="w-full text-left text-[12px]">
               <tbody>
                 {group.entries.map((entry) => (
                   <tr key={entry.syntax} className="border-b border-[#f0eee9] last:border-0">
                     <td className="w-1/2 py-1.5 pr-4 align-top">
-                      <code className="whitespace-nowrap font-mono text-[#3a5fd9]">
+                      <code className="whitespace-nowrap font-mono text-[#2f56d3]">
                         {entry.syntax}
                       </code>
                     </td>
-                    <td className="py-1.5 align-top text-[#5a5650]">{entry.meaning}</td>
+                    <td className="py-1.5 align-top text-[#5c574c]">{entry.meaning}</td>
                   </tr>
                 ))}
               </tbody>

@@ -30,7 +30,7 @@ function highlight(text: string, terms: string[]): React.ReactNode {
   const pattern = new RegExp(`(${terms.map(escapeRegExp).join("|")})`, "gi");
   return text.split(pattern).map((part, index) =>
     terms.some((term) => term.toLowerCase() === part.toLowerCase()) ? (
-      <mark key={index} className="bg-[#fce7a3] text-[#1a1814]">
+      <mark key={index} className="bg-[#fce7a3] text-[#1c1b19]">
         {part}
       </mark>
     ) : (
@@ -171,7 +171,7 @@ export function KnowledgeContent() {
                 <Label htmlFor="flow">Flow</Label>
                 <select
                   id="flow"
-                  className="h-9 w-64 rounded-md border border-[#dedad2] bg-white px-3 text-sm"
+                  className="h-9 w-64 rounded-md border border-[#e7e3db] bg-white px-3 text-sm"
                   value={flowId}
                   onChange={(event) => {
                     setFlowId(event.target.value);
@@ -192,7 +192,7 @@ export function KnowledgeContent() {
                 <Label htmlFor="status">Status</Label>
                 <select
                   id="status"
-                  className="h-9 w-40 rounded-md border border-[#dedad2] bg-white px-3 text-sm"
+                  className="h-9 w-40 rounded-md border border-[#e7e3db] bg-white px-3 text-sm"
                   value={statusFilter}
                   onChange={(event) => setStatusFilter(event.target.value as ChunkStatus | "")}
                   disabled={isSearching}
@@ -222,7 +222,7 @@ export function KnowledgeContent() {
                   <button
                     type="button"
                     onClick={() => setSearchMode((mode) => (mode === "semantic" ? "exact" : "semantic"))}
-                    className="h-9 shrink-0 rounded-md border border-[#dedad2] px-3 text-xs font-medium text-[#5a554d] hover:bg-[#f0eee9]"
+                    className="h-9 shrink-0 rounded-md border border-[#e7e3db] px-3 text-xs font-medium text-[#5c574c] hover:bg-[#f0eee9]"
                     title="Toggle exact / semantic"
                   >
                     {searchMode === "exact" ? "Exact match" : "Semantic"}
@@ -247,8 +247,8 @@ export function KnowledgeContent() {
             </div>
 
             {selectedList.length > 0 && (
-              <div className="flex items-center gap-2 rounded-md border border-[#dedad2] bg-[#f7f6f3] px-3 py-2">
-                <span className="text-xs text-[#5a554d]">{selectedList.length} selected</span>
+              <div className="flex items-center gap-2 rounded-md border border-[#e7e3db] bg-[#faf9f7] px-3 py-2">
+                <span className="text-xs text-[#5c574c]">{selectedList.length} selected</span>
                 <Button
                   size="sm"
                   variant="outline"
@@ -299,12 +299,12 @@ export function KnowledgeContent() {
                         />
                       </TableCell>
                       <TableCell onClick={() => openDrawer(chunk)}>
-                        <span className="line-clamp-2 text-xs text-[#1a1814]">
+                        <span className="line-clamp-2 text-xs text-[#1c1b19]">
                           {highlight(chunk.chunkText, matched)}
                         </span>
                       </TableCell>
                       <TableCell
-                        className="truncate font-mono text-[11px] text-[#6d6a65]"
+                        className="truncate font-mono text-[11px] text-[#666055]"
                         onClick={() => openDrawer(chunk)}
                       >
                         {chunk.filename}
@@ -313,11 +313,11 @@ export function KnowledgeContent() {
                         <Badge variant={statusVariant(chunk.status)}>{chunk.status}</Badge>
                       </TableCell>
                       <TableCell onClick={() => openDrawer(chunk)}>
-                        <span className="text-[11px] text-[#5a554d]">
+                        <span className="text-[11px] text-[#5c574c]">
                           {chunk.tags.length > 0 ? chunk.tags.join(", ") : "—"}
                         </span>
                       </TableCell>
-                      <TableCell className="text-right text-xs text-[#5a554d]" onClick={() => openDrawer(chunk)}>
+                      <TableCell className="text-right text-xs text-[#5c574c]" onClick={() => openDrawer(chunk)}>
                         {chunk.retrievalCount}×
                       </TableCell>
                     </TableRow>
@@ -350,10 +350,10 @@ export function KnowledgeContent() {
                 <TableBody>
                   {(feedbackQuery.data ?? []).map((item) => (
                     <TableRow key={item.id}>
-                      <TableCell className="text-xs text-[#6d6a65]">
+                      <TableCell className="text-xs text-[#666055]">
                         <span className="line-clamp-2">{item.flaggedAnswer}</span>
                       </TableCell>
-                      <TableCell className="text-xs text-[#1a1814]">
+                      <TableCell className="text-xs text-[#1c1b19]">
                         <span className="line-clamp-2">{item.correctedText}</span>
                       </TableCell>
                       <TableCell>
@@ -385,13 +385,13 @@ export function KnowledgeContent() {
       </div>
 
       {drawerChunk && (
-        <aside className="fixed right-0 top-0 z-50 flex h-screen w-[440px] flex-col border-l border-[#dedad2] bg-white shadow-xl">
-          <div className="flex items-center justify-between border-b border-[#dedad2] px-4 py-3">
+        <aside className="fixed right-0 top-0 z-50 flex h-screen w-[440px] flex-col border-l border-[#e7e3db] bg-white shadow-xl">
+          <div className="flex items-center justify-between border-b border-[#e7e3db] px-4 py-3">
             <h2 className="text-sm font-semibold">Edit content</h2>
             <button
               type="button"
               onClick={() => setDrawerChunkId(null)}
-              className="text-[#6d6a65] hover:text-[#1a1814]"
+              className="text-[#666055] hover:text-[#1c1b19]"
             >
               ✕
             </button>
@@ -415,8 +415,8 @@ export function KnowledgeContent() {
             </div>
 
             {showSource && (
-              <div className="rounded-md border border-[#dedad2] bg-[#f7f6f3] p-3 text-xs text-[#5a554d]">
-                <p className="mb-1 font-mono text-[11px] text-[#6d6a65]">
+              <div className="rounded-md border border-[#e7e3db] bg-[#faf9f7] p-3 text-xs text-[#5c574c]">
+                <p className="mb-1 font-mono text-[11px] text-[#666055]">
                   {drawerChunk.filename} · segment #{drawerChunk.chunkIndex}
                 </p>
                 <p className="whitespace-pre-wrap">{drawerChunk.chunkText}</p>
@@ -424,7 +424,7 @@ export function KnowledgeContent() {
             )}
 
             <div>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#6d6a65]">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#666055]">
                 Version history
               </h3>
               {(versionsQuery.data ?? []).length === 0 ? (
@@ -432,16 +432,16 @@ export function KnowledgeContent() {
               ) : (
                 <ul className="space-y-2">
                   {(versionsQuery.data ?? []).map((version) => (
-                    <li key={version.id} className="rounded-md border border-[#dedad2] p-2">
-                      <p className="mb-1 line-clamp-2 text-xs text-[#5a554d]">{version.chunkText}</p>
+                    <li key={version.id} className="rounded-md border border-[#e7e3db] p-2">
+                      <p className="mb-1 line-clamp-2 text-xs text-[#5c574c]">{version.chunkText}</p>
                       <div className="flex items-center justify-between">
-                        <span className="font-mono text-[10px] text-[#6d6a65]">
+                        <span className="font-mono text-[10px] text-[#666055]">
                           {new Date(version.createdAt).toLocaleString()}
                           {version.reason ? ` · ${version.reason}` : ""}
                         </span>
                         <button
                           type="button"
-                          className="text-[10px] font-medium text-[#3a5fd9] hover:underline"
+                          className="text-[10px] font-medium text-[#2f56d3] hover:underline"
                           onClick={() =>
                             revertMutation.mutate({ chunkId: drawerChunk.id, versionId: version.id })
                           }

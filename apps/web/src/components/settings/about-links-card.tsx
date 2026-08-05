@@ -88,7 +88,7 @@ export function AboutLinksCard() {
                 className="space-y-2 rounded-[10px] border border-[#e4e1db] p-3"
               >
                 <div className="flex items-center gap-2">
-                  <Icon className="h-4 w-4 shrink-0 text-[#6d6a65]" />
+                  <Icon className="h-4 w-4 shrink-0 text-[#666055]" />
                   <Input
                     aria-label={`Link text ${index + 1}`}
                     value={link.label}
@@ -124,7 +124,7 @@ export function AboutLinksCard() {
                       onChange={(event) =>
                         updateLink(index, { icon: event.target.value as AboutLinkIcon })
                       }
-                      className="h-9 rounded-[8px] border border-[#dedad2] bg-white px-2 text-[13px]"
+                      className="h-9 rounded-[8px] border border-[#e7e3db] bg-white px-2 text-[13px]"
                     >
                       {ABOUT_LINK_ICONS.map((icon) => (
                         <option key={icon} value={icon}>

@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/empty-state";
 import { CardSkeletonGrid } from "@/components/skeleton/card-skeleton";
 import { NewChatModal } from "@/components/chat/new-chat-modal";
 import { SessionCard } from "@/components/chat/session-card";
+import { AppHeader } from "@/components/layout/app-header";
 import { trpc } from "@/trpc/client";
 
 type Tab = "active" | "complete" | "all";
@@ -38,12 +39,16 @@ export function ChatsContent() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#dedad2] bg-white pl-5 pr-[52px]">
-        <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1a1814]">My Chats</h1>
-        <Button onClick={() => setNewChatOpen(true)}>New Chat</Button>
-      </header>
+      <AppHeader
+        title="My Chats"
+        actions={
+          <Button size="sm" onClick={() => setNewChatOpen(true)}>
+            New chat
+          </Button>
+        }
+      />
 
-      <div className="flex shrink-0 gap-1 border-b border-[#dedad2] px-5">
+      <div className="flex shrink-0 gap-1 border-b border-[#e7e3db] px-5">
         {tabs.map(({ key, label }) => (
           <button
             key={key}
@@ -51,8 +56,8 @@ export function ChatsContent() {
             onClick={() => setTab(key)}
             className={`px-3 py-[10px] text-[13px] font-medium transition-colors ${
               tab === key
-                ? "border-b-2 border-[#3a5fd9] text-[#3a5fd9]"
-                : "text-[#6d6a65] hover:text-[#5a5650]"
+                ? "border-b-2 border-[#2f56d3] text-[#2f56d3]"
+                : "text-[#666055] hover:text-[#5c574c]"
             }`}
           >
             {label}

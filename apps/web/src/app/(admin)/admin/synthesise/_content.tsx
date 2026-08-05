@@ -19,9 +19,9 @@ export function AdminSynthesiseContent() {
   // /synthesise workspace, which is a working surface with a create action.
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#dedad2] bg-white pl-5 pr-[52px]">
-        <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1a1814]">All Syntheses</h1>
-        <span className="text-[12px] text-[#6d6a65]">
+      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#e7e3db] bg-white pl-5 pr-[52px]">
+        <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1c1b19]">All Syntheses</h1>
+        <span className="text-[12px] text-[#666055]">
           Every extraction flow across the organisation
         </span>
       </header>
@@ -29,7 +29,7 @@ export function AdminSynthesiseContent() {
       <div className="flex-1 overflow-auto">
         <div className="container py-8">
           {flowsQuery.isPending ? (
-            <p className="text-[13px] text-[#8a857c]">Loading…</p>
+            <p className="text-[13px] text-[#736d5f]">Loading…</p>
           ) : flowsQuery.error ? (
             <EmptyState
               heading="Synthesise Information is not enabled"

@@ -36,7 +36,7 @@ export function OrganisationMembershipCard() {
             <p className="text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
               Current organisation
             </p>
-            <p className="text-sm text-[#1a1814]">
+            <p className="text-sm text-[#1c1b19]">
               {mineQuery.isLoading ? "Loading…" : (current?.name ?? "Not set")}
             </p>
           </div>

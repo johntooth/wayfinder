@@ -20,13 +20,13 @@ type StepField = NonNullable<NonNullable<ApprovalContext["previousStep"]>["field
 
 export function StepFields({ fields }: { fields: StepField[] }) {
   return (
-    <div className="overflow-hidden rounded-[10px] border border-[#dedad2] bg-white">
+    <div className="overflow-hidden rounded-[10px] border border-[#e7e3db] bg-white">
       <table className="w-full text-[12.5px]">
         <tbody>
           {fields.map((field) => (
-            <tr key={field.key} className="border-b border-[#efede8] last:border-0">
-              <td className="w-2/5 px-3 py-1.5 align-top font-medium text-[#6d6a65]">{field.label}</td>
-              <td className="px-3 py-1.5 align-top whitespace-pre-wrap text-[#1a1814]">{field.value}</td>
+            <tr key={field.key} className="border-b border-[#f5f3ee] last:border-0">
+              <td className="w-2/5 px-3 py-1.5 align-top font-medium text-[#666055]">{field.label}</td>
+              <td className="px-3 py-1.5 align-top whitespace-pre-wrap text-[#1c1b19]">{field.value}</td>
             </tr>
           ))}
         </tbody>
@@ -47,7 +47,7 @@ export function ApprovalSubject({
   if (!description) return null;
 
   return (
-    <p className="text-[13px] text-[#1a1814]">
+    <p className="text-[13px] text-[#1c1b19]">
       <span className="font-semibold">
         {decided ? "You approved:" : "You are approving:"}
       </span>{" "}
@@ -73,15 +73,15 @@ export function OutcomeChip({ approval }: { approval: ApprovalContext }) {
 // deciding without knowing which one they are is deciding half-informed.
 export function ApproverStage({ approval }: { approval: ApprovalContext }) {
   return (
-    <p className="text-[13px] text-[#5a5650]" data-approver-stage>
+    <p className="text-[13px] text-[#5c574c]" data-approver-stage>
       You are the{" "}
-      <span className="font-medium text-[#1a1814]">
+      <span className="font-medium text-[#1c1b19]">
         {approverStageLabel({
           approverSource: approval.approval.approverSource,
           roleHint: approval.roleHint,
         })}
       </span>{" "}
-      on <span className="font-medium text-[#1a1814]">{approval.approvalStepName}</span>.
+      on <span className="font-medium text-[#1c1b19]">{approval.approvalStepName}</span>.
     </p>
   );
 }
@@ -102,8 +102,8 @@ export function PreviousStep({
   const { document, fields, stepName } = previousStep;
 
   return (
-    <div className="rounded-[12px] bg-[#f7f6f3] p-3">
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#6d6a65]">
+    <div className="rounded-[12px] bg-[#faf9f7] p-3">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#666055]">
         {stepName}
       </p>
       {document ? (
@@ -116,7 +116,7 @@ export function PreviousStep({
       ) : fields && fields.length > 0 ? (
         <StepFields fields={fields} />
       ) : (
-        <p className="text-[12.5px] text-[#6d6a65]">No preview available for this step.</p>
+        <p className="text-[12.5px] text-[#666055]">No preview available for this step.</p>
       )}
 
       {document && canEdit && (

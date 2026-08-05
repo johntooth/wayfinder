@@ -15,7 +15,7 @@ import { BranchOverrideModal } from "@/components/chat/branch-override-modal";
 import { ConfirmStepCard } from "@/components/chat/confirm-step-card";
 import { hasPendingDocumentGeneration } from "@/components/chat/document-poll-state";
 import { MessageFeed } from "@/components/chat/message-feed";
-import { StepProgressRail } from "@/components/chat/step-progress-rail";
+import { AppHeader } from "@/components/layout/app-header";
 import { TypingIndicator } from "@/components/chat/typing-indicator";
 import { buildStepRail, topoSortNodes } from "@/lib/flow-utils";
 import { trpc } from "@/trpc/client";
@@ -374,7 +374,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   if (sessionQuery.isLoading) {
     return (
       <main className="flex flex-1 flex-col items-center justify-center gap-4">
-        <p className="text-[13px] text-[#6d6a65]">Loading session…</p>
+        <p className="text-[13px] text-[#666055]">Loading session…</p>
       </main>
     );
   }
@@ -382,8 +382,8 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   if (!sessionData) {
     return (
       <main className="flex flex-1 flex-col items-center justify-center gap-4">
-        <p className="text-[14px] font-semibold text-[#1a1814]">Session not found</p>
-        <Link href="/chats" className="text-[13px] text-[#3a5fd9] underline">
+        <p className="text-[14px] font-semibold text-[#1c1b19]">Session not found</p>
+        <Link href="/chats" className="text-[13px] text-[#2f56d3] underline">
           Back to My Chats
         </Link>
       </main>
@@ -394,8 +394,6 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const newChatUrl = `${origin}/chats?flow=${flow.id}&start=1`;
   const collaborateUrl = `${origin}/chats/${sessionId}?shared=true`;
-  const me = meQuery.data;
-  const userFirstInitial = me?.name?.trim()?.[0]?.toUpperCase() ?? "U";
   const isFlowDeleted = flow.deletedAt !== null;
 
   const firstTyperName = typingUsers[0]?.name?.trim();
@@ -410,21 +408,15 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
 
   return (
     <main className="flex h-full flex-col overflow-hidden">
-      <header className="flex h-[52px] min-w-0 shrink-0 items-center justify-between border-b border-[#dedad2] bg-white pl-5 pr-[52px]">
-        <div className="flex min-w-0 items-center gap-3">
-          <Link href="/chats" className="shrink-0 text-[13px] text-[#5a5650] hover:text-[#1a1814]">
-            ← My Chats
-          </Link>
-          <span aria-hidden="true" className="text-[13px] text-[#777570]">|</span>
-          <span className="text-[18px]">{flow.icon ?? "💬"}</span>
-          <h1 className="truncate text-[13px] font-semibold text-[#1a1814]">
-            {session.title ?? flow.name}
-          </h1>
-          <Badge variant={statusVariant(session.status)} className="shrink-0 capitalize">
+      <AppHeader
+        breadcrumb={{ label: "My Chats", href: "/chats" }}
+        title={session.title ?? flow.name}
+        status={
+          <Badge variant={statusVariant(session.status)} className="capitalize">
             {session.status}
           </Badge>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
+        }
+        actions={
           <ChatActionsMenu
             sessionId={sessionId}
             sessionTitle={session.title}
@@ -434,18 +426,15 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
             onClose={() => closeMutation.mutate({ sessionId })}
             isReadOnly={isReadOnly}
           />
-        </div>
-      </header>
-
-      <StepProgressRail
+        }
         steps={railSteps}
         currentNodeId={session.currentNodeId}
         completedNodeIds={completedNodeIds}
       />
 
       {isFlowDeleted && (
-        <div className="flex justify-center border-b border-[#f5d0a9] bg-[#fdf3e3] px-4 py-2">
-          <p className="text-[13px] text-[#9b6215]">
+        <div className="flex justify-center border-b border-[#e6d0ab] bg-[#f6e9d8] px-4 py-2">
+          <p className="text-[13px] text-[#8a5a1d]">
             This flow has been deleted. You can read this chat but can no longer send new messages.
           </p>
         </div>
@@ -463,8 +452,8 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         canEditDocuments={session.status === "active" && !isReadOnly && !isFlowDeleted}
         onDocumentEdited={() => void utils.session.get.invalidate({ sessionId })}
         expertRole={flow.expertRole ?? null}
-        userFirstInitial={userFirstInitial}
         senderNamesById={senderNamesById}
+        currentUserId={myUserId}
         awaitingConfirmationNodeId={awaitingConfirmationNodeId}
         currentNodeId={currentNodeId}
         sessionId={sessionId}
@@ -477,9 +466,9 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       />
 
       {showBranchOverride && (
-        <div className="flex justify-center border-t border-[#dedad2] bg-[#fdf3e3] px-4 py-3">
+        <div className="flex justify-center border-t border-[#e7e3db] bg-[#f6e9d8] px-4 py-3">
           <div className="flex items-center gap-3">
-            <p className="text-[13px] text-[#9b6215]">Wayfinder could not determine the next step.</p>
+            <p className="text-[13px] text-[#8a5a1d]">Wayfinder could not determine the next step.</p>
             <Button size="sm" variant="secondary" onClick={() => setOverrideOpen(true)}>
               Pick a step manually
             </Button>
@@ -488,9 +477,9 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       )}
 
       {typingLabel && (
-        <div className="flex shrink-0 items-center gap-2 border-t border-[#dedad2] bg-white px-5 pt-2">
+        <div className="flex shrink-0 items-center gap-2 border-t border-[#e7e3db] bg-white px-5 pt-2">
           <TypingIndicator />
-          <span className="text-[12px] text-[#6d6a65]">{typingLabel}</span>
+          <span className="text-[12px] text-[#666055]">{typingLabel}</span>
         </div>
       )}
 

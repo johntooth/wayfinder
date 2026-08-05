@@ -80,7 +80,7 @@ export function ConnectivityBadge({ target, state }: { target: ConnectivityTarge
       <span
         data-testid={testId}
         data-status="testing"
-        className="inline-flex items-center gap-1 rounded-md border border-[#dedad2] bg-[#f7f6f3] px-2 py-1 text-xs text-muted-foreground"
+        className="inline-flex items-center gap-1 rounded-md border border-[#e7e3db] bg-[#faf9f7] px-2 py-1 text-xs text-muted-foreground"
       >
         <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground" /> Testing…
       </span>
@@ -135,7 +135,7 @@ export function ConnectivityTest({
   const state = controller.states[target];
   const idle = label ? `Test ${label}` : "Test connectivity";
   return (
-    <div className="flex items-center gap-2 border-t border-[#ece9e3] pt-3">
+    <div className="flex items-center gap-2 border-t border-[#f0ede8] pt-3">
       <Button
         size="sm"
         variant="secondary"

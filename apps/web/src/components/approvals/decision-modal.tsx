@@ -146,13 +146,13 @@ export function DecisionModal({
   const notifyBody = (
     <DialogBody>
       {notifyTargets.length === 0 ? (
-        <p className="text-[13px] text-[#5a5650]">
+        <p className="text-[13px] text-[#5c574c]">
           The decision was recorded and is shown in the session. There is no one else to notify —
           share the link if someone needs to see it.
         </p>
       ) : (
         <>
-          <p className="text-[13px] text-[#5a5650]">
+          <p className="text-[13px] text-[#5c574c]">
             The decision was recorded and is shown in the session. Let{" "}
             <span className="font-medium">
               {notifyTargets.map(targetLabel).join(", ")}
@@ -163,11 +163,11 @@ export function DecisionModal({
             {notifyTargets.map((target) => (
               <li
                 key={target.userId ?? target.email ?? targetLabel(target)}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-[#dedad2] bg-white px-3 py-2"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-[#e7e3db] bg-white px-3 py-2"
               >
-                <span className="min-w-0 text-[12.5px] text-[#1a1814]">
+                <span className="min-w-0 text-[12.5px] text-[#1c1b19]">
                   <span className="font-medium">{targetLabel(target)}</span>
-                  <span className="text-[#6d6a65]"> · {NOTIFY_LEAD[target.reason]}</span>
+                  <span className="text-[#666055]"> · {NOTIFY_LEAD[target.reason]}</span>
                 </span>
                 {target.email && (
                   <Button asChild size="sm">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import type { Message as UIMessage } from "@ai-sdk/react";
 import type { FlowNode, SessionMessage } from "@rbrasier/domain";
 import { ConfidenceBar } from "./confidence-bar";
@@ -21,13 +21,14 @@ import {
 import { resolveMilestoneState } from "./milestone-state";
 import { TypingIndicator } from "./typing-indicator";
 import {
-  formatDecisionMoment,
+  decisionVerbPhrase,
   parseApprovalDecisionMessage,
-  type ParsedApprovalDecision,
 } from "@/lib/approval-decision-message";
 import { parseApproverEditMessage } from "@/lib/approver-edit-message";
 import { formatScheduledResume, parseScheduledMessage } from "@/lib/scheduled-message";
 import { resolveApproverEditDocument } from "./approver-edit-document";
+import { participantInitials, participantTint } from "./participant-identity";
+import { streamingTail } from "./streaming-tail";
 
 interface ConfidenceAnnotation {
   type: "confidence";
@@ -55,7 +56,6 @@ interface MessageFeedProps {
   canEditDocuments?: boolean;
   onDocumentEdited?: () => void;
   expertRole?: string | null;
-  userFirstInitial?: string;
   senderNamesById?: Record<string, string>;
   // The step held open awaiting operator confirmation. Its milestone pill is
   // suppressed because the step has not actually completed yet (ADR-026).
@@ -68,6 +68,9 @@ interface MessageFeedProps {
   // assistant message exposes a "Fix this answer" affordance.
   sessionId?: string;
   canSubmitFeedback?: boolean;
+  // Who is reading. Messages stamped with any other sender render as theirs,
+  // on the left, with their own mark.
+  currentUserId?: string | null;
   // The operator Proceed path runs document generation inside a mutation, with
   // no stream to carry the generating-document annotation — the caller raises
   // this instead so the same badge shows while that mutation runs.
@@ -90,26 +93,81 @@ const getRoleInitials = (role: string | null | undefined, fallback: string): str
   return initials || fallback;
 };
 
-// An approval decision, rendered as what it is: a person's decision, signed and
-// timed. The name and email come from the message itself rather than the
-// participant list, because an approver is often not a participant — and the
-// decision moment is shown on the reader's clock, not the server's.
-function ApprovalDecisionBubble({ decision }: { decision: ParsedApprovalDecision }) {
+// Marks the boundary between flow steps in the transcript: a hairline, the step
+// name as a mono eyebrow, another hairline.
+function FeedDivider({ label }: { label: string }) {
   return (
-    <div className="flex flex-col gap-1" data-approval-decision>
-      <p className="text-[13px] font-semibold leading-[1.55] text-white">{decision.outcome}</p>
-      {decision.body && (
-        <p className="whitespace-pre-wrap text-[13px] leading-[1.55] text-white/90">
-          {decision.body}
+    <div className="flex items-center gap-3 py-[2px]">
+      <span className="h-px flex-1 bg-[#e7e3db]" />
+      <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[#736d5f]">
+        {label}
+      </span>
+      <span className="h-px flex-1 bg-[#e7e3db]" />
+    </div>
+  );
+}
+
+function AgentMark({ initials }: { initials: string }) {
+  return (
+    <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[8px] bg-[#2f56d3] text-[11px] font-semibold text-white">
+      {initials}
+    </div>
+  );
+}
+
+// Someone else's circular mark. Deliberately not the agent's rounded square:
+// the two were indistinguishable enough that an approver's edit read as the
+// assistant's work.
+function ParticipantMark({ name, seed }: { name: string | null; seed: string }) {
+  const { fill, ink } = participantTint(seed);
+  return (
+    <div
+      aria-hidden="true"
+      className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full text-[10px] font-semibold"
+      style={{ backgroundColor: fill, color: ink }}
+    >
+      {participantInitials(name)}
+    </div>
+  );
+}
+
+// A message from anyone who is not the viewer — an approver's decision, another
+// participant's turn, or a system notice about a person's action. Left-aligned
+// with their own mark, so it never reads as the viewer's own message.
+function OtherPersonMessage({
+  name,
+  seed,
+  action,
+  body,
+  at,
+  children,
+}: {
+  name: string | null;
+  seed: string;
+  // Follows the name in regular weight: "granted approval, with edits."
+  action?: string;
+  body?: string;
+  at: Date;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="flex gap-[14px]" data-participant-message>
+      <ParticipantMark name={name} seed={seed} />
+      <div className="min-w-0 flex-1">
+        <p className="text-[14px] leading-[1.55] text-[#1c1b19]">
+          <span className="font-semibold">{name ?? "Someone"}</span>
+          {action && <span> {action}</span>}
         </p>
-      )}
-      <p className="text-[11px] leading-[1.5] text-white/70">
-        {decision.approverName ?? decision.approverEmail ?? "Approver"}
-        {decision.approverName && decision.approverEmail && (
-          <span> · {decision.approverEmail}</span>
+        {body && (
+          <p className="mt-[2px] whitespace-pre-wrap text-[14px] leading-[1.55] text-[#3d382f]">
+            {`“${body}”`}
+          </p>
         )}
-        <span> · {formatDecisionMoment(decision.decidedAt)}</span>
-      </p>
+        <p data-message-time className="mt-[4px] font-mono text-[10px] text-[#736d5f]">
+          {formatRelativeTime(at)}
+        </p>
+        {children}
+      </div>
     </div>
   );
 }
@@ -134,12 +192,12 @@ export function MessageFeed({
   canEditDocuments,
   onDocumentEdited,
   expertRole,
-  userFirstInitial,
   senderNamesById,
   awaitingConfirmationNodeId,
   currentNodeId,
   sessionId,
   canSubmitFeedback,
+  currentUserId,
   pendingDocumentGeneration,
   pendingStepAdvance,
 }: MessageFeedProps) {
@@ -163,18 +221,23 @@ export function MessageFeed({
   });
 
   const nodeById = Object.fromEntries(nodes.map((n) => [n.id, n]));
-  const showStreaming = isStreaming || streamingMessages.length > dbMessages.length;
+  // The persisted transcript always renders. Only what the server has not
+  // persisted yet is appended from the stream — swapping one list for the other
+  // is what made step dividers, timestamps, milestone pills, document cards and
+  // approval bubbles disappear for the length of every turn.
+  const unpersisted = streamingTail(streamingMessages, dbMessages.length);
   const botInitials = getRoleInitials(expertRole ?? null, "AI");
-  const userInitials = userFirstInitial ?? "U";
 
   return (
     <div
       ref={containerRef}
       onScroll={handleScroll}
-      className="flex flex-1 flex-col gap-5 overflow-y-auto bg-[#f7f6f3] px-5 py-6"
+      // The conversation reads as a single centred column on the canvas rather
+      // than a full-bleed list — long lines are the main legibility cost at
+      // desktop widths.
+      className="mx-auto flex w-full max-w-[808px] flex-1 flex-col gap-5 overflow-y-auto px-6 pb-2 pt-7"
     >
-      {!showStreaming &&
-        dbMessages.map((msg, index) => {
+      {dbMessages.map((msg, index) => {
           const prevMsg = dbMessages[index - 1];
           const isNewStep = msg.stepNodeId && prevMsg?.stepNodeId !== msg.stepNodeId && index > 0;
           const node = msg.stepNodeId ? nodeById[msg.stepNodeId] : null;
@@ -189,7 +252,6 @@ export function MessageFeed({
             (msg.role === "user" && msg.senderUserId
               ? senderNamesById?.[msg.senderUserId] ?? null
               : null);
-          const messageUserInitials = senderName ? getRoleInitials(senderName, userInitials) : userInitials;
 
           const scheduled = msg.role === "system" ? parseScheduledMessage(msg.content) : null;
           const displayContent = scheduled
@@ -205,6 +267,16 @@ export function MessageFeed({
           const approverEditDocument = approverEdit
             ? resolveApproverEditDocument(dbMessages, msg.stepNodeId)
             : null;
+
+          // A message belongs to someone else when it is stamped with a sender
+          // who is not the viewer. An unstamped user message is the viewer's
+          // own — that is every message in a single-participant chat, which
+          // must keep rendering on the right.
+          const isFromOtherPerson =
+            msg.role === "user" &&
+            Boolean(msg.senderUserId) &&
+            Boolean(currentUserId) &&
+            msg.senderUserId !== currentUserId;
 
           const config = node?.config as Record<string, unknown> | undefined;
           const isDocNode = config?.["outputType"] === "generate_document";
@@ -231,62 +303,76 @@ export function MessageFeed({
 
           return (
             <div key={msg.id}>
-              {isNewStep && node && (
-                <div className="my-1 text-center font-mono text-[10px] text-[#6d6a65]">
-                  — {node.name} —
-                </div>
-              )}
-              <div className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                {msg.role !== "user" && (
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#3a5fd9] text-[10px] font-bold text-white">
-                    {botInitials}
-                  </div>
-                )}
-                <div
-                  className={`relative max-w-[68%] rounded-[14px] px-4 py-3 ${
-                    msg.role === "user"
-                      ? "rounded-br-[4px] bg-[#3a5fd9]"
-                      : "rounded-bl-[4px] border border-[#dedad2] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
-                  }`}
-                >
-                  {decision ? (
-                    <ApprovalDecisionBubble decision={decision} />
-                  ) : msg.role === "user" ? (
-                    <p className="whitespace-pre-wrap text-[13px] leading-[1.55] text-white/90">
-                      {displayContent}
-                    </p>
-                  ) : (
-                    <MarkdownText
-                      content={displayContent}
-                      className="text-[13px] leading-[1.55] text-[#1a1814]"
-                    />
-                  )}
-                  <p
-                    className={`mt-1 text-right font-mono text-[10px] ${
-                      showsInfoButton && !showsConfidenceBar ? "pr-6" : ""
-                    } ${msg.role === "user" ? "text-white/50" : "text-[#6d6a65]"}`}
-                  >
-                    {formatRelativeTime(msg.createdAt)}
-                  </p>
-                  {showsConfidenceBar && <ConfidenceBar score={msg.confidence} />}
-                  {showsInfoButton && (
-                    <MessageInfoModal
-                      message={msg}
-                      allMessages={dbMessages}
-                      sessionId={sessionId}
-                      canSubmitFeedback={canSubmitFeedback}
-                    />
-                  )}
-                </div>
-                {msg.role === "user" && (
+              {isNewStep && node && <FeedDivider label={node.name} />}
+              {decision ? (
+                // An approver is rarely the viewer, and their decision carries
+                // its own attribution — so it always renders as someone else's.
+                <OtherPersonMessage
+                  name={decision.approverName ?? decision.approverEmail ?? null}
+                  seed={decision.approverEmail ?? decision.approverName ?? msg.id}
+                  action={decisionVerbPhrase(decision.outcome)}
+                  body={decision.body || undefined}
+                  at={decision.decidedAt}
+                />
+              ) : approverEdit ? (
+                // The notice is persisted as a system message, so it used to
+                // render through the assistant branch and wear the AI's mark —
+                // attributing a person's edit to the model.
+                <OtherPersonMessage
+                  name={approverEdit.editorName}
+                  seed={approverEdit.editorName}
+                  action={`edited ${approverEdit.changedLabels.join(", ")} before deciding.`}
+                  at={msg.createdAt}
+                />
+              ) : isFromOtherPerson ? (
+                <OtherPersonMessage
+                  name={senderName}
+                  seed={msg.senderUserId ?? msg.id}
+                  body={displayContent}
+                  at={msg.createdAt}
+                />
+              ) : msg.role === "user" ? (
+                <div className="flex justify-end">
                   <div
                     title={senderName ?? undefined}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#e6e3dc] text-[10px] font-bold text-[#1a1814]"
+                    className="max-w-[460px] rounded-[14px] rounded-br-[4px] bg-[#ebe8e0] px-4 py-3"
                   >
-                    {messageUserInitials}
+                    <p className="whitespace-pre-wrap text-[14px] leading-[1.5] text-[#1c1b19]">
+                      {displayContent}
+                    </p>
+                    <p
+                      data-message-time
+                      className="mt-1 text-right font-mono text-[10px] text-[#666055]"
+                    >
+                      {formatRelativeTime(msg.createdAt)}
+                    </p>
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="flex gap-[14px]">
+                  <AgentMark initials={botInitials} />
+                  <div className="relative min-w-0 flex-1">
+                    <MarkdownText
+                      content={displayContent}
+                      className="text-[14px] leading-[1.6] text-[#26241f]"
+                    />
+                    <div className="mt-[6px] flex items-center gap-3">
+                      <span data-message-time className="font-mono text-[10px] text-[#736d5f]">
+                        {formatRelativeTime(msg.createdAt)}
+                      </span>
+                      {showsConfidenceBar && <ConfidenceBar score={msg.confidence} />}
+                      {showsInfoButton && (
+                        <MessageInfoModal
+                          message={msg}
+                          allMessages={dbMessages}
+                          sessionId={sessionId}
+                          canSubmitFeedback={canSubmitFeedback}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* Read-only: the author is being shown what the approver did,
                   and the record is locked while an approval is pending. */}
               {approverEditDocument?.document && (
@@ -336,9 +422,9 @@ export function MessageFeed({
           );
         })}
 
-      {showStreaming && (
+      {unpersisted.length > 0 && (
         <>
-          {streamingMessages.map((msg) => {
+          {unpersisted.map((msg) => {
             const confidenceAnnotation =
               msg.annotations?.map(toConfidenceAnnotation).find(Boolean) ?? null;
             const crossCheckingState = resolveCrossCheckingState(msg.annotations);
@@ -359,63 +445,51 @@ export function MessageFeed({
 
             return (
               <div key={msg.id} className="flex flex-col gap-5">
-              {segments.map((segment, segmentIndex) => (
-                <div
-                  key={segmentIndex}
-                  className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                >
-                  {msg.role !== "user" && (
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#3a5fd9] text-[10px] font-bold text-white">
-                      {botInitials}
-                    </div>
-                  )}
-                  <div
-                    className={`max-w-[68%] rounded-[14px] px-4 py-3 ${
-                      msg.role === "user"
-                        ? "rounded-br-[4px] bg-[#3a5fd9]"
-                        : "rounded-bl-[4px] border border-[#dedad2] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
-                    }`}
-                  >
-                    {msg.role === "user" ? (
-                      <p className="whitespace-pre-wrap text-[13px] leading-[1.55] text-white/90">
+              {segments.map((segment, segmentIndex) =>
+                msg.role === "user" ? (
+                  <div key={segmentIndex} className="flex justify-end">
+                    <div className="max-w-[460px] rounded-[14px] rounded-br-[4px] bg-[#ebe8e0] px-4 py-3">
+                      <p className="whitespace-pre-wrap text-[14px] leading-[1.5] text-[#1c1b19]">
                         {segment}
                       </p>
-                    ) : (
+                    </div>
+                  </div>
+                ) : (
+                  <div key={segmentIndex} className="flex gap-[14px]">
+                    <AgentMark initials={botInitials} />
+                    <div className="min-w-0 flex-1">
                       <MarkdownText
                         content={segment}
-                        className="text-[13px] leading-[1.55] text-[#1a1814]"
+                        className="text-[14px] leading-[1.6] text-[#26241f]"
                       />
-                    )}
-                    {msg.role === "assistant" && segmentIndex === 0 && !streamingIsNeverDone && (
-                      <ConfidenceBar
-                        score={confidenceAnnotation?.score ?? null}
-                        evaluating={isStreaming && !confidenceAnnotation}
-                      />
-                    )}
-                  </div>
-                  {msg.role === "user" && (
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#e6e3dc] text-[10px] font-bold text-[#1a1814]">
-                      {userInitials}
+                      {segmentIndex === 0 && !streamingIsNeverDone && (
+                        <ConfidenceBar
+                          score={confidenceAnnotation?.score ?? null}
+                          evaluating={isStreaming && !confidenceAnnotation}
+                        />
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
+                  </div>
+                ),
+              )}
               {isCrossChecking && <CrossCheckingBadge documents={crossCheckingState.documents} />}
               {isGeneratingDocument && <GeneratingDocumentBadge />}
               </div>
             );
           })}
-          {isStreaming && streamingMessages.at(-1)?.role !== "assistant" && (
-            <div className="flex gap-3 justify-start">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#3a5fd9] text-[10px] font-bold text-white">
-                {botInitials}
-              </div>
-              <div className="rounded-[14px] rounded-bl-[4px] border border-[#dedad2] bg-white px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]">
-                <TypingIndicator />
-              </div>
-            </div>
-          )}
         </>
+      )}
+
+      {/* Outside the delta block: at the instant a turn starts the client list
+          has not grown yet, and a typing indicator that blinks out on the first
+          frame reads as a dropped message. */}
+      {isStreaming && streamingMessages.at(-1)?.role !== "assistant" && (
+        <div className="flex gap-[14px]">
+          <AgentMark initials={botInitials} />
+          <div className="flex items-center">
+            <TypingIndicator />
+          </div>
+        </div>
       )}
 
       {pendingDocumentGeneration && <GeneratingDocumentBadge />}
@@ -444,7 +518,7 @@ export function MessageFeed({
       {isComplete && !isStreaming && <FlowCompletePill />}
 
       {dbMessages.length === 0 && !isStreaming && !error && (
-        <div className="flex flex-1 items-center justify-center text-center text-[13px] text-[#6d6a65]">
+        <div className="flex flex-1 items-center justify-center text-center text-[13px] text-[#666055]">
           <p>The conversation will begin once you send your first message.</p>
         </div>
       )}

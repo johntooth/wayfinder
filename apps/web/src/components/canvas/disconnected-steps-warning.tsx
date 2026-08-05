@@ -47,15 +47,15 @@ function ConnectGestureDemo() {
         y1={20}
         x2={252}
         y2={20}
-        stroke="#3a5fd9"
+        stroke="#2f56d3"
         strokeWidth={2}
         strokeLinecap="round"
       />
 
-      <circle cx={112} cy={20} r={4.5} fill="#3a5fd9" stroke="#fff" strokeWidth={1.5} />
+      <circle cx={112} cy={20} r={4.5} fill="#2f56d3" stroke="#fff" strokeWidth={1.5} />
 
       <g className="wf-connect-target">
-        <circle cx={252} cy={20} r={4.5} fill="#3a5fd9" stroke="#fff" strokeWidth={1.5} />
+        <circle cx={252} cy={20} r={4.5} fill="#2f56d3" stroke="#fff" strokeWidth={1.5} />
       </g>
 
       <g transform="translate(112 20)">
@@ -77,7 +77,7 @@ function StepCard({ x }: { x: number }) {
   return (
     <g>
       <rect x={x} y={7} width={100} height={26} rx={5} fill="#fff" stroke="#c3cee9" />
-      <rect x={x + 8} y={14} width={12} height={12} rx={3} fill="#3a5fd9" />
+      <rect x={x + 8} y={14} width={12} height={12} rx={3} fill="#2f56d3" />
       <rect x={x + 26} y={16} width={52} height={3.5} rx={1.75} fill="#b9b4ab" />
       <rect x={x + 26} y={23} width={34} height={3.5} rx={1.75} fill="#ddd8d0" />
     </g>
