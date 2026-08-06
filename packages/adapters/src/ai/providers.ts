@@ -69,6 +69,19 @@ const PROVIDERS = {
       return createAmazonBedrock(creds ?? {})(model);
     },
   },
+  // Groq serves an OpenAI-compatible /chat/completions, so it reuses that SDK
+  // rather than adding one. The baseURL is the whole difference: without it a
+  // Groq key resolved through `openai` goes to api.openai.com and 401s.
+  groq: {
+    defaultModel: "openai/gpt-oss-120b",
+    resolve: (model: string, credentials: ProviderCredentials) => {
+      const apiKey = requireStringOrNull(credentials, "groq");
+      return createOpenAI({
+        baseURL: "https://api.groq.com/openai/v1",
+        ...(apiKey ? { apiKey } : {}),
+      })(model);
+    },
+  },
 } as const satisfies Record<ProviderName, ProviderEntry>;
 
 // Wayfinder passes no temperature on any call, but ai@4 substitutes

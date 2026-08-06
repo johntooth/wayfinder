@@ -92,10 +92,15 @@ const serverEnvSchema = z.object({
   // workers) to drain a backlog faster; the claim is FOR UPDATE SKIP LOCKED so
   // concurrent ticks never double-fire (ADR-019, scaling wall #8).
   SCHEDULER_BATCH_SIZE: z.coerce.number().int().positive().default(50),
-  AI_DEFAULT_PROVIDER: z.enum(["anthropic", "openai", "mistral", "bedrock"]).default("anthropic"),
+  AI_DEFAULT_PROVIDER: z
+    .enum(["anthropic", "openai", "mistral", "bedrock", "groq"])
+    .default("anthropic"),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   MISTRAL_API_KEY: z.string().optional(),
+  // Groq is OpenAI-compatible but is NOT OPENAI_API_KEY: it needs its own base
+  // URL, so a Groq key in the OpenAI slot reaches api.openai.com and 401s.
+  GROQ_API_KEY: z.string().optional(),
   AWS_BEDROCK_REGION: z.string().optional(),
   AWS_BEDROCK_ACCESS_KEY_ID: z.string().optional(),
   AWS_BEDROCK_SECRET_ACCESS_KEY: z.string().optional(),

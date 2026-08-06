@@ -38,6 +38,10 @@ const MODEL_RATES: Record<string, ModelRates> = {
   "anthropic.claude-sonnet-4-5-20250929-v1:0": { prompt: 0.000003, completion: 0.000015, cacheRead: 0.0000003, cacheWrite: 0.000003750 },
   "anthropic.claude-opus-5":   { prompt: 0.000005,    completion: 0.000025,   cacheRead: 0.0000005,    cacheWrite: 0.00000625 },
   "anthropic.claude-sonnet-5": { prompt: 0.000003,    completion: 0.000015,   cacheRead: 0.0000003,    cacheWrite: 0.000003750 },
+  // Groq — https://console.groq.com/docs/models ($0.15 / $0.60 per 1M). No
+  // prompt caching, so the prompt rate stands in for both, as Mistral does.
+  "openai/gpt-oss-120b":        { prompt: 0.00000015,  completion: 0.0000006,  cacheRead: 0.00000015,   cacheWrite: 0.00000015 },
+  "openai/gpt-oss-20b":         { prompt: 0.0000001,   completion: 0.0000005,  cacheRead: 0.0000001,    cacheWrite: 0.0000001 },
 };
 
 // Providers whose reported promptTokens already *includes* cached tokens, so
@@ -55,6 +59,9 @@ const PROVIDER_FALLBACK_RATES: Record<ProviderName, ModelRates> = {
   openai: MODEL_RATES["gpt-4o"]!,
   mistral: MODEL_RATES["mistral-large-latest"]!,
   bedrock: MODEL_RATES["claude-sonnet-4-6"]!,
+  // The larger of the two Groq models, so an unrecognised one over-estimates
+  // rather than under-bills — under-billing is what slips past a spend cap.
+  groq: MODEL_RATES["openai/gpt-oss-120b"]!,
 };
 
 const estimateCost = (model: string, usage: TokenUsage, provider: ProviderName): number => {

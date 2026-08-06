@@ -50,7 +50,7 @@ import { toTrpcError } from "../trpc-errors";
 import { authConfigInputSchema, mergeAuthConfig } from "./settings-auth";
 import { getReindexStatus, startReindex } from "@/lib/reindex-runner";
 
-const providerSchema = z.enum(["anthropic", "openai", "mistral", "bedrock"]);
+const providerSchema = z.enum(["anthropic", "openai", "mistral", "bedrock", "groq"]);
 
 const bedrockInputSchema = z
   .object({
@@ -67,6 +67,7 @@ const aiConfigInputSchema = z.object({
     anthropic: z.string().nullable().optional(),
     openai: z.string().nullable().optional(),
     mistral: z.string().nullable().optional(),
+    groq: z.string().nullable().optional(),
     bedrock: bedrockInputSchema,
   }),
   models: z.object({
@@ -258,6 +259,7 @@ export const mergeApiKeys = (
     anthropic?: string | null;
     openai?: string | null;
     mistral?: string | null;
+    groq?: string | null;
     bedrock?: BedrockInput;
   },
   stored: AiConfig["apiKeys"],
@@ -265,6 +267,7 @@ export const mergeApiKeys = (
   anthropic: incoming.anthropic && incoming.anthropic.length > 0 ? incoming.anthropic : stored.anthropic,
   openai: incoming.openai && incoming.openai.length > 0 ? incoming.openai : stored.openai,
   mistral: incoming.mistral && incoming.mistral.length > 0 ? incoming.mistral : stored.mistral,
+  groq: incoming.groq && incoming.groq.length > 0 ? incoming.groq : stored.groq,
   bedrock: mergeBedrockCredentials(incoming.bedrock, stored.bedrock),
 });
 
@@ -303,6 +306,7 @@ export const settingsRouter = router({
         anthropic: apiKeyState(config.apiKeys.anthropic),
         openai: apiKeyState(config.apiKeys.openai),
         mistral: apiKeyState(config.apiKeys.mistral),
+        groq: apiKeyState(config.apiKeys.groq),
         bedrock: bedrockState(config.apiKeys.bedrock),
       },
       defaultModelsForProvider: DEFAULT_MODELS_FOR,
