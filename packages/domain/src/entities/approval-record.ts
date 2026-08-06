@@ -46,6 +46,24 @@ export const deriveStepKeys = (labels: string[]): string[] => {
   });
 };
 
+// What a decided approval projects onto its node's step outputs, so the Insights
+// field report can show the decision beside the values it governs. Named here,
+// next to the record these values are read from, because the writer
+// (`DecideApproval`) and the report that renders them agreed on the literals by
+// coincidence alone until this existed.
+//
+// The first four keys and their labels are fixed by history: rows written before
+// `approver_email` and `applies_to` existed are keyed this way, and changing a
+// key would strand them in a column that no longer appears.
+export const APPROVAL_PROJECTION_FIELDS: readonly { key: string; label: string }[] = [
+  { key: "outcome", label: "Outcome" },
+  { key: "decided_at", label: "Decided at" },
+  { key: "decided_by", label: "Decided by" },
+  { key: "approver_email", label: "Approver email" },
+  { key: "applies_to", label: "Applies to" },
+  { key: "comment", label: "Comment" },
+];
+
 export interface ApprovalRecordInput {
   stepKey: string;
   // The recorded status, which may be `approved_with_edits` — the value the

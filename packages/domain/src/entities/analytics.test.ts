@@ -11,6 +11,7 @@ import {
   type AnalyticsNode,
   type AnalyticsSessionRow,
 } from "./analytics";
+import { APPROVAL_PROJECTION_FIELDS } from "./approval-record";
 import type { ExtractionRecord } from "./extraction-record";
 
 const session = (overrides: Partial<AnalyticsSessionRow>): AnalyticsSessionRow => ({
@@ -532,6 +533,196 @@ describe("computeFieldReport", () => {
     );
 
     expect(report.columns.every((column) => column.versionGroupId === undefined)).toBe(true);
+  });
+
+  it("tags each column with the type of the step that produced it", () => {
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n1",
+          createdAt: new Date(),
+          fields: [{ key: "amount", label: "Amount", type: "currency", value: "$10.00" }],
+        },
+        {
+          sessionId: "s1",
+          nodeId: "n2",
+          createdAt: new Date(),
+          fields: [{ key: "outcome", label: "Outcome", type: "text", value: "approved" }],
+        },
+      ],
+      [
+        { id: "n1", name: "Intake", type: "conversational" },
+        { id: "n2", name: "Finance Sign-off", type: "approval" },
+      ],
+      [sessionS1],
+      [],
+    );
+
+    expect(report.columns.find((column) => column.columnKey === "n1:amount")?.nodeType).toBe(
+      "conversational",
+    );
+    expect(report.columns.find((column) => column.columnKey === "n2:outcome")?.nodeType).toBe(
+      "approval",
+    );
+  });
+
+  it("never fork-collapses two approval steps that share a projected key", () => {
+    // Every approval step projects the same `outcome` key by construction, so
+    // the shared key says nothing about the author's intent — unlike a template
+    // field, where a shared key means one reused slot. Two sign-offs on the two
+    // branches of a fork must stay two columns.
+    const edges = [
+      { fromNodeId: "n0", toNodeId: "n1" },
+      { fromNodeId: "n0", toNodeId: "n2" },
+      { fromNodeId: "n1", toNodeId: "n3" },
+      { fromNodeId: "n2", toNodeId: "n3" },
+    ];
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n1",
+          createdAt: new Date(),
+          fields: [{ key: "outcome", label: "Outcome", type: "text", value: "approved" }],
+        },
+        {
+          sessionId: "s2",
+          nodeId: "n2",
+          createdAt: new Date(),
+          fields: [{ key: "outcome", label: "Outcome", type: "text", value: "rejected" }],
+        },
+      ],
+      [
+        { id: "n1", name: "Finance Sign-off", type: "approval" },
+        { id: "n2", name: "Legal Sign-off", type: "approval" },
+      ],
+      [sessionS1, sessionS2],
+      edges,
+    );
+
+    expect(report.columns).toHaveLength(2);
+    expect(report.columns.every((column) => column.collapseGroupId === undefined)).toBe(true);
+  });
+
+  it("never version-collapses an approval step onto a historical one", () => {
+    // The live approval step and a deleted one never co-occur in a session, so
+    // the version rule would merge a finance sign-off into a legal one. The
+    // whole key group is skipped once any column in it is an approval column,
+    // because the historical node is absent from the flow and so has no type.
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n1",
+          createdAt: new Date(),
+          fields: [{ key: "outcome", label: "Outcome", type: "text", value: "approved" }],
+        },
+        {
+          sessionId: "s2",
+          nodeId: "n_old",
+          createdAt: new Date(),
+          fields: [{ key: "outcome", label: "Outcome", type: "text", value: "rejected" }],
+        },
+      ],
+      [{ id: "n1", name: "Finance Sign-off", type: "approval" }],
+      [sessionS1, sessionS2],
+      [],
+    );
+
+    expect(report.columns).toHaveLength(2);
+    expect(report.columns.every((column) => column.versionGroupId === undefined)).toBe(true);
+  });
+
+  it("still collapses template fields when an approval step is present in the flow", () => {
+    // The approval exclusion is scoped to the key group it appears in: an
+    // ordinary fork-sibling template field must collapse exactly as before.
+    const edges = [
+      { fromNodeId: "n0", toNodeId: "n1" },
+      { fromNodeId: "n0", toNodeId: "n2" },
+      { fromNodeId: "n1", toNodeId: "n3" },
+      { fromNodeId: "n2", toNodeId: "n3" },
+    ];
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n1",
+          createdAt: new Date(),
+          fields: [{ key: "amount", label: "Amount", type: "currency", value: "$10.00" }],
+        },
+        {
+          sessionId: "s2",
+          nodeId: "n2",
+          createdAt: new Date(),
+          fields: [{ key: "amount", label: "Amount", type: "currency", value: "$20.00" }],
+        },
+        {
+          sessionId: "s1",
+          nodeId: "n4",
+          createdAt: new Date(),
+          fields: [{ key: "outcome", label: "Outcome", type: "text", value: "approved" }],
+        },
+      ],
+      [
+        { id: "n1", name: "Standard", type: "conversational" },
+        { id: "n2", name: "Expedited", type: "conversational" },
+        { id: "n4", name: "Finance Sign-off", type: "approval" },
+      ],
+      [sessionS1, sessionS2],
+      edges,
+    );
+
+    expect(report.columns.find((column) => column.columnKey === "n1:amount")?.collapseGroupId).toBe(
+      "amount::n1+n2",
+    );
+  });
+
+  it("leaves collapse behaviour unchanged when no node carries a type", () => {
+    // The extraction report and any caller predating node typing pass untyped
+    // nodes; they must keep collapsing exactly as they do today.
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n1",
+          createdAt: new Date(),
+          fields: [{ key: "amount", label: "Amount", type: "currency", value: "$10.00" }],
+        },
+        {
+          sessionId: "s2",
+          nodeId: "n_old",
+          createdAt: new Date(),
+          fields: [{ key: "amount", label: "Amount", type: "currency", value: "$20.00" }],
+        },
+      ],
+      [{ id: "n1", name: "Intake" }],
+      [sessionS1, sessionS2],
+      [],
+    );
+
+    expect(report.columns.every((column) => column.versionGroupId === "amount::version")).toBe(true);
+  });
+});
+
+describe("APPROVAL_PROJECTION_FIELDS", () => {
+  it("names the six keys a decision projects, in report order", () => {
+    expect(APPROVAL_PROJECTION_FIELDS.map((field) => field.key)).toEqual([
+      "outcome",
+      "decided_at",
+      "decided_by",
+      "approver_email",
+      "applies_to",
+      "comment",
+    ]);
+  });
+
+  it("keeps the four pre-existing keys labelled as they were, so old rows keep their column", () => {
+    const labels = new Map(APPROVAL_PROJECTION_FIELDS.map((field) => [field.key, field.label]));
+    expect(labels.get("outcome")).toBe("Outcome");
+    expect(labels.get("decided_at")).toBe("Decided at");
+    expect(labels.get("decided_by")).toBe("Decided by");
+    expect(labels.get("comment")).toBe("Comment");
   });
 });
 

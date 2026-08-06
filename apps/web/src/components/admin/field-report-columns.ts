@@ -12,7 +12,19 @@ export interface DisplayColumn {
   options?: string[];
   memberKeys: string[];
   stepNames: string[];
+  nodeType?: FieldReportColumn["nodeType"];
 }
+
+// A heading that stands alone, for anywhere a column is read without its step
+// beside it — the xlsx export, the pivot's group-by list. An approval step
+// projects the same generic labels as every other approval step ("Outcome",
+// "Comment"), so its own label identifies nothing; a merged column names the
+// steps it coalesced. Everything else is already unambiguous.
+export const qualifiedColumnLabel = (column: DisplayColumn): string => {
+  if (column.stepNames.length > 1) return `${column.stepNames.join(" · ")} — ${column.label}`;
+  if (column.nodeType === "approval") return `${column.nodeName} — ${column.label}`;
+  return column.label;
+};
 
 export interface NodeGroup {
   nodeId: string;
@@ -78,6 +90,7 @@ export const buildDisplayColumns = (
       options: lead.options,
       memberKeys: members.map((member) => member.columnKey),
       stepNames,
+      nodeType: lead.nodeType,
     };
   });
 };

@@ -1721,6 +1721,105 @@ describe("DecideApproval", () => {
       expect(record["manager_review.comment"]).toBe("Fix the date.");
     });
 
+    describe("projected onto step outputs for the insights report", () => {
+      const projected = (stepOutputs: InMemoryStepOutputs, key: string): string | undefined =>
+        stepOutputs.rows
+          .find((row) => row.nodeId === "node-appr" && row.fields.some((f) => f.key === "outcome"))
+          ?.fields.find((f) => f.key === key)?.value;
+
+      it("names the approver rather than projecting their user id", async () => {
+        const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+        const approval = await seedConfirmed(approvals);
+        const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+        await sut.execute({
+          approvalId: approval.id,
+          decidedByUserId: "manager-1",
+          decision: "approved",
+        });
+
+        expect(projected(stepOutputs, "decided_by")).toBe("Jane Doe");
+        expect(projected(stepOutputs, "approver_email")).toBe("manager@corp.test");
+      });
+
+      it("projects what the approval applies to", async () => {
+        const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+        const approval = await seedConfirmed(approvals);
+        const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+        await sut.execute({
+          approvalId: approval.id,
+          decidedByUserId: "manager-1",
+          decision: "approved",
+        });
+
+        expect(projected(stepOutputs, "applies_to")).toContain("Prepare instrument");
+      });
+
+      it("falls back to the approver's email when no name was recorded", async () => {
+        const { approvals, sessions, nodes, stepOutputs } = await seedFlow();
+        const users = new InMemoryUsers();
+        users.add({ ...user("manager-1", "manager@corp.test"), name: null });
+        const approval = await seedConfirmed(approvals);
+        const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+        await sut.execute({
+          approvalId: approval.id,
+          decidedByUserId: "manager-1",
+          decision: "approved",
+        });
+
+        expect(projected(stepOutputs, "decided_by")).toBe("manager@corp.test");
+      });
+
+      // The record's dependencies are optional, so an unwired decision path still
+      // has to project something that identifies the decider — a blank cell in a
+      // governance report is worse than a raw id.
+      it("falls back to the decider's user id when the record carries no identity", async () => {
+        const approvals = new InMemoryApprovals();
+        const approval = await seedConfirmed(approvals);
+        const sessions = new InMemorySessions();
+        sessions.add(session());
+        const stepOutputs = new InMemoryStepOutputs();
+        const sut = new DecideApproval(
+          unitOfWorkFor(approvals, sessions),
+          approvals,
+          sessions,
+          new InMemoryFlowEdges(),
+          stepOutputs,
+          new RecordingAuditLogger(),
+        );
+
+        await sut.execute({
+          approvalId: approval.id,
+          decidedByUserId: "manager-1",
+          decision: "approved",
+        });
+
+        expect(projected(stepOutputs, "decided_by")).toBe("manager-1");
+        expect(projected(stepOutputs, "approver_email")).toBe("");
+        expect(projected(stepOutputs, "applies_to")).toBe("");
+      });
+
+      it("keeps the outcome, timestamp and comment the report already reads", async () => {
+        const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+        const approval = await seedConfirmed(approvals);
+        const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+        await sut.execute({
+          approvalId: approval.id,
+          decidedByUserId: "manager-1",
+          decision: "approved",
+          comment: "Within delegated authority.",
+        });
+
+        expect(projected(stepOutputs, "outcome")).toBe("approved");
+        expect(projected(stepOutputs, "comment")).toBe("Within delegated authority.");
+        expect(projected(stepOutputs, "decided_at")).toEqual(expect.any(String));
+      });
+
+    });
+
     it("freezes the attestation block when the node targets a signature slot", async () => {
       const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
       nodes.add(
@@ -1825,6 +1924,32 @@ describe("DecideApproval", () => {
 
       const laterThanRaise = new Date(Date.now() + 60_000).toISOString();
       const beforeRaise = new Date(Date.now() - 60_000).toISOString();
+
+      // The report reads the projection, not the approval row, so the widened
+      // status has to reach both or "approved after the approver changed it"
+      // is invisible to the very report it was derived for (ADR-045 §4).
+      it("projects the widened status onto the step outputs too", async () => {
+        const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+        const approval = await seedConfirmed(approvals);
+        const messages = new InMemoryMessages();
+        await seedEditedDocument(messages, [
+          { editedByUserId: "manager-1", editedAt: laterThanRaise, keys: ["commencement_date"] },
+        ]);
+        const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users, messages });
+
+        await sut.execute({
+          approvalId: approval.id,
+          decidedByUserId: "manager-1",
+          decision: "approved",
+        });
+
+        const row = stepOutputs.rows.find(
+          (candidate) =>
+            candidate.nodeId === "node-appr" &&
+            candidate.fields.some((f) => f.key === "outcome"),
+        );
+        expect(row?.fields.find((f) => f.key === "outcome")?.value).toBe("approved_with_edits");
+      });
 
       it("records approved_with_edits when the approver edited their own subject step", async () => {
         const decided = await decideWith([

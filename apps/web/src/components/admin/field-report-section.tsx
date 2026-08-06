@@ -26,7 +26,11 @@ import {
 import { trpc } from "@/trpc/client";
 import { exportInsightsXlsx } from "@/components/admin/field-report-export";
 import { FieldReportPivotDrawer } from "@/components/admin/field-report-pivot-drawer";
-import { buildDisplayColumns, type NodeGroup } from "@/components/admin/field-report-columns";
+import {
+  buildDisplayColumns,
+  qualifiedColumnLabel,
+  type NodeGroup,
+} from "@/components/admin/field-report-columns";
 
 type DatePreset = "all" | "this_year" | "last_90" | "last_30";
 type FilterOperator = "gte" | "lte";
@@ -269,6 +273,13 @@ export function FieldReportSection({
     [displayColumns, filterColumnKey],
   );
 
+  // The drawer lists columns in a flat select with no step grouping, so each
+  // entry has to name its own step.
+  const pivotColumns = useMemo(
+    () => displayColumns.map((col) => ({ ...col, label: qualifiedColumnLabel(col) })),
+    [displayColumns],
+  );
+
   const filteredRows = useMemo((): FieldReportSessionRow[] => {
     const now = new Date();
     const dateThreshold = getDateThreshold(datePreset, now);
@@ -332,8 +343,11 @@ export function FieldReportSection({
   const handleExport = useCallback(async () => {
     setIsExporting(true);
     try {
+      // The sheet has no second header line to carry a step name, so the
+      // heading has to stand on its own or a two-approval flow exports two
+      // columns both headed "Outcome".
       const exportColumns = displayedColumns.map((col) => ({
-        label: col.label,
+        label: qualifiedColumnLabel(col),
         type: col.type,
         memberKeys: col.memberKeys,
       }));
@@ -616,7 +630,10 @@ export function FieldReportSection({
                 {displayedColumns.map((col) => (
                   <TableHead key={col.columnKey}>
                     {col.label}
-                    {col.stepNames.length > 1 && (
+                    {/* An approval step projects the same generic labels as every
+                        other one, so without its name several sign-offs all read
+                        "Outcome" with nothing to tell them apart. */}
+                    {(col.stepNames.length > 1 || col.nodeType === "approval") && (
                       <span className="block text-[10px] font-normal normal-case text-[#666055]">
                         {col.stepNames.join(" · ")}
                       </span>
@@ -708,7 +725,7 @@ export function FieldReportSection({
       <FieldReportPivotDrawer
         open={summariseOpen}
         onOpenChange={setSummariseOpen}
-        columns={displayColumns}
+        columns={pivotColumns}
         rows={filteredRows}
       />
     </Card>

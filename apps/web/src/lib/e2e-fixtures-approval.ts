@@ -92,9 +92,28 @@ export const seedApprovalSubjectSession = async (
     "create finance approval node",
   );
 
+  // A third sign-off, decided like the delegate's, so the flow carries *two*
+  // decided approval steps. Flow Insights needs more than one to show that a
+  // report can tell approval types apart (ADR-040 §5).
+  const recordsNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "approval",
+      name: "Records sign-off",
+      positionX: 1020,
+      positionY: 120,
+      config: {
+        approverSource: "first_level_supervisor",
+        approvalSubject: { kind: "step", nodeId: documentNode.id },
+      },
+    }),
+    "create records approval node",
+  );
+
   for (const [fromNodeId, toNodeId] of [
     [documentNode.id, delegateNode.id],
     [delegateNode.id, financeNode.id],
+    [financeNode.id, recordsNode.id],
   ] as const) {
     unwrap(
       await container.useCases.createFlowEdge.execute({ flowId: flow.id, fromNodeId, toNodeId }),
@@ -174,7 +193,8 @@ export const seedApprovalSubjectSession = async (
     "create decided delegate approval",
   );
 
-  // The projected decision output the second approver must NOT be shown.
+  // The projected decision output the second approver must NOT be shown — and
+  // the row Flow Insights reads to build this step's approval columns.
   unwrap(
     await container.repos.sessionStepOutputs.create({
       sessionId: session.id,
@@ -182,7 +202,21 @@ export const seedApprovalSubjectSession = async (
       nodeId: delegateNode.id,
       fields: [
         { key: "outcome", label: "Outcome", type: "text", value: "approved" },
-        { key: "decided_by", label: "Decided by", type: "text", value: ownerUserId },
+        { key: "decided_at", label: "Decided at", type: "text", value: new Date().toISOString() },
+        { key: "decided_by", label: "Decided by", type: "text", value: "Jane Doe" },
+        {
+          key: "approver_email",
+          label: "Approver email",
+          type: "text",
+          value: "jane.doe@example.com",
+        },
+        {
+          key: "applies_to",
+          label: "Applies to",
+          type: "text",
+          value: 'the output of the step "Prepare instrument"',
+        },
+        { key: "comment", label: "Comment", type: "text", value: "" },
       ],
     }),
     "create delegate decision projection",
@@ -209,6 +243,63 @@ export const seedApprovalSubjectSession = async (
       status: "pending",
     }),
     "create pending finance approval",
+  );
+
+  // The second decided sign-off. Its projection carries the same generic keys
+  // as the delegate's — which is exactly the collision Flow Insights has to
+  // keep segmented by step.
+  unwrap(
+    await container.repos.approvals.create({
+      sessionId: session.id,
+      flowId: flow.id,
+      nodeId: recordsNode.id,
+      requestedByUserId: ownerUserId,
+      approverSource: "first_level_supervisor",
+      approverUserId: ownerUserId,
+      status: "approved",
+      recordSnapshot: {
+        subjectDescription: 'the output of the step "Prepare instrument"',
+        subjectNodeId: documentNode.id,
+        "records_sign_off.decision": "approved",
+        "records_sign_off.approver_name": "Sam Patel",
+        "records_sign_off.approver_email": "sam.patel@example.com",
+        "records_sign_off.decided_at": new Date().toISOString(),
+        "records_sign_off.comment": "Filed against the delegations register.",
+      },
+    }),
+    "create decided records approval",
+  );
+
+  unwrap(
+    await container.repos.sessionStepOutputs.create({
+      sessionId: session.id,
+      flowId: flow.id,
+      nodeId: recordsNode.id,
+      fields: [
+        { key: "outcome", label: "Outcome", type: "text", value: "approved" },
+        { key: "decided_at", label: "Decided at", type: "text", value: new Date().toISOString() },
+        { key: "decided_by", label: "Decided by", type: "text", value: "Sam Patel" },
+        {
+          key: "approver_email",
+          label: "Approver email",
+          type: "text",
+          value: "sam.patel@example.com",
+        },
+        {
+          key: "applies_to",
+          label: "Applies to",
+          type: "text",
+          value: 'the output of the step "Prepare instrument"',
+        },
+        {
+          key: "comment",
+          label: "Comment",
+          type: "text",
+          value: "Filed against the delegations register.",
+        },
+      ],
+    }),
+    "create records decision projection",
   );
 
   return { sessionId: session.id, flowId: flow.id };
