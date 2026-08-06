@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FieldReportColumn } from "@rbrasier/domain";
 import {
+  approvalRevisionNote,
   buildDisplayColumns,
   qualifiedColumnLabel,
   type DisplayColumn,
@@ -109,6 +110,76 @@ describe("qualifiedColumnLabel", () => {
 
   it("leaves an ordinary template field alone", () => {
     expect(qualifiedColumnLabel(display({}))).toBe("Amount");
+  });
+});
+
+describe("approvalRevisionNote", () => {
+  const outcomeColumn = display({
+    columnKey: "n1:outcome",
+    nodeId: "n1",
+    nodeName: "Finance Sign-off",
+    fieldKey: "outcome",
+    label: "Outcome",
+    type: "text",
+    nodeType: "approval",
+    memberKeys: ["n1:outcome"],
+    stepNames: ["Finance Sign-off"],
+  });
+
+  it("notes the pass count when a step was decided more than once", () => {
+    expect(approvalRevisionNote(outcomeColumn, { "n1:outcome": "approved", "n1:revision": "2" }))
+      .toBe("Revision 2");
+  });
+
+  it("stays silent on a first-pass decision, so the common case reads clean", () => {
+    expect(
+      approvalRevisionNote(outcomeColumn, { "n1:outcome": "approved", "n1:revision": "1" }),
+    ).toBeNull();
+  });
+
+  it("stays silent for a row projected before revisions were counted", () => {
+    expect(approvalRevisionNote(outcomeColumn, { "n1:outcome": "approved" })).toBeNull();
+  });
+
+  it("annotates only the outcome, not every column of the step", () => {
+    const comment = display({
+      columnKey: "n1:comment",
+      nodeId: "n1",
+      fieldKey: "comment",
+      label: "Comment",
+      type: "text",
+      nodeType: "approval",
+      memberKeys: ["n1:comment"],
+    });
+
+    expect(approvalRevisionNote(comment, { "n1:revision": "2" })).toBeNull();
+  });
+
+  it("ignores a template field that happens to be called outcome", () => {
+    const templateField = display({
+      columnKey: "n1:outcome",
+      nodeId: "n1",
+      fieldKey: "outcome",
+      label: "Outcome",
+      type: "text",
+      memberKeys: ["n1:outcome"],
+    });
+
+    expect(approvalRevisionNote(templateField, { "n1:revision": "2" })).toBeNull();
+  });
+
+  it("names the approval step for its revision column too", () => {
+    const revision = display({
+      columnKey: "n1:revision",
+      nodeName: "Finance Sign-off",
+      fieldKey: "revision",
+      label: "Revision",
+      type: "number",
+      nodeType: "approval",
+      stepNames: ["Finance Sign-off"],
+    });
+
+    expect(qualifiedColumnLabel(revision)).toBe("Finance Sign-off — Revision");
   });
 
   it("lists the merged steps for a collapsed column", () => {

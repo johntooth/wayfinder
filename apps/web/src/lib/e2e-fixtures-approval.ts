@@ -202,6 +202,7 @@ export const seedApprovalSubjectSession = async (
       nodeId: delegateNode.id,
       fields: [
         { key: "outcome", label: "Outcome", type: "text", value: "approved" },
+        { key: "revision", label: "Revision", type: "number", value: "1" },
         { key: "decided_at", label: "Decided at", type: "text", value: new Date().toISOString() },
         { key: "decided_by", label: "Decided by", type: "text", value: "Jane Doe" },
         {
@@ -245,9 +246,71 @@ export const seedApprovalSubjectSession = async (
     "create pending finance approval",
   );
 
-  // The second decided sign-off. Its projection carries the same generic keys
-  // as the delegate's — which is exactly the collision Flow Insights has to
-  // keep segmented by step.
+  // The second decided sign-off, decided *twice*: sent back for changes on the
+  // first pass, approved on the second. Its projection carries the same generic
+  // keys as the delegate's — which is exactly the collision Flow Insights has to
+  // keep segmented by step — and two passes, which it has to report as one
+  // current decision plus a revision count.
+  unwrap(
+    await container.repos.approvals.create({
+      sessionId: session.id,
+      flowId: flow.id,
+      nodeId: recordsNode.id,
+      requestedByUserId: ownerUserId,
+      approverSource: "first_level_supervisor",
+      approverUserId: ownerUserId,
+      status: "changes_requested",
+      recordSnapshot: {
+        subjectDescription: 'the output of the step "Prepare instrument"',
+        subjectNodeId: documentNode.id,
+        "records_sign_off.decision": "changes_requested",
+        "records_sign_off.approver_name": "Sam Patel",
+        "records_sign_off.approver_email": "sam.patel@example.com",
+        "records_sign_off.decided_at": new Date(Date.now() - 60_000).toISOString(),
+        "records_sign_off.comment": "Register reference is missing.",
+      },
+    }),
+    "create returned records approval",
+  );
+
+  unwrap(
+    await container.repos.sessionStepOutputs.create({
+      sessionId: session.id,
+      flowId: flow.id,
+      nodeId: recordsNode.id,
+      fields: [
+        { key: "outcome", label: "Outcome", type: "text", value: "changes_requested" },
+        { key: "revision", label: "Revision", type: "number", value: "1" },
+        {
+          key: "decided_at",
+          label: "Decided at",
+          type: "text",
+          value: new Date(Date.now() - 60_000).toISOString(),
+        },
+        { key: "decided_by", label: "Decided by", type: "text", value: "Sam Patel" },
+        {
+          key: "approver_email",
+          label: "Approver email",
+          type: "text",
+          value: "sam.patel@example.com",
+        },
+        {
+          key: "applies_to",
+          label: "Applies to",
+          type: "text",
+          value: 'the output of the step "Prepare instrument"',
+        },
+        {
+          key: "comment",
+          label: "Comment",
+          type: "text",
+          value: "Register reference is missing.",
+        },
+      ],
+    }),
+    "create returned records decision projection",
+  );
+
   unwrap(
     await container.repos.approvals.create({
       sessionId: session.id,
@@ -277,6 +340,7 @@ export const seedApprovalSubjectSession = async (
       nodeId: recordsNode.id,
       fields: [
         { key: "outcome", label: "Outcome", type: "text", value: "approved" },
+        { key: "revision", label: "Revision", type: "number", value: "2" },
         { key: "decided_at", label: "Decided at", type: "text", value: new Date().toISOString() },
         { key: "decided_by", label: "Decided by", type: "text", value: "Sam Patel" },
         {

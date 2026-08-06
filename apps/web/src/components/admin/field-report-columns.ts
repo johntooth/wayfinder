@@ -26,6 +26,24 @@ export const qualifiedColumnLabel = (column: DisplayColumn): string => {
   return column.label;
 };
 
+// How many passes it took to reach the decision now showing, for the outcome
+// cell of an approval step — `null` on a first pass, so the ordinary case reads
+// clean and only a step that went back and round again is marked.
+//
+// The count rides its own column, which is what a report filters and pivots on;
+// this is the at-a-glance reading of it, so "approved" beside a step that was
+// once sent back does not look like it sailed through first time.
+export const approvalRevisionNote = (
+  column: DisplayColumn,
+  values: Record<string, string>,
+): string | null => {
+  if (column.nodeType !== "approval" || column.fieldKey !== "outcome") return null;
+
+  const revision = Number(values[`${column.nodeId}:revision`]);
+  if (!Number.isFinite(revision) || revision < 2) return null;
+  return `Revision ${revision}`;
+};
+
 export interface NodeGroup {
   nodeId: string;
   nodeName: string;

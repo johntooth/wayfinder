@@ -73,6 +73,27 @@ test.describe("Flow Insights: approval steps segmented by step", () => {
     await expect(page.getByRole("cell", { name: /Prepare instrument/i }).first()).toBeVisible();
   });
 
+  test("a step decided twice shows its latest decision, noting the revision", async ({ page }) => {
+    test.skip(!(await openSubjectFlow(page)), "Seeded approval-subject flow not in insights");
+
+    // Records sign-off was sent back for changes, then approved. The report
+    // must read as the step now stands, not as it stood on the first pass.
+    const table = page.getByRole("table");
+    await expect(table.getByText("changes_requested")).toHaveCount(0);
+
+    // …and say it took two passes to get there.
+    await expect(table.getByText("(Revision 2)")).toBeVisible();
+
+    // The single-pass sign-off carries no note, so the ordinary case reads clean.
+    await expect(table.getByText("(Revision 1)")).toHaveCount(0);
+  });
+
+  test("the revision count is its own column, so a report can filter on it", async ({ page }) => {
+    test.skip(!(await openSubjectFlow(page)), "Seeded approval-subject flow not in insights");
+
+    await expect(page.getByRole("columnheader", { name: /revision/i }).first()).toBeVisible();
+  });
+
   test("the Columns dialog groups the approval fields under their own step", async ({ page }) => {
     test.skip(!(await openSubjectFlow(page)), "Seeded approval-subject flow not in insights");
 

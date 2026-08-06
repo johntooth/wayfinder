@@ -27,6 +27,7 @@ import { trpc } from "@/trpc/client";
 import { exportInsightsXlsx } from "@/components/admin/field-report-export";
 import { FieldReportPivotDrawer } from "@/components/admin/field-report-pivot-drawer";
 import {
+  approvalRevisionNote,
   buildDisplayColumns,
   qualifiedColumnLabel,
   type NodeGroup,
@@ -661,11 +662,19 @@ export function FieldReportSection({
                   <TableCell className={`text-[12px] font-medium ${statusBadgeClass(row.status)}`}>
                     {formatStatus(row.status)}
                   </TableCell>
-                  {displayedColumns.map((col) => (
-                    <TableCell key={col.columnKey} className="max-w-[220px] truncate text-[13px]">
-                      {coalesceValue(row.values, col.memberKeys) || "—"}
-                    </TableCell>
-                  ))}
+                  {displayedColumns.map((col) => {
+                    const revisionNote = approvalRevisionNote(col, row.values);
+                    return (
+                      <TableCell key={col.columnKey} className="max-w-[220px] truncate text-[13px]">
+                        {coalesceValue(row.values, col.memberKeys) || "—"}
+                        {/* A step sent back and re-decided shows where it landed;
+                            without this, "approved" reads as a clean first pass. */}
+                        {revisionNote && (
+                          <span className="ml-1 text-[11px] text-[#666055]">({revisionNote})</span>
+                        )}
+                      </TableCell>
+                    );
+                  })}
                 </TableRow>
               ))}
             </TableBody>

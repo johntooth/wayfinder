@@ -593,6 +593,7 @@ export class DecideApproval {
       nodeId: approval.nodeId,
       fields: [
         field("outcome", approval.status),
+        field("revision", String(await this.decisionCount(approval))),
         field("decided_at", decidedAt.toISOString()),
         field("decided_by", decidedBy),
         field("approver_email", approverEmail),
@@ -600,6 +601,24 @@ export class DecideApproval {
         field("comment", approval.comment ?? ""),
       ],
     });
+  }
+
+  // Which pass through this step the decision is, counting from one. A change
+  // request routes work back, and re-entering the step raises a fresh request
+  // rather than reopening the old one, so a step can be decided several times.
+  // Counted from the approval rows — the source of truth — rather than from the
+  // projections, which are best-effort and may have missed a write.
+  //
+  // Runs after the decision commits, so this decision is already among them.
+  // A read failure reports the pass it certainly is rather than none.
+  private async decisionCount(approval: Approval): Promise<number> {
+    const listed = await this.approvals.listBySession(approval.sessionId);
+    if (listed.error) return 1;
+
+    const decided = listed.data.filter(
+      (candidate) => candidate.nodeId === approval.nodeId && candidate.status !== "pending",
+    );
+    return Math.max(decided.length, 1);
   }
 
   // What the approver signed off, as a report column. The frozen description is

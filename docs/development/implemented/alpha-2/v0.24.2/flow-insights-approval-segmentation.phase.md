@@ -41,6 +41,9 @@ Reported symptoms, all confirmed in the code:
    UUID.
 4. There is no column for **what the approval applies to** — the subject step
    the approver signed off — even though it is frozen in the approval record.
+5. A step decided **more than once** — sent back for changes, reworked, then
+   approved — does not say so. Nothing distinguishes an approval that sailed
+   through first time from one that took three passes.
 
 ## 2. Root causes
 
@@ -93,7 +96,21 @@ projection, not an authoring decision. The heuristic has no way to know that,
 because `FieldReportColumn` does not record what kind of step a column came
 from.
 
-### 2.3 The table header renders the field label alone
+### 2.3 Repeat decisions are invisible
+
+A change request routes work back, and re-entering the step raises a **fresh**
+approval request rather than reopening the old one (`step-approvals.prd.md` §6
+story 7). So one approval step legitimately holds several decisions, and
+`projectDecision` writes a **new step-output row per decision**.
+
+`computeFieldReport` sorts a session's outputs ascending by `createdAt` and lets
+later values overwrite earlier ones (`analytics.ts:480-490`), so the report
+already shows the **latest** decision. That is correct but incidental — nothing
+tested it, and nothing recorded that a step had been round more than once. A
+step that was rejected twice before being approved reads exactly like one
+approved on sight.
+
+### 2.4 The table header renders the field label alone
 
 `field-report-section.tsx:616` renders `col.label` per column, and the step name
 only when a column merged several steps (`col.stepNames.length > 1`,
@@ -143,12 +160,14 @@ agree on `"outcome"` and friends only by coincidence of string literals. Name
 them once, next to `buildApprovalRecord`, in
 `packages/domain/src/entities/approval-record.ts`:
 
-- `APPROVAL_PROJECTION_FIELDS` — the ordered `{ key, label }` set that
-  `projectDecision` writes: `outcome`, `decided_at`, `decided_by`,
+- `APPROVAL_PROJECTION_FIELDS` — the ordered `{ key, label, type }` set that
+  `projectDecision` writes: `outcome`, `revision`, `decided_at`, `decided_by`,
   `approver_email`, `applies_to`, `comment`.
 
-Two new keys, `approver_email` and `applies_to`; the existing four keep their
-keys and labels so rows already written stay readable in the same columns.
+Three new keys — `revision`, `approver_email` and `applies_to`; the existing
+four keep their keys and labels so rows already written stay readable in the
+same columns. `revision` is typed `number` so it filters, sorts and pivots as
+one rather than as text.
 
 ### 5.2 Columns know which kind of step they came from (domain)
 
@@ -178,7 +197,13 @@ the snapshot patched in (`decide-approval.ts:370-384`) — and writes:
 | `decided_by` | `<stepKey>.approver_name` → `<stepKey>.approver_email` → `decidedByUserId` |
 | `approver_email` | `<stepKey>.approver_email` |
 | `applies_to` | `<stepKey>.subject_description` → subject step's node name → `""` |
+| `revision` | count of this step's decided approvals in this session, this one included |
 | `comment` | `approval.comment` (unchanged) |
+
+`revision` is counted from the **approval rows**, not from the projections:
+the projections are best-effort and may have missed a write, while the approval
+rows are the source of truth for what was decided. It runs after the decision
+commits, so the current decision is already among them — a first pass is 1.
 
 The fallbacks matter: the record is built best-effort (its dependencies are
 optional, `decide-approval.ts:132-139`), so an unwired or partial record must
@@ -200,6 +225,11 @@ re-derived.
 - The table header shows the step name as the existing small sub-line — the
   same treatment merged columns already get (line 619) — extended to approval
   columns.
+- `approvalRevisionNote` annotates an approval step's **outcome** cell with
+  `(Revision N)` when N > 1. Presentation only: the count itself rides its own
+  numeric column, so grouping and filtering still see a clean `approved`, never
+  `approved (Revision 2)`. A first pass is unannotated, so the ordinary case
+  reads clean and only a step that went round again is marked.
 - The export and the Summarise group-by select use `qualifiedColumnLabel`, so a
   spreadsheet never carries two identical headings.
 
@@ -247,6 +277,14 @@ re-derived.
       headings** — approval headings are step-qualified.
 - [ ] The Summarise drawer's group-by list distinguishes the two steps'
       `Outcome` columns.
+- [ ] A step decided twice (changes requested, then approved) reports the
+      **latest** decision — `approved` — never the superseded one.
+- [ ] That step's outcome cell reads `approved (Revision 2)`, and a step decided
+      once carries no revision note.
+- [ ] `Revision` is its own numeric column, so a report can filter and pivot on
+      "took more than one pass".
+- [ ] Each approval step counts its own passes: a second sign-off on its first
+      pass is revision 1 however many times the first step was decided.
 - [ ] A step output written before this change still renders in its existing
       column, with its stored value, and no column disappears.
 - [ ] A flow with no approval steps produces a report byte-identical to today's.
@@ -261,10 +299,14 @@ Written before the implementation, per CLAUDE.md.
     a `collapseGroupId` or a `versionGroupId`, under both toggles
   - `nodeType` is set on every column from its node
   - a template field shared across fork siblings still collapses (no regression)
+  - a twice-decided step reports its latest decision and revision, and does so
+    by decision time rather than row order
 - `packages/application/src/use-cases/approvals/approvals.test.ts`
   - `projectDecision` writes the approver name from the record, the email, and
     the subject description
   - falls back to email, then to the user id, when the record is partial
+  - numbers each pass: a re-decided step projects revision 2 with the newer
+    outcome, a first pass projects 1, and passes are counted per step
 - `apps/web/src/components/admin/field-report-export.test.ts`
   - two approval steps export two distinct, step-qualified headings
 - `apps/web/e2e/enhance-flow-insights-approval-segmentation.spec.ts` — Playwright
@@ -275,6 +317,11 @@ Written before the implementation, per CLAUDE.md.
 
 - **Historical rows keep a UUID in `Decided by`.** Accepted (§4): the value was
   already a UUID, so nothing regresses; new decisions read correctly.
+- **Historical rows carry no `revision`.** A decision projected before this
+  change has no count, so its outcome cell is unannotated — it reads as a first
+  pass whether or not it was one. `approvalRevisionNote` treats a missing value
+  as "no note" rather than guessing, since a wrong revision number in a
+  governance report is worse than none.
 - **A flow that genuinely reused one approval step across versions no longer
   coalesces.** Intended — the ask is segmentation. The columns remain adjacent
   and step-labelled, so the report is longer but never wrong.

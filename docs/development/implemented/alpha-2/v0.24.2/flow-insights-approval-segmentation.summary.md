@@ -23,6 +23,11 @@ Flow Insights field report could not tell them apart:
 3. `decided_by` held a raw user **UUID**.
 4. Nothing showed **what** an approval applied to, though the subject is frozen
    in `recordSnapshot` at decision time.
+5. A step decided **more than once** — sent back for changes, reworked, then
+   approved — read exactly like one approved on sight. The report did already
+   show the latest decision (outputs are sorted ascending and later values
+   overwrite earlier ones), but that was incidental and untested, and the number
+   of passes was recorded nowhere.
 
 ADR-040 §5 anticipated all of this ("a report needs to tell them apart") and
 the record layer honoured it in v0.22.0. The report layer never consumed it.
@@ -31,10 +36,12 @@ the record layer honoured it in v0.22.0. The report layer never consumed it.
 
 **`packages/domain`**
 
-- `approval-record.ts` — new `APPROVAL_PROJECTION_FIELDS`: the ordered key/label
-  set a decision projects, named once so writer and readers cannot drift. Two
-  new keys (`approver_email`, `applies_to`); the original four keep their keys
-  and labels so rows already written stay in the same columns.
+- `approval-record.ts` — new `APPROVAL_PROJECTION_FIELDS`: the ordered
+  key/label/type set a decision projects, named once so writer and readers
+  cannot drift. Three new keys (`revision`, `approver_email`, `applies_to`); the
+  original four keep their keys and labels so rows already written stay in the
+  same columns. `revision` is typed `number` so it filters, sorts and pivots as
+  one.
 - `analytics.ts` — `type` on `AnalyticsNode` and the report's `NodeForReport`;
   `nodeType` on `FieldReportColumn`, set by `computeFieldReport`.
 - `annotateCollapseGroups` — skips a whole `fieldKey` group once any column in
@@ -52,25 +59,38 @@ the record layer honoured it in v0.22.0. The report layer never consumed it.
   plus `approver_email` and `applies_to` (subject description → subject step
   name → blank). The `field` helper now takes its label from the shared domain
   definition instead of the call site.
+- `decisionCount` numbers the pass. A change request routes work back and
+  re-entering the step raises a *fresh* request, so one step can be decided
+  several times. Counted from the approval rows — the source of truth — rather
+  than from the best-effort projections, and after the decision commits, so a
+  first pass is 1.
 
 **`apps/web`**
 
 - `field-report-columns.ts` — `nodeType` on `DisplayColumn`; new
   `qualifiedColumnLabel` for anywhere a column is read without its step beside
-  it.
+  it; new `approvalRevisionNote`, which annotates an approval step's outcome
+  cell with `(Revision N)` when N > 1. Presentation only — the count rides its
+  own numeric column, so grouping and filtering still see a clean `approved`
+  rather than `approved (Revision 2)`.
 - `field-report-section.tsx` — approval columns render their step name as the
   header sub-line; the xlsx export and the Summarise drawer take qualified
   labels.
-- `e2e-fixtures-approval.ts` — the seeded approval-subject flow gains a third,
-  decided `Records sign-off` step and full six-field projections, so the seed
-  carries **two** decided approval steps for the dashboard to segment.
+- `e2e-fixtures-approval.ts` — the seeded approval-subject flow gains a third
+  `Records sign-off` step, decided *twice* (changes requested, then approved),
+  with full projections. The seed now carries two decided approval steps for the
+  dashboard to segment, one of which took two passes.
 
-## Behaviour change to note
+## Behaviour changes to note
 
-Two approval steps can no longer be coalesced into one column by either combine
-toggle. That is the point of the change, but it is a visible difference for a
-flow that was relying on the merge: the report gains columns rather than losing
-information.
+- Two approval steps can no longer be coalesced into one column by either
+  combine toggle. That is the point of the change, but it is a visible
+  difference for a flow that was relying on the merge: the report gains columns
+  rather than losing information.
+- Decisions projected **before** this change carry no `revision`, so their
+  outcome cell is unannotated and reads as a first pass whether or not it was
+  one. `approvalRevisionNote` treats a missing count as "no note" rather than
+  guessing — a wrong revision number in a governance report is worse than none.
 
 ## Tests
 
@@ -78,15 +98,17 @@ Written before the implementation, per CLAUDE.md.
 
 | Layer | File | Covers |
 | --- | --- | --- |
-| Domain | `packages/domain/src/entities/analytics.test.ts` | `nodeType` tagging; no fork-collapse and no version-collapse across approval steps; template fields still collapse with an approval step present; untyped callers unchanged; `APPROVAL_PROJECTION_FIELDS` key order and preserved labels |
-| Application | `packages/application/src/use-cases/approvals/approvals.test.ts` | projection names the approver, projects the subject, falls back email → user id, keeps outcome/timestamp/comment, and carries `approved_with_edits` |
-| Web | `apps/web/src/components/admin/field-report-columns.test.ts` | `nodeType` passthrough, two approval steps stay two columns, qualified labels distinct per step |
+| Domain | `packages/domain/src/entities/analytics.test.ts` | `nodeType` tagging; no fork-collapse and no version-collapse across approval steps; template fields still collapse with an approval step present; untyped callers unchanged; a twice-decided step reports its latest decision and revision, ordered by decision time not row order; `APPROVAL_PROJECTION_FIELDS` key order, preserved labels and numeric revision |
+| Application | `packages/application/src/use-cases/approvals/approvals.test.ts` | projection names the approver, projects the subject, falls back email → user id, keeps outcome/timestamp/comment, carries `approved_with_edits`, numbers each pass (1 on a first pass, 2 after a change request) and counts passes per step |
+| Web | `apps/web/src/components/admin/field-report-columns.test.ts` | `nodeType` passthrough, two approval steps stay two columns, qualified labels distinct per step, revision note only on an approval outcome cell past pass 1 |
 
 **E2E** — `apps/web/e2e/enhance-flow-insights-approval-segmentation.spec.ts`
 covers the changed behaviour end-to-end: two step-captioned `Outcome` columns
 for the two decided sign-offs, no merge with either combine toggle flipped, the
-approver named rather than a UUID, an `Applies to` column, and the Columns
-dialog grouping each approval's fields under its own step.
+approver named rather than a UUID, an `Applies to` column, the twice-decided
+step showing its latest decision annotated `(Revision 2)` with no note on the
+single-pass one, a `Revision` column of its own, and the Columns dialog grouping
+each approval's fields under its own step.
 
 Not run locally by design — CI runs the suite (`.github/workflows/e2e.yml`, on
 every PR, sharded, against a full stack). A local run needs Postgres, Redis,

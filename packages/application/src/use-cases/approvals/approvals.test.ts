@@ -1801,6 +1801,86 @@ describe("DecideApproval", () => {
         expect(projected(stepOutputs, "applies_to")).toBe("");
       });
 
+      // A change request routes work back; re-entering the step raises a fresh
+      // request, so one approval step holds several decisions. The report reads
+      // the latest projected row, and the revision says how many passes it took.
+      it("numbers each pass, so a re-decided step reports its revision", async () => {
+        const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+        const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+        const first = await seedConfirmed(approvals);
+        await sut.execute({
+          approvalId: first.id,
+          decidedByUserId: "manager-1",
+          decision: "changes_requested",
+          comment: "Fix the date.",
+        });
+
+        const second = await seedConfirmed(approvals);
+        await sut.execute({
+          approvalId: second.id,
+          decidedByUserId: "manager-1",
+          decision: "approved",
+        });
+
+        const projections = stepOutputs.rows.filter(
+          (row) => row.nodeId === "node-appr" && row.fields.some((f) => f.key === "outcome"),
+        );
+        expect(projections).toHaveLength(2);
+        expect(projections[0]!.fields.find((f) => f.key === "revision")?.value).toBe("1");
+        expect(projections[0]!.fields.find((f) => f.key === "outcome")?.value).toBe(
+          "changes_requested",
+        );
+        expect(projections[1]!.fields.find((f) => f.key === "revision")?.value).toBe("2");
+        expect(projections[1]!.fields.find((f) => f.key === "outcome")?.value).toBe("approved");
+      });
+
+      it("numbers a first-pass decision as revision 1", async () => {
+        const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+        const approval = await seedConfirmed(approvals);
+        const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+        await sut.execute({
+          approvalId: approval.id,
+          decidedByUserId: "manager-1",
+          decision: "approved",
+        });
+
+        expect(projected(stepOutputs, "revision")).toBe("1");
+      });
+
+      // Two approval steps each count their own passes — a second sign-off on
+      // its first pass is revision 1, however many times the first was decided.
+      it("counts passes per approval step, not per session", async () => {
+        const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+        nodes.add(approvalNode({ id: "node-appr-2", name: "Finance review" }));
+        const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+        const first = await seedConfirmed(approvals);
+        await sut.execute({
+          approvalId: first.id,
+          decidedByUserId: "manager-1",
+          decision: "changes_requested",
+        });
+        const retry = await seedConfirmed(approvals);
+        await sut.execute({
+          approvalId: retry.id,
+          decidedByUserId: "manager-1",
+          decision: "approved",
+        });
+        const other = await seedConfirmed(approvals, { nodeId: "node-appr-2" });
+        await sut.execute({
+          approvalId: other.id,
+          decidedByUserId: "manager-1",
+          decision: "approved",
+        });
+
+        const financeProjection = stepOutputs.rows.find(
+          (row) => row.nodeId === "node-appr-2" && row.fields.some((f) => f.key === "outcome"),
+        );
+        expect(financeProjection?.fields.find((f) => f.key === "revision")?.value).toBe("1");
+      });
+
       it("keeps the outcome, timestamp and comment the report already reads", async () => {
         const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
         const approval = await seedConfirmed(approvals);

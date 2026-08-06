@@ -678,6 +678,69 @@ describe("computeFieldReport", () => {
     );
   });
 
+  it("shows the most recent decision when a step was decided more than once", () => {
+    // A change request routes work back; re-entering the step raises a fresh
+    // request and projects a second row. The report must read as the step
+    // currently stands — a superseded "changes_requested" would say the work
+    // was sent back when it has since been approved.
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n2",
+          createdAt: new Date("2026-05-20T09:00:00Z"),
+          fields: [
+            { key: "outcome", label: "Outcome", type: "text", value: "changes_requested" },
+            { key: "revision", label: "Revision", type: "number", value: "1" },
+          ],
+        },
+        {
+          sessionId: "s1",
+          nodeId: "n2",
+          createdAt: new Date("2026-05-20T11:00:00Z"),
+          fields: [
+            { key: "outcome", label: "Outcome", type: "text", value: "approved" },
+            { key: "revision", label: "Revision", type: "number", value: "2" },
+          ],
+        },
+      ],
+      [{ id: "n2", name: "Finance Sign-off", type: "approval" }],
+      [sessionS1],
+      [],
+    );
+
+    expect(report.rows[0]?.values["n2:outcome"]).toBe("approved");
+    expect(report.rows[0]?.values["n2:revision"]).toBe("2");
+  });
+
+  it("orders repeat decisions by when they happened, not by row order", () => {
+    // The repository makes no ordering promise, so the newest decision must win
+    // even when it arrives first in the list.
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n2",
+          createdAt: new Date("2026-05-20T11:00:00Z"),
+          fields: [{ key: "outcome", label: "Outcome", type: "text", value: "approved" }],
+        },
+        {
+          sessionId: "s1",
+          nodeId: "n2",
+          createdAt: new Date("2026-05-20T09:00:00Z"),
+          fields: [
+            { key: "outcome", label: "Outcome", type: "text", value: "changes_requested" },
+          ],
+        },
+      ],
+      [{ id: "n2", name: "Finance Sign-off", type: "approval" }],
+      [sessionS1],
+      [],
+    );
+
+    expect(report.rows[0]?.values["n2:outcome"]).toBe("approved");
+  });
+
   it("leaves collapse behaviour unchanged when no node carries a type", () => {
     // The extraction report and any caller predating node typing pass untyped
     // nodes; they must keep collapsing exactly as they do today.
@@ -706,15 +769,23 @@ describe("computeFieldReport", () => {
 });
 
 describe("APPROVAL_PROJECTION_FIELDS", () => {
-  it("names the six keys a decision projects, in report order", () => {
+  it("names the seven keys a decision projects, in report order", () => {
     expect(APPROVAL_PROJECTION_FIELDS.map((field) => field.key)).toEqual([
       "outcome",
+      "revision",
       "decided_at",
       "decided_by",
       "approver_email",
       "applies_to",
       "comment",
     ]);
+  });
+
+  it("types the revision as a number, so it filters and pivots as one", () => {
+    expect(APPROVAL_PROJECTION_FIELDS.find((field) => field.key === "revision")?.type).toBe(
+      "number",
+    );
+    expect(APPROVAL_PROJECTION_FIELDS.find((field) => field.key === "outcome")?.type).toBe("text");
   });
 
   it("keeps the four pre-existing keys labelled as they were, so old rows keep their column", () => {
