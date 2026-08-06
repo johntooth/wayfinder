@@ -26,7 +26,12 @@ import {
 import { trpc } from "@/trpc/client";
 import { exportInsightsXlsx } from "@/components/admin/field-report-export";
 import { FieldReportPivotDrawer } from "@/components/admin/field-report-pivot-drawer";
-import { buildDisplayColumns, type NodeGroup } from "@/components/admin/field-report-columns";
+import {
+  approvalRevisionNote,
+  buildDisplayColumns,
+  qualifiedColumnLabel,
+  type NodeGroup,
+} from "@/components/admin/field-report-columns";
 
 type DatePreset = "all" | "this_year" | "last_90" | "last_30";
 type FilterOperator = "gte" | "lte";
@@ -269,6 +274,13 @@ export function FieldReportSection({
     [displayColumns, filterColumnKey],
   );
 
+  // The drawer lists columns in a flat select with no step grouping, so each
+  // entry has to name its own step.
+  const pivotColumns = useMemo(
+    () => displayColumns.map((col) => ({ ...col, label: qualifiedColumnLabel(col) })),
+    [displayColumns],
+  );
+
   const filteredRows = useMemo((): FieldReportSessionRow[] => {
     const now = new Date();
     const dateThreshold = getDateThreshold(datePreset, now);
@@ -332,8 +344,11 @@ export function FieldReportSection({
   const handleExport = useCallback(async () => {
     setIsExporting(true);
     try {
+      // The sheet has no second header line to carry a step name, so the
+      // heading has to stand on its own or a two-approval flow exports two
+      // columns both headed "Outcome".
       const exportColumns = displayedColumns.map((col) => ({
-        label: col.label,
+        label: qualifiedColumnLabel(col),
         type: col.type,
         memberKeys: col.memberKeys,
       }));
@@ -616,7 +631,10 @@ export function FieldReportSection({
                 {displayedColumns.map((col) => (
                   <TableHead key={col.columnKey}>
                     {col.label}
-                    {col.stepNames.length > 1 && (
+                    {/* An approval step projects the same generic labels as every
+                        other one, so without its name several sign-offs all read
+                        "Outcome" with nothing to tell them apart. */}
+                    {(col.stepNames.length > 1 || col.nodeType === "approval") && (
                       <span className="block text-[10px] font-normal normal-case text-[#666055]">
                         {col.stepNames.join(" · ")}
                       </span>
@@ -644,11 +662,35 @@ export function FieldReportSection({
                   <TableCell className={`text-[12px] font-medium ${statusBadgeClass(row.status)}`}>
                     {formatStatus(row.status)}
                   </TableCell>
-                  {displayedColumns.map((col) => (
-                    <TableCell key={col.columnKey} className="max-w-[220px] truncate text-[13px]">
-                      {coalesceValue(row.values, col.memberKeys) || "—"}
-                    </TableCell>
-                  ))}
+                  {displayedColumns.map((col) => {
+                    const value = coalesceValue(row.values, col.memberKeys) || "—";
+                    // A step sent back and re-decided shows where it landed;
+                    // without this, "approved" reads as a clean first pass.
+                    const revisionNote = approvalRevisionNote(col, row.values);
+                    if (!revisionNote) {
+                      return (
+                        <TableCell
+                          key={col.columnKey}
+                          className="max-w-[220px] truncate text-[13px]"
+                        >
+                          {value}
+                        </TableCell>
+                      );
+                    }
+                    // The note is the part that must survive: truncating the
+                    // cell as a whole would clip exactly it, and a long outcome
+                    // beside a double-digit count is where that first bites.
+                    return (
+                      <TableCell key={col.columnKey} className="max-w-[220px] text-[13px]">
+                        <span className="flex items-baseline gap-1">
+                          <span className="truncate">{value}</span>
+                          <span className="shrink-0 text-[11px] text-[#666055]">
+                            ({revisionNote})
+                          </span>
+                        </span>
+                      </TableCell>
+                    );
+                  })}
                 </TableRow>
               ))}
             </TableBody>
@@ -708,7 +750,7 @@ export function FieldReportSection({
       <FieldReportPivotDrawer
         open={summariseOpen}
         onOpenChange={setSummariseOpen}
-        columns={displayColumns}
+        columns={pivotColumns}
         rows={filteredRows}
       />
     </Card>
