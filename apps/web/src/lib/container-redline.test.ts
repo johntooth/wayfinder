@@ -92,8 +92,15 @@ const adjudicator: IAdjudicator = {
   async adjudicate(request: AdjudicationRequest): Promise<Result<Adjudication>> {
     return ok({
       documentId: request.documentId,
-      chosenTopicId: request.candidates[0]?.topicId ?? "req-1",
-      rationale: "",
+      topics: [
+        {
+          topicId: request.candidates[0]?.topicId ?? "req-1",
+          evidenceChunkIds: request.passages.map((passage) => passage.chunkId),
+          rationale: "",
+        },
+      ],
+      exception: null,
+      cost: null,
     });
   },
 };
