@@ -226,10 +226,17 @@ re-derived.
   same treatment merged columns already get (line 619) — extended to approval
   columns.
 - `approvalRevisionNote` annotates an approval step's **outcome** cell with
-  `(Revision N)` when N > 1. Presentation only: the count itself rides its own
-  numeric column, so grouping and filtering still see a clean `approved`, never
-  `approved (Revision 2)`. A first pass is unannotated, so the ordinary case
-  reads clean and only a step that went round again is marked.
+  `(Revision N)` for any N > 1 — nothing caps the pass count, so a step that
+  went back and round four times reads `(Revision 4)`. Presentation only: the
+  count itself rides its own numeric column, so grouping and filtering still see
+  a clean `approved`, never `approved (Revision 2)`. A first pass is
+  unannotated, so the ordinary case reads clean and only a step that went round
+  again is marked.
+- The annotated cell lays out as a flex row — value truncating, note
+  `shrink-0` — rather than truncating as a whole. Under the cell's 220px cap the
+  note is the tail, so a blanket `truncate` would clip exactly the thing the
+  annotation exists to show, and a long outcome beside a double-digit count is
+  where that first bites.
 - The export and the Summarise group-by select use `qualifiedColumnLabel`, so a
   spreadsheet never carries two identical headings.
 
@@ -281,6 +288,9 @@ re-derived.
       **latest** decision — `approved` — never the superseded one.
 - [ ] That step's outcome cell reads `approved (Revision 2)`, and a step decided
       once carries no revision note.
+- [ ] The count is uncapped: a step decided four times reports revision 4, and
+      the note stays visible beside a long outcome value rather than being
+      truncated away.
 - [ ] `Revision` is its own numeric column, so a report can filter and pivot on
       "took more than one pass".
 - [ ] Each approval step counts its own passes: a second sign-off on its first

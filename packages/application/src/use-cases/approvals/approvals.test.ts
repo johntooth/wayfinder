@@ -1835,6 +1835,34 @@ describe("DecideApproval", () => {
         expect(projections[1]!.fields.find((f) => f.key === "outcome")?.value).toBe("approved");
       });
 
+      // Nothing caps the count: a step can go back and round as many times as
+      // the work needs, and each pass numbers itself.
+      it("keeps numbering past a second pass", async () => {
+        const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+        const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+        for (const decision of ["changes_requested", "rejected", "changes_requested"] as const) {
+          const pass = await seedConfirmed(approvals);
+          await sut.execute({ approvalId: pass.id, decidedByUserId: "manager-1", decision });
+        }
+        const final = await seedConfirmed(approvals);
+        await sut.execute({
+          approvalId: final.id,
+          decidedByUserId: "manager-1",
+          decision: "approved",
+        });
+
+        const revisions = stepOutputs.rows
+          .filter((row) => row.nodeId === "node-appr" && row.fields.some((f) => f.key === "outcome"))
+          .map((row) => row.fields.find((f) => f.key === "revision")?.value);
+        expect(revisions).toEqual(["1", "2", "3", "4"]);
+
+        const latest = stepOutputs.rows
+          .filter((row) => row.nodeId === "node-appr" && row.fields.some((f) => f.key === "outcome"))
+          .at(-1);
+        expect(latest?.fields.find((f) => f.key === "outcome")?.value).toBe("approved");
+      });
+
       it("numbers a first-pass decision as revision 1", async () => {
         const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
         const approval = await seedConfirmed(approvals);

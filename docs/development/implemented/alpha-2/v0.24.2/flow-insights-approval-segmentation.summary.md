@@ -70,9 +70,11 @@ the record layer honoured it in v0.22.0. The report layer never consumed it.
 - `field-report-columns.ts` — `nodeType` on `DisplayColumn`; new
   `qualifiedColumnLabel` for anywhere a column is read without its step beside
   it; new `approvalRevisionNote`, which annotates an approval step's outcome
-  cell with `(Revision N)` when N > 1. Presentation only — the count rides its
-  own numeric column, so grouping and filtering still see a clean `approved`
-  rather than `approved (Revision 2)`.
+  cell with `(Revision N)` for any N > 1 — the pass count is uncapped.
+  Presentation only — the count rides its own numeric column, so grouping and
+  filtering still see a clean `approved` rather than `approved (Revision 2)`.
+  The annotated cell lays out as a flex row (value truncates, note `shrink-0`)
+  so the note is never the part clipped by the cell's 220px cap.
 - `field-report-section.tsx` — approval columns render their step name as the
   header sub-line; the xlsx export and the Summarise drawer take qualified
   labels.
@@ -99,8 +101,8 @@ Written before the implementation, per CLAUDE.md.
 | Layer | File | Covers |
 | --- | --- | --- |
 | Domain | `packages/domain/src/entities/analytics.test.ts` | `nodeType` tagging; no fork-collapse and no version-collapse across approval steps; template fields still collapse with an approval step present; untyped callers unchanged; a twice-decided step reports its latest decision and revision, ordered by decision time not row order; `APPROVAL_PROJECTION_FIELDS` key order, preserved labels and numeric revision |
-| Application | `packages/application/src/use-cases/approvals/approvals.test.ts` | projection names the approver, projects the subject, falls back email → user id, keeps outcome/timestamp/comment, carries `approved_with_edits`, numbers each pass (1 on a first pass, 2 after a change request) and counts passes per step |
-| Web | `apps/web/src/components/admin/field-report-columns.test.ts` | `nodeType` passthrough, two approval steps stay two columns, qualified labels distinct per step, revision note only on an approval outcome cell past pass 1 |
+| Application | `packages/application/src/use-cases/approvals/approvals.test.ts` | projection names the approver, projects the subject, falls back email → user id, keeps outcome/timestamp/comment, carries `approved_with_edits`, numbers each pass (1, then 2 after a change request, and on through a four-pass `changes_requested → rejected → changes_requested → approved` run) and counts passes per step |
+| Web | `apps/web/src/components/admin/field-report-columns.test.ts` | `nodeType` passthrough, two approval steps stay two columns, qualified labels distinct per step, revision note only on an approval outcome cell past pass 1, at any count |
 
 **E2E** — `apps/web/e2e/enhance-flow-insights-approval-segmentation.spec.ts`
 covers the changed behaviour end-to-end: two step-captioned `Outcome` columns

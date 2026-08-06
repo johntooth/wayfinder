@@ -131,6 +131,14 @@ describe("approvalRevisionNote", () => {
       .toBe("Revision 2");
   });
 
+  it("notes any pass count, not just a second one", () => {
+    for (const revision of ["3", "7", "12"]) {
+      expect(approvalRevisionNote(outcomeColumn, { "n1:revision": revision })).toBe(
+        `Revision ${revision}`,
+      );
+    }
+  });
+
   it("stays silent on a first-pass decision, so the common case reads clean", () => {
     expect(
       approvalRevisionNote(outcomeColumn, { "n1:outcome": "approved", "n1:revision": "1" }),

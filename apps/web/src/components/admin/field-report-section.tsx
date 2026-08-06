@@ -663,15 +663,31 @@ export function FieldReportSection({
                     {formatStatus(row.status)}
                   </TableCell>
                   {displayedColumns.map((col) => {
+                    const value = coalesceValue(row.values, col.memberKeys) || "—";
+                    // A step sent back and re-decided shows where it landed;
+                    // without this, "approved" reads as a clean first pass.
                     const revisionNote = approvalRevisionNote(col, row.values);
+                    if (!revisionNote) {
+                      return (
+                        <TableCell
+                          key={col.columnKey}
+                          className="max-w-[220px] truncate text-[13px]"
+                        >
+                          {value}
+                        </TableCell>
+                      );
+                    }
+                    // The note is the part that must survive: truncating the
+                    // cell as a whole would clip exactly it, and a long outcome
+                    // beside a double-digit count is where that first bites.
                     return (
-                      <TableCell key={col.columnKey} className="max-w-[220px] truncate text-[13px]">
-                        {coalesceValue(row.values, col.memberKeys) || "—"}
-                        {/* A step sent back and re-decided shows where it landed;
-                            without this, "approved" reads as a clean first pass. */}
-                        {revisionNote && (
-                          <span className="ml-1 text-[11px] text-[#666055]">({revisionNote})</span>
-                        )}
+                      <TableCell key={col.columnKey} className="max-w-[220px] text-[13px]">
+                        <span className="flex items-baseline gap-1">
+                          <span className="truncate">{value}</span>
+                          <span className="shrink-0 text-[11px] text-[#666055]">
+                            ({revisionNote})
+                          </span>
+                        </span>
                       </TableCell>
                     );
                   })}
