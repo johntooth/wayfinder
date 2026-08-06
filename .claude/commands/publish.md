@@ -87,7 +87,31 @@ publish: the deployment guides promise a credential-free pull.
 On failure, report which step failed and why. Do not retry blindly — a version
 mismatch and a registry outage need different responses.
 
-### Step 5 — Point at the upgrade path
+### Step 5 — Re-pin the deployment guides to what's published
+
+Skip this step for a throwaway pre-release tag (Step 0 below) — it never moves
+`latest`, so the guides must keep pointing at the last real release, not at it.
+
+`docs/guides/setup-aws.md`, `docs/guides/setup-azure.md`, and
+`docs/guides/upgrading.md` pin the previous version in example commands
+(`ghcr.io/rbrasier/wayfinder:<version>`, `--image wayfinder:<version>`,
+`WAYFINDER_VERSION=<version>` in a `sed` example, and the `X.Y.z` upgrade-path
+prose in `upgrading.md`). Find the previous version they're still pinned to and
+bump every literal occurrence to the version just published:
+
+```bash
+grep -rn "wayfinder:[0-9]\|WAYFINDER_VERSION=[0-9]" docs/guides/*.md
+```
+
+A reference driven by `$(cat VERSION)` or another variable (as in
+`setup-azure.md`'s `az containerapp create`) is already self-updating — leave
+it alone. Only bump hardcoded literals. Commit on the same branch the tag was
+cut from (`docs: pin deployment guides to v<version>`), and push directly —
+this is a mechanical version bump, not a design change, so it doesn't need its
+own PR. If the branch is protected and a direct push is rejected, open a PR
+instead.
+
+### Step 6 — Point at the upgrade path
 
 Once published, remind the user that existing deployments upgrade by pointing at
 the new tag and running migrations — see
