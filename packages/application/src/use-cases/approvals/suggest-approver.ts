@@ -29,9 +29,20 @@ export interface SuggestedApprover {
   email: string;
 }
 
+// The identity actually written on the row, as opposed to the one the resolver
+// proposed. They differ whenever the request has already been sent — and on a
+// chained approval the row is assigned by the *previous approver*, so without
+// this the gate can neither name the approver nor build a mailto for them.
+export interface AssignedApprover {
+  userId: string | null;
+  name: string | null;
+  email: string | null;
+}
+
 export interface SuggestApproverOutput {
   approval: Approval;
   suggestedApprover: SuggestedApprover | null;
+  assignedApprover: AssignedApprover | null;
 }
 
 // Reaching an approval node: compute a *suggested* approver from the node's
@@ -55,7 +66,8 @@ export class SuggestApprover {
     if (existing.error) return existing;
     if (existing.data) {
       const suggestedApprover = await this.describe(existing.data.suggestedApproverUserId);
-      return ok({ approval: existing.data, suggestedApprover });
+      const assignedApprover = await this.describeAssigned(existing.data);
+      return ok({ approval: existing.data, suggestedApprover, assignedApprover });
     }
 
     const nodeResult = await this.flowNodes.findById(input.nodeId);
@@ -80,7 +92,8 @@ export class SuggestApprover {
     if (created.error) return created;
 
     const suggestedApprover = await this.describe(suggestedUserId);
-    return ok({ approval: created.data, suggestedApprover });
+    const assignedApprover = await this.describeAssigned(created.data);
+    return ok({ approval: created.data, suggestedApprover, assignedApprover });
   }
 
   private async resolveSuggestion(
@@ -162,6 +175,20 @@ export class SuggestApprover {
     const position = result.data.object;
     if (!position.role && !position.band && !position.businessUnit) return null;
     return position;
+  }
+
+  // Null until an approver is confirmed. An email-only assignment (ADR-018)
+  // resolves to the address alone, which is all the gate needs to name it.
+  private async describeAssigned(approval: Approval): Promise<AssignedApprover | null> {
+    if (approval.approverUserId) {
+      const described = await this.describe(approval.approverUserId);
+      if (described) return described;
+      return { userId: approval.approverUserId, name: null, email: approval.approverEmail };
+    }
+    if (approval.approverEmail) {
+      return { userId: null, name: null, email: approval.approverEmail };
+    }
+    return null;
   }
 
   private async describe(userId: string | null): Promise<SuggestedApprover | null> {

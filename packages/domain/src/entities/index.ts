@@ -64,6 +64,7 @@ export * from "./approval";
 export * from "./approval-change-request";
 export * from "./approval-decision-message";
 export * from "./approval-withdrawal-message";
+export * from "./approval-reassignment-message";
 export * from "./approver-edit-message";
 export * from "./approval-lock";
 export * from "./approval-record";

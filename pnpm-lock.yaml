@@ -17,6 +17,8 @@ overrides:
   better-auth: '>=1.6.22 <1.7.0'
   protobufjs: '>=7.6.1'
   adm-zip: '>=0.6.0'
+  nanoid@3: '>=3.3.18 <4'
+  nanoid@5: '>=5.1.16 <6'
   js-yaml@3: 3.15.1
   js-yaml@4: '>=4.3.1 <5'
   brace-expansion@1: 1.1.18
@@ -4310,18 +4312,13 @@ packages:
   mz@2.7.0:
     resolution: {integrity: sha512-z81GNO7nnYMEhrGh9LeymoE4+Yr0Wn5McHIZMK5cfQCl+NDX08sCZgUc9/6MHni9IWuFLm1Z3HTCXu2z9fN62Q==}
 
-  nanoid@3.3.12:
-    resolution: {integrity: sha512-ZB9RH/39qpq5Vu6Y+NmUaFhQR6pp+M2Xt76XBnEwDaGcVAqhlvxrl3B2bKS5D3NH3QR76v3aSrKaF/Kiy7lEtQ==}
+  nanoid@3.3.18:
+    resolution: {integrity: sha512-DTg4MJbGMWkfi6VZFdNt2/caMbQy4Ou+Op/hJQvGEWcnVfoA1QA+xzRKAzw9jD6+GVOOeYr/mIcuDSdug6F6+w==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
-  nanoid@3.3.16:
-    resolution: {integrity: sha512-bzlKTyNJ7+LdGIIwy8ijFpIqEQIvafahV7eYykJ8Cvh42EdJeODoJ6gUJXpQJvej1BddH8OqTXZNE/KfbWAu8Q==}
-    engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
-    hasBin: true
-
-  nanoid@5.1.11:
-    resolution: {integrity: sha512-v+KEsUv2ps74PaSKv0gHTxTCgMXOIfBEbaqa6w6ISIGC7ZsvHN4N9oJ8d4cmf0n5oTzQz2SLmThbQWhjd/8eKg==}
+  nanoid@5.1.16:
+    resolution: {integrity: sha512-kVrnsrJqMR8+oLJnGEmSWw9BivK5mt7H3FZatVRjrc5wGqFYuBxX1yG7+A7Gi5AefkX6t/oCkizcQgpu0cY1dQ==}
     engines: {node: ^18 || >=20}
     hasBin: true
 
@@ -5646,7 +5643,7 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 1.0.7
       eventsource-parser: 3.1.0
-      nanoid: 3.3.12
+      nanoid: 3.3.18
       secure-json-parse: 2.7.0
     optionalDependencies:
       zod: 3.25.76
@@ -5654,7 +5651,7 @@ snapshots:
   '@ai-sdk/provider-utils@2.2.8(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
-      nanoid: 3.3.12
+      nanoid: 3.3.18
       secure-json-parse: 2.7.0
       zod: 3.25.76
 
@@ -8501,7 +8498,7 @@ snapshots:
       '@types/node': 25.9.0
       hash.js: 1.1.7
       jszip: 3.10.1
-      nanoid: 5.1.11
+      nanoid: 5.1.16
       xml: 1.0.1
       xml-js: 1.6.11
 
@@ -9698,11 +9695,9 @@ snapshots:
       object-assign: 4.1.1
       thenify-all: 1.6.0
 
-  nanoid@3.3.12: {}
+  nanoid@3.3.18: {}
 
-  nanoid@3.3.16: {}
-
-  nanoid@5.1.11: {}
+  nanoid@5.1.16: {}
 
   nanostores@1.3.0: {}
 
@@ -10058,7 +10053,7 @@ snapshots:
 
   postcss@8.5.23:
     dependencies:
-      nanoid: 3.3.16
+      nanoid: 3.3.18
       picocolors: 1.1.1
       source-map-js: 1.2.1
 

@@ -27,6 +27,7 @@ import {
 import { parseApproverEditMessage } from "@/lib/approver-edit-message";
 import { formatScheduledResume, parseScheduledMessage } from "@/lib/scheduled-message";
 import { resolveApproverEditDocument } from "./approver-edit-document";
+import { showsDocumentCard, showsEditAffordance } from "./document-card-state";
 import { participantInitials, participantTint } from "./participant-identity";
 import { streamingTail } from "./streaming-tail";
 
@@ -54,6 +55,10 @@ interface MessageFeedProps {
   // Coarse gate: documents are only manually editable on an active session. The
   // node's allowManualEdit flag refines this per step, and the server enforces both.
   canEditDocuments?: boolean;
+  // The session is parked on an approval node, so a request is out for decision
+  // and the author must not be editing what is under review. Hides the edit
+  // affordance; the approver's own path from /approvals is unaffected.
+  isOnApprovalNode?: boolean;
   onDocumentEdited?: () => void;
   expertRole?: string | null;
   senderNamesById?: Record<string, string>;
@@ -190,6 +195,7 @@ export function MessageFeed({
   onRetry,
   onRegenerateDocument,
   canEditDocuments,
+  isOnApprovalNode,
   onDocumentEdited,
   expertRole,
   senderNamesById,
@@ -386,37 +392,47 @@ export function MessageFeed({
                 />
               )}
               {isAdvancingMsg && node && !isNeverDone && (
-                <>
-                  <MilestonePill
-                    nodeName={node.name}
-                    confidence={msg.confidence ?? 0}
-                    documentState={docState}
-                    onRegenerate={
-                      docState === "failed" && onRegenerateDocument
-                        ? () => onRegenerateDocument(msg.id)
-                        : undefined
-                    }
-                  />
-                  {msg.document && (
-                    <DocumentCard
-                      messageId={msg.id}
-                      document={msg.document}
-                      documentGenerationConfidence={msg.aiPayload?.documentGenerationConfidence ?? null}
-                      canEdit={Boolean(canEditDocuments) && config?.["allowManualEdit"] !== false}
-                      onEdited={onDocumentEdited}
-                      onRegenerate={
-                        onRegenerateDocument ? () => onRegenerateDocument(msg.id) : undefined
-                      }
-                    />
-                  )}
-                  {isStructuredNode && (
-                    <RecordCard
-                      messageId={msg.id}
-                      canEdit={Boolean(canEditDocuments) && config?.["allowManualEdit"] !== false}
-                      onEdited={onDocumentEdited}
-                    />
-                  )}
-                </>
+                <MilestonePill
+                  nodeName={node.name}
+                  confidence={msg.confidence ?? 0}
+                  documentState={docState}
+                  onRegenerate={
+                    docState === "failed" && onRegenerateDocument
+                      ? () => onRegenerateDocument(msg.id)
+                      : undefined
+                  }
+                />
+              )}
+              {/* Outside the milestone branch on purpose. The pill asks whether
+                  this turn completed a step; the card asks whether this message
+                  carries a document — and that answer does not change because a
+                  withdrawal brought the session back to the step. */}
+              {msg.document && showsDocumentCard({ hasDocument: true, isAdvancing: isAdvancingMsg }) && (
+                <DocumentCard
+                  messageId={msg.id}
+                  document={msg.document}
+                  documentGenerationConfidence={msg.aiPayload?.documentGenerationConfidence ?? null}
+                  canEdit={showsEditAffordance({
+                    canEditDocuments: Boolean(canEditDocuments),
+                    allowManualEdit: config?.["allowManualEdit"] !== false,
+                    isOnApprovalNode: Boolean(isOnApprovalNode),
+                  })}
+                  onEdited={onDocumentEdited}
+                  onRegenerate={
+                    onRegenerateDocument ? () => onRegenerateDocument(msg.id) : undefined
+                  }
+                />
+              )}
+              {isAdvancingMsg && node && !isNeverDone && isStructuredNode && (
+                <RecordCard
+                  messageId={msg.id}
+                  canEdit={showsEditAffordance({
+                    canEditDocuments: Boolean(canEditDocuments),
+                    allowManualEdit: config?.["allowManualEdit"] !== false,
+                    isOnApprovalNode: Boolean(isOnApprovalNode),
+                  })}
+                  onEdited={onDocumentEdited}
+                />
               )}
             </div>
           );

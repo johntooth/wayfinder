@@ -120,6 +120,43 @@ const STATUS_LABEL: Record<ApprovalStatus, string> = {
 const outcomeLabel = (status: ApprovalStatus, routedBack: boolean | undefined): string =>
   status === "rejected" && routedBack ? STATUS_LABEL.changes_requested : STATUS_LABEL[status];
 
+export interface ApprovalReassignedEmailInput {
+  flowName: string;
+  // Who it went to. Null when the new assignee is a free-typed address with no
+  // account yet, in which case the previous approver is simply told it moved.
+  newApproverName: string | null;
+  approvalUrl: string;
+}
+
+// Sent to the *previous* approver when an open request is moved to someone else.
+// It is the "you are off it" note, not a request — the point is that nothing is
+// expected of them, which a queue entry silently disappearing does not convey.
+export const buildApprovalReassignedEmail = (
+  input: ApprovalReassignedEmailInput,
+): EmailContent => {
+  const destination = input.newApproverName
+    ? ` It is now with ${input.newApproverName}.`
+    : " It is now with someone else.";
+  return {
+    subject: `Approval request reassigned: '${input.flowName}'`,
+    text: [
+      `The approval request in the '${input.flowName}' flow has been reassigned.${destination}`,
+      "No decision is needed from you.",
+      "",
+      `Your outstanding approvals are here: ${input.approvalUrl}`,
+    ].join("\n"),
+    html: [
+      `<p>The approval request in the '${escapeHtml(input.flowName)}' flow has been reassigned.${
+        input.newApproverName
+          ? ` It is now with ${escapeHtml(input.newApproverName)}.`
+          : " It is now with someone else."
+      }</p>`,
+      "<p>No decision is needed from you.</p>",
+      `<p><a href="${escapeHtml(input.approvalUrl)}">Your outstanding approvals</a></p>`,
+    ].join("\n"),
+  };
+};
+
 export interface ApprovalDecidedEmailInput {
   flowName: string;
   // The recorded status, so an approval its own approver edited says so.

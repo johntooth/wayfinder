@@ -450,6 +450,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         onRetry={() => void reload()}
         onRegenerateDocument={handleRegenerateDocument}
         canEditDocuments={session.status === "active" && !isReadOnly && !isFlowDeleted}
+        isOnApprovalNode={isApprovalGate}
         onDocumentEdited={() => void utils.session.get.invalidate({ sessionId })}
         expertRole={flow.expertRole ?? null}
         senderNamesById={senderNamesById}
@@ -489,9 +490,11 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
 
       {/* The composer stack: the approval gate sits inside it, directly above
           the input and at the same width, so a pending approval reads as the
-          next thing in the chat rather than a panel over it. The input stays
-          disabled while the gate is up — the session is parked on the approval
-          node, and the gate's own message field is the thing to type in. */}
+          next thing in the chat rather than a panel over it. While the gate is
+          up the composer is not rendered at all — a disabled input still holds
+          the place the operator's attention goes and still invites a click that
+          does nothing. It returns when the session leaves the approval node,
+          which is what withdrawing does. */}
       <div className="shrink-0" data-composer-stack>
         {isApprovalGate && currentNode && session.status === "active" && !isReadOnly && (
           <ApprovalGate
@@ -506,10 +509,13 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
             }
             instructions={(currentNode.config as { instructions?: string }).instructions ?? null}
             roleHint={(currentNode.config as { roleHint?: string }).roleHint ?? null}
+            viewerUserId={myUserId}
+            sessionOwnerUserId={session.userId}
+            viewerIsAdmin={isAdmin}
           />
         )}
 
-        {!isReadOnly && (
+        {!isReadOnly && !isApprovalGate && (
           <ChatComposer
             sessionId={sessionId}
             value={input}
@@ -522,7 +528,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
               emitTypingMutation.mutate({ sessionId });
             }}
             onSubmit={handleSend}
-            disabled={isLoading || session.status !== "active" || isFlowDeleted || isApprovalGate}
+            disabled={isLoading || session.status !== "active" || isFlowDeleted}
           />
         )}
       </div>

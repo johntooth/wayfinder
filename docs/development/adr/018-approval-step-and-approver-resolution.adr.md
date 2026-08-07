@@ -7,6 +7,8 @@
   the operator (v0.22.2)
 - **Extended**: 2026-08-07 — "Withdrawal": the originator may take a pending
   request back, a fourth transition out of `pending` (v0.25.0)
+- **Extended**: 2026-08-07 — "Reassignment": the session owner may change who an
+  open request is with, without moving the session (v0.26.0)
 - **Relates to**: ADR-010 (`INodeExecutor` / `pending_approval`), ADR-016 /
   ADR-017 (pgvector RAG over the knowledge base), ADR-023 Email Notification
   Transport (`IEmailSender` + `app_notification_log` outbox, M365 app registration)
@@ -208,6 +210,39 @@ initiated by the person who raised the request.**
 - **The approver is told.** They may already be part-way through a review, so a
   request that silently vanishes from their queue is worse than one they are
   told was pulled.
+
+### Reassignment: changing who an open request is with (v0.26.0)
+
+Withdrawal answers "the work needs to change". It is the wrong instrument for
+"the right person is someone else": withdrawing moves the session back a step it
+has no reason to leave, and on a chained approval it would drag the work back
+past a completed signature that is still perfectly valid.
+
+**Reassignment moves the addressee and nothing else.** The session stays on the
+approval node; the row stays `pending`; the decided chain behind it is untouched.
+
+- **Who.** The **session owner**, or an admin. Deliberately *not* the row's
+  requester: on a chained approval the requester is the previous approver, who
+  nominated the next signer from their decision modal — and the person who needs
+  to fix a wrong assignment is the one watching the chat. This is why the gate
+  offers the author *Update approver* where it does not offer *Withdraw*.
+- **Only an open request.** Guarded by the same `updateIfPending` check the
+  decision and the withdrawal use, so an approver deciding first wins and the
+  move is refused rather than rewriting a decided row's approver. A decided
+  approval's record is immutable (ADR-040 §3) and reassignment cannot touch it.
+- **Audited with both identities.** `approval.reassigned` names who moved it,
+  from whom, and to whom. This is the answer to the audit question that kept
+  in-place reassignment out of scope when withdrawal shipped.
+- **Announced.** A thread message names the new approver, so the author's own
+  chat answers "who is this with now" without opening anything.
+- **Both approvers told.** The new one gets the ordinary request email — a
+  different recipient, so the outbox's (trigger, resource, recipient) dedupe does
+  not swallow it. The old one gets `approval_reassigned`, saying plainly that no
+  decision is needed from them.
+
+Every guarantee at the top of this ADR still holds: a human who is party to the
+approval confirms it, the resolver still only suggests, "Someone else" is still
+offered, and the override is still recorded.
 
 ### The request carries a message from the originator (v0.25.0)
 

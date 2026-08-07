@@ -6,6 +6,7 @@ import {
   ListApprovals,
   ListApprovalsWithContext,
   ResolveApprovalSubject,
+  ReassignApproval,
   ResolveDecisionNotifyTargets,
   SuggestApprover,
   WithdrawApproval,
@@ -53,6 +54,7 @@ export interface ApprovalUseCaseDeps {
   notifyOnApprovalRequested: ConstructorParameters<typeof ConfirmAndSend>[2];
   notifyOnApprovalDecided: ConstructorParameters<typeof DecideApproval>[6];
   notifyOnApprovalWithdrawn: ConstructorParameters<typeof WithdrawApproval>[8];
+  notifyOnApprovalReassigned: ConstructorParameters<typeof ReassignApproval>[5];
 }
 
 // The approval use-case cluster, factored out of the main container to keep
@@ -127,6 +129,15 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
       deps.users,
       deps.flowNodes,
       deps.notifyOnApprovalWithdrawn,
+    ),
+    reassignApproval: new ReassignApproval(
+      deps.approvals,
+      deps.sessions,
+      deps.auditLogger,
+      deps.sessionMessages,
+      deps.users,
+      deps.notifyOnApprovalReassigned,
+      deps.notifyOnApprovalRequested,
     ),
     listApprovals: new ListApprovals(deps.approvals),
     listApprovalsWithContext: new ListApprovalsWithContext(

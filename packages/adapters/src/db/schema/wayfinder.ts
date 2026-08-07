@@ -478,6 +478,7 @@ export const app_notification_log = pgTable(
         "approval_requested",
         "approval_decided",
         "approval_withdrawn",
+        "approval_reassigned",
       ],
     }).notNull(),
     resource_type: text("resource_type", { enum: ["session", "flow", "approval"] }).notNull(),

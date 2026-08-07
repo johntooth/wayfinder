@@ -97,7 +97,12 @@ and continue only once they approve. The `pending_approval` status exists in the
 8. As an operator, when I send a request I can write the approver a short
    message, so they know why it is with them now rather than only what the step
    says in general.
-9. As an approver, I can review the decisions I have already made — what I
+9. As an operator, I can change who a still-open request is with, without
+   pulling the work back a step — so a request sent to the wrong person, or one
+   sitting with someone on leave, can be moved on rather than withdrawn and
+   raised again. This holds for a request a previous approver addressed on my
+   behalf as well as one I raised myself.
+10. As an approver, I can review the decisions I have already made — what I
    signed, what I commented, and where that work ended up — without hunting
    through the chats they belong to. One flow may hold several decisions for the
    same approval step, because a change request routes work back and re-entering
@@ -198,6 +203,11 @@ hierarchy comes from Entra/HR and every route is operator-confirmed (ADR-018).
       racing a decision loses cleanly and changes nothing.
 - [ ] A message written to the approver when sending reaches them in the request
       email and in their queue, and survives the decision that writes `comment`.
+- [ ] The session owner (or an admin) can change the approver on a still-open
+      request; nobody else can. The session does not move, the row stays
+      `pending`, both approvers are notified, the thread names the new one, and
+      the audit entry carries both identities. A decided approval cannot be
+      reassigned, and a reassignment racing a decision loses cleanly.
 - [ ] `./validate.sh` passes; `VERSION` and `package.json#version` match.
 
 ## 11. Out of scope / future work

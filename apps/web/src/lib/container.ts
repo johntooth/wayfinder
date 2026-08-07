@@ -450,7 +450,12 @@ const build = () => {
     auditLogger,
     notificationConfig,
   );
-  const { notifyOnApprovalRequested, notifyOnApprovalDecided, notifyOnApprovalWithdrawn } =
+  const {
+    notifyOnApprovalRequested,
+    notifyOnApprovalDecided,
+    notifyOnApprovalWithdrawn,
+    notifyOnApprovalReassigned,
+  } =
     buildApprovalNotifiers({
       notificationLog,
       emailSender,
@@ -617,6 +622,7 @@ const build = () => {
     notifyOnApprovalRequested,
     notifyOnApprovalDecided,
     notifyOnApprovalWithdrawn,
+    notifyOnApprovalReassigned,
   });
 
   return {

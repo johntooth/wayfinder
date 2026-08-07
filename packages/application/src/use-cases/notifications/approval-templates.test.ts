@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildApprovalDecidedEmail,
+  buildApprovalReassignedEmail,
   buildApprovalRequestedEmail,
   buildApprovalWithdrawnEmail,
 } from "./approval-templates";
@@ -109,6 +110,47 @@ describe("buildApprovalWithdrawnEmail", () => {
 
     expect(built.text).not.toContain("Reason:");
     expect(built.html).not.toContain("Reason:");
+  });
+});
+
+describe("buildApprovalReassignedEmail", () => {
+  const reassigned = (newApproverName: string | null) =>
+    buildApprovalReassignedEmail({
+      flowName: "Delegation instrument",
+      newApproverName,
+      approvalUrl: "https://wayfinder.test/approvals",
+    });
+
+  // Sent to the *previous* approver: this is the "you are off it" note, not the
+  // request. It must say plainly that nothing is expected of them.
+  it("tells the previous approver no decision is needed from them", () => {
+    const built = reassigned("Sam Patel");
+
+    expect(built.subject).toContain("reassigned");
+    expect(built.text).toContain("Delegation instrument");
+    expect(built.text).toMatch(/no decision is needed/i);
+  });
+
+  it("names who it went to", () => {
+    const built = reassigned("Sam Patel");
+
+    expect(built.text).toContain("Sam Patel");
+    expect(built.html).toContain("Sam Patel");
+  });
+
+  it("escapes the new approver's name in the HTML body", () => {
+    const built = reassigned('<script>alert("x")</script>');
+
+    expect(built.html).not.toContain("<script>");
+    expect(built.html).toContain("&lt;script&gt;");
+  });
+
+  // The previous approver should not be told the request went to nobody.
+  it("stays readable when the new approver has no name", () => {
+    const built = reassigned(null);
+
+    expect(built.text).toMatch(/no decision is needed/i);
+    expect(built.text).not.toContain("null");
   });
 });
 

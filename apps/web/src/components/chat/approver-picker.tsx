@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Copy, Info, Loader2, Mail, Stamp, Undo2 } from "lucide-react";
+import { Copy, Info, Loader2, Mail, Stamp, Undo2, UserPen } from "lucide-react";
 import { toast } from "sonner";
 import type { ApproverSource } from "@rbrasier/domain";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
 import { approverStageLabel } from "./approver-label";
 import { picksApproverManually, setupNotice, type SetupNotice } from "./approval-gate-state";
+import { sentApprovalActions } from "./sent-approval-actions";
 
 export interface ApproverPickerProps {
   sessionId: string;
@@ -26,11 +27,16 @@ export interface ApproverPickerProps {
   // Raised once the request has been sent, so a host that owns the surrounding
   // chrome (the decision modal) can close or refresh.
   onSent?: () => void;
-  // Whether to offer the originator a way to take the request back. True only
-  // in the chat gate: withdrawing belongs where the person watching the work is,
-  // not in the approver's decision modal — where the mounting user is the
-  // approver, and the request is not theirs to pull.
-  canWithdraw?: boolean;
+  // Set only by the chat gate. Managing a sent request — chasing it, moving it,
+  // pulling it — belongs where the person watching the work is, not in the
+  // approver's decision modal, where the mounting user is the approver and the
+  // request is not theirs to manage.
+  inChat?: boolean;
+  // Who is looking, and whose chat this is. Together with the row's requester
+  // these decide which of the sent-state actions are offered.
+  viewerUserId?: string | null;
+  sessionOwnerUserId?: string | null;
+  viewerIsAdmin?: boolean;
 }
 
 interface ChosenApprover {
@@ -58,7 +64,10 @@ export function ApproverPicker({
   roleHint,
   emailConfigured,
   onSent,
-  canWithdraw = false,
+  inChat = false,
+  viewerUserId = null,
+  sessionOwnerUserId = null,
+  viewerIsAdmin = false,
 }: ApproverPickerProps) {
   const utils = trpc.useUtils();
   const [approvalId, setApprovalId] = useState<string | null>(null);
@@ -72,6 +81,10 @@ export function ApproverPicker({
   const [requestMessage, setRequestMessage] = useState("");
   const [confirmingWithdrawal, setConfirmingWithdrawal] = useState(false);
   const [withdrawalReason, setWithdrawalReason] = useState("");
+  // Set while the operator is changing who a sent request is with. Reuses the
+  // same search UI as the initial pick, so there is one way to choose a person.
+  const [updatingApprover, setUpdatingApprover] = useState(false);
+  const [requestedByUserId, setRequestedByUserId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Focus the approver search box when the operator reveals it (replaces
@@ -84,10 +97,17 @@ export function ApproverPicker({
   const suggest = trpc.approval.suggest.useMutation({
     onSuccess: (data) => {
       setApprovalId(data.approval.id);
+      setRequestedByUserId(data.approval.requestedByUserId);
+      setRequestMessage(data.approval.requestMessage ?? "");
       if (data.approval.approverUserId || data.approval.approverEmail) {
         setSent(true);
-        const email = data.approval.approverEmail ?? data.suggestedApprover?.email ?? null;
-        setSentTo(email ?? data.suggestedApprover?.name ?? "the approver");
+        // The identity actually on the row, resolved server-side. A chained
+        // approval is assigned by user id with no email on the row, so without
+        // this the card could only say "the approver" and the mailto had no
+        // address to open with.
+        const assigned = data.assignedApprover;
+        const email = assigned?.email ?? data.approval.approverEmail ?? null;
+        setSentTo(assigned?.name ?? email ?? "the approver");
         setSentToEmail(email);
         return;
       }
@@ -140,6 +160,41 @@ export function ApproverPicker({
       requestMessage: requestMessage.trim() || null,
     });
   };
+
+  // Changing who an open request is with. Unlike a withdrawal this leaves the
+  // session exactly where it is — only the addressee moves.
+  const reassign = trpc.approval.reassign.useMutation({
+    onSuccess: async () => {
+      setUpdatingApprover(false);
+      setShowSearch(false);
+      setQuery("");
+      setSentTo(chosen?.label ?? "the approver");
+      setSentToEmail(chosen?.email ?? null);
+      setChosen(null);
+      await utils.session.get.invalidate({ sessionId });
+      toast.success("Approver updated");
+    },
+    onError: (error) => toast.error(error.message ?? "Could not change the approver"),
+  });
+
+  const applyReassignment = () => {
+    if (!approvalId || !chosen) return;
+    reassign.mutate({
+      approvalId,
+      approverUserId: chosen.userId,
+      approverEmail: chosen.userId ? null : chosen.email,
+      isOverride: true,
+      requestMessage: requestMessage.trim() || null,
+    });
+  };
+
+  const actions = sentApprovalActions({
+    viewerUserId,
+    sessionOwnerUserId,
+    requestedByUserId,
+    isAdmin: viewerIsAdmin,
+    inChat,
+  });
 
   // Taking the request back. The session returns to the nearest prior chat step,
   // so the whole page has to re-read: `session.get` drives the gate, the
@@ -218,6 +273,44 @@ export function ApproverPicker({
     </p>
   );
 
+  // One way to choose a person, mounted both for the initial pick and for
+  // changing who a sent request is with.
+  const approverSearchPanel = (
+        <div className="space-y-2 rounded-[10px] border border-[#e7e3db] bg-white p-3">
+          <Input
+            ref={searchInputRef}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search people, Entra, HR, or type any email…"
+          />
+          <div className="max-h-44 space-y-1 overflow-y-auto">
+            {(searchQuery.data ?? []).map((person) => (
+              <button
+                key={`${person.source}:${person.email}`}
+                type="button"
+                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[13px] text-[#1c1b19] hover:bg-[#faf9f7]"
+                onClick={() => {
+                  setChosen({
+                    userId: person.userId,
+                    email: person.email,
+                    label: person.displayName ?? person.email,
+                  });
+                  setShowSearch(false);
+                }}
+              >
+                <span className="truncate">{person.displayName ?? person.email}</span>
+                <span className="ml-2 shrink-0 text-[11px] uppercase text-[#666055]">
+                  {person.source}
+                </span>
+              </button>
+            ))}
+            {searchQuery.data?.length === 0 && query.trim().length > 1 && (
+              <p className="px-2 py-1 text-[12px] text-[#666055]">No matches.</p>
+            )}
+          </div>
+        </div>
+  );
+
   // Until the initial suggest resolves we cannot tell whether the request is
   // already sent or still needs an approver, so show a loading state rather than
   // flashing the empty confirm form (which makes a re-opened session feel as if
@@ -258,40 +351,124 @@ export function ApproverPicker({
 
         {notice && noticeDetail(notice)}
 
-        {(!emailConfigured || canWithdraw) && (
-          <div className="flex flex-wrap gap-2">
-            {!emailConfigured && sentToEmail && (
-              <Button asChild size="sm">
-                <a href={buildMailtoHref(sentToEmail)}>
-                  <Mail className="h-4 w-4" />
-                  Email approver
-                </a>
-              </Button>
+        {(actions.canEmail || actions.canUpdateApprover || actions.canWithdraw) &&
+          !confirmingWithdrawal &&
+          !updatingApprover && (
+            <div className="flex flex-wrap gap-2">
+              {/* Always offered now, not only when email is unconfigured: a
+                  request stalling is a separate problem from email being
+                  unconfigured, and chasing the approver answers both. */}
+              {actions.canEmail && sentToEmail && (
+                <Button asChild size="sm" variant="outline" data-approval-email>
+                  <a href={buildMailtoHref(sentToEmail)}>
+                    <Mail className="h-4 w-4" />
+                    Email approver
+                  </a>
+                </Button>
+              )}
+              {!emailConfigured && (
+                <Button size="sm" variant="outline" onClick={copyApprovalLink}>
+                  <Copy className="h-4 w-4" />
+                  Copy approval link
+                </Button>
+              )}
+              {actions.canUpdateApprover && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setUpdatingApprover(true);
+                    setShowSearch(true);
+                  }}
+                  data-approval-update-approver
+                >
+                  <UserPen className="h-4 w-4" />
+                  Update approver
+                </Button>
+              )}
+              {/* Two steps, not one: withdrawing moves the chat back a step and
+                  tells the approver it happened, which is too much to trigger on
+                  a stray click next to "Copy approval link". */}
+              {actions.canWithdraw && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setConfirmingWithdrawal(true)}
+                  data-approval-withdraw
+                >
+                  <Undo2 className="h-4 w-4" />
+                  Withdraw
+                </Button>
+              )}
+            </div>
+          )}
+
+        {actions.canUpdateApprover && updatingApprover && (
+          <div
+            className="space-y-2 rounded-[10px] border border-[#e8d4b0] bg-white px-3 py-2"
+            data-approval-update-panel
+          >
+            <p className="text-[13px] text-[#1c1b19]">
+              Currently with <span className="font-medium">{sentTo}</span>. Choose who it should
+              go to instead — the chat stays where it is.
+            </p>
+
+            {showSearch && approverSearchPanel}
+
+            {chosen && (
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-[13px] text-[#1c1b19]" data-approval-update-chosen>
+                  Moving to <span className="font-medium">{chosen.label}</span>
+                  {chosen.email && chosen.label !== chosen.email && (
+                    <span className="text-[#666055]"> ({chosen.email})</span>
+                  )}
+                </p>
+                {!showSearch && (
+                  <Button size="sm" variant="ghost" onClick={() => setShowSearch(true)}>
+                    Choose someone else
+                  </Button>
+                )}
+              </div>
             )}
-            {!emailConfigured && (
-              <Button size="sm" variant="outline" onClick={copyApprovalLink}>
-                <Copy className="h-4 w-4" />
-                Copy approval link
-              </Button>
-            )}
-            {/* Two steps, not one: withdrawing moves the chat back a step and
-                tells the approver it happened, which is too much to trigger on
-                a stray click next to "Copy approval link". */}
-            {canWithdraw && !confirmingWithdrawal && (
+
+            {/* Pre-filled with the note already on the request, so one naming
+                the previous approver can be revised rather than forwarded. */}
+            <Textarea
+              value={requestMessage}
+              onChange={(event) => setRequestMessage(event.target.value)}
+              placeholder="Add a message for the new approver (optional)"
+              maxLength={2000}
+              className="min-h-[56px]"
+              aria-label="Message for the new approver"
+            />
+
+            <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
-                variant="ghost"
-                onClick={() => setConfirmingWithdrawal(true)}
-                data-approval-withdraw
+                onClick={applyReassignment}
+                disabled={!chosen || reassign.isPending}
+                data-approval-update-confirm
               >
-                <Undo2 className="h-4 w-4" />
-                Withdraw
+                {reassign.isPending ? "Updating…" : "Update approver"}
               </Button>
-            )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setUpdatingApprover(false);
+                  setShowSearch(false);
+                  setChosen(null);
+                  setQuery("");
+                }}
+                disabled={reassign.isPending}
+              >
+                Cancel
+              </Button>
+            </div>
           </div>
         )}
 
-        {canWithdraw && confirmingWithdrawal && (
+        {actions.canWithdraw && confirmingWithdrawal && (
           <div
             className="space-y-2 rounded-[10px] border border-[#e8d4b0] bg-white px-3 py-2"
             data-approval-withdraw-confirm
@@ -378,41 +555,7 @@ export function ApproverPicker({
         </div>
       )}
 
-      {showSearch && (
-        <div className="space-y-2 rounded-[10px] border border-[#e7e3db] bg-white p-3">
-          <Input
-            ref={searchInputRef}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search people, Entra, HR, or type any email…"
-          />
-          <div className="max-h-44 space-y-1 overflow-y-auto">
-            {(searchQuery.data ?? []).map((person) => (
-              <button
-                key={`${person.source}:${person.email}`}
-                type="button"
-                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[13px] text-[#1c1b19] hover:bg-[#faf9f7]"
-                onClick={() => {
-                  setChosen({
-                    userId: person.userId,
-                    email: person.email,
-                    label: person.displayName ?? person.email,
-                  });
-                  setShowSearch(false);
-                }}
-              >
-                <span className="truncate">{person.displayName ?? person.email}</span>
-                <span className="ml-2 shrink-0 text-[11px] uppercase text-[#666055]">
-                  {person.source}
-                </span>
-              </button>
-            ))}
-            {searchQuery.data?.length === 0 && query.trim().length > 1 && (
-              <p className="px-2 py-1 text-[12px] text-[#666055]">No matches.</p>
-            )}
-          </div>
-        </div>
-      )}
+      {showSearch && approverSearchPanel}
 
       {/* The approver gets the subject and the step's standing instructions
           either way; this is the one place the operator can say why *this*

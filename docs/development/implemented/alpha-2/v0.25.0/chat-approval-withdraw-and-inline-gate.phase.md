@@ -110,6 +110,11 @@ message field is the only thing typeable. A pending approval means the session
 is parked; letting the operator send turns into a step nobody is executing would
 be a different change, and not this one.
 
+> **Superseded in v0.26.0** (`approval-documents-and-reassignment.phase.md` §5):
+> the composer is now *hidden* rather than disabled. A disabled input still holds
+> the place the operator's attention goes and still invites a click that does
+> nothing. It returns when the session leaves the approval node.
+
 What does not change: the gate still renders only for `type === "approval"` on an
 active, non-read-only session, and `MessageFeed` keeps scrolling behind it.
 
@@ -200,7 +205,10 @@ second file would have to duplicate ~400 lines of them.
 
 - Letting the operator keep chatting while an approval is pending. The composer
   stays disabled; only the gate's framing changes.
-- Reassigning an approval to a different approver in place. Withdraw-and-resend
-  covers it, and an in-place reassignment has its own audit questions.
+- ~~Reassigning an approval to a different approver in place.~~ **Superseded in
+  v0.26.0** (`approval-documents-and-reassignment.phase.md`). Withdraw-and-resend
+  turned out to be the wrong shape for a wrong recipient — it moves the session
+  back a step it has no reason to leave — and the audit question is answered by
+  an `approval.reassigned` entry naming both approvers.
 - Withdrawing from the `/approvals` list. The button belongs where the
   originator is watching the work, which is the chat.

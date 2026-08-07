@@ -15,6 +15,11 @@ interface ApprovalGateProps {
   // The policy-named approver role authored on the node, shown to the operator
   // so they know who the request is meant for before confirming.
   roleHint: string | null;
+  // Who is looking and whose chat this is. Together with the row's requester
+  // these decide which actions the sent card offers.
+  viewerUserId: string | null;
+  sessionOwnerUserId: string | null;
+  viewerIsAdmin: boolean;
 }
 
 // Operator-facing gate shown when a session is parked on an approval node. The
@@ -29,6 +34,9 @@ export function ApprovalGate({
   approverSource,
   instructions,
   roleHint,
+  viewerUserId,
+  sessionOwnerUserId,
+  viewerIsAdmin,
 }: ApprovalGateProps) {
   // When email cannot be delivered the operator must notify the approver by hand,
   // so the confirm action only records the approver and surfaces manual options.
@@ -52,7 +60,10 @@ export function ApprovalGate({
           instructions={instructions}
           roleHint={roleHint}
           emailConfigured={emailConfigured}
-          canWithdraw
+          inChat
+          viewerUserId={viewerUserId}
+          sessionOwnerUserId={sessionOwnerUserId}
+          viewerIsAdmin={viewerIsAdmin}
         />
       </div>
     </div>

@@ -96,6 +96,38 @@ export const approvalRouter = router({
       return result.data;
     }),
 
+  // Changing who an open request is with, without pulling the work back a step.
+  // Gated in the use case to the session owner or an admin — on a chained
+  // approval the row's requester is the previous approver, not the person
+  // watching the chat.
+  reassign: authenticatedProcedure
+    .input(
+      z.object({
+        approvalId: z.string().uuid(),
+        approverUserId: z.string().uuid().nullish(),
+        approverEmail: z.string().email().nullish(),
+        isOverride: z.boolean().optional(),
+        // Undefined keeps the note the request already carries; a supplied
+        // value replaces it.
+        requestMessage: z.string().max(2000).nullish(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.reassignApproval.execute({
+        approvalId: input.approvalId,
+        reassignedByUserId: ctx.userId,
+        approverUserId: input.approverUserId ?? null,
+        approverEmail: input.approverEmail ?? null,
+        isOverride: input.isOverride,
+        ...(input.requestMessage !== undefined
+          ? { requestMessage: input.requestMessage }
+          : {}),
+        isAdmin: ctx.isAdmin,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
   // The originator taking their own request back before it is decided. The
   // use case gates it to the requester (or an admin) and returns the session to
   // the nearest prior conversational step.

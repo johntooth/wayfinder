@@ -1,5 +1,6 @@
 import {
   NotifyOnApprovalDecided,
+  NotifyOnApprovalReassigned,
   NotifyOnApprovalRequested,
   NotifyOnApprovalWithdrawn,
   type NotificationConfig,
@@ -39,5 +40,14 @@ export const buildApprovalNotifiers = (deps: ApprovalNotifierDeps) => {
     notifyOnApprovalRequested: new NotifyOnApprovalRequested(...parts),
     notifyOnApprovalDecided: new NotifyOnApprovalDecided(...parts),
     notifyOnApprovalWithdrawn: new NotifyOnApprovalWithdrawn(...parts),
+    // Takes no user repository — it resolves nothing by id, so it is built from
+    // the same parts minus that one.
+    notifyOnApprovalReassigned: new NotifyOnApprovalReassigned(
+      deps.notificationLog,
+      deps.emailSender,
+      deps.flows,
+      deps.auditLogger,
+      deps.notificationConfig,
+    ),
   };
 };

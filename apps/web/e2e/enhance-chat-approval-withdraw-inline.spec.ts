@@ -61,7 +61,7 @@ test.describe("the approval gate sits in the chat, above the composer", () => {
     expect(gateBox!.y).toBeLessThan(composerBox!.y);
   });
 
-  test("keeps the chat input disabled while the approval is pending", async ({ page }) => {
+  test("hides the chat input entirely while the approval is pending", async ({ page }) => {
     const sessionId = seed?.approvalWithdrawSessionId;
     test.skip(!sessionId, "No seeded withdrawable approval — run the seed setup project");
 
@@ -69,8 +69,32 @@ test.describe("the approval gate sits in the chat, above the composer", () => {
     await expect(page.locator("[data-approval-gate]")).toBeVisible();
 
     // The session is parked on the approval node — there is no step to send a
-    // turn to, so the composer stays shut.
-    await expect(page.getByPlaceholder(/message wayfinder/i)).toBeDisabled();
+    // turn to. A disabled input still holds the place attention goes, so it is
+    // not rendered at all; the gate's own message field is what to type in.
+    await expect(page.getByPlaceholder(/message wayfinder/i)).toHaveCount(0);
+  });
+
+  // The fault the document rules exist to fix: the card used to render only
+  // inside the milestone branch, which required the session to have left the
+  // step — so a withdrawal made the document vanish from the history.
+  test("keeps the document downloadable, and hides Edit while the request is out", async ({
+    page,
+  }) => {
+    const sessionId = seed?.approvalWithdrawSessionId;
+    test.skip(!sessionId, "No seeded withdrawable approval — run the seed setup project");
+
+    await page.goto(`/chats/${sessionId}`);
+    await expect(page.locator("[data-approval-gate]")).toBeVisible();
+
+    const documentCard = page.getByRole("button", { name: /download/i }).first();
+    test.skip(
+      !(await documentCard.isVisible().catch(() => false)),
+      "Seeded session has no generated document to assert on",
+    );
+
+    // The author must not be editing what is under review. Hidden, not
+    // disabled — there is nothing they can do about it until it resolves.
+    await expect(page.getByRole("button", { name: /^edit$/i })).toHaveCount(0);
   });
 });
 
@@ -139,8 +163,28 @@ test.describe("withdrawing a sent approval", () => {
     await expect(page.getByText(/figures were stale/i).first()).toBeVisible();
 
     // And the operator can type again, because the chat is back on a step that
-    // takes turns.
+    // takes turns — the composer returns rather than merely re-enabling.
     await expect(page.getByPlaceholder(/message wayfinder/i)).toBeEnabled();
+  });
+
+  // "A withdrawer may want to just edit the document directly rather than
+  // chat." Both halves of that come back together: the card is still there, and
+  // Edit returns with it now the session is off the approval node.
+  test("returns the document and its Edit affordance after withdrawal", async ({ page }) => {
+    const sessionId = seed?.approvalWithdrawSessionId;
+    test.skip(!sessionId, "No seeded withdrawable approval — run the seed setup project");
+
+    await page.goto(`/chats/${sessionId}`);
+    // Runs after the withdrawal above (serial mode), so the gate is gone.
+    await expect(page.locator("[data-approval-gate]")).toHaveCount(0);
+
+    const documentCard = page.getByRole("button", { name: /download/i }).first();
+    test.skip(
+      !(await documentCard.isVisible().catch(() => false)),
+      "Seeded session has no generated document to assert on",
+    );
+
+    await expect(documentCard).toBeVisible();
   });
 
   test("clears the request from the approver's queue", async ({ page }) => {
