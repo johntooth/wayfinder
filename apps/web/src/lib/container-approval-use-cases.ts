@@ -8,6 +8,7 @@ import {
   ResolveApprovalSubject,
   ResolveDecisionNotifyTargets,
   SuggestApprover,
+  WithdrawApproval,
   type UpdateDocumentFields,
 } from "@rbrasier/application";
 import type {
@@ -51,6 +52,7 @@ export interface ApprovalUseCaseDeps {
   updateDocumentFields: UpdateDocumentFields;
   notifyOnApprovalRequested: ConstructorParameters<typeof ConfirmAndSend>[2];
   notifyOnApprovalDecided: ConstructorParameters<typeof DecideApproval>[6];
+  notifyOnApprovalWithdrawn: ConstructorParameters<typeof WithdrawApproval>[8];
 }
 
 // The approval use-case cluster, factored out of the main container to keep
@@ -114,6 +116,17 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
       deps.sha256Hex,
       resolveApprovalSubject,
       applyApprovalSignature,
+    ),
+    withdrawApproval: new WithdrawApproval(
+      deps.unitOfWork,
+      deps.approvals,
+      deps.sessions,
+      deps.sessionStepOutputs,
+      deps.auditLogger,
+      deps.sessionMessages,
+      deps.users,
+      deps.flowNodes,
+      deps.notifyOnApprovalWithdrawn,
     ),
     listApprovals: new ListApprovals(deps.approvals),
     listApprovalsWithContext: new ListApprovalsWithContext(

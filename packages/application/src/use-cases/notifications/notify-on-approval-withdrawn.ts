@@ -10,25 +10,23 @@ import {
   type Result,
 } from "@rbrasier/domain";
 import type { NotificationConfig } from "./notify-on-session-complete";
-import { buildApprovalRequestedEmail } from "./approval-templates";
-import { SUBJECT_DESCRIPTION_KEY } from "../approvals/approval-record-keys";
+import { buildApprovalWithdrawnEmail } from "./approval-templates";
 
-export interface NotifyOnApprovalRequestedInput {
+export interface NotifyOnApprovalWithdrawnInput {
   approval: Approval;
+  reason: string | null;
 }
 
-const readSubjectDescription = (approval: Approval): string | null => {
-  const value = approval.recordSnapshot?.[SUBJECT_DESCRIPTION_KEY];
-  return typeof value === "string" && value.length > 0 ? value : null;
-};
-
-// Narrow view injected into ConfirmAndSend, so it depends on "an approval-request
-// notifier" rather than this concrete class.
-export interface IApprovalRequestedNotifier {
-  execute(input: NotifyOnApprovalRequestedInput): Promise<Result<NotificationLog | null>>;
+// Narrow view injected into WithdrawApproval, so it depends on "an approval-
+// withdrawal notifier" rather than this concrete class.
+export interface IApprovalWithdrawnNotifier {
+  execute(input: NotifyOnApprovalWithdrawnInput): Promise<Result<NotificationLog | null>>;
 }
 
-export class NotifyOnApprovalRequested implements IApprovalRequestedNotifier {
+// Tells the approver their request was pulled. Mirrors NotifyOnApprovalRequested
+// in shape and posture: the outbox row is written first, the send is
+// best-effort, and the outcome is audited either way (ADR-023).
+export class NotifyOnApprovalWithdrawn implements IApprovalWithdrawnNotifier {
   constructor(
     private readonly notificationLog: INotificationLogRepository,
     private readonly emailSender: IEmailSender,
@@ -38,14 +36,16 @@ export class NotifyOnApprovalRequested implements IApprovalRequestedNotifier {
     private readonly config: NotificationConfig,
   ) {}
 
-  async execute(input: NotifyOnApprovalRequestedInput): Promise<Result<NotificationLog | null>> {
+  async execute(input: NotifyOnApprovalWithdrawnInput): Promise<Result<NotificationLog | null>> {
     const { approval } = input;
 
+    // Nothing to tell anyone when the request was pulled before an approver was
+    // ever confirmed.
     const recipientEmail = await this.resolveApproverEmail(approval);
     if (!recipientEmail) return ok(null);
 
     const existsResult = await this.notificationLog.existsFor(
-      "approval_requested",
+      "approval_withdrawn",
       approval.id,
       recipientEmail,
     );
@@ -57,21 +57,17 @@ export class NotifyOnApprovalRequested implements IApprovalRequestedNotifier {
     const requesterResult = await this.users.findById(approval.requestedByUserId);
     const requesterName = requesterResult.data?.name ?? requesterResult.data?.email ?? "A colleague";
 
-    const email = buildApprovalRequestedEmail({
+    const email = buildApprovalWithdrawnEmail({
       flowName,
       requesterName,
-      instructions: null,
-      // Cached on the pending approval by the gate resolution, so the email
-      // reads the same sentence the operator saw before sending.
-      subjectDescription: readSubjectDescription(approval),
-      requestMessage: approval.requestMessage,
+      reason: input.reason,
       approvalUrl: `${this.config.baseUrl}/approvals`,
     });
 
     const enqueueResult = await this.notificationLog.enqueue({
       recipientEmail,
       recipientUserId: approval.approverUserId,
-      trigger: "approval_requested",
+      trigger: "approval_withdrawn",
       resourceType: "approval",
       resourceId: approval.id,
       subject: email.subject,
@@ -95,7 +91,7 @@ export class NotifyOnApprovalRequested implements IApprovalRequestedNotifier {
         action: "notification.failed",
         resourceType: "approval",
         resourceId: approval.id,
-        metadata: { trigger: "approval_requested", recipientEmail, error: sendResult.error.message },
+        metadata: { trigger: "approval_withdrawn", recipientEmail, error: sendResult.error.message },
       });
       return failed;
     }
@@ -105,7 +101,7 @@ export class NotifyOnApprovalRequested implements IApprovalRequestedNotifier {
       action: "notification.sent",
       resourceType: "approval",
       resourceId: approval.id,
-      metadata: { trigger: "approval_requested", recipientEmail },
+      metadata: { trigger: "approval_withdrawn", recipientEmail },
     });
     return sent;
   }

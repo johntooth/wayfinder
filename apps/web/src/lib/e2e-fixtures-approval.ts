@@ -9,6 +9,11 @@ const SEED_SUBJECT_FLOW_NAME = "E2E SEED Approval Subject Flow";
 const SEED_SUBJECT_SESSION_TITLE = "E2E SEED Approval Subject Session";
 const SEED_SUBJECT_DOCUMENT = "delegation-instrument.docx";
 const SEED_APPROVAL_FIRST_FLOW_NAME = "E2E SEED Approval First Flow";
+const SEED_WITHDRAW_FLOW_NAME = "E2E SEED Approval Withdraw Flow";
+const SEED_WITHDRAW_SESSION_TITLE = "E2E SEED Approval Withdraw Session";
+const SEED_WITHDRAW_DRAFT_STEP = "Draft the request";
+const SEED_WITHDRAW_REQUEST_MESSAGE =
+  "Board meets Thursday — a signature before then would help.";
 
 export const seedApprovalSubjectSession = async (
   container: Container,
@@ -367,6 +372,116 @@ export const seedApprovalSubjectSession = async (
   );
 
   return { sessionId: session.id, flowId: flow.id };
+};
+
+// `Draft the request (conversational) → Manager sign-off (approval, pending)`,
+// owned and raised by the seed user so they are the originator who may withdraw.
+//
+// Its own session rather than a reuse of the subject one: withdrawing is
+// destructive — it moves the session off the approval node — and the subject
+// session is asserted on by other specs that would then find no gate.
+export const seedWithdrawableApprovalSession = async (
+  container: Container,
+  ownerUserId: string,
+): Promise<{ sessionId: string; draftStepName: string }> => {
+  const flow = unwrap(
+    await container.useCases.createFlow.execute({
+      name: SEED_WITHDRAW_FLOW_NAME,
+      description: "Seeded flow with one pending approval the originator can withdraw",
+      expertRole: "Procurement Officer",
+      ownerUserId,
+    }),
+    "create withdraw flow",
+  );
+
+  const draftNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "conversational",
+      name: SEED_WITHDRAW_DRAFT_STEP,
+      positionX: 120,
+      positionY: 120,
+      config: {
+        aiInstruction: "Draft the purchase request.",
+        doneWhen: "The request is drafted.",
+      },
+    }),
+    "create withdraw draft node",
+  );
+
+  const approvalNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "approval",
+      name: "Manager sign-off",
+      positionX: 420,
+      positionY: 120,
+      config: { approverSource: "first_level_supervisor" },
+    }),
+    "create withdraw approval node",
+  );
+
+  unwrap(
+    await container.useCases.createFlowEdge.execute({
+      flowId: flow.id,
+      fromNodeId: draftNode.id,
+      toNodeId: approvalNode.id,
+    }),
+    "create withdraw flow edge",
+  );
+
+  unwrap(
+    await container.useCases.updateFlow.execute(
+      flow.id,
+      { status: "published", visibility: { kind: "global" } },
+      { canPublishToEveryone: true },
+    ),
+    "publish withdraw flow",
+  );
+
+  const session = unwrap(
+    await container.useCases.startSession.execute({ flowId: flow.id, userId: ownerUserId }),
+    "start withdraw session",
+  );
+
+  // The draft step's output is what makes it the taken path's nearest editable
+  // node — without it there is nothing for the withdrawal to return to.
+  unwrap(
+    await container.repos.sessionStepOutputs.create({
+      sessionId: session.id,
+      flowId: flow.id,
+      nodeId: draftNode.id,
+      fields: [{ key: "amount", label: "Amount", type: "text", value: "$1,200" }],
+    }),
+    "create withdraw draft output",
+  );
+
+  unwrap(
+    await container.repos.sessions.update(session.id, {
+      title: SEED_WITHDRAW_SESSION_TITLE,
+      currentNodeId: approvalNode.id,
+      graphCheckpoint: { currentNodeId: approvalNode.id, advancedFrom: draftNode.id },
+    }),
+    "park withdraw session on the approval",
+  );
+
+  // Already sent: the gate opens in its "Awaiting approval" state, which is
+  // where the withdraw affordance lives.
+  unwrap(
+    await container.repos.approvals.create({
+      sessionId: session.id,
+      flowId: flow.id,
+      nodeId: approvalNode.id,
+      requestedByUserId: ownerUserId,
+      approverSource: "first_level_supervisor",
+      approverUserId: ownerUserId,
+      status: "pending",
+      requestMessage: SEED_WITHDRAW_REQUEST_MESSAGE,
+    }),
+    "create pending withdrawable approval",
+  );
+
+  return { sessionId: session.id, draftStepName: SEED_WITHDRAW_DRAFT_STEP };
 };
 
 // An approval with no step before it, so the config editor has to warn that a

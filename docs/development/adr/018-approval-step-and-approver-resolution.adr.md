@@ -5,6 +5,8 @@
 - **Extended**: 2026-08-02 — "Resolution always ends in human confirmation": the
   confirming human may be the preceding approver on a chained approval, not only
   the operator (v0.22.2)
+- **Extended**: 2026-08-07 — "Withdrawal": the originator may take a pending
+  request back, a fourth transition out of `pending` (v0.25.0)
 - **Relates to**: ADR-010 (`INodeExecutor` / `pending_approval`), ADR-016 /
   ADR-017 (pgvector RAG over the knowledge base), ADR-023 Email Notification
   Transport (`IEmailSender` + `app_notification_log` outbox, M365 app registration)
@@ -172,9 +174,52 @@ denormalised copy.
 
 Notifications reuse the existing `IEmailSender` port + the `app_notification_log`
 outbox (ADR-023) — no new `INotificationSender` port. Triggers `approval_requested`
-(→ approver) and `approval_decided` (→ requester) write a `pending` outbox row in
-the deciding action's commit; the send is best-effort and non-blocking, with
-subject/body composed as application-layer string builders.
+(→ approver), `approval_decided` (→ requester) and `approval_withdrawn`
+(→ approver) write a `pending` outbox row in the acting commit; the send is
+best-effort and non-blocking, with subject/body composed as application-layer
+string builders.
+
+### Withdrawal: the originator's own way out (v0.25.0)
+
+The three decisions above all belong to the approver. That left the originator
+with no route out of a request they had already sent: a wrong approver, or a
+mistake spotted a moment after sending, parked the session until someone else
+acted. **Withdrawal is the fourth transition out of `pending`, and the only one
+initiated by the person who raised the request.**
+
+- **Recorded, not deleted.** `ApprovalStatus` gains `withdrawn`. The row stays,
+  so the trail keeps who asked whom and that it was pulled before a decision.
+  Deleting it would leave the node looking as though no request was ever made —
+  precisely the history an approval trail exists to hold. `APPROVED_STATUSES` is
+  untouched, so nothing downstream counts a withdrawal as an approval.
+- **Who.** The originator (`requested_by_user_id`), or an admin — the same
+  widening that lets an admin decide on an approver's behalf. Nobody else.
+- **Guarded like a decision.** The status flip goes through the same
+  `updateIfPending` guard, in one transaction with the session move. An approver
+  who decides first wins the race; the withdrawal fails and runs no side effect.
+- **Where the work goes.** Back to the nearest prior *conversational* step, via
+  the `nearest_editable` resolver ADR-044 §2 defines. The node's authored
+  `changesRequestedTarget` is deliberately not consulted: that answers where an
+  *approver* wants work returned to, and this is not the approver's move. When
+  nothing resolves, the session is **held** on the approval node with the reason
+  in the thread — never cancelled (ADR-044 §3).
+- **Re-entry raises a fresh row**, exactly as ADR-044 §5 specifies for
+  re-approval after changes. A withdrawn row is never reopened.
+- **The approver is told.** They may already be part-way through a review, so a
+  request that silently vanishes from their queue is worse than one they are
+  told was pulled.
+
+### The request carries a message from the originator (v0.25.0)
+
+`instructions` on the node is authored once, by the flow author, for everyone who
+ever reaches the step. It cannot say why *this* request is with *this* approver
+now. A nullable `request_message` on the row carries the originator's own note,
+captured when they confirm the approver and shown to the approver both in the
+request email and in their queue.
+
+It is stored apart from `comment` on purpose: `comment` is the approver's
+decision comment, written to the same row, and one column would have the decision
+overwrite the request.
 
 ### Superseded earlier sketch
 

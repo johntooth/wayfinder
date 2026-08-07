@@ -9,6 +9,7 @@ import { isDecided } from "@/components/approvals/approval-outcome";
 import { AppHeader } from "@/components/layout/app-header";
 import {
   ApprovalSubject,
+  RequestMessage,
   ApproverStage,
   OutcomeChip,
   PreviousStep,
@@ -75,6 +76,11 @@ function ApprovalRow({
       <ApproverStage approval={approval} />
 
       <ApprovalSubject description={approval.subjectDescription} />
+
+      <RequestMessage
+        message={approval.approval.requestMessage}
+        originatorName={approval.originatorName}
+      />
 
       <PreviousStep previousStep={approval.previousStep} canEdit />
 

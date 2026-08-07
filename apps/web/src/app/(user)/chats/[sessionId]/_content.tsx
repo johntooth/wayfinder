@@ -487,38 +487,45 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         <ConfirmStepCard stepName={currentNode.name} onProceed={handleConfirmStep} />
       )}
 
-      {isApprovalGate && currentNode && session.status === "active" && !isReadOnly && (
-        <ApprovalGate
-          sessionId={sessionId}
-          flowId={session.flowId}
-          flowName={flow.name}
-          nodeId={currentNode.id}
-          nodeName={currentNode.name}
-          approverSource={
-            (currentNode.config as { approverSource?: ApproverSource }).approverSource ??
-            "first_level_supervisor"
-          }
-          instructions={(currentNode.config as { instructions?: string }).instructions ?? null}
-          roleHint={(currentNode.config as { roleHint?: string }).roleHint ?? null}
-        />
-      )}
+      {/* The composer stack: the approval gate sits inside it, directly above
+          the input and at the same width, so a pending approval reads as the
+          next thing in the chat rather than a panel over it. The input stays
+          disabled while the gate is up — the session is parked on the approval
+          node, and the gate's own message field is the thing to type in. */}
+      <div className="shrink-0" data-composer-stack>
+        {isApprovalGate && currentNode && session.status === "active" && !isReadOnly && (
+          <ApprovalGate
+            sessionId={sessionId}
+            flowId={session.flowId}
+            flowName={flow.name}
+            nodeId={currentNode.id}
+            nodeName={currentNode.name}
+            approverSource={
+              (currentNode.config as { approverSource?: ApproverSource }).approverSource ??
+              "first_level_supervisor"
+            }
+            instructions={(currentNode.config as { instructions?: string }).instructions ?? null}
+            roleHint={(currentNode.config as { roleHint?: string }).roleHint ?? null}
+          />
+        )}
 
-      {!isReadOnly && (
-        <ChatComposer
-          sessionId={sessionId}
-          value={input}
-          onChange={(value) => {
-            setInput(value);
-            if (session.status !== "active") return;
-            const now = Date.now();
-            if (now - lastTypingEmitRef.current < 2000) return;
-            lastTypingEmitRef.current = now;
-            emitTypingMutation.mutate({ sessionId });
-          }}
-          onSubmit={handleSend}
-          disabled={isLoading || session.status !== "active" || isFlowDeleted || isApprovalGate}
-        />
-      )}
+        {!isReadOnly && (
+          <ChatComposer
+            sessionId={sessionId}
+            value={input}
+            onChange={(value) => {
+              setInput(value);
+              if (session.status !== "active") return;
+              const now = Date.now();
+              if (now - lastTypingEmitRef.current < 2000) return;
+              lastTypingEmitRef.current = now;
+              emitTypingMutation.mutate({ sessionId });
+            }}
+            onSubmit={handleSend}
+            disabled={isLoading || session.status !== "active" || isFlowDeleted || isApprovalGate}
+          />
+        )}
+      </div>
 
       <BranchOverrideModal
         open={overrideOpen}

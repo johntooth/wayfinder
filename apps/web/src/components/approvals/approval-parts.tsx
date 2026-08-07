@@ -56,6 +56,31 @@ export function ApprovalSubject({
   );
 }
 
+// What the originator wrote when they sent this request — their own words about
+// why it is with this approver now, as opposed to the step's standing
+// instructions or the resolved subject.
+export function RequestMessage({
+  message,
+  originatorName,
+}: {
+  message: string | null;
+  originatorName: string | null;
+}) {
+  if (!message) return null;
+
+  return (
+    <div
+      className="rounded-[10px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2"
+      data-approval-request-message
+    >
+      <p className="text-[12px] font-semibold text-[#666055]">
+        {originatorName ? `${originatorName} wrote:` : "The requester wrote:"}
+      </p>
+      <p className="mt-[3px] whitespace-pre-wrap text-[13px] text-[#1c1b19]">{message}</p>
+    </div>
+  );
+}
+
 export function OutcomeChip({ approval }: { approval: ApprovalContext }) {
   const outcome = approvalOutcome(approval.approval.status);
   return (

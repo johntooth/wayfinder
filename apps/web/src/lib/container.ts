@@ -64,8 +64,6 @@ import {
   ListUsersForRole,
   LogAuditEvent,
   LogError,
-  NotifyOnApprovalDecided,
-  NotifyOnApprovalRequested,
   NotifyOnFlowShared,
   NotifyOnSessionComplete,
   ConfirmStepAdvance,
@@ -112,6 +110,7 @@ import {
   UpdateUser,
   UpsertFeatureFlag,
 } from "@rbrasier/application";
+import { buildApprovalNotifiers } from "./container-approval-notifiers";
 import { buildApprovalUseCases } from "./container-approval-use-cases";
 import { buildDocumentUseCases } from "./container-document-use-cases";
 import { buildOnboarding } from "./container-onboarding";
@@ -451,22 +450,15 @@ const build = () => {
     auditLogger,
     notificationConfig,
   );
-  const notifyOnApprovalRequested = new NotifyOnApprovalRequested(
-    notificationLog,
-    emailSender,
-    users,
-    flows,
-    auditLogger,
-    notificationConfig,
-  );
-  const notifyOnApprovalDecided = new NotifyOnApprovalDecided(
-    notificationLog,
-    emailSender,
-    users,
-    flows,
-    auditLogger,
-    notificationConfig,
-  );
+  const { notifyOnApprovalRequested, notifyOnApprovalDecided, notifyOnApprovalWithdrawn } =
+    buildApprovalNotifiers({
+      notificationLog,
+      emailSender,
+      users,
+      flows,
+      auditLogger,
+      notificationConfig,
+    });
 
   const approvals = new DrizzleApprovalRepository(db);
   const hrDatasets = new DrizzleHrDatasetRepository(db);
@@ -624,6 +616,7 @@ const build = () => {
     updateDocumentFields: documentUseCases.updateDocumentFields,
     notifyOnApprovalRequested,
     notifyOnApprovalDecided,
+    notifyOnApprovalWithdrawn,
   });
 
   return {

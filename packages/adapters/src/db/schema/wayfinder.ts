@@ -22,15 +22,6 @@ import type { ExtractionFieldResult, FlowPermission, FlowSnapshot, FlowVersionSt
 import type { AiTurnPayload, PendingExecutions, SessionDocument, StepOutputField } from "@rbrasier/domain";
 import { core_users } from "./core";
 
-// Postgres full-text search vector (ADR-029). drizzle-orm has no native tsvector
-// column type, so we declare a minimal custom type. The column is generated from
-// chunk_text in the database and feeds the keyword side of hybrid retrieval.
-const tsvector = customType<{ data: string }>({
-  dataType() {
-    return "tsvector";
-  },
-});
-
 type StoredContextDoc = {
   id: string;
   filename: string;
@@ -424,18 +415,31 @@ export const app_session_approvals = pgTable(
     approver_email: text("approver_email"),
     is_override: boolean("is_override").notNull().default(false),
     // A plain text column with a TypeScript-level refinement — there is no CHECK
-    // constraint in `drizzle/`, so `approved_with_edits` is additive at the
-    // database and needs no migration (ADR-045 §4).
+    // constraint in `drizzle/`, so `approved_with_edits` and `withdrawn` are
+    // additive at the database and need no migration (ADR-045 §4).
     status: text("status", {
-      enum: ["pending", "approved", "approved_with_edits", "rejected", "changes_requested"],
+      enum: [
+        "pending",
+        "approved",
+        "approved_with_edits",
+        "rejected",
+        "changes_requested",
+        "withdrawn",
+      ],
     })
       .notNull()
       .default("pending"),
+    // Set for `withdrawn` as the moment the row left `pending`; nobody decided
+    // it, so `decided_by_user_id` stays null.
     decided_by_user_id: uuid("decided_by_user_id").references(() => core_users.id, {
       onDelete: "set null",
     }),
     decided_at: timestamp("decided_at", { withTimezone: true }),
     comment: text("comment"),
+    // The originator's note to the approver, written when the request is sent.
+    // Kept apart from `comment`, which the approver's decision writes on this
+    // same row — one column would have the decision overwrite the request.
+    request_message: text("request_message"),
     record_snapshot: jsonb("record_snapshot").$type<Record<string, unknown>>(),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -473,6 +477,7 @@ export const app_notification_log = pgTable(
         "flow_shared",
         "approval_requested",
         "approval_decided",
+        "approval_withdrawn",
       ],
     }).notNull(),
     resource_type: text("resource_type", { enum: ["session", "flow", "approval"] }).notNull(),
@@ -552,123 +557,6 @@ export const admin_system_settings = pgTable(
   }),
 );
 
-export const kb_context_doc_content = pgTable(
-  "kb_context_doc_content",
-  {
-    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-    flow_id: uuid("flow_id")
-      .notNull()
-      .references(() => app_flows.id, { onDelete: "cascade" }),
-    storage_path: text("storage_path").notNull(),
-    extracted_text: text("extracted_text"),
-    extraction_status: text("extraction_status", {
-      enum: ["pending", "complete", "failed", "unsupported"],
-    }).notNull().default("pending"),
-    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => ({
-    storage_path_unique: unique("kb_context_doc_content_storage_path_unique").on(t.storage_path),
-    by_flow: index("kb_context_doc_content_flow_id_idx").on(t.flow_id),
-  }),
-);
-
-export const kb_document_chunks = pgTable(
-  "kb_document_chunks",
-  {
-    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-    flow_id: uuid("flow_id").references(() => app_flows.id, { onDelete: "cascade" }),
-    session_id: uuid("session_id").references(() => app_sessions.id, { onDelete: "cascade" }),
-    source_type: text("source_type", {
-      enum: ["flow_context_doc", "session_upload", "template"],
-    }).notNull(),
-    storage_path: text("storage_path").notNull(),
-    filename: text("filename").notNull(),
-    chunk_index: integer("chunk_index").notNull(),
-    chunk_text: text("chunk_text").notNull(),
-    // 384 dims (ADR-017): shared by the local all-MiniLM model and OpenAI
-    // text-embedding-3-small reduced via its `dimensions` parameter.
-    embedding: vector("embedding", { dimensions: 384 }).notNull(),
-    // Curation lifecycle (ADR-028). Inference retrieval filters to `active`;
-    // archived chunks are retained for audit but never retrieved.
-    status: text("status", { enum: ["active", "archived", "draft"] }).notNull().default("active"),
-    tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
-    retrieval_count: integer("retrieval_count").notNull().default(0),
-    last_retrieved_at: timestamp("last_retrieved_at", { withTimezone: true }),
-    // Keyword side of hybrid retrieval (ADR-029): generated from chunk_text.
-    content_tsv: tsvector("content_tsv").generatedAlwaysAs(
-      sql`to_tsvector('english', "chunk_text")`,
-    ),
-    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => ({
-    by_flow_source: index("kb_document_chunks_flow_id_source_type_idx").on(t.flow_id, t.source_type),
-    by_session: index("kb_document_chunks_session_id_idx").on(t.session_id),
-    by_storage_path: index("kb_document_chunks_storage_path_idx").on(t.storage_path),
-    by_status: index("kb_document_chunks_status_idx").on(t.status),
-    embedding_hnsw: index("kb_document_chunks_embedding_hnsw_idx")
-      .using("hnsw", t.embedding.op("vector_cosine_ops"))
-      .with({ m: 16, ef_construction: 64 }),
-    content_tsv_gin: index("kb_document_chunks_content_tsv_idx").using("gin", t.content_tsv),
-    // Exactly one scope per chunk: flow-scoped sources carry flow_id, session
-    // uploads carry session_id (phase doc §6).
-    scope_check: check(
-      "kb_document_chunks_scope_check",
-      sql`num_nonnulls("flow_id", "session_id") = 1`,
-    ),
-  }),
-);
-
-// Append-only edit history for a curated chunk (ADR-028 Decision 2). Each row
-// captures the chunk's text and embedding *as they were before* an edit or
-// revert, so a revert restores an exact prior state and nothing is destroyed.
-export const kb_chunk_versions = pgTable(
-  "kb_chunk_versions",
-  {
-    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-    chunk_id: uuid("chunk_id")
-      .notNull()
-      .references(() => kb_document_chunks.id, { onDelete: "cascade" }),
-    chunk_text: text("chunk_text").notNull(),
-    embedding: vector("embedding", { dimensions: 384 }).notNull(),
-    edited_by: uuid("edited_by").references(() => core_users.id, { onDelete: "set null" }),
-    reason: text("reason"),
-    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => ({
-    by_chunk: index("kb_chunk_versions_chunk_id_idx").on(t.chunk_id, t.created_at),
-  }),
-);
-
-// A frontline "Fix This Answer" submission (ADR-028 Decision 3). Captured raw
-// and decoupled from any chunk; an SME maps it to a chunk during triage.
-export const kb_answer_feedback = pgTable(
-  "kb_answer_feedback",
-  {
-    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-    session_id: uuid("session_id")
-      .notNull()
-      .references(() => app_sessions.id, { onDelete: "cascade" }),
-    message_id: uuid("message_id"),
-    flagged_answer: text("flagged_answer").notNull(),
-    corrected_text: text("corrected_text").notNull(),
-    reason: text("reason", {
-      enum: ["outdated", "wrong", "incomplete", "other"],
-    }).notNull(),
-    status: text("status", {
-      enum: ["pending", "accepted", "dismissed"],
-    }).notNull().default("pending"),
-    created_by: uuid("created_by").references(() => core_users.id, { onDelete: "set null" }),
-    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => ({
-    by_status: index("kb_answer_feedback_status_idx").on(t.status, t.created_at),
-    by_session: index("kb_answer_feedback_session_id_idx").on(t.session_id),
-  }),
-);
 
 // Extraction batch engine (ADR-033 §5, extraction-flows-2). Three tables isolate
 // the whole paradigm: a run aggregate, one row per input file (the unit of

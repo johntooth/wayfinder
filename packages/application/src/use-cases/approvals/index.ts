@@ -1,6 +1,7 @@
 export * from "./suggest-approver";
 export * from "./confirm-and-send";
 export * from "./decide-approval";
+export * from "./withdraw-approval";
 export * from "./list-approvals";
 export * from "./list-approvals-with-context";
 export * from "./resolve-approval-subject";

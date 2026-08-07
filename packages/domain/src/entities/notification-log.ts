@@ -8,7 +8,8 @@ export type NotificationTrigger =
   | "step_complete"
   | "flow_shared"
   | "approval_requested"
-  | "approval_decided";
+  | "approval_decided"
+  | "approval_withdrawn";
 export type NotificationResourceType = "session" | "flow" | "approval";
 export type NotificationStatus = "pending" | "sent" | "failed";
 

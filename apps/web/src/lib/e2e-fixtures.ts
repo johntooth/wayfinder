@@ -72,6 +72,11 @@ export interface SeedResult {
   // A flow whose first step is an approval, so the config editor has an
   // authoring-time warning to show (ADR-044 §2).
   approvalFirstFlowId: string;
+  // `conversational → approval (pending)`, raised by the seed user so they are
+  // the originator who may withdraw it. Its own session because withdrawing
+  // moves the session off the approval node.
+  approvalWithdrawSessionId: string;
+  approvalWithdrawDraftStepName: string;
 }
 
 // A fork flow whose two mutually-exclusive branches capture the same `amount`
@@ -440,6 +445,7 @@ const seedApprovalRequest = async (
 import {
   seedApprovalFirstFlow,
   seedApprovalSubjectSession,
+  seedWithdrawableApprovalSession,
 } from "./e2e-fixtures-approval";
 
 export const seedE2EFixtures = async (container: Container): Promise<SeedResult> => {
@@ -665,6 +671,7 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
   const structured = await seedStructuredSession(container, ownerUserId);
   const approvalSubject = await seedApprovalSubjectSession(container, ownerUserId);
   const approvalFirstFlowId = await seedApprovalFirstFlow(container, ownerUserId);
+  const approvalWithdraw = await seedWithdrawableApprovalSession(container, ownerUserId);
 
   return {
     flowId: flow.id,
@@ -677,6 +684,8 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     approvalSubjectSessionId: approvalSubject.sessionId,
     approvalSubjectFlowId: approvalSubject.flowId,
     approvalFirstFlowId,
+    approvalWithdrawSessionId: approvalWithdraw.sessionId,
+    approvalWithdrawDraftStepName: approvalWithdraw.draftStepName,
   };
 };
 

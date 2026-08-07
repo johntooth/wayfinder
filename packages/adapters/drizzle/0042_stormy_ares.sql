@@ -1,0 +1,1 @@
+ALTER TABLE "app_session_approvals" ADD COLUMN "request_message" text;

@@ -78,6 +78,10 @@ export const approvalRouter = router({
         approverUserId: z.string().uuid().nullish(),
         approverEmail: z.string().email().nullish(),
         isOverride: z.boolean(),
+        // The originator's note to the approver. Bounded like the decision
+        // comment — it travels by email, and a whole document does not belong
+        // in one.
+        requestMessage: z.string().max(2000).nullish(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -86,6 +90,28 @@ export const approvalRouter = router({
         approverUserId: input.approverUserId ?? null,
         approverEmail: input.approverEmail ?? null,
         isOverride: input.isOverride,
+        requestMessage: input.requestMessage ?? null,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  // The originator taking their own request back before it is decided. The
+  // use case gates it to the requester (or an admin) and returns the session to
+  // the nearest prior conversational step.
+  withdraw: authenticatedProcedure
+    .input(
+      z.object({
+        approvalId: z.string().uuid(),
+        reason: z.string().max(2000).nullish(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.withdrawApproval.execute({
+        approvalId: input.approvalId,
+        withdrawnByUserId: ctx.userId,
+        reason: input.reason ?? null,
+        isAdmin: ctx.isAdmin,
       });
       if (result.error) throw toTrpcError(result.error);
       return result.data;

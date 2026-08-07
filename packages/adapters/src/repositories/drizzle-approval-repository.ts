@@ -44,6 +44,7 @@ const toEntity = (row: typeof app_session_approvals.$inferSelect): Approval => (
   decidedByUserId: row.decided_by_user_id ?? null,
   decidedAt: row.decided_at ?? null,
   comment: row.comment ?? null,
+  requestMessage: row.request_message ?? null,
   recordSnapshot: (row.record_snapshot as Record<string, unknown> | null) ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
@@ -68,6 +69,7 @@ export class DrizzleApprovalRepository implements IApprovalRepository {
           approver_email: input.approverEmail ?? null,
           is_override: input.isOverride ?? false,
           status: input.status ?? "pending",
+          request_message: input.requestMessage ?? null,
           record_snapshot: input.recordSnapshot ?? null,
         })
         .returning();
@@ -256,6 +258,7 @@ export const approvalPatchToColumns = (patch: ApprovalUpdate): Record<string, un
         : {}),
       ...(patch.decidedAt !== undefined ? { decided_at: patch.decidedAt } : {}),
       ...(patch.comment !== undefined ? { comment: patch.comment } : {}),
+      ...(patch.requestMessage !== undefined ? { request_message: patch.requestMessage } : {}),
       ...(patch.recordSnapshot !== undefined ? { record_snapshot: patch.recordSnapshot } : {}),
       updated_at: new Date(),
   };

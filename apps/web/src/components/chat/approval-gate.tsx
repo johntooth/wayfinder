@@ -35,9 +35,13 @@ export function ApprovalGate({
   const emailStatusQuery = trpc.approval.emailStatus.useQuery();
   const emailConfigured = emailStatusQuery.data?.configured ?? true;
 
+  // Constrained to the composer's own width and rendered in its stack, so the
+  // gate reads as the next thing in the chat column rather than a band laid
+  // across the conversation. The full-bleed `border-t` panel it replaces spanned
+  // wider than any message, which is what made it look like an overlay.
   return (
-    <div className="border-t border-[#e7e3db] bg-[#fffaf2] px-5 py-4" data-approval-gate>
-      <div className="mx-auto max-w-2xl">
+    <div className="shrink-0 px-4 pt-[14px] sm:px-6" data-approval-gate>
+      <div className="mx-auto max-w-[760px] rounded-[14px] border border-[#e8d4b0] bg-[#fffaf2] px-4 py-3">
         <ApproverPicker
           sessionId={sessionId}
           flowId={flowId}
@@ -48,6 +52,7 @@ export function ApprovalGate({
           instructions={instructions}
           roleHint={roleHint}
           emailConfigured={emailConfigured}
+          canWithdraw
         />
       </div>
     </div>

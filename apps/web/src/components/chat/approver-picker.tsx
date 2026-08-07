@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Copy, Info, Loader2, Mail, Stamp } from "lucide-react";
+import { Copy, Info, Loader2, Mail, Stamp, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import type { ApproverSource } from "@rbrasier/domain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
 import { approverStageLabel } from "./approver-label";
 import { picksApproverManually, setupNotice, type SetupNotice } from "./approval-gate-state";
@@ -25,6 +26,11 @@ export interface ApproverPickerProps {
   // Raised once the request has been sent, so a host that owns the surrounding
   // chrome (the decision modal) can close or refresh.
   onSent?: () => void;
+  // Whether to offer the originator a way to take the request back. True only
+  // in the chat gate: withdrawing belongs where the person watching the work is,
+  // not in the approver's decision modal — where the mounting user is the
+  // approver, and the request is not theirs to pull.
+  canWithdraw?: boolean;
 }
 
 interface ChosenApprover {
@@ -52,6 +58,7 @@ export function ApproverPicker({
   roleHint,
   emailConfigured,
   onSent,
+  canWithdraw = false,
 }: ApproverPickerProps) {
   const utils = trpc.useUtils();
   const [approvalId, setApprovalId] = useState<string | null>(null);
@@ -62,6 +69,9 @@ export function ApproverPicker({
   const [showSearch, setShowSearch] = useState(false);
   const [showNotice, setShowNotice] = useState(false);
   const [query, setQuery] = useState("");
+  const [requestMessage, setRequestMessage] = useState("");
+  const [confirmingWithdrawal, setConfirmingWithdrawal] = useState(false);
+  const [withdrawalReason, setWithdrawalReason] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Focus the approver search box when the operator reveals it (replaces
@@ -127,8 +137,26 @@ export function ApproverPicker({
       approverUserId: chosen.userId,
       approverEmail: chosen.userId ? null : chosen.email,
       isOverride,
+      requestMessage: requestMessage.trim() || null,
     });
   };
+
+  // Taking the request back. The session returns to the nearest prior chat step,
+  // so the whole page has to re-read: `session.get` drives the gate, the
+  // composer's disabled state and the step rail alike.
+  const withdraw = trpc.approval.withdraw.useMutation({
+    onSuccess: async (result) => {
+      setConfirmingWithdrawal(false);
+      setWithdrawalReason("");
+      await utils.session.get.invalidate({ sessionId });
+      toast.success(
+        result.held
+          ? "Approval withdrawn — no earlier chat step to return to, so the chat is held here"
+          : "Approval withdrawn",
+      );
+    },
+    onError: (error) => toast.error(error.message ?? "Could not withdraw the request"),
+  });
 
   const approvalUrl = typeof window !== "undefined" ? `${window.location.origin}/approvals` : "/approvals";
 
@@ -230,9 +258,9 @@ export function ApproverPicker({
 
         {notice && noticeDetail(notice)}
 
-        {!emailConfigured && (
+        {(!emailConfigured || canWithdraw) && (
           <div className="flex flex-wrap gap-2">
-            {sentToEmail && (
+            {!emailConfigured && sentToEmail && (
               <Button asChild size="sm">
                 <a href={buildMailtoHref(sentToEmail)}>
                   <Mail className="h-4 w-4" />
@@ -240,10 +268,70 @@ export function ApproverPicker({
                 </a>
               </Button>
             )}
-            <Button size="sm" variant="outline" onClick={copyApprovalLink}>
-              <Copy className="h-4 w-4" />
-              Copy approval link
-            </Button>
+            {!emailConfigured && (
+              <Button size="sm" variant="outline" onClick={copyApprovalLink}>
+                <Copy className="h-4 w-4" />
+                Copy approval link
+              </Button>
+            )}
+            {/* Two steps, not one: withdrawing moves the chat back a step and
+                tells the approver it happened, which is too much to trigger on
+                a stray click next to "Copy approval link". */}
+            {canWithdraw && !confirmingWithdrawal && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setConfirmingWithdrawal(true)}
+                data-approval-withdraw
+              >
+                <Undo2 className="h-4 w-4" />
+                Withdraw
+              </Button>
+            )}
+          </div>
+        )}
+
+        {canWithdraw && confirmingWithdrawal && (
+          <div
+            className="space-y-2 rounded-[10px] border border-[#e8d4b0] bg-white px-3 py-2"
+            data-approval-withdraw-confirm
+          >
+            <p className="text-[13px] text-[#1c1b19]">
+              Withdraw this request? {sentTo ?? "The approver"} will be told it was taken back,
+              and the chat returns to the last step you can edit.
+            </p>
+            <Textarea
+              value={withdrawalReason}
+              onChange={(event) => setWithdrawalReason(event.target.value)}
+              placeholder="Why are you withdrawing? (optional)"
+              maxLength={2000}
+              className="min-h-[56px]"
+              aria-label="Reason for withdrawing"
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                onClick={() =>
+                  approvalId &&
+                  withdraw.mutate({
+                    approvalId,
+                    reason: withdrawalReason.trim() || null,
+                  })
+                }
+                disabled={!approvalId || withdraw.isPending}
+                data-approval-withdraw-confirm-button
+              >
+                {withdraw.isPending ? "Withdrawing…" : "Withdraw request"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setConfirmingWithdrawal(false)}
+                disabled={withdraw.isPending}
+              >
+                Keep waiting
+              </Button>
+            </div>
           </div>
         )}
       </div>
@@ -325,6 +413,19 @@ export function ApproverPicker({
           </div>
         </div>
       )}
+
+      {/* The approver gets the subject and the step's standing instructions
+          either way; this is the one place the operator can say why *this*
+          request is going to *them*, now. */}
+      <Textarea
+        value={requestMessage}
+        onChange={(event) => setRequestMessage(event.target.value)}
+        placeholder="Add a message for the approver (optional)"
+        maxLength={2000}
+        className="min-h-[56px]"
+        aria-label="Message for the approver"
+        data-approval-request-message
+      />
 
       <div className="flex flex-wrap gap-2">
         <Button size="sm" onClick={send} disabled={!chosen || confirmAndSend.isPending}>
