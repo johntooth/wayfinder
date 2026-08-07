@@ -48,7 +48,7 @@ export function ApprovalGate({
   // across the conversation. The full-bleed `border-t` panel it replaces spanned
   // wider than any message, which is what made it look like an overlay.
   return (
-    <div className="shrink-0 px-4 pt-[14px] sm:px-6" data-approval-gate>
+    <div className="shrink-0 px-4 pb-[18px] pt-[14px] sm:px-6" data-approval-gate>
       <div className="mx-auto max-w-[760px] rounded-[14px] border border-[#e8d4b0] bg-[#fffaf2] px-4 py-3">
         <ApproverPicker
           sessionId={sessionId}
