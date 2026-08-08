@@ -14,6 +14,12 @@ const contractValue: ExtractionField = {
   doneWhen: null,
 };
 
+const signedOn: ExtractionField = {
+  field: { key: "signed_on", label: "Signed On", type: "date", optional: false, raw: "Signed On (date)" },
+  instruction: "The date the contract was signed.",
+  doneWhen: null,
+};
+
 describe("buildExtractionSystemPrompt", () => {
   it("adapts the conversational-node structure: role, field formats, instructions and grounding rules, without questions", () => {
     const prompt = buildExtractionSystemPrompt({
@@ -61,5 +67,36 @@ describe("buildExtractionSystemPrompt", () => {
 
     expect(prompt).toContain("evaluation-criteria.docx");
     expect(prompt).toContain("Mandatory criteria MC1..MC4");
+  });
+
+  // Extraction reads third-party documents whose date convention it does not
+  // control, so — unlike the conversational node — it must not simply assert
+  // day-first. It anchors its own output, then reasons about the source.
+  it("anchors day-first output while reasoning about the source's own date convention", () => {
+    const prompt = buildExtractionSystemPrompt({
+      fields: [signedOn],
+      guidance: "",
+      contextDocs: [],
+    });
+
+    expect(prompt).toContain("the first number is the day and the second is the month");
+    expect(prompt).toContain("10-08-2026, never 08-10-2026");
+    expect(prompt).toContain("may not use the same convention");
+    expect(prompt).toContain("above 12");
+  });
+
+  it("sends an undetermined date order to the low-confidence band instead of guessing", () => {
+    const prompt = buildExtractionSystemPrompt({
+      fields: [signedOn],
+      guidance: "",
+      contextDocs: [],
+    });
+
+    // 30-45 clears EXTRACTION_CONFIDENCE_FLOOR (25, below which the value is
+    // blanked) and sits under AMBER_THRESHOLD (50), so it bands red for triage
+    // rather than being discarded.
+    expect(prompt).toContain("confidence between 30 and 45");
+    expect(prompt).toContain("could not be determined");
+    expect(prompt).toContain("Never swap a day and month");
   });
 });
