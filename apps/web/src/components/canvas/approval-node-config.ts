@@ -79,18 +79,42 @@ export const decodeChangesRequestedTarget = (
 export const editableReturnSteps = (priorSteps: PriorStep[]): PriorStep[] =>
   priorSteps.filter((step) => step.type === "conversational");
 
+// Which step the "last completed step" default will resolve to, as far as the
+// canvas can tell: the nearest earlier step that declares any fields, which in a
+// linear flow is exactly the step the runtime will have just finished.
+//
+// This is a prediction, not a guarantee — on a branching flow the step that
+// actually completes last depends on the path taken. It is offered anyway
+// because the alternative was worse: the default subject showed no signature
+// control at all, so the common single-document flow could not target its own
+// signature without the author first naming the step by hand. Choosing a slot
+// here writes an explicit `signatureFieldKey`, which is what the runtime reads,
+// so a correct prediction becomes a durable configuration.
+export const defaultSubjectNodeId = (priorStepFields: PriorStepField[]): string => {
+  let nearest: PriorStepField | null = null;
+  for (const entry of priorStepFields) {
+    if (!nearest || entry.stepNumber > nearest.stepNumber) nearest = entry;
+  }
+  return nearest?.nodeId ?? "";
+};
+
 // The signature slots declared by the subject step's template. Read from the
 // prior-step field list, which carries the raw template fields — `nodeFieldSet`
 // filters signatures out on purpose, and this is the one place that needs them.
+//
+// An empty `subjectNodeId` is the last-completed-step default, which resolves to
+// the nearest earlier step rather than to nothing.
 export const signatureSlotsFor = (
   priorStepFields: PriorStepField[],
   subjectNodeId: string,
 ): Array<{ key: string; label: string }> => {
-  if (!subjectNodeId) return [];
+  const targetNodeId = subjectNodeId || defaultSubjectNodeId(priorStepFields);
+  if (!targetNodeId) return [];
+
   const seen = new Set<string>();
   const slots: Array<{ key: string; label: string }> = [];
   for (const entry of priorStepFields) {
-    if (entry.nodeId !== subjectNodeId) continue;
+    if (entry.nodeId !== targetNodeId) continue;
     if (entry.field.type !== "signature") continue;
     if (seen.has(entry.field.key)) continue;
     seen.add(entry.field.key);
@@ -102,18 +126,18 @@ export const signatureSlotsFor = (
 export type SignatureSlotControl =
   // The template declares none, so the approval simply records no signature.
   | { mode: "none" }
-  // Exactly one: there is no choice to make, so it binds without a control.
-  | { mode: "auto"; key: string }
-  // Two or more: the author must say which slot this step signs.
+  // One or more: the author says which slot this step signs, and a lone slot
+  // arrives pre-selected rather than hidden.
   | { mode: "choose"; slots: Array<{ key: string; label: string }> };
 
+// There is deliberately no "bind it automatically" mode. One existed until
+// v0.26.2 and bound nothing: it rendered no control, so `signatureFieldKey` was
+// never written, and every single-signature template decided without signing
+// while the modal said otherwise (ADR-043 §5, amended).
 export const signatureSlotControl = (
   slots: Array<{ key: string; label: string }>,
-): SignatureSlotControl => {
-  if (slots.length === 0) return { mode: "none" };
-  if (slots.length === 1) return { mode: "auto", key: slots[0]!.key };
-  return { mode: "choose", slots };
-};
+): SignatureSlotControl =>
+  slots.length === 0 ? { mode: "none" } : { mode: "choose", slots };
 
 // Two approval steps must not sign the same slot on the same document — a
 // config-time error, not a runtime surprise (ADR-043 §5).

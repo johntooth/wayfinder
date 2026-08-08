@@ -85,6 +85,26 @@ call site, because every consumer must inherit it:
 Filtering at one choke point is the whole safety argument: a signature slot the
 conversation can reach is a signature an operator can forge.
 
+**Amended v0.27.0 — the choke point needs an exported filter, because one caller
+cannot reach it.** `EvaluateStepReadiness` resolves a template step's fields from
+the node config *or* by extracting them from the template bytes, and the byte
+path has no `ConversationalNodeConfig` to pass to `nodeFieldSet`. It therefore
+returned the raw set, and the pre-generation gate extracted and graded the
+signatures — reporting them as missing information, which the gate's fail path
+streams straight into the thread as "Supervisor signature is blank" and then as a
+question to the operator.
+
+The exclusion is now exported as `gatherableFields` and applied on every branch.
+A caller that cannot go through `nodeFieldSet` must still go through the same
+predicate; being unable to reach the choke point is not permission to skip it.
+
+**Rendering is the deliberate exception.** `GenerateDocument` and
+`ApplyApprovalSignature` keep the raw set, because a signature must reach
+`buildRenderData` to be written at all — as the attestation once decided, as an
+empty string until then. The rule is therefore *gathering* excludes signatures
+and *rendering* includes them, which is why the filter cannot live in
+`resolveTemplateFields`, the helper both the gate and generation share.
+
 ### 3. The value is an attestation block — not an image, not a certificate
 
 On decision, the slot renders a fixed block built from the locked approval
@@ -139,12 +159,82 @@ behaves by count:
 | Signature fields in the subject step's template | Control |
 | --- | --- |
 | 0 | no control shown; the approval simply records no signature |
-| 1 | bound automatically, dropdown hidden — there is no choice to make |
-| 2+ | a dropdown listing each slot by its `label`, required before save |
+| 1+ | a dropdown listing each slot by its `label`, required before save; a lone slot arrives pre-selected |
 
 Two approval nodes in the same flow must not target the same
 `signatureFieldKey` on the same document; that is a config-time validation
 error, not a runtime surprise.
+
+**Amended v0.27.0 — the default subject resolves to a step, and an unsigned slot
+is warned about.** The slot list was empty whenever the subject was the
+last-completed-step default, so the commonest shape — one document step, one
+approval step, subject left on the default — could not target its own signature
+at all. The config editor now predicts the default as the nearest earlier step
+declaring fields, which in a linear flow is the step the runtime will have just
+completed. The prediction is stated as one in the UI, and choosing a slot writes
+an explicit `signatureFieldKey`, so a correct prediction becomes durable
+configuration rather than a standing guess.
+
+An unclaimed slot is otherwise **silent**: §3 renders an undecided slot as an
+empty string, so the step completes, the document generates, and the signature
+block is simply blank with nothing at run time to say it was meant to be filled.
+The canvas therefore carries an authoring advisory naming each slot no approval
+step signs, alongside the stranded-step warning. Claiming mirrors what actually
+signs — a named key, or the lone-slot fallback above — and is scoped by subject
+step, so an approval signing "signature" on one document cannot claim a
+same-named slot on another.
+
+**Amended v0.27.1 — the advisory resolves the default subject too.** Scoping a
+claim by subject step is only sound if every approval *has* a resolvable subject
+step, and one shape does not: the default stores no `approvalSubject` at all, so
+a correctly bound approval left on it claimed nothing and the advisory fired on a
+flow that was already signed. The advisory now resolves an unnamed subject the
+way the runtime will — the nearest step upstream of the approval that declares
+signatures — walking predecessors only, since a step downstream has not run when
+the approval decides. The two halves of this amendment were added in the same
+version and had to agree: making the default subject targetable while the
+advisory still treated it as targeting nothing is what produced the false
+warning.
+
+**Amended v0.26.2 — a lone slot is bound explicitly, not implicitly.** As first
+written, this table hid the control for exactly one slot and called it "bound
+automatically". Nothing bound it: `signatureFieldKey` stayed empty in the config,
+`DecideApproval` read it as `null`, and `ApplyApprovalSignature` returned
+`no_signature_slot`. Every single-signature template went unsigned while the
+editor said the opposite. A control that claims an effect it does not have is
+worse than no control, so the dropdown now appears from the first slot.
+
+Two approval steps must still not claim one slot, so the pre-selection is a
+default the author can see and change — not a silent write.
+
+The runtime keeps a **fallback for flows already saved under the old
+behaviour**: when a node's `signatureFieldKey` is empty and the subject step
+declares exactly one signature, `DecideApproval` binds that slot. This is
+deliberately narrow. With two or more slots an empty key stays unbound, because
+guessing which of several signatures a step fills would put a named person's
+attestation in the wrong place on the document — a worse failure than not
+signing at all.
+
+### 5a. A signature is a first-class type in the annotation editor
+
+`(approval)` is a type the template author selects, not merely one the parser
+tolerates. The guided annotation editor lists it beside Text and Narrative, and
+the annotation reference documents it.
+
+This is a correctness requirement, not a convenience. The editor round-trips
+every reviewed row through `modelToLine` and writes the result back into the
+stored `.docx` (`buildAnnotationEdits`). A row the editor cannot represent is a
+row it silently rewrites: before v0.26.2 a signature loaded as a plain text
+field and saved as `{{ Name (optional) }}`, destroying the slot in the author's
+own document. Any field type the parser accepts must therefore be a type the
+editor can hold and re-emit unchanged.
+
+Because a signature carries no author-supplied value, its per-field settings are
+empty of constraints — no length, bound, multiplicity or required toggle, all of
+which `parseTemplateField` rejects on a signature anyway.
+
+The structured-conversation editor still omits it, for the reason §2 gives: no
+document, no signature.
 
 Note the scope this settles: ADR-040 keeps **one subject per approval node**.
 Multiple signatures do not change that. A document with three signature slots is
@@ -235,6 +325,14 @@ guessing would produce a signature nobody can rely on.
   `buildRenderData`, the structured-field editor). Missing one is a silent
   wrong-behaviour bug, so the type must be added to the domain first and the
   compiler used to find the rest.
+
+  This is what the v0.26.2 fix ran into, and the compiler did **not** find it.
+  The annotation editor's `fieldRowTypeOf` maps a `TemplateField` onto its own
+  narrower `FieldRowType`, and it ends in a `default:` arm rather than an
+  exhaustive one — so `signature` fell through to `text` with no type error.
+  Every place a domain type is narrowed onto a UI vocabulary needs an explicit
+  arm per member, because a `default:` turns an unhandled case into plausible
+  wrong behaviour instead of a build failure.
 - The attestation block is **not** a qualified electronic signature. Anywhere it
   is described to users it must be called what it is; overclaiming legal
   standing is the failure mode to avoid.

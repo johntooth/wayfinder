@@ -115,6 +115,7 @@ export function FieldConfigModal({
 }) {
   const isNumeric = model.type === "number" || model.type === "currency";
   const hasOptions = model.type === "select" || model.type === "multiselect";
+  const isSignature = model.type === "signature";
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -126,30 +127,43 @@ export function FieldConfigModal({
           <DialogCloseButton />
         </DialogHeader>
         <DialogBody>
-          <div className="flex items-center justify-between gap-3">
-            <div className="space-y-0.5">
-              <Label htmlFor="field-required">Required</Label>
-              <p className="text-[12px] text-[#666055]">
-                When on, this value must be captured before the step can complete.
-              </p>
-            </div>
-            <button
-              id="field-required"
-              type="button"
-              role="switch"
-              aria-checked={!model.optional}
-              onClick={() => onChange({ optional: !model.optional })}
-              className={`relative mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                !model.optional ? "bg-[#1f6b4d]" : "bg-[#dedad2]"
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  !model.optional ? "translate-x-4" : "translate-x-0.5"
+          {/* A signature carries no author-supplied value, so there is nothing
+              for a length, bound or required toggle to constrain — and
+              parseTemplateField rejects a signature that carries any of them. */}
+          {isSignature && (
+            <p className="text-[12px] leading-[1.55] text-[#5c574c]">
+              This slot is filled by the approval step that signs it — the approver&apos;s name,
+              decision, date and comment are written in when they decide. Nobody is asked for it
+              during the conversation, and it has no settings.
+            </p>
+          )}
+
+          {!isSignature && (
+            <div className="flex items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="field-required">Required</Label>
+                <p className="text-[12px] text-[#666055]">
+                  When on, this value must be captured before the step can complete.
+                </p>
+              </div>
+              <button
+                id="field-required"
+                type="button"
+                role="switch"
+                aria-checked={!model.optional}
+                onClick={() => onChange({ optional: !model.optional })}
+                className={`relative mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                  !model.optional ? "bg-[#1f6b4d]" : "bg-[#dedad2]"
                 }`}
-              />
-            </button>
-          </div>
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    !model.optional ? "translate-x-4" : "translate-x-0.5"
+                  }`}
+                />
+              </button>
+            </div>
+          )}
 
           {model.type === "text" && (
             <div className="space-y-1">

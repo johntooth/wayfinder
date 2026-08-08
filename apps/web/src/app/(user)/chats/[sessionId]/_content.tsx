@@ -291,6 +291,12 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
     const source = new EventSource(`/api/sessions/${sessionId}/events`);
     const refetch = () => {
       void utils.session.get.invalidate({ sessionId });
+      // The approval gate reads its row separately, and it is the one thing on
+      // screen another person can change without touching the session: a
+      // chained approval is confirmed by the *previous approver*, from their
+      // own decision modal. Without this the gate keeps offering to choose an
+      // approver for a request that has already been sent.
+      void utils.approval.forNode.invalidate();
     };
     source.addEventListener("message.created", refetch);
     source.addEventListener("session.updated", refetch);
@@ -450,6 +456,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         onRetry={() => void reload()}
         onRegenerateDocument={handleRegenerateDocument}
         canEditDocuments={session.status === "active" && !isReadOnly && !isFlowDeleted}
+        isOnApprovalNode={isApprovalGate}
         onDocumentEdited={() => void utils.session.get.invalidate({ sessionId })}
         expertRole={flow.expertRole ?? null}
         senderNamesById={senderNamesById}
@@ -487,38 +494,50 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         <ConfirmStepCard stepName={currentNode.name} onProceed={handleConfirmStep} />
       )}
 
-      {isApprovalGate && currentNode && session.status === "active" && !isReadOnly && (
-        <ApprovalGate
-          sessionId={sessionId}
-          flowId={session.flowId}
-          flowName={flow.name}
-          nodeId={currentNode.id}
-          nodeName={currentNode.name}
-          approverSource={
-            (currentNode.config as { approverSource?: ApproverSource }).approverSource ??
-            "first_level_supervisor"
-          }
-          instructions={(currentNode.config as { instructions?: string }).instructions ?? null}
-          roleHint={(currentNode.config as { roleHint?: string }).roleHint ?? null}
-        />
-      )}
+      {/* The composer stack: the approval gate sits inside it, directly above
+          the input and at the same width, so a pending approval reads as the
+          next thing in the chat rather than a panel over it. While the gate is
+          up the composer is not rendered at all — a disabled input still holds
+          the place the operator's attention goes and still invites a click that
+          does nothing. It returns when the session leaves the approval node,
+          which is what withdrawing does. */}
+      <div className="shrink-0" data-composer-stack>
+        {isApprovalGate && currentNode && session.status === "active" && !isReadOnly && (
+          <ApprovalGate
+            sessionId={sessionId}
+            flowId={session.flowId}
+            flowName={flow.name}
+            nodeId={currentNode.id}
+            nodeName={currentNode.name}
+            approverSource={
+              (currentNode.config as { approverSource?: ApproverSource }).approverSource ??
+              "first_level_supervisor"
+            }
+            instructions={(currentNode.config as { instructions?: string }).instructions ?? null}
+            roleHint={(currentNode.config as { roleHint?: string }).roleHint ?? null}
+            viewerUserId={myUserId}
+            sessionOwnerUserId={session.userId}
+            viewerIsAdmin={isAdmin}
+          />
+        )}
 
-      {!isReadOnly && (
-        <ChatComposer
-          sessionId={sessionId}
-          value={input}
-          onChange={(value) => {
-            setInput(value);
-            if (session.status !== "active") return;
-            const now = Date.now();
-            if (now - lastTypingEmitRef.current < 2000) return;
-            lastTypingEmitRef.current = now;
-            emitTypingMutation.mutate({ sessionId });
-          }}
-          onSubmit={handleSend}
-          disabled={isLoading || session.status !== "active" || isFlowDeleted || isApprovalGate}
-        />
-      )}
+        {!isReadOnly && !isApprovalGate && (
+          <ChatComposer
+            sessionId={sessionId}
+            value={input}
+            onChange={(value) => {
+              setInput(value);
+              if (session.status !== "active") return;
+              const now = Date.now();
+              if (now - lastTypingEmitRef.current < 2000) return;
+              lastTypingEmitRef.current = now;
+              emitTypingMutation.mutate({ sessionId });
+            }}
+            onSubmit={handleSend}
+            disabled={isLoading || session.status !== "active" || isFlowDeleted}
+          />
+        )}
+      </div>
 
       <BranchOverrideModal
         open={overrideOpen}

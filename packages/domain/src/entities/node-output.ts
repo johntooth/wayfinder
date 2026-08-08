@@ -50,13 +50,23 @@ export const normaliseOutputType = (value: string | null | undefined): OutputTyp
 // signature an operator can forge.
 export const nodeFieldSet = (config: ConversationalNodeConfig): TemplateField[] => {
   const outputType = normaliseOutputType(config.outputType);
-  if (outputType === "generate_document") return gatherable(config.documentTemplateFields);
-  if (outputType === "structured") return gatherable(config.structuredFields);
+  if (outputType === "generate_document") return gatherableFields(config.documentTemplateFields);
+  if (outputType === "structured") return gatherableFields(config.structuredFields);
   return [];
 };
 
-const gatherable = (fields: TemplateField[] | null | undefined): TemplateField[] =>
-  (fields ?? []).filter((field) => field.type !== "signature");
+// The exclusion itself, for the one caller that cannot go through
+// `nodeFieldSet`: the pre-generation gate resolves a template step's fields from
+// the node config *or* by extracting them from the template bytes, and the byte
+// path has no config to hand. Exported rather than duplicated so there is still
+// a single definition of what the conversation may gather.
+//
+// Rendering is the deliberate exception and must keep the raw set: a signature
+// has to reach `buildRenderData` to be written — as the attestation once decided,
+// as an empty string until then.
+export const gatherableFields = (
+  fields: TemplateField[] | null | undefined,
+): TemplateField[] => (fields ?? []).filter((field) => field.type !== "signature");
 
 // Validates an author-declared structured field set. The `section` type is a
 // document "include/omit this part" concept with no meaning when no document

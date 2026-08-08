@@ -9,7 +9,7 @@ import type {
 } from "@rbrasier/domain";
 import { desc, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
-import { kb_answer_feedback } from "../db/schema/wayfinder";
+import { kb_answer_feedback } from "../db/schema/kb";
 import { logRepoError } from "./log-repo-error";
 
 const toAnswerFeedback = (row: typeof kb_answer_feedback.$inferSelect): AnswerFeedback => ({

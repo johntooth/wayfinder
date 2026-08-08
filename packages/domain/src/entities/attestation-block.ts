@@ -43,6 +43,9 @@ const BY_LABEL: Record<ApprovalStatus, string> = {
   approved_with_edits: "Approved by:",
   rejected: "Rejected by:",
   changes_requested: "Changes requested by:",
+  // An attestation block is only ever built for a decision, and a withdrawal is
+  // not one. Labelled rather than omitted because the map is exhaustive.
+  withdrawn: "Withdrawn by:",
 };
 
 const DECISION_LABEL: Record<ApprovalStatus, string> = {
@@ -51,6 +54,7 @@ const DECISION_LABEL: Record<ApprovalStatus, string> = {
   approved_with_edits: "Approved with edits",
   rejected: "Rejected",
   changes_requested: "Changes requested",
+  withdrawn: "Withdrawn",
 };
 
 // Exhaustive by construction: adding an ApprovalStatus without a label here is a

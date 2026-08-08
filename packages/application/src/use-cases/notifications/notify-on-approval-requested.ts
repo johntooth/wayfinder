@@ -64,6 +64,7 @@ export class NotifyOnApprovalRequested implements IApprovalRequestedNotifier {
       // Cached on the pending approval by the gate resolution, so the email
       // reads the same sentence the operator saw before sending.
       subjectDescription: readSubjectDescription(approval),
+      requestMessage: approval.requestMessage,
       approvalUrl: `${this.config.baseUrl}/approvals`,
     });
 

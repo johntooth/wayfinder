@@ -30,6 +30,11 @@ const outcomeLine = (status: ApprovalStatus, routedBack: boolean): string => {
     rejected: routedBack
       ? "Approval rejected — routed back to the originator."
       : "Approval rejected — the request was closed.",
+    // Unreachable from a decision — a withdrawal is not decided and posts its
+    // own message via `buildApprovalWithdrawalMessage`. Present because the map
+    // is exhaustive, and worded so a future caller that does reach it says
+    // something true rather than nothing.
+    withdrawn: "Approval request withdrawn by the originator.",
   };
   return outcome[status];
 };

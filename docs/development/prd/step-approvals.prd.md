@@ -90,7 +90,19 @@ and continue only once they approve. The `pending_approval` status exists in the
    changes with a comment.
 6. As an operator, approval advances the flow; changes-requested shows me the
    feedback to revise.
-7. As an approver, I can review the decisions I have already made — what I
+7. As an operator, I can withdraw a request I raised before it is decided, and
+   pick the work back up at the step I was on — so a wrong approver or a mistake
+   spotted after sending does not park the session until someone else acts. I
+   can say why, and the approver is told it was pulled.
+8. As an operator, when I send a request I can write the approver a short
+   message, so they know why it is with them now rather than only what the step
+   says in general.
+9. As an operator, I can change who a still-open request is with, without
+   pulling the work back a step — so a request sent to the wrong person, or one
+   sitting with someone on leave, can be moved on rather than withdrawn and
+   raised again. This holds for a request a previous approver addressed on my
+   behalf as well as one I raised myself.
+10. As an approver, I can review the decisions I have already made — what I
    signed, what I commented, and where that work ended up — without hunting
    through the chats they belong to. One flow may hold several decisions for the
    same approval step, because a change request routes work back and re-entering
@@ -130,8 +142,12 @@ and continue only once they approve. The `pending_approval` status exists in the
 `suggested_approver_user_id` (nullable), `approver_user_id` (nullable, the
 confirmed user), `approver_email` (text — for a free-typed address),
 `is_override` (bool — operator chose someone other than the suggestion),
-`status` (`pending`|`approved`|`rejected`|`changes_requested`),
-`decided_by_user_id` (nullable), `decided_at` (nullable), `comment` (nullable),
+`status` (`pending`|`approved`|`approved_with_edits`|`rejected`|
+`changes_requested`|`withdrawn` — `approved_with_edits` is derived at decision
+time per ADR-045 §4, `withdrawn` is the originator taking the request back per
+ADR-018), `decided_by_user_id` (nullable), `decided_at` (nullable), `comment`
+(nullable — the *approver's* decision comment), `request_message` (nullable —
+the *originator's* note to the approver, sent with the request),
 `record_snapshot` (jsonb), `created_at`, `updated_at`. Index on
 `(approver_user_id, status)` for the inbox.
 
@@ -180,6 +196,18 @@ hierarchy comes from Entra/HR and every route is operator-confirmed (ADR-018).
       signed, the outcome and comment, and where the session has since got to.
       Another user cannot open a decision that was not addressed to them.
 - [ ] A pending request whose session was discarded leaves the approver's queue.
+- [ ] The originator (or an admin) can withdraw a pending request; nobody else
+      can. The row records `withdrawn`, the session returns to the nearest prior
+      conversational step — or is held, never cancelled, when none resolves —
+      the approver is told, and the request leaves their queue. A withdrawal
+      racing a decision loses cleanly and changes nothing.
+- [ ] A message written to the approver when sending reaches them in the request
+      email and in their queue, and survives the decision that writes `comment`.
+- [ ] The session owner (or an admin) can change the approver on a still-open
+      request; nobody else can. The session does not move, the row stays
+      `pending`, both approvers are notified, the thread names the new one, and
+      the audit entry carries both identities. A decided approval cannot be
+      reassigned, and a reassignment racing a decision loses cleanly.
 - [ ] `./validate.sh` passes; `VERSION` and `package.json#version` match.
 
 ## 11. Out of scope / future work

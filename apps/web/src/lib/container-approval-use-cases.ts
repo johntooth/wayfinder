@@ -5,9 +5,12 @@ import {
   DecideApproval,
   ListApprovals,
   ListApprovalsWithContext,
+  LoadPendingApproval,
   ResolveApprovalSubject,
+  ReassignApproval,
   ResolveDecisionNotifyTargets,
   SuggestApprover,
+  WithdrawApproval,
   type UpdateDocumentFields,
 } from "@rbrasier/application";
 import type {
@@ -51,6 +54,8 @@ export interface ApprovalUseCaseDeps {
   updateDocumentFields: UpdateDocumentFields;
   notifyOnApprovalRequested: ConstructorParameters<typeof ConfirmAndSend>[2];
   notifyOnApprovalDecided: ConstructorParameters<typeof DecideApproval>[6];
+  notifyOnApprovalWithdrawn: ConstructorParameters<typeof WithdrawApproval>[8];
+  notifyOnApprovalReassigned: ConstructorParameters<typeof ReassignApproval>[5];
 }
 
 // The approval use-case cluster, factored out of the main container to keep
@@ -115,6 +120,27 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
       resolveApprovalSubject,
       applyApprovalSignature,
     ),
+    withdrawApproval: new WithdrawApproval(
+      deps.unitOfWork,
+      deps.approvals,
+      deps.sessions,
+      deps.sessionStepOutputs,
+      deps.auditLogger,
+      deps.sessionMessages,
+      deps.users,
+      deps.flowNodes,
+      deps.notifyOnApprovalWithdrawn,
+    ),
+    reassignApproval: new ReassignApproval(
+      deps.approvals,
+      deps.sessions,
+      deps.auditLogger,
+      deps.sessionMessages,
+      deps.users,
+      deps.notifyOnApprovalReassigned,
+      deps.notifyOnApprovalRequested,
+    ),
+    loadPendingApproval: new LoadPendingApproval(deps.approvals, deps.users),
     listApprovals: new ListApprovals(deps.approvals),
     listApprovalsWithContext: new ListApprovalsWithContext(
       deps.approvals,

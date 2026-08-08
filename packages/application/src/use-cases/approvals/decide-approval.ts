@@ -40,6 +40,7 @@ import {
   SUBJECT_NODE_ID_KEY,
 } from "./approval-record-keys";
 import type { ResolveApprovalSubject } from "./resolve-approval-subject";
+import { loneSignatureSlot } from "./signature-slot";
 
 export interface DecideApprovalInput {
   approvalId: string;
@@ -365,7 +366,9 @@ export class DecideApproval {
     const config = (nodes.find((node) => node.id === approval.nodeId)?.config ??
       {}) as unknown as ApprovalNodeConfig;
 
-    return { description, nodeId, signatureFieldKey: config.signatureFieldKey ?? null };
+    const signatureFieldKey =
+      config.signatureFieldKey ?? loneSignatureSlot(nodes, nodeId);
+    return { description, nodeId, signatureFieldKey };
   }
 
   // The atomic core: the pending-guard update and the session write share one

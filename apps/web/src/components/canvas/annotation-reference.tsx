@@ -34,6 +34,11 @@ const REFERENCE: ReferenceGroup[] = [
         syntax: "{{ Background (narrative) }}",
         meaning: "A paragraph the AI writes from the conversation",
       },
+      {
+        syntax: "{{ Delegate Sign Off (approval) }}",
+        meaning:
+          "A signature slot. Nobody is asked for it — an approval step fills it in with the approver's name, decision, date and comment when they decide.",
+      },
     ],
   },
   {

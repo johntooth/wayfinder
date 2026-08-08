@@ -1,6 +1,6 @@
 import type { ApprovalStatus } from "@rbrasier/domain";
 
-export type OutcomeTone = "approved" | "rejected" | "changes" | "pending";
+export type OutcomeTone = "approved" | "rejected" | "changes" | "pending" | "withdrawn";
 
 export interface ApprovalOutcome {
   label: string;
@@ -20,6 +20,9 @@ export const APPROVAL_OUTCOMES: Record<ApprovalStatus, ApprovalOutcome> = {
   approved_with_edits: { label: "Approved with edits", tone: "approved" },
   changes_requested: { label: "Changes requested", tone: "changes" },
   rejected: { label: "Rejected", tone: "rejected" },
+  // Its own tone rather than borrowing "rejected": nobody judged this request,
+  // and colouring it as a refusal would misreport the approver's record.
+  withdrawn: { label: "Withdrawn", tone: "withdrawn" },
 };
 
 export const approvalOutcome = (status: ApprovalStatus): ApprovalOutcome =>
@@ -34,4 +37,5 @@ export const OUTCOME_CLASSES: Record<OutcomeTone, string> = {
   rejected: "bg-[#fdeaea] text-[#a32020]",
   changes: "bg-[#fef3e2] text-[#a65b05]",
   pending: "bg-[#eaeefb] text-[#2f56d3]",
+  withdrawn: "bg-[#f0efec] text-[#666055]",
 };

@@ -53,10 +53,25 @@ import { DecideApproval } from "./decide-approval";
 import { ListApprovals } from "./list-approvals";
 import { ListApprovalsWithContext } from "./list-approvals-with-context";
 import { ResolveApprovalSubject } from "./resolve-approval-subject";
+import { WithdrawApproval } from "./withdraw-approval";
+import { ReassignApproval } from "./reassign-approval";
+import { LoadPendingApproval } from "./load-pending-approval";
 import type {
   IApprovalDecidedNotifier,
   NotifyOnApprovalDecidedInput,
 } from "../notifications/notify-on-approval-decided";
+import type {
+  IApprovalWithdrawnNotifier,
+  NotifyOnApprovalWithdrawnInput,
+} from "../notifications/notify-on-approval-withdrawn";
+import type {
+  IApprovalReassignedNotifier,
+  NotifyOnApprovalReassignedInput,
+} from "../notifications/notify-on-approval-reassigned";
+import type {
+  IApprovalRequestedNotifier,
+  NotifyOnApprovalRequestedInput,
+} from "../notifications/notify-on-approval-requested";
 
 class InMemoryApprovals implements IApprovalRepository {
   rows = new Map<string, Approval>();
@@ -80,6 +95,7 @@ class InMemoryApprovals implements IApprovalRepository {
       decidedByUserId: null,
       decidedAt: null,
       comment: null,
+      requestMessage: input.requestMessage ?? null,
       recordSnapshot: input.recordSnapshot ?? null,
       createdAt: now,
       updatedAt: now,
@@ -433,6 +449,30 @@ class RecordingNotifier implements IApprovalDecidedNotifier {
   }
 }
 
+class RecordingWithdrawnNotifier implements IApprovalWithdrawnNotifier {
+  calls: NotifyOnApprovalWithdrawnInput[] = [];
+  async execute(input: NotifyOnApprovalWithdrawnInput): Promise<Result<NotificationLog | null>> {
+    this.calls.push(input);
+    return ok(null);
+  }
+}
+
+class RecordingReassignedNotifier implements IApprovalReassignedNotifier {
+  calls: NotifyOnApprovalReassignedInput[] = [];
+  async execute(input: NotifyOnApprovalReassignedInput): Promise<Result<NotificationLog | null>> {
+    this.calls.push(input);
+    return ok(null);
+  }
+}
+
+class RecordingRequestedNotifier implements IApprovalRequestedNotifier {
+  calls: NotifyOnApprovalRequestedInput[] = [];
+  async execute(input: NotifyOnApprovalRequestedInput): Promise<Result<NotificationLog | null>> {
+    this.calls.push(input);
+    return ok(null);
+  }
+}
+
 // Runs the work against the same in-memory repositories the test inspects, and
 // counts invocations so a test can assert the approval update and session write
 // went through one transaction. Rollback semantics live in the adapter's test.
@@ -746,6 +786,52 @@ describe("ConfirmAndSend", () => {
     const result = await sut.execute({ approvalId: approval.id, isOverride: false });
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("persists the originator's message to the approver", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedPending(approvals);
+    const sut = new ConfirmAndSend(approvals, new RecordingAuditLogger());
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      approverUserId: "manager-1",
+      isOverride: false,
+      requestMessage: "Numbers are from the June forecast — signing before Friday would help.",
+    });
+
+    expect(result.data?.requestMessage).toContain("June forecast");
+  });
+
+  // Blank is not a message. Storing "" would put an empty block in the email
+  // and an empty panel in the approver's view.
+  it("stores a blank message as null", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedPending(approvals);
+    const sut = new ConfirmAndSend(approvals, new RecordingAuditLogger());
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      approverUserId: "manager-1",
+      isOverride: false,
+      requestMessage: "   ",
+    });
+
+    expect(result.data?.requestMessage).toBeNull();
+  });
+
+  it("leaves the message null when none was written", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedPending(approvals);
+    const sut = new ConfirmAndSend(approvals, new RecordingAuditLogger());
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      approverUserId: "manager-1",
+      isOverride: false,
+    });
+
+    expect(result.data?.requestMessage).toBeNull();
   });
 });
 
@@ -1957,6 +2043,112 @@ describe("DecideApproval", () => {
       expect(record["manager_review.verification_code"]).toMatch(/^[0-9A-F]{12}$/);
     });
 
+    // Flows authored before v0.26.2 saw no slot dropdown when their template
+    // declared exactly one signature, so `signatureFieldKey` was never written
+    // and every one of those approvals decided without signing anything. The
+    // fallback binds the lone slot so those flows sign without being re-saved.
+    const seedSubjectTemplate = (
+      nodes: Awaited<ReturnType<typeof seedFlow>>["nodes"],
+      signatureKeys: string[],
+    ) => {
+      nodes.add(
+        approvalNode({
+          id: "node-draft",
+          type: "conversational",
+          name: "Prepare instrument",
+          config: {
+            outputType: "generate_document",
+            documentTemplateFields: [
+              { key: "amount", label: "Amount", type: "text", optional: false, raw: "Amount" },
+              ...signatureKeys.map((key) => ({
+                key,
+                label: key.replace(/_/g, " "),
+                type: "signature",
+                optional: true,
+                raw: `${key} (approval)`,
+              })),
+            ],
+          },
+        }),
+      );
+    };
+
+    it("signs the lone slot when the node config never named one", async () => {
+      const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+      seedSubjectTemplate(nodes, ["delegate_signature"]);
+      const approval = await seedConfirmed(approvals);
+      const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+      await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "approved",
+      });
+
+      const record = approvals.rows.get(approval.id)!.recordSnapshot!;
+      expect(record.signatureFieldKey).toBe("delegate_signature");
+      expect(record.attestationText).toContain("Jane Doe");
+    });
+
+    it("signs nothing rather than guessing when the subject declares several", async () => {
+      const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+      seedSubjectTemplate(nodes, ["delegate_signature", "finance_signature"]);
+      const approval = await seedConfirmed(approvals);
+      const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+      await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "approved",
+      });
+
+      // Writing a named person's attestation into the wrong signature line on a
+      // governance document is worse than leaving the document unsigned.
+      expect(approvals.rows.get(approval.id)!.recordSnapshot!.signatureFieldKey).toBeUndefined();
+    });
+
+    it("keeps an explicit slot in preference to the fallback", async () => {
+      const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+      seedSubjectTemplate(nodes, ["delegate_signature", "finance_signature"]);
+      nodes.add(
+        approvalNode({
+          id: "node-appr",
+          name: "Manager review",
+          config: {
+            approverSource: "first_level_supervisor",
+            signatureFieldKey: "finance_signature",
+          },
+        }),
+      );
+      const approval = await seedConfirmed(approvals);
+      const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+      await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "approved",
+      });
+
+      expect(approvals.rows.get(approval.id)!.recordSnapshot!.signatureFieldKey).toBe(
+        "finance_signature",
+      );
+    });
+
+    it("signs nothing when the subject step declares no signature at all", async () => {
+      const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+      seedSubjectTemplate(nodes, []);
+      const approval = await seedConfirmed(approvals);
+      const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+      await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "approved",
+      });
+
+      expect(approvals.rows.get(approval.id)!.recordSnapshot!.signatureFieldKey).toBeUndefined();
+    });
+
     it("triggers the document re-render after the decision commits", async () => {
       const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
       const applied: string[] = [];
@@ -2205,6 +2397,800 @@ describe("DecideApproval", () => {
       expect(approvals.rows.get(approval.id)!.status).toBe("approved");
       expect(approvals.rows.get(approval.id)!.recordSnapshot).toBeTruthy();
     });
+  });
+});
+
+describe("WithdrawApproval", () => {
+  const seedSent = async (
+    approvals: InMemoryApprovals,
+    overrides: Partial<NewApproval> = {},
+  ) => {
+    const created = await approvals.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-appr",
+      requestedByUserId: "operator-1",
+      approverSource: "first_level_supervisor",
+      suggestedApproverUserId: "manager-1",
+      approverUserId: "manager-1",
+      ...overrides,
+    });
+    return created.data!;
+  };
+
+  // `Prepare instrument (conversational) → Manager review (approval)`, with the
+  // conversational step already run — the shape a withdrawal has to return to.
+  const withdrawableFlow = async () => {
+    const nodes = new InMemoryFlowNodes();
+    nodes.add(approvalNode({ id: "node-appr", name: "Manager review" }));
+    nodes.add(
+      approvalNode({ id: "node-prev", type: "conversational", name: "Prepare instrument" }),
+    );
+    const stepOutputs = new InMemoryStepOutputs();
+    await stepOutputs.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-prev",
+      fields: [{ key: "amount", label: "Amount", type: "text", value: "$1,200" }],
+    });
+    return { nodes, stepOutputs };
+  };
+
+  const withdrawSut = (parts: {
+    approvals: InMemoryApprovals;
+    sessions: InMemorySessions;
+    nodes: InMemoryFlowNodes;
+    stepOutputs: InMemoryStepOutputs;
+    messages?: InMemoryMessages;
+    users?: InMemoryUsers;
+    audit?: RecordingAuditLogger;
+    unitOfWork?: IUnitOfWork;
+  }) =>
+    new WithdrawApproval(
+      parts.unitOfWork ?? unitOfWorkFor(parts.approvals, parts.sessions),
+      parts.approvals,
+      parts.sessions,
+      parts.stepOutputs,
+      parts.audit ?? new RecordingAuditLogger(),
+      parts.messages ?? new InMemoryMessages(),
+      parts.users ?? new InMemoryUsers(),
+      parts.nodes,
+    );
+
+  it("records the withdrawal and returns the session to the nearest conversational step", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedSent(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const { nodes, stepOutputs } = await withdrawableFlow();
+    const sut = withdrawSut({ approvals, sessions, nodes, stepOutputs });
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      withdrawnByUserId: "operator-1",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.returnedToNodeId).toBe("node-prev");
+    expect(result.data?.held).toBe(false);
+    expect(approvals.rows.get(approval.id)?.status).toBe("withdrawn");
+    expect(sessions.rows.get("session-1")?.currentNodeId).toBe("node-prev");
+    expect(sessions.rows.get("session-1")?.status).toBe("active");
+  });
+
+  it("audits the withdrawal", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedSent(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const { nodes, stepOutputs } = await withdrawableFlow();
+    const audit = new RecordingAuditLogger();
+    const sut = withdrawSut({ approvals, sessions, nodes, stepOutputs, audit });
+
+    await sut.execute({
+      approvalId: approval.id,
+      withdrawnByUserId: "operator-1",
+      reason: "Figures were stale",
+    });
+
+    const entry = audit.entries.find((row) => row.action === "approval.withdrawn");
+    expect(entry).toBeDefined();
+    expect(entry?.actorId).toBe("operator-1");
+    expect(entry?.resourceId).toBe(approval.id);
+  });
+
+  it("posts the withdrawal into the session thread, naming the step returned to", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedSent(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const { nodes, stepOutputs } = await withdrawableFlow();
+    const messages = new InMemoryMessages();
+    const users = new InMemoryUsers();
+    users.add(user("operator-1", "dana@corp.test"));
+    users.add(user("manager-1", "rosa@corp.test"));
+    const sut = withdrawSut({ approvals, sessions, nodes, stepOutputs, messages, users });
+
+    await sut.execute({
+      approvalId: approval.id,
+      withdrawnByUserId: "operator-1",
+      reason: "Figures were stale",
+    });
+
+    const posted = messages.rows.at(-1);
+    expect(posted?.content).toContain("withdrawn");
+    expect(posted?.content).toContain("Prepare instrument");
+    expect(posted?.content).toContain("Figures were stale");
+    // The originator's own message, not a system aside — matching how a
+    // decision is written into the thread.
+    expect(posted?.role).toBe("user");
+    expect(posted?.senderUserId).toBe("operator-1");
+  });
+
+  it("lets an admin withdraw a request they did not raise", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedSent(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const { nodes, stepOutputs } = await withdrawableFlow();
+    const sut = withdrawSut({ approvals, sessions, nodes, stepOutputs });
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      withdrawnByUserId: "admin-9",
+      isAdmin: true,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(approvals.rows.get(approval.id)?.status).toBe("withdrawn");
+  });
+
+  it("refuses a withdrawal by anyone other than the originator or an admin", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedSent(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const { nodes, stepOutputs } = await withdrawableFlow();
+    const sut = withdrawSut({ approvals, sessions, nodes, stepOutputs });
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      withdrawnByUserId: "manager-1",
+    });
+
+    expect(result.error?.code).toBe("FORBIDDEN");
+    expect(approvals.rows.get(approval.id)?.status).toBe("pending");
+    expect(sessions.rows.get("session-1")?.currentNodeId).toBe("node-appr");
+  });
+
+  it("refuses to withdraw an approval that has already been decided", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedSent(approvals, { status: "approved" });
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const { nodes, stepOutputs } = await withdrawableFlow();
+    const sut = withdrawSut({ approvals, sessions, nodes, stepOutputs });
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      withdrawnByUserId: "operator-1",
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(sessions.rows.get("session-1")?.currentNodeId).toBe("node-appr");
+  });
+
+  it("reports NOT_FOUND for an approval that does not exist", async () => {
+    const approvals = new InMemoryApprovals();
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const { nodes, stepOutputs } = await withdrawableFlow();
+    const sut = withdrawSut({ approvals, sessions, nodes, stepOutputs });
+
+    const result = await sut.execute({
+      approvalId: "appr-missing",
+      withdrawnByUserId: "operator-1",
+    });
+
+    expect(result.error?.code).toBe("NOT_FOUND");
+  });
+
+  // ADR-044 §3: a routing gap holds the session, it never cancels it. An
+  // approval with no conversational step before it is exactly that gap.
+  it("holds the session on the approval node when no conversational step precedes it", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedSent(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const nodes = new InMemoryFlowNodes();
+    nodes.add(approvalNode({ id: "node-appr", name: "Manager review" }));
+    const messages = new InMemoryMessages();
+    const sut = withdrawSut({
+      approvals,
+      sessions,
+      nodes,
+      stepOutputs: new InMemoryStepOutputs(),
+      messages,
+    });
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      withdrawnByUserId: "operator-1",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.held).toBe(true);
+    expect(result.data?.returnedToNodeId).toBeNull();
+    // The withdrawal still stands, and the session is held rather than cancelled.
+    expect(approvals.rows.get(approval.id)?.status).toBe("withdrawn");
+    expect(sessions.rows.get("session-1")?.currentNodeId).toBe("node-appr");
+    expect(sessions.rows.get("session-1")?.status).toBe("active");
+    expect(messages.rows.at(-1)?.content).toContain("no earlier chat step");
+  });
+
+  // The status flip and the session move must commit together, or a crash
+  // between them leaves a withdrawn row on a session that never moved.
+  it("puts the status change and the session move in one transaction", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedSent(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const { nodes, stepOutputs } = await withdrawableFlow();
+    const unitOfWork = unitOfWorkFor(approvals, sessions);
+    const sut = withdrawSut({ approvals, sessions, nodes, stepOutputs, unitOfWork });
+
+    await sut.execute({ approvalId: approval.id, withdrawnByUserId: "operator-1" });
+
+    expect((unitOfWork as FakeUnitOfWork).transactionCount).toBe(1);
+  });
+
+  // A decision landing first wins: `updateIfPending` returns null, the whole
+  // transaction fails, and no side effect runs on a row someone else decided.
+  it("loses cleanly to a decision that lands first, leaving no trace", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedSent(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const { nodes, stepOutputs } = await withdrawableFlow();
+    const messages = new InMemoryMessages();
+    const audit = new RecordingAuditLogger();
+    const sut = withdrawSut({ approvals, sessions, nodes, stepOutputs, messages, audit });
+
+    // The approver decides in the window between the guard read and the write.
+    await approvals.update(approval.id, { status: "approved", decidedByUserId: "manager-1" });
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      withdrawnByUserId: "operator-1",
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(approvals.rows.get(approval.id)?.status).toBe("approved");
+    expect(sessions.rows.get("session-1")?.currentNodeId).toBe("node-appr");
+    expect(messages.rows).toHaveLength(0);
+    expect(audit.entries).toHaveLength(0);
+  });
+
+  it("notifies the approver that the request was pulled", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedSent(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const { nodes, stepOutputs } = await withdrawableFlow();
+    const notifier = new RecordingWithdrawnNotifier();
+    const sut = new WithdrawApproval(
+      unitOfWorkFor(approvals, sessions),
+      approvals,
+      sessions,
+      stepOutputs,
+      new RecordingAuditLogger(),
+      new InMemoryMessages(),
+      new InMemoryUsers(),
+      nodes,
+      notifier,
+    );
+
+    await sut.execute({ approvalId: approval.id, withdrawnByUserId: "operator-1" });
+
+    // Fire-and-forget, so let the microtask queue drain before asserting.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(notifier.calls).toHaveLength(1);
+    expect(notifier.calls[0]?.approval.id).toBe(approval.id);
+  });
+
+  // The row leaves `pending`, so it leaves the approver's queue by the same
+  // filter that drops a decided one. Nothing new is needed for that; this
+  // guards it against a regression.
+  it("drops the request out of the approver's pending queue", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedSent(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const { nodes, stepOutputs } = await withdrawableFlow();
+    const sut = withdrawSut({ approvals, sessions, nodes, stepOutputs });
+
+    await sut.execute({ approvalId: approval.id, withdrawnByUserId: "operator-1" });
+
+    const queue = await approvals.listPendingForApprover({
+      approverUserId: "manager-1",
+      approverEmail: null,
+    });
+    expect(queue.data).toHaveLength(0);
+  });
+
+  // Re-entering the node raises a fresh row rather than reopening the withdrawn
+  // one, exactly as ADR-044 §5 specifies for re-approval after changes.
+  it("leaves the node free to raise a fresh request", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedSent(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const { nodes, stepOutputs } = await withdrawableFlow();
+    const sut = withdrawSut({ approvals, sessions, nodes, stepOutputs });
+
+    await sut.execute({ approvalId: approval.id, withdrawnByUserId: "operator-1" });
+
+    const stillPending = await approvals.findPendingByNode("session-1", "node-appr");
+    expect(stillPending.data).toBeNull();
+  });
+});
+
+describe("LoadPendingApproval", () => {
+  const users = () => {
+    const rows = new InMemoryUsers();
+    rows.add(user("grace-1", "grace@corp.test"));
+    rows.add(user("manager-1", "rosa@corp.test"));
+    return rows;
+  };
+
+  it("returns nothing for a node with no pending row, and creates none", async () => {
+    const approvals = new InMemoryApprovals();
+    const sut = new LoadPendingApproval(approvals, users());
+
+    const result = await sut.execute({ sessionId: "session-1", nodeId: "node-appr" });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toBeNull();
+    // The whole point of splitting this out of SuggestApprover: reading must
+    // not write.
+    expect(approvals.rows.size).toBe(0);
+  });
+
+  // The chained case. The row was confirmed by the *previous approver* from
+  // their decision modal, so the originator's gate has to learn the assignment
+  // from the row rather than from whatever it saw when it mounted.
+  it("names an approver a different user confirmed", async () => {
+    const approvals = new InMemoryApprovals();
+    const created = await approvals.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-appr",
+      requestedByUserId: "approver-a",
+      approverSource: "first_level_supervisor",
+      suggestedApproverUserId: "manager-1",
+      approverUserId: "grace-1",
+    });
+    const sut = new LoadPendingApproval(approvals, users());
+
+    const result = await sut.execute({ sessionId: "session-1", nodeId: "node-appr" });
+
+    expect(result.data?.approval.id).toBe(created.data!.id);
+    expect(result.data?.assignedApprover).toMatchObject({
+      userId: "grace-1",
+      email: "grace@corp.test",
+    });
+    // The suggestion is still reported, and is deliberately not the assignee.
+    expect(result.data?.suggestedApprover?.userId).toBe("manager-1");
+  });
+
+  it("reports an email-only assignment, which has no account behind it", async () => {
+    const approvals = new InMemoryApprovals();
+    await approvals.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-appr",
+      requestedByUserId: "operator-1",
+      approverSource: "first_level_supervisor",
+      approverEmail: "external@partner.test",
+    });
+    const sut = new LoadPendingApproval(approvals, users());
+
+    const result = await sut.execute({ sessionId: "session-1", nodeId: "node-appr" });
+
+    expect(result.data?.assignedApprover).toEqual({
+      userId: null,
+      name: null,
+      email: "external@partner.test",
+    });
+  });
+
+  it("reports no assignee for a row nobody has confirmed yet", async () => {
+    const approvals = new InMemoryApprovals();
+    await approvals.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-appr",
+      requestedByUserId: "operator-1",
+      approverSource: "first_level_supervisor",
+      suggestedApproverUserId: "manager-1",
+    });
+    const sut = new LoadPendingApproval(approvals, users());
+
+    const result = await sut.execute({ sessionId: "session-1", nodeId: "node-appr" });
+
+    expect(result.data?.assignedApprover).toBeNull();
+    expect(result.data?.suggestedApprover?.userId).toBe("manager-1");
+  });
+
+  // A decided row is not what gates the node, so it must not be served as one.
+  it("ignores a row that has already been decided", async () => {
+    const approvals = new InMemoryApprovals();
+    await approvals.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-appr",
+      requestedByUserId: "operator-1",
+      approverSource: "first_level_supervisor",
+      approverUserId: "grace-1",
+      status: "approved",
+    });
+    const sut = new LoadPendingApproval(approvals, users());
+
+    const result = await sut.execute({ sessionId: "session-1", nodeId: "node-appr" });
+
+    expect(result.data).toBeNull();
+  });
+});
+
+describe("ReassignApproval", () => {
+  // The chained shape this exists for: the row for the second approval is
+  // raised by the *first approver*, who nominates the next signer from their
+  // decision modal (ADR-018, v0.22.2). So `requestedByUserId` is them, not the
+  // chat's author — and the author is the one who needs to move it.
+  const seedChained = async (
+    approvals: InMemoryApprovals,
+    overrides: Partial<NewApproval> = {},
+  ) => {
+    const created = await approvals.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-appr",
+      requestedByUserId: "approver-a",
+      approverSource: "first_level_supervisor",
+      approverUserId: "manager-1",
+      requestMessage: "Board meets Thursday.",
+      ...overrides,
+    });
+    return created.data!;
+  };
+
+  const reassignSut = (parts: {
+    approvals: InMemoryApprovals;
+    sessions: InMemorySessions;
+    users?: InMemoryUsers;
+    messages?: InMemoryMessages;
+    audit?: RecordingAuditLogger;
+    reassigned?: RecordingReassignedNotifier;
+    requested?: RecordingRequestedNotifier;
+  }) =>
+    new ReassignApproval(
+      parts.approvals,
+      parts.sessions,
+      parts.audit ?? new RecordingAuditLogger(),
+      parts.messages ?? new InMemoryMessages(),
+      parts.users ?? new InMemoryUsers(),
+      parts.reassigned,
+      parts.requested,
+    );
+
+  const withUsers = () => {
+    const users = new InMemoryUsers();
+    users.add(user("operator-1", "dana@corp.test"));
+    users.add(user("manager-1", "rosa@corp.test"));
+    users.add(user("manager-2", "sam@corp.test"));
+    users.add(user("approver-a", "alex@corp.test"));
+    return users;
+  };
+
+  it("moves an open request to a new approver at the session owner's request", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedChained(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const sut = reassignSut({ approvals, sessions, users: withUsers() });
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      reassignedByUserId: "operator-1",
+      approverUserId: "manager-2",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.approval.approverUserId).toBe("manager-2");
+    expect(result.data?.previousApproverUserId).toBe("manager-1");
+    // Still open, and still on the same node — reassigning is not a withdrawal.
+    expect(approvals.rows.get(approval.id)?.status).toBe("pending");
+    expect(sessions.rows.get("session-1")?.currentNodeId).toBe("node-appr");
+  });
+
+  it("accepts a free-typed address and records the override", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedChained(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const sut = reassignSut({ approvals, sessions, users: withUsers() });
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      reassignedByUserId: "operator-1",
+      approverEmail: "external@partner.test",
+      isOverride: true,
+    });
+
+    expect(result.data?.approval.approverEmail).toBe("external@partner.test");
+    expect(result.data?.approval.approverUserId).toBeNull();
+    expect(result.data?.approval.isOverride).toBe(true);
+  });
+
+  it("lets an admin reassign a session they do not own", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedChained(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const sut = reassignSut({ approvals, sessions, users: withUsers() });
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      reassignedByUserId: "admin-9",
+      approverUserId: "manager-2",
+      isAdmin: true,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(approvals.rows.get(approval.id)?.approverUserId).toBe("manager-2");
+  });
+
+  // Gated on the session owner, not the requester: on a chained row the
+  // requester is the previous approver, and the person who needs this is the
+  // one watching the chat.
+  it("refuses a reassignment by someone who neither owns the session nor is an admin", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedChained(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const sut = reassignSut({ approvals, sessions, users: withUsers() });
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      reassignedByUserId: "manager-1",
+      approverUserId: "manager-2",
+    });
+
+    expect(result.error?.code).toBe("FORBIDDEN");
+    expect(approvals.rows.get(approval.id)?.approverUserId).toBe("manager-1");
+  });
+
+  it("refuses to reassign an approval that has already been decided", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedChained(approvals, { status: "approved" });
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const sut = reassignSut({ approvals, sessions, users: withUsers() });
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      reassignedByUserId: "operator-1",
+      approverUserId: "manager-2",
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("rejects a reassignment with no approver chosen", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedChained(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const sut = reassignSut({ approvals, sessions, users: withUsers() });
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      reassignedByUserId: "operator-1",
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("reports NOT_FOUND for an approval that does not exist", async () => {
+    const approvals = new InMemoryApprovals();
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const sut = reassignSut({ approvals, sessions, users: withUsers() });
+
+    const result = await sut.execute({
+      approvalId: "appr-missing",
+      reassignedByUserId: "operator-1",
+      approverUserId: "manager-2",
+    });
+
+    expect(result.error?.code).toBe("NOT_FOUND");
+  });
+
+  // The audit answer to the question that put in-place reassignment out of
+  // scope in v0.25.0: the trail names who moved it, from whom, to whom.
+  it("audits the move with both approver identities", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedChained(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const audit = new RecordingAuditLogger();
+    const sut = reassignSut({ approvals, sessions, users: withUsers(), audit });
+
+    await sut.execute({
+      approvalId: approval.id,
+      reassignedByUserId: "operator-1",
+      approverUserId: "manager-2",
+    });
+
+    const entry = audit.entries.find((row) => row.action === "approval.reassigned");
+    expect(entry).toBeDefined();
+    expect(entry?.actorId).toBe("operator-1");
+    expect(entry?.metadata).toMatchObject({
+      previousApproverUserId: "manager-1",
+      approverUserId: "manager-2",
+    });
+  });
+
+  it("announces the move in the session thread", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedChained(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const messages = new InMemoryMessages();
+    const sut = reassignSut({ approvals, sessions, users: withUsers(), messages });
+
+    await sut.execute({
+      approvalId: approval.id,
+      reassignedByUserId: "operator-1",
+      approverUserId: "manager-2",
+    });
+
+    const posted = messages.rows.at(-1);
+    expect(posted?.content).toContain("reassigned");
+    expect(posted?.content).toContain("sam@corp.test");
+    expect(posted?.content).toContain("rosa@corp.test");
+  });
+
+  it("tells the previous approver they are off it, and the new one they are on it", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedChained(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const reassigned = new RecordingReassignedNotifier();
+    const requested = new RecordingRequestedNotifier();
+    const sut = reassignSut({
+      approvals,
+      sessions,
+      users: withUsers(),
+      reassigned,
+      requested,
+    });
+
+    await sut.execute({
+      approvalId: approval.id,
+      reassignedByUserId: "operator-1",
+      approverUserId: "manager-2",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(reassigned.calls).toHaveLength(1);
+    expect(reassigned.calls[0]?.previousApproverUserId).toBe("manager-1");
+    expect(requested.calls).toHaveLength(1);
+    expect(requested.calls[0]?.approval.approverUserId).toBe("manager-2");
+  });
+
+  it("carries the originator's message across unchanged when none is supplied", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedChained(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const sut = reassignSut({ approvals, sessions, users: withUsers() });
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      reassignedByUserId: "operator-1",
+      approverUserId: "manager-2",
+    });
+
+    expect(result.data?.approval.requestMessage).toBe("Board meets Thursday.");
+  });
+
+  // A note naming the old approver would read oddly to the new one, so the
+  // panel offers it for revision and a supplied value replaces it.
+  it("replaces the message when the operator revises it", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedChained(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const sut = reassignSut({ approvals, sessions, users: withUsers() });
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      reassignedByUserId: "operator-1",
+      approverUserId: "manager-2",
+      requestMessage: "Rosa is on leave — over to you, Sam.",
+    });
+
+    expect(result.data?.approval.requestMessage).toBe("Rosa is on leave — over to you, Sam.");
+  });
+
+  it("clears the message when the operator empties it", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedChained(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const sut = reassignSut({ approvals, sessions, users: withUsers() });
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      reassignedByUserId: "operator-1",
+      approverUserId: "manager-2",
+      requestMessage: "   ",
+    });
+
+    expect(result.data?.approval.requestMessage).toBeNull();
+  });
+
+  // The row stays pending but stops matching the old approver, so it leaves
+  // their queue by the same filter that serves it.
+  it("moves the request between the two approvers' queues", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedChained(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const sut = reassignSut({ approvals, sessions, users: withUsers() });
+
+    await sut.execute({
+      approvalId: approval.id,
+      reassignedByUserId: "operator-1",
+      approverUserId: "manager-2",
+    });
+
+    const oldQueue = await approvals.listPendingForApprover({
+      approverUserId: "manager-1",
+      approverEmail: null,
+    });
+    const newQueue = await approvals.listPendingForApprover({
+      approverUserId: "manager-2",
+      approverEmail: null,
+    });
+    expect(oldQueue.data).toHaveLength(0);
+    expect(newQueue.data).toHaveLength(1);
+  });
+
+  // A decision landing first wins: `updateIfPending` returns null and the move
+  // is refused rather than rewriting the approver on a decided row.
+  it("loses cleanly to a decision that lands first", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedChained(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const messages = new InMemoryMessages();
+    const audit = new RecordingAuditLogger();
+    const sut = reassignSut({ approvals, sessions, users: withUsers(), messages, audit });
+
+    await approvals.update(approval.id, { status: "approved", decidedByUserId: "manager-1" });
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      reassignedByUserId: "operator-1",
+      approverUserId: "manager-2",
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(approvals.rows.get(approval.id)?.approverUserId).toBe("manager-1");
+    expect(messages.rows).toHaveLength(0);
+    expect(audit.entries).toHaveLength(0);
   });
 });
 

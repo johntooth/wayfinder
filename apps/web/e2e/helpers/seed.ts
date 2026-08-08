@@ -26,7 +26,10 @@ export interface SeedFixtures {
   structuredFlowId?: string;
   approvalSubjectSessionId?: string;
   approvalSubjectFlowId?: string;
+  signatureWarningFlowId?: string;
   approvalFirstFlowId?: string;
+  approvalWithdrawSessionId?: string;
+  approvalWithdrawDraftStepName?: string;
 }
 
 export function writeSeedFixtures(fixtures: SeedFixtures): void {

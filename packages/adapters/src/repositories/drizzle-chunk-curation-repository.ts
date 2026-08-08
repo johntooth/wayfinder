@@ -11,7 +11,7 @@ import type {
 } from "@rbrasier/domain";
 import { and, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
-import { kb_chunk_versions, kb_document_chunks } from "../db/schema/wayfinder";
+import { kb_chunk_versions, kb_document_chunks } from "../db/schema/kb";
 import { logRepoError } from "./log-repo-error";
 
 // The curation surface never needs the embedding or the tsvector, so we never

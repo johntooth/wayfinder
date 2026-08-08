@@ -18,7 +18,13 @@ import {
 } from "@/components/ui/dialog";
 import { ApproverPicker } from "@/components/chat/approver-picker";
 import { trpc } from "@/trpc/client";
-import { ApprovalSubject, ApproverStage, PreviousStep, type ApprovalContext } from "./approval-parts";
+import {
+  ApprovalSubject,
+  ApproverStage,
+  PreviousStep,
+  RequestMessage,
+  type ApprovalContext,
+} from "./approval-parts";
 
 type Decision = "approved" | "rejected" | "changes_requested";
 type DecideOutput = inferRouterOutputs<AppRouter>["approval"]["decide"];
@@ -243,6 +249,11 @@ export function DecisionModal({
                 back to the row behind the modal to recall any of it. */}
             <ApproverStage approval={approval} />
             <ApprovalSubject description={approval.subjectDescription} />
+
+            <RequestMessage
+              message={approval.approval.requestMessage}
+              originatorName={approval.originatorName}
+            />
             {/* Editable here: their approval is still pending, and fixing a
                 typo beats sending the whole thing back (ADR-045 §5). */}
             <PreviousStep previousStep={approval.previousStep} canEdit />

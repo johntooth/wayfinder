@@ -6,10 +6,9 @@ export function DisconnectedStepsWarning({ count }: { count: number }) {
     // The live region itself stays mounted and only its contents change. A
     // region that appears already populated is announced unreliably, and this
     // warning always arrives in response to an edit the author just made.
-    <div
-      role="status"
-      className="pointer-events-none absolute left-1/2 top-3 z-10 w-[calc(100%-2rem)] max-w-[900px] -translate-x-1/2"
-    >
+    // Positioning lives in the canvas warning band, which stacks this with the
+    // unclaimed-signature advisory.
+    <div role="status">
       {count > 0 && (
         // Copy and demonstration sit side by side rather than stacked: the
         // banner overlays the canvas, so height is the expensive axis.

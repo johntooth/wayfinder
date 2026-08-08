@@ -9,6 +9,12 @@ const SEED_SUBJECT_FLOW_NAME = "E2E SEED Approval Subject Flow";
 const SEED_SUBJECT_SESSION_TITLE = "E2E SEED Approval Subject Session";
 const SEED_SUBJECT_DOCUMENT = "delegation-instrument.docx";
 const SEED_APPROVAL_FIRST_FLOW_NAME = "E2E SEED Approval First Flow";
+const SEED_WITHDRAW_FLOW_NAME = "E2E SEED Approval Withdraw Flow";
+const SEED_WITHDRAW_SESSION_TITLE = "E2E SEED Approval Withdraw Session";
+const SEED_WITHDRAW_DRAFT_STEP = "Draft the request";
+const SEED_WITHDRAW_REQUEST_MESSAGE =
+  "Board meets Thursday — a signature before then would help.";
+const SEED_SIGNATURE_WARNING_FLOW_NAME = "E2E SEED Signature Warning Flow";
 
 export const seedApprovalSubjectSession = async (
   container: Container,
@@ -369,8 +375,219 @@ export const seedApprovalSubjectSession = async (
   return { sessionId: session.id, flowId: flow.id };
 };
 
+// `Draft the request (conversational) → Manager sign-off (approval, pending)`,
+// owned and raised by the seed user so they are the originator who may withdraw.
+//
+// Its own session rather than a reuse of the subject one: withdrawing is
+// destructive — it moves the session off the approval node — and the subject
+// session is asserted on by other specs that would then find no gate.
+export const seedWithdrawableApprovalSession = async (
+  container: Container,
+  ownerUserId: string,
+): Promise<{ sessionId: string; draftStepName: string }> => {
+  const flow = unwrap(
+    await container.useCases.createFlow.execute({
+      name: SEED_WITHDRAW_FLOW_NAME,
+      description: "Seeded flow with one pending approval the originator can withdraw",
+      expertRole: "Procurement Officer",
+      ownerUserId,
+    }),
+    "create withdraw flow",
+  );
+
+  const draftNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "conversational",
+      name: SEED_WITHDRAW_DRAFT_STEP,
+      positionX: 120,
+      positionY: 120,
+      config: {
+        aiInstruction: "Draft the purchase request.",
+        doneWhen: "The request is drafted.",
+      },
+    }),
+    "create withdraw draft node",
+  );
+
+  const approvalNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "approval",
+      name: "Manager sign-off",
+      positionX: 420,
+      positionY: 120,
+      config: { approverSource: "first_level_supervisor" },
+    }),
+    "create withdraw approval node",
+  );
+
+  unwrap(
+    await container.useCases.createFlowEdge.execute({
+      flowId: flow.id,
+      fromNodeId: draftNode.id,
+      toNodeId: approvalNode.id,
+    }),
+    "create withdraw flow edge",
+  );
+
+  unwrap(
+    await container.useCases.updateFlow.execute(
+      flow.id,
+      { status: "published", visibility: { kind: "global" } },
+      { canPublishToEveryone: true },
+    ),
+    "publish withdraw flow",
+  );
+
+  const session = unwrap(
+    await container.useCases.startSession.execute({ flowId: flow.id, userId: ownerUserId }),
+    "start withdraw session",
+  );
+
+  // The draft step's output is what makes it the taken path's nearest editable
+  // node — without it there is nothing for the withdrawal to return to.
+  unwrap(
+    await container.repos.sessionStepOutputs.create({
+      sessionId: session.id,
+      flowId: flow.id,
+      nodeId: draftNode.id,
+      fields: [{ key: "amount", label: "Amount", type: "text", value: "$1,200" }],
+    }),
+    "create withdraw draft output",
+  );
+
+  unwrap(
+    await container.repos.sessions.update(session.id, {
+      title: SEED_WITHDRAW_SESSION_TITLE,
+      currentNodeId: approvalNode.id,
+      graphCheckpoint: { currentNodeId: approvalNode.id, advancedFrom: draftNode.id },
+    }),
+    "park withdraw session on the approval",
+  );
+
+  // Already sent: the gate opens in its "Awaiting approval" state, which is
+  // where the withdraw affordance lives.
+  unwrap(
+    await container.repos.approvals.create({
+      sessionId: session.id,
+      flowId: flow.id,
+      nodeId: approvalNode.id,
+      requestedByUserId: ownerUserId,
+      approverSource: "first_level_supervisor",
+      approverUserId: ownerUserId,
+      status: "pending",
+      requestMessage: SEED_WITHDRAW_REQUEST_MESSAGE,
+    }),
+    "create pending withdrawable approval",
+  );
+
+  return { sessionId: session.id, draftStepName: SEED_WITHDRAW_DRAFT_STEP };
+};
+
 // An approval with no step before it, so the config editor has to warn that a
 // change request has nowhere to return to (ADR-044 §2).
+// A flow carrying one bound signature and one unbound one, so the canvas
+// advisory has both states to tell apart in a single screenshot.
+//
+// The bound one is deliberately bound the way the reported bug was authored:
+// the approval names its slot but sits on the "last completed step" default, so
+// it stores no `approvalSubject` at all. The advisory must resolve that default
+// to the step upstream and stay quiet about it.
+const signatureField = (key: string, label: string) => ({
+  key,
+  label,
+  type: "signature" as const,
+  optional: true,
+  raw: `${label} (approval)`,
+});
+
+export const seedSignatureWarningFlow = async (
+  container: Container,
+  ownerUserId: string,
+): Promise<string> => {
+  const flow = unwrap(
+    await container.useCases.createFlow.execute({
+      name: SEED_SIGNATURE_WARNING_FLOW_NAME,
+      description: "Seeded flow with one bound signature and one nothing signs",
+      expertRole: "Delegation Officer",
+      ownerUserId,
+    }),
+    "create signature warning flow",
+  );
+
+  const instrumentNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "conversational",
+      name: "Prepare the instrument",
+      positionX: 120,
+      positionY: 120,
+      config: {
+        aiInstruction: "Draft the delegation instrument.",
+        doneWhen: "The instrument is drafted.",
+        outputType: "generate_document",
+        documentTemplatePath: "templates/e2e-seed-instrument.docx",
+        documentTemplateContent:
+          "Delegation to {{Delegate Name}}.\n{{ Supervisor Signature (approval) }}",
+        documentTemplateFields: [
+          { key: "delegate_name", label: "Delegate Name", type: "text", optional: false, raw: "Delegate Name" },
+          signatureField("supervisor_signature", "Supervisor Signature"),
+        ],
+      },
+    }),
+    "create signature warning instrument node",
+  );
+
+  const signOffNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "approval",
+      name: "Sign-off",
+      positionX: 420,
+      positionY: 120,
+      // No `approvalSubject`: the subject is left on the default, which is what
+      // the modal persists for the empty choice.
+      config: {
+        approverSource: "first_level_supervisor",
+        signatureFieldKey: "supervisor_signature",
+      },
+    }),
+    "create signature warning approval node",
+  );
+
+  const annexeNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "conversational",
+      name: "Prepare the annexe",
+      positionX: 720,
+      positionY: 120,
+      config: {
+        aiInstruction: "Draft the annexe.",
+        doneWhen: "The annexe is drafted.",
+        outputType: "generate_document",
+        documentTemplatePath: "templates/e2e-seed-annexe.docx",
+        documentTemplateContent: "Annexe.\n{{ Annexe Signature (approval) }}",
+        documentTemplateFields: [signatureField("annexe_signature", "Annexe Signature")],
+      },
+    }),
+    "create signature warning annexe node",
+  );
+
+  for (const [fromNodeId, toNodeId] of [
+    [instrumentNode.id, signOffNode.id],
+    [signOffNode.id, annexeNode.id],
+  ] as const) {
+    unwrap(
+      await container.useCases.createFlowEdge.execute({ flowId: flow.id, fromNodeId, toNodeId }),
+      "create signature warning edge",
+    );
+  }
+
+  return flow.id;
+};
+
 export const seedApprovalFirstFlow = async (
   container: Container,
   ownerUserId: string,

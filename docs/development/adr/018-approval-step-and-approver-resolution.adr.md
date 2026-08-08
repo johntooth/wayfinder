@@ -5,6 +5,10 @@
 - **Extended**: 2026-08-02 — "Resolution always ends in human confirmation": the
   confirming human may be the preceding approver on a chained approval, not only
   the operator (v0.22.2)
+- **Extended**: 2026-08-07 — "Withdrawal": the originator may take a pending
+  request back, a fourth transition out of `pending` (v0.25.0)
+- **Extended**: 2026-08-07 — "Reassignment": the session owner may change who an
+  open request is with, without moving the session (v0.26.0)
 - **Relates to**: ADR-010 (`INodeExecutor` / `pending_approval`), ADR-016 /
   ADR-017 (pgvector RAG over the knowledge base), ADR-023 Email Notification
   Transport (`IEmailSender` + `app_notification_log` outbox, M365 app registration)
@@ -172,9 +176,85 @@ denormalised copy.
 
 Notifications reuse the existing `IEmailSender` port + the `app_notification_log`
 outbox (ADR-023) — no new `INotificationSender` port. Triggers `approval_requested`
-(→ approver) and `approval_decided` (→ requester) write a `pending` outbox row in
-the deciding action's commit; the send is best-effort and non-blocking, with
-subject/body composed as application-layer string builders.
+(→ approver), `approval_decided` (→ requester) and `approval_withdrawn`
+(→ approver) write a `pending` outbox row in the acting commit; the send is
+best-effort and non-blocking, with subject/body composed as application-layer
+string builders.
+
+### Withdrawal: the originator's own way out (v0.25.0)
+
+The three decisions above all belong to the approver. That left the originator
+with no route out of a request they had already sent: a wrong approver, or a
+mistake spotted a moment after sending, parked the session until someone else
+acted. **Withdrawal is the fourth transition out of `pending`, and the only one
+initiated by the person who raised the request.**
+
+- **Recorded, not deleted.** `ApprovalStatus` gains `withdrawn`. The row stays,
+  so the trail keeps who asked whom and that it was pulled before a decision.
+  Deleting it would leave the node looking as though no request was ever made —
+  precisely the history an approval trail exists to hold. `APPROVED_STATUSES` is
+  untouched, so nothing downstream counts a withdrawal as an approval.
+- **Who.** The originator (`requested_by_user_id`), or an admin — the same
+  widening that lets an admin decide on an approver's behalf. Nobody else.
+- **Guarded like a decision.** The status flip goes through the same
+  `updateIfPending` guard, in one transaction with the session move. An approver
+  who decides first wins the race; the withdrawal fails and runs no side effect.
+- **Where the work goes.** Back to the nearest prior *conversational* step, via
+  the `nearest_editable` resolver ADR-044 §2 defines. The node's authored
+  `changesRequestedTarget` is deliberately not consulted: that answers where an
+  *approver* wants work returned to, and this is not the approver's move. When
+  nothing resolves, the session is **held** on the approval node with the reason
+  in the thread — never cancelled (ADR-044 §3).
+- **Re-entry raises a fresh row**, exactly as ADR-044 §5 specifies for
+  re-approval after changes. A withdrawn row is never reopened.
+- **The approver is told.** They may already be part-way through a review, so a
+  request that silently vanishes from their queue is worse than one they are
+  told was pulled.
+
+### Reassignment: changing who an open request is with (v0.26.0)
+
+Withdrawal answers "the work needs to change". It is the wrong instrument for
+"the right person is someone else": withdrawing moves the session back a step it
+has no reason to leave, and on a chained approval it would drag the work back
+past a completed signature that is still perfectly valid.
+
+**Reassignment moves the addressee and nothing else.** The session stays on the
+approval node; the row stays `pending`; the decided chain behind it is untouched.
+
+- **Who.** The **session owner**, or an admin. Deliberately *not* the row's
+  requester: on a chained approval the requester is the previous approver, who
+  nominated the next signer from their decision modal — and the person who needs
+  to fix a wrong assignment is the one watching the chat. This is why the gate
+  offers the author *Update approver* where it does not offer *Withdraw*.
+- **Only an open request.** Guarded by the same `updateIfPending` check the
+  decision and the withdrawal use, so an approver deciding first wins and the
+  move is refused rather than rewriting a decided row's approver. A decided
+  approval's record is immutable (ADR-040 §3) and reassignment cannot touch it.
+- **Audited with both identities.** `approval.reassigned` names who moved it,
+  from whom, and to whom. This is the answer to the audit question that kept
+  in-place reassignment out of scope when withdrawal shipped.
+- **Announced.** A thread message names the new approver, so the author's own
+  chat answers "who is this with now" without opening anything.
+- **Both approvers told.** The new one gets the ordinary request email — a
+  different recipient, so the outbox's (trigger, resource, recipient) dedupe does
+  not swallow it. The old one gets `approval_reassigned`, saying plainly that no
+  decision is needed from them.
+
+Every guarantee at the top of this ADR still holds: a human who is party to the
+approval confirms it, the resolver still only suggests, "Someone else" is still
+offered, and the override is still recorded.
+
+### The request carries a message from the originator (v0.25.0)
+
+`instructions` on the node is authored once, by the flow author, for everyone who
+ever reaches the step. It cannot say why *this* request is with *this* approver
+now. A nullable `request_message` on the row carries the originator's own note,
+captured when they confirm the approver and shown to the approver both in the
+request email and in their queue.
+
+It is stored apart from `comment` on purpose: `comment` is the approver's
+decision comment, written to the same row, and one column would have the decision
+overwrite the request.
 
 ### Superseded earlier sketch
 

@@ -2,6 +2,7 @@ import {
   computeGroupCompletenessNotes,
   domainError,
   err,
+  gatherableFields,
   nodeFieldSet,
   normaliseAdvanceConfidenceThreshold,
   normaliseOutputType,
@@ -137,6 +138,13 @@ export class EvaluateStepReadiness {
   // A structured step reads its author-declared fields directly (no template);
   // a template step prefers its parsed fields and otherwise extracts them from
   // the template bytes, mirroring GenerateDocument's field resolution.
+  //
+  // Every branch is filtered through `gatherableFields`. This gate extracts and
+  // grades its field set, so an unfiltered signature is reported as missing
+  // information and streamed at the operator as "Supervisor signature is blank"
+  // — asking them to supply a value only the approval step may write
+  // (ADR-043 §2). GenerateDocument deliberately keeps the raw set, because a
+  // signature must reach the render data; this one must not.
   private async resolveFields(
     config: ConversationalNodeConfig,
   ): Promise<Result<TemplateField[]>> {
@@ -144,13 +152,16 @@ export class EvaluateStepReadiness {
       return ok(nodeFieldSet(config));
     }
     if (config.documentTemplateFields && config.documentTemplateFields.length > 0) {
-      return ok(config.documentTemplateFields);
+      return ok(gatherableFields(config.documentTemplateFields));
     }
     if (!config.documentTemplatePath) {
       return err(domainError("VALIDATION_FAILED", "No template configured for this node."));
     }
     const templateResult = await this.objectStorage.get(config.documentTemplatePath);
     if (templateResult.error) return templateResult;
-    return resolveTemplateFields(this.documentGenerator, config, templateResult.data);
+
+    const extracted = resolveTemplateFields(this.documentGenerator, config, templateResult.data);
+    if (extracted.error) return extracted;
+    return ok(gatherableFields(extracted.data));
   }
 }

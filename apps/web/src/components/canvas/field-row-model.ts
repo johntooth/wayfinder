@@ -7,8 +7,8 @@ import {
 } from "@rbrasier/domain";
 
 // The field types a row editor can author. `select` / `multiselect` are the UI
-// names for an options / multi-options field. `narrative` is document-only —
-// prose the AI composes — so the structured editor omits it.
+// names for an options / multi-options field. `narrative` and `signature` are
+// document-only, so the structured editor omits both.
 export type FieldRowType =
   | "text"
   | "number"
@@ -18,7 +18,8 @@ export type FieldRowType =
   | "yesno"
   | "select"
   | "multiselect"
-  | "narrative";
+  | "narrative"
+  | "signature";
 
 export interface FieldRowTypeOption {
   value: FieldRowType;
@@ -43,6 +44,7 @@ export const STRUCTURED_TYPE_OPTIONS: FieldRowTypeOption[] = BASE_TYPE_OPTIONS;
 export const TEMPLATE_TYPE_OPTIONS: FieldRowTypeOption[] = [
   ...BASE_TYPE_OPTIONS,
   { value: "narrative", label: "Narrative" },
+  { value: "signature", label: "Signature" },
 ];
 
 export interface FieldModel {
@@ -88,9 +90,15 @@ export const lineToModel = (line: string): FieldModel => {
   };
 };
 
+// Exhaustive on purpose, with no `default:` arm. Every reviewed row is
+// re-serialised from its model and written back into the stored .docx, so a type
+// this narrowing cannot represent is a type the editor silently rewrites — which
+// is how `signature` was turned into `(optional)` text before v0.26.2. Leaving
+// the switch exhaustive makes the next added TemplateFieldType a build failure.
 const fieldRowTypeOf = (field: TemplateField): FieldRowType => {
-  if (field.options) return field.multiple ? "multiselect" : "select";
   switch (field.type) {
+    case "signature":
+      return "signature";
     case "number":
     case "currency":
     case "date":
@@ -98,7 +106,15 @@ const fieldRowTypeOf = (field: TemplateField): FieldRowType => {
     case "yesno":
     case "narrative":
       return field.type;
-    default:
+    // The parser keeps an options list on the `text` type carrying
+    // (options: …), so this is the only arm that can be a select.
+    case "text":
+      if (!field.options) return "text";
+      return field.multiple ? "multiselect" : "select";
+    // Multi-line Word constructs. They reach the annotator as locked rows that
+    // render no type control, so they only need a value the model can hold.
+    case "section":
+    case "group":
       return "text";
   }
 };
@@ -136,7 +152,9 @@ export const modelToLine = (model: FieldModel): string => {
 // has set anything the cog controls, so a configured field is visible without
 // opening it. Field name and type are the row's own controls, not config.
 export const hasNonDefaultConfig = (model: FieldModel): boolean =>
-  model.optional ||
+  // A signature is optional by construction rather than by an author's choice,
+  // and its cog carries no controls, so it is never "configured".
+  (model.type !== "signature" && model.optional) ||
   model.maxLength !== undefined ||
   model.max !== undefined ||
   model.min !== undefined ||
@@ -148,7 +166,9 @@ export const hasNonDefaultConfig = (model: FieldModel): boolean =>
 export const withType = (model: FieldModel, type: FieldRowType): FieldModel => ({
   label: model.label,
   type,
-  optional: model.optional,
+  // parseTemplateField makes every signature optional and rejects one that is
+  // required, so the switch has to carry the model to where the parser will.
+  optional: type === "signature" ? true : model.optional,
   options: type === "select" || type === "multiselect" ? model.options : [],
   ...(type === "narrative" && model.instruction ? { instruction: model.instruction } : {}),
 });
