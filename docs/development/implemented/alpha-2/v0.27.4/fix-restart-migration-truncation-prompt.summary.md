@@ -1,4 +1,4 @@
-# Summary — `restart.sh` truncation prompt (0.27.2)
+# Summary — `restart.sh` truncation prompt (0.27.4)
 
 ## Symptom
 
@@ -74,4 +74,4 @@ test is what stops the next one being written.
 
 ## Version
 
-PATCH: 0.27.1 → 0.27.2. No schema change.
+PATCH: 0.27.3 → 0.27.4. No schema change.
