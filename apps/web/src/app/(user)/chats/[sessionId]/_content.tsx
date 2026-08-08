@@ -291,6 +291,12 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
     const source = new EventSource(`/api/sessions/${sessionId}/events`);
     const refetch = () => {
       void utils.session.get.invalidate({ sessionId });
+      // The approval gate reads its row separately, and it is the one thing on
+      // screen another person can change without touching the session: a
+      // chained approval is confirmed by the *previous approver*, from their
+      // own decision modal. Without this the gate keeps offering to choose an
+      // approver for a request that has already been sent.
+      void utils.approval.forNode.invalidate();
     };
     source.addEventListener("message.created", refetch);
     source.addEventListener("session.updated", refetch);

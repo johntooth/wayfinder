@@ -5,6 +5,7 @@ import {
   DecideApproval,
   ListApprovals,
   ListApprovalsWithContext,
+  LoadPendingApproval,
   ResolveApprovalSubject,
   ReassignApproval,
   ResolveDecisionNotifyTargets,
@@ -139,6 +140,7 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
       deps.notifyOnApprovalReassigned,
       deps.notifyOnApprovalRequested,
     ),
+    loadPendingApproval: new LoadPendingApproval(deps.approvals, deps.users),
     listApprovals: new ListApprovals(deps.approvals),
     listApprovalsWithContext: new ListApprovalsWithContext(
       deps.approvals,

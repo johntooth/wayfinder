@@ -9,7 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
 import { approverStageLabel } from "./approver-label";
-import { picksApproverManually, setupNotice, type SetupNotice } from "./approval-gate-state";
+import {
+  gateMode,
+  picksApproverManually,
+  sentApproverLabel,
+  setupNotice,
+  type SetupNotice,
+} from "./approval-gate-state";
 import { sentApprovalActions } from "./sent-approval-actions";
 
 export interface ApproverPickerProps {
@@ -70,10 +76,6 @@ export function ApproverPicker({
   viewerIsAdmin = false,
 }: ApproverPickerProps) {
   const utils = trpc.useUtils();
-  const [approvalId, setApprovalId] = useState<string | null>(null);
-  const [sent, setSent] = useState(false);
-  const [sentTo, setSentTo] = useState<string | null>(null);
-  const [sentToEmail, setSentToEmail] = useState<string | null>(null);
   const [chosen, setChosen] = useState<ChosenApprover | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [showNotice, setShowNotice] = useState(false);
@@ -84,7 +86,9 @@ export function ApproverPicker({
   // Set while the operator is changing who a sent request is with. Reuses the
   // same search UI as the initial pick, so there is one way to choose a person.
   const [updatingApprover, setUpdatingApprover] = useState(false);
-  const [requestedByUserId, setRequestedByUserId] = useState<string | null>(null);
+  // Set once from the first read, so typing in the message box does not fight
+  // the refetch that keeps the rest of the card current.
+  const messageSeededRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Focus the approver search box when the operator reveals it (replaces
@@ -94,55 +98,84 @@ export function ApproverPicker({
     if (showSearch) searchInputRef.current?.focus();
   }, [showSearch]);
 
+  // The row as it stands *now*. A query rather than the `suggest` mutation,
+  // because a mutation's result can never be refetched — which is what left
+  // this card offering to choose an approver for a request the previous
+  // approver had already sent. It is invalidated by the chat's EventSource on
+  // `session.updated`, which every approval mutation now publishes.
+  const rowQuery = trpc.approval.forNode.useQuery({ sessionId, nodeId });
+  const row = rowQuery.data ?? null;
+
+  // Raises the row when the node has never had one. Creating stays a write;
+  // reading no longer is.
   const suggest = trpc.approval.suggest.useMutation({
-    onSuccess: (data) => {
-      setApprovalId(data.approval.id);
-      setRequestedByUserId(data.approval.requestedByUserId);
-      setRequestMessage(data.approval.requestMessage ?? "");
-      if (data.approval.approverUserId || data.approval.approverEmail) {
-        setSent(true);
-        // The identity actually on the row, resolved server-side. A chained
-        // approval is assigned by user id with no email on the row, so without
-        // this the card could only say "the approver" and the mailto had no
-        // address to open with.
-        const assigned = data.assignedApprover;
-        const email = assigned?.email ?? data.approval.approverEmail ?? null;
-        setSentTo(assigned?.name ?? email ?? "the approver");
-        setSentToEmail(email);
-        return;
-      }
-      // With nothing to confirm, go straight to the choice the operator has to
-      // make rather than parking them behind a "Someone else" button.
-      setShowSearch(picksApproverManually(Boolean(data.suggestedApprover)));
-      if (data.suggestedApprover) {
-        setChosen({
-          userId: data.suggestedApprover.userId,
-          email: data.suggestedApprover.email,
-          label: data.suggestedApprover.name ?? data.suggestedApprover.email,
-        });
-      }
+    onSuccess: async () => {
+      await utils.approval.forNode.invalidate({ sessionId, nodeId });
     },
   });
 
-  // Raise/load the pending request once for this node.
   const suggestMutate = suggest.mutate;
+  const suggestPending = suggest.isPending;
   useEffect(() => {
+    if (!rowQuery.isSuccess || rowQuery.data || suggestPending) return;
     suggestMutate({ sessionId, flowId, nodeId });
-  }, [sessionId, flowId, nodeId, suggestMutate]);
+  }, [
+    rowQuery.isSuccess,
+    rowQuery.data,
+    suggestPending,
+    sessionId,
+    flowId,
+    nodeId,
+    suggestMutate,
+  ]);
+
+  const mode = gateMode({
+    row: row?.approval ?? null,
+    assignedApprover: row?.assignedApprover ?? null,
+  });
+  const approvalId = row?.approval.id ?? null;
+  const requestedByUserId = row?.approval.requestedByUserId ?? null;
+  const sentTo = sentApproverLabel(row?.assignedApprover ?? null);
+  const sentToEmail = row?.assignedApprover?.email ?? null;
+
+  // Seed the message box from the row once, then leave it to the operator.
+  useEffect(() => {
+    if (messageSeededRef.current || !row) return;
+    messageSeededRef.current = true;
+    setRequestMessage(row.approval.requestMessage ?? "");
+  }, [row]);
+
+  // Open the search by itself when there is nothing to confirm, rather than
+  // parking the operator behind a "Someone else" button.
+  const suggestedApprover = row?.suggestedApprover ?? null;
+  const seededChoiceRef = useRef(false);
+  useEffect(() => {
+    if (seededChoiceRef.current || mode !== "choose") return;
+    seededChoiceRef.current = true;
+    setShowSearch(picksApproverManually(Boolean(suggestedApprover)));
+    if (suggestedApprover) {
+      setChosen({
+        userId: suggestedApprover.userId,
+        email: suggestedApprover.email,
+        label: suggestedApprover.name ?? suggestedApprover.email,
+      });
+    }
+  }, [mode, suggestedApprover]);
 
   const searchQuery = trpc.people.search.useQuery(
     { query, limit: 8 },
     { enabled: showSearch && query.trim().length > 1 },
   );
 
-  const suggestedUserId = suggest.data?.suggestedApprover?.userId ?? null;
+  const suggestedUserId = suggestedApprover?.userId ?? null;
 
   const confirmAndSend = trpc.approval.confirmAndSend.useMutation({
     onSuccess: async () => {
-      setSent(true);
-      setSentTo(chosen?.label ?? "the approver");
-      setSentToEmail(chosen?.email ?? null);
-      await utils.session.get.invalidate({ sessionId });
+      setChosen(null);
+      await Promise.all([
+        utils.approval.forNode.invalidate({ sessionId, nodeId }),
+        utils.session.get.invalidate({ sessionId }),
+      ]);
       toast.success(emailConfigured ? "Approval request sent" : "Approver confirmed");
       onSent?.();
     },
@@ -168,10 +201,11 @@ export function ApproverPicker({
       setUpdatingApprover(false);
       setShowSearch(false);
       setQuery("");
-      setSentTo(chosen?.label ?? "the approver");
-      setSentToEmail(chosen?.email ?? null);
       setChosen(null);
-      await utils.session.get.invalidate({ sessionId });
+      await Promise.all([
+        utils.approval.forNode.invalidate({ sessionId, nodeId }),
+        utils.session.get.invalidate({ sessionId }),
+      ]);
       toast.success("Approver updated");
     },
     onError: (error) => toast.error(error.message ?? "Could not change the approver"),
@@ -203,7 +237,10 @@ export function ApproverPicker({
     onSuccess: async (result) => {
       setConfirmingWithdrawal(false);
       setWithdrawalReason("");
-      await utils.session.get.invalidate({ sessionId });
+      await Promise.all([
+        utils.approval.forNode.invalidate({ sessionId, nodeId }),
+        utils.session.get.invalidate({ sessionId }),
+      ]);
       toast.success(
         result.held
           ? "Approval withdrawn — no earlier chat step to return to, so the chat is held here"
@@ -315,8 +352,7 @@ export function ApproverPicker({
   // already sent or still needs an approver, so show a loading state rather than
   // flashing the empty confirm form (which makes a re-opened session feel as if
   // the approver must be re-entered).
-  const requestResolved = suggest.isSuccess || suggest.isError;
-  if (!requestResolved) {
+  if (mode === "loading") {
     return (
       <div className="flex items-center gap-2 text-[13px] text-[#666055]">
         <Loader2 className="h-4 w-4 animate-spin text-[#a65b05]" />
@@ -325,7 +361,7 @@ export function ApproverPicker({
     );
   }
 
-  if (sent) {
+  if (mode === "sent") {
     const notice = setupNotice({ emailConfigured, hasSuggestion: true });
     return (
       <div className="flex flex-col gap-3">

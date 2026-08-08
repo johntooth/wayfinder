@@ -15,28 +15,18 @@ import {
   type Result,
 } from "@rbrasier/domain";
 import { delegationPositionSchema, type DelegationPosition } from "@rbrasier/shared";
+import {
+  describeApprover,
+  describeAssignedApprover,
+  type AssignedApprover,
+  type SuggestedApprover,
+} from "./approver-identity";
 
 export interface SuggestApproverInput {
   sessionId: string;
   flowId: string;
   nodeId: string;
   requestedByUserId: string;
-}
-
-export interface SuggestedApprover {
-  userId: string;
-  name: string | null;
-  email: string;
-}
-
-// The identity actually written on the row, as opposed to the one the resolver
-// proposed. They differ whenever the request has already been sent — and on a
-// chained approval the row is assigned by the *previous approver*, so without
-// this the gate can neither name the approver nor build a mailto for them.
-export interface AssignedApprover {
-  userId: string | null;
-  name: string | null;
-  email: string | null;
 }
 
 export interface SuggestApproverOutput {
@@ -65,8 +55,8 @@ export class SuggestApprover {
     const existing = await this.approvals.findPendingByNode(input.sessionId, input.nodeId);
     if (existing.error) return existing;
     if (existing.data) {
-      const suggestedApprover = await this.describe(existing.data.suggestedApproverUserId);
-      const assignedApprover = await this.describeAssigned(existing.data);
+      const suggestedApprover = await describeApprover(this.users, existing.data.suggestedApproverUserId);
+      const assignedApprover = await describeAssignedApprover(this.users, existing.data);
       return ok({ approval: existing.data, suggestedApprover, assignedApprover });
     }
 
@@ -91,8 +81,8 @@ export class SuggestApprover {
     });
     if (created.error) return created;
 
-    const suggestedApprover = await this.describe(suggestedUserId);
-    const assignedApprover = await this.describeAssigned(created.data);
+    const suggestedApprover = await describeApprover(this.users, suggestedUserId);
+    const assignedApprover = await describeAssignedApprover(this.users, created.data);
     return ok({ approval: created.data, suggestedApprover, assignedApprover });
   }
 
@@ -177,24 +167,4 @@ export class SuggestApprover {
     return position;
   }
 
-  // Null until an approver is confirmed. An email-only assignment (ADR-018)
-  // resolves to the address alone, which is all the gate needs to name it.
-  private async describeAssigned(approval: Approval): Promise<AssignedApprover | null> {
-    if (approval.approverUserId) {
-      const described = await this.describe(approval.approverUserId);
-      if (described) return described;
-      return { userId: approval.approverUserId, name: null, email: approval.approverEmail };
-    }
-    if (approval.approverEmail) {
-      return { userId: null, name: null, email: approval.approverEmail };
-    }
-    return null;
-  }
-
-  private async describe(userId: string | null): Promise<SuggestedApprover | null> {
-    if (!userId) return null;
-    const userResult = await this.users.findById(userId);
-    if (userResult.error || !userResult.data) return null;
-    return { userId: userResult.data.id, name: userResult.data.name, email: userResult.data.email };
-  }
 }
