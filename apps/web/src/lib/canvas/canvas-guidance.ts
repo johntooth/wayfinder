@@ -54,6 +54,82 @@ export function findDisconnectedNodeIds(
   return nodes.filter((node) => !connected.has(node.id)).map((node) => node.id);
 }
 
+export interface UnclaimedSignatureSlot {
+  nodeId: string;
+  stepName: string;
+  label: string;
+}
+
+interface CanvasTemplateField {
+  key: string;
+  label: string;
+  type: string;
+}
+
+const configOf = (node: GuidanceNode): Record<string, unknown> =>
+  (node.data.config as Record<string, unknown> | undefined) ?? {};
+
+const signatureFieldsOf = (node: GuidanceNode): CanvasTemplateField[] => {
+  const fields = configOf(node).documentTemplateFields;
+  if (!Array.isArray(fields)) return [];
+  return (fields as CanvasTemplateField[]).filter((field) => field?.type === "signature");
+};
+
+/**
+ * Signature slots that no approval step signs. A slot nothing claims renders as
+ * an empty line on the finished document — the step completes, the document is
+ * produced, and the signature block is simply blank, with nothing at run time to
+ * say it was meant to be filled. That makes it a canvas-time warning rather than
+ * a runtime one: it is only fixable while the flow is being authored.
+ *
+ * Claiming mirrors what actually signs at decision time: an approval step whose
+ * `signatureFieldKey` names the slot, or — matching the v0.26.2 fallback — an
+ * approval step subject to a document step that declares exactly one signature,
+ * which is bound even when the config never named it (ADR-043 §5, amended).
+ */
+export function findUnclaimedSignatureSlots(nodes: GuidanceNode[]): UnclaimedSignatureSlot[] {
+  const approvals = nodes.filter((node) => node.type === "approvalNode");
+
+  const claimedKeys = new Set<string>();
+  const subjectNodeIds = new Set<string>();
+  for (const approval of approvals) {
+    const config = configOf(approval);
+    const subject = config.approvalSubject as { kind?: string; nodeId?: string } | undefined;
+    const subjectNodeId = subject?.kind === "step" ? subject.nodeId : undefined;
+    if (subjectNodeId) subjectNodeIds.add(subjectNodeId);
+
+    const key = config.signatureFieldKey;
+    // Scoped to the subject step, so an approval signing "signature" on one
+    // document cannot silently claim a same-named slot on another.
+    if (typeof key === "string" && key && subjectNodeId) {
+      claimedKeys.add(`${subjectNodeId}:${key}`);
+    }
+  }
+
+  const unclaimed: UnclaimedSignatureSlot[] = [];
+  for (const node of nodes) {
+    const signatures = signatureFieldsOf(node);
+    if (signatures.length === 0) continue;
+
+    // The decide-time fallback binds a lone slot for any approval subject to the
+    // step. It stops at one — with several, an unnamed key stays unbound — so
+    // only the single-slot case is claimed this way.
+    const loneSlotBound = signatures.length === 1 && subjectNodeIds.has(node.id);
+
+    for (const signature of signatures) {
+      if (claimedKeys.has(`${node.id}:${signature.key}`)) continue;
+      if (loneSlotBound) continue;
+      unclaimed.push({
+        nodeId: node.id,
+        stepName: (node.data.name as string | undefined) ?? "a step",
+        label: signature.label,
+      });
+    }
+  }
+
+  return unclaimed;
+}
+
 const nodeWidth = (node: GuidanceNode): number => node.measured?.width ?? STEP_NODE_WIDTH;
 const nodeHeight = (node: GuidanceNode): number => node.measured?.height ?? STEP_NODE_HEIGHT;
 

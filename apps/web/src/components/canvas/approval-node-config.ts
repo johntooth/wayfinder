@@ -79,18 +79,42 @@ export const decodeChangesRequestedTarget = (
 export const editableReturnSteps = (priorSteps: PriorStep[]): PriorStep[] =>
   priorSteps.filter((step) => step.type === "conversational");
 
+// Which step the "last completed step" default will resolve to, as far as the
+// canvas can tell: the nearest earlier step that declares any fields, which in a
+// linear flow is exactly the step the runtime will have just finished.
+//
+// This is a prediction, not a guarantee — on a branching flow the step that
+// actually completes last depends on the path taken. It is offered anyway
+// because the alternative was worse: the default subject showed no signature
+// control at all, so the common single-document flow could not target its own
+// signature without the author first naming the step by hand. Choosing a slot
+// here writes an explicit `signatureFieldKey`, which is what the runtime reads,
+// so a correct prediction becomes a durable configuration.
+export const defaultSubjectNodeId = (priorStepFields: PriorStepField[]): string => {
+  let nearest: PriorStepField | null = null;
+  for (const entry of priorStepFields) {
+    if (!nearest || entry.stepNumber > nearest.stepNumber) nearest = entry;
+  }
+  return nearest?.nodeId ?? "";
+};
+
 // The signature slots declared by the subject step's template. Read from the
 // prior-step field list, which carries the raw template fields — `nodeFieldSet`
 // filters signatures out on purpose, and this is the one place that needs them.
+//
+// An empty `subjectNodeId` is the last-completed-step default, which resolves to
+// the nearest earlier step rather than to nothing.
 export const signatureSlotsFor = (
   priorStepFields: PriorStepField[],
   subjectNodeId: string,
 ): Array<{ key: string; label: string }> => {
-  if (!subjectNodeId) return [];
+  const targetNodeId = subjectNodeId || defaultSubjectNodeId(priorStepFields);
+  if (!targetNodeId) return [];
+
   const seen = new Set<string>();
   const slots: Array<{ key: string; label: string }> = [];
   for (const entry of priorStepFields) {
-    if (entry.nodeId !== subjectNodeId) continue;
+    if (entry.nodeId !== targetNodeId) continue;
     if (entry.field.type !== "signature") continue;
     if (seen.has(entry.field.key)) continue;
     seen.add(entry.field.key);
@@ -114,13 +138,6 @@ export const signatureSlotControl = (
   slots: Array<{ key: string; label: string }>,
 ): SignatureSlotControl =>
   slots.length === 0 ? { mode: "none" } : { mode: "choose", slots };
-
-// Whether any step earlier in the flow declares a signature at all. Drives the
-// explanation shown on the default subject, where the subject step — and so its
-// template — is not known until the session runs. Without this the hint would
-// fire on every flow, including the many that have no signature anywhere.
-export const anyPriorStepHasSignature = (priorStepFields: PriorStepField[]): boolean =>
-  priorStepFields.some((entry) => entry.field.type === "signature");
 
 // Two approval steps must not sign the same slot on the same document — a
 // config-time error, not a runtime surprise (ADR-043 §5).

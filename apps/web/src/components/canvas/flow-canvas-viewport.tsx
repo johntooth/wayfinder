@@ -20,9 +20,11 @@ import { NODE_TYPES } from "@/lib/canvas/rf-adapters";
 import {
   findDisconnectedNodeIds,
   findNextStepAnchor,
+  findUnclaimedSignatureSlots,
   type NextStepAnchor,
 } from "@/lib/canvas/canvas-guidance";
 import { DisconnectedStepsWarning } from "./disconnected-steps-warning";
+import { UnclaimedSignaturesWarning } from "./unclaimed-signatures-warning";
 
 // The shared canvas surface for both the user and admin flow-config screens:
 // the React Flow pane (background, controls, minimap) plus the stale-reference
@@ -58,6 +60,7 @@ export function FlowCanvasViewport({
     [nodes, edges],
   );
   const nextStepAnchor = useMemo(() => findNextStepAnchor(nodes, edges), [nodes, edges]);
+  const unclaimedSignatures = useMemo(() => findUnclaimedSignatureSlots(nodes), [nodes]);
 
   return (
     <div className="relative flex-1">
@@ -116,7 +119,12 @@ export function FlowCanvasViewport({
           </Button>
         </div>
       )}
-      <DisconnectedStepsWarning count={disconnectedCount} />
+      {/* One band for every authoring advisory, so a flow with more than one
+          problem stacks them rather than overlapping them on the canvas. */}
+      <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex w-[calc(100%-2rem)] max-w-[900px] -translate-x-1/2 flex-col gap-2">
+        <DisconnectedStepsWarning count={disconnectedCount} />
+        <UnclaimedSignaturesWarning slots={unclaimedSignatures} />
+      </div>
       {staleReferences.length > 0 && (
         <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 max-w-[90%] -translate-x-1/2 rounded-[9px] border border-[#e7c200] bg-[#fff8e1] px-4 py-2 text-center text-[12px] text-[#886b00] shadow-md">
           ⚠ Some steps reference data that no longer exists: {staleReferences.join(", ")}. Re-open them to fix.

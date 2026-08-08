@@ -5,6 +5,7 @@ import {
   STEP_NODE_WIDTH,
   findDisconnectedNodeIds,
   findNextStepAnchor,
+  findUnclaimedSignatureSlots,
   type GuidanceEdge,
   type GuidanceNode,
 } from "./canvas-guidance";
@@ -138,5 +139,97 @@ describe("findNextStepAnchor", () => {
   it("breaks a tie on x by y then id so the anchor never jitters", () => {
     const nodes = [step("b", 400, 300), step("a", 400, 100)];
     expect(findNextStepAnchor(nodes, [])?.position.y).toBe(300);
+  });
+});
+
+// ── unclaimed signature slots ────────────────────────────────────────────────
+
+const documentStep = (id: string, signatureKeys: string[]): GuidanceNode => ({
+  id,
+  position: { x: 0, y: 0 },
+  type: "conversationalNode",
+  data: {
+    name: "Draft the instrument",
+    config: {
+      outputType: "generate_document",
+      documentTemplateFields: [
+        { key: "amount", label: "Amount", type: "text", optional: false, raw: "Amount" },
+        ...signatureKeys.map((key) => ({
+          key,
+          label: key.replace(/_/g, " "),
+          type: "signature",
+          optional: true,
+          raw: `${key} (approval)`,
+        })),
+      ],
+    },
+  },
+});
+
+const approvalStep = (id: string, subjectNodeId: string, signatureFieldKey?: string): GuidanceNode => ({
+  id,
+  position: { x: 300, y: 0 },
+  type: "approvalNode",
+  data: {
+    name: "Sign-off",
+    config: {
+      approvalSubject: { kind: "step", nodeId: subjectNodeId },
+      ...(signatureFieldKey ? { signatureFieldKey } : {}),
+    },
+  },
+});
+
+describe("findUnclaimedSignatureSlots", () => {
+  it("reports a signature no approval step signs", () => {
+    const slots = findUnclaimedSignatureSlots([documentStep("doc", ["supervisor_signature"])]);
+
+    expect(slots).toEqual([
+      { nodeId: "doc", stepName: "Draft the instrument", label: "supervisor signature" },
+    ]);
+  });
+
+  it("reports nothing once an approval step names the slot", () => {
+    expect(
+      findUnclaimedSignatureSlots([
+        documentStep("doc", ["supervisor_signature"]),
+        approvalStep("appr", "doc", "supervisor_signature"),
+      ]),
+    ).toEqual([]);
+  });
+
+  // Mirrors the decide-time fallback: a subject step with exactly one signature
+  // is signed even when the config never named the key (ADR-043 §5, amended).
+  it("treats a lone slot as claimed by an approval step subject to that step", () => {
+    expect(
+      findUnclaimedSignatureSlots([
+        documentStep("doc", ["supervisor_signature"]),
+        approvalStep("appr", "doc"),
+      ]),
+    ).toEqual([]);
+  });
+
+  // The fallback stops at one, so the second slot is genuinely unsigned.
+  it("still reports the extra slots when a step declares several", () => {
+    const slots = findUnclaimedSignatureSlots([
+      documentStep("doc", ["first_signature", "second_signature"]),
+      approvalStep("appr", "doc", "first_signature"),
+    ]);
+
+    expect(slots.map((slot) => slot.label)).toEqual(["second signature"]);
+  });
+
+  it("ignores a step that declares no signature", () => {
+    expect(findUnclaimedSignatureSlots([documentStep("doc", [])])).toEqual([]);
+  });
+
+  // An approval step pointing somewhere else cannot claim this step's slot.
+  it("does not let an approval step on another subject claim the slot", () => {
+    const slots = findUnclaimedSignatureSlots([
+      documentStep("doc", ["supervisor_signature"]),
+      documentStep("other", []),
+      approvalStep("appr", "other", "supervisor_signature"),
+    ]);
+
+    expect(slots.map((slot) => slot.nodeId)).toEqual(["doc"]);
   });
 });

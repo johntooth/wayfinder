@@ -171,8 +171,11 @@ sequential approvals, all reachable in today's code:
 - `apps/web/src/components/canvas/node-config-modal-approval.tsx` — the "What is
   being approved" selector (prior-step dropdown defaulting to last completed +
   custom free-text), the signature-slot dropdown (shown whenever the subject
-  step's template declares at least one signature field), **and** the "On
+  step's template declares at least one signature field — including on the
+  default subject, which resolves to the nearest earlier step), **and** the "On
   changes requested, return to:" dropdown.
+- `apps/web/src/lib/canvas/canvas-guidance.ts` and the canvas warning band —
+  the advisory for signature slots no approval step signs.
 - `apps/web/src/components/canvas/field-row-model.ts` and `field-row.tsx` — the
   guided annotation editor, which must be able to hold and re-emit a signature
   row unchanged, since every reviewed row is written back into the stored `.docx`.
@@ -246,6 +249,13 @@ new table.
       inside a `{{#group (repeat)}}` block.
 - [ ] A `signature` field never appears in the conversational prompt, never
       blocks step readiness, and cannot be edited manually.
+- [ ] The pre-generation evaluation gate never extracts, grades or reports a
+      signature as missing — including when it resolves fields by extracting them
+      from the template bytes rather than from the node config.
+- [ ] The canvas warns, alongside the stranded-step advisory, about any signature
+      slot no approval step signs, naming the slot and the step it sits on.
+- [ ] An approval step left on the default subject is offered the signature slots
+      of the nearest earlier step that declares fields.
 - [ ] On decision, the slot renders the attestation block — approver name, email,
       role, decision, UTC timestamp, comment and verification code — and the
       document is written as a new revision with the prior one retained.

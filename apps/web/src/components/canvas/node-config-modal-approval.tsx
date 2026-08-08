@@ -6,10 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  anyPriorStepHasSignature,
   approvalSubjectChoice,
   approvalSubjectFromChoice,
   CUSTOM_SUBJECT_CHOICE,
+  defaultSubjectNodeId,
   editableReturnSteps,
   noEditablePredecessorWarning,
   signatureSlotConflict,
@@ -55,6 +55,9 @@ export function NodeConfigModalApproval({
   );
   const onDefaultSubject =
     values.approvalSubjectKind === "step" && !values.approvalSubjectNodeId;
+  const defaultSubjectLabel =
+    priorStepFields.find((entry) => entry.nodeId === defaultSubjectNodeId(priorStepFields))
+      ?.stepLabel ?? "the last completed step";
 
   // A lone slot is pre-selected by writing it, not by displaying it. Displaying
   // a default while leaving the config empty is exactly the v0.26.2 bug: the
@@ -178,11 +181,11 @@ export function NodeConfigModalApproval({
         </div>
       )}
 
-      {onDefaultSubject && anyPriorStepHasSignature(priorStepFields) && (
+      {onDefaultSubject && slotControl.mode === "choose" && (
         <p className={HINT_CLASS}>
-          A step earlier in this flow has a signature slot. To sign it, name that step above —
-          on the default the subject is whichever step happens to finish last, so there is no
-          template to pick a signature from until the session runs.
+          These are the signatures on <strong>{defaultSubjectLabel}</strong>, the step this default
+          will reach in a straight-through flow. If the flow branches, name the step above instead
+          so the signature cannot follow the wrong path.
         </p>
       )}
 

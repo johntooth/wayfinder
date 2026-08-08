@@ -85,6 +85,26 @@ call site, because every consumer must inherit it:
 Filtering at one choke point is the whole safety argument: a signature slot the
 conversation can reach is a signature an operator can forge.
 
+**Amended v0.27.0 — the choke point needs an exported filter, because one caller
+cannot reach it.** `EvaluateStepReadiness` resolves a template step's fields from
+the node config *or* by extracting them from the template bytes, and the byte
+path has no `ConversationalNodeConfig` to pass to `nodeFieldSet`. It therefore
+returned the raw set, and the pre-generation gate extracted and graded the
+signatures — reporting them as missing information, which the gate's fail path
+streams straight into the thread as "Supervisor signature is blank" and then as a
+question to the operator.
+
+The exclusion is now exported as `gatherableFields` and applied on every branch.
+A caller that cannot go through `nodeFieldSet` must still go through the same
+predicate; being unable to reach the choke point is not permission to skip it.
+
+**Rendering is the deliberate exception.** `GenerateDocument` and
+`ApplyApprovalSignature` keep the raw set, because a signature must reach
+`buildRenderData` to be written at all — as the attestation once decided, as an
+empty string until then. The rule is therefore *gathering* excludes signatures
+and *rendering* includes them, which is why the filter cannot live in
+`resolveTemplateFields`, the helper both the gate and generation share.
+
 ### 3. The value is an attestation block — not an image, not a certificate
 
 On decision, the slot renders a fixed block built from the locked approval
@@ -144,6 +164,25 @@ behaves by count:
 Two approval nodes in the same flow must not target the same
 `signatureFieldKey` on the same document; that is a config-time validation
 error, not a runtime surprise.
+
+**Amended v0.27.0 — the default subject resolves to a step, and an unsigned slot
+is warned about.** The slot list was empty whenever the subject was the
+last-completed-step default, so the commonest shape — one document step, one
+approval step, subject left on the default — could not target its own signature
+at all. The config editor now predicts the default as the nearest earlier step
+declaring fields, which in a linear flow is the step the runtime will have just
+completed. The prediction is stated as one in the UI, and choosing a slot writes
+an explicit `signatureFieldKey`, so a correct prediction becomes durable
+configuration rather than a standing guess.
+
+An unclaimed slot is otherwise **silent**: §3 renders an undecided slot as an
+empty string, so the step completes, the document generates, and the signature
+block is simply blank with nothing at run time to say it was meant to be filled.
+The canvas therefore carries an authoring advisory naming each slot no approval
+step signs, alongside the stranded-step warning. Claiming mirrors what actually
+signs — a named key, or the lone-slot fallback above — and is scoped by subject
+step, so an approval signing "signature" on one document cannot claim a
+same-named slot on another.
 
 **Amended v0.26.2 — a lone slot is bound explicitly, not implicitly.** As first
 written, this table hid the control for exactly one slot and called it "bound
