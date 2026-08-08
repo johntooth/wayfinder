@@ -60,7 +60,10 @@ export function FlowCanvasViewport({
     [nodes, edges],
   );
   const nextStepAnchor = useMemo(() => findNextStepAnchor(nodes, edges), [nodes, edges]);
-  const unclaimedSignatures = useMemo(() => findUnclaimedSignatureSlots(nodes), [nodes]);
+  const unclaimedSignatures = useMemo(
+    () => findUnclaimedSignatureSlots(nodes, edges),
+    [nodes, edges],
+  );
 
   return (
     <div className="relative flex-1">

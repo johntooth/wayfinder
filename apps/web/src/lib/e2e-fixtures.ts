@@ -77,6 +77,9 @@ export interface SeedResult {
   // moves the session off the approval node.
   approvalWithdrawSessionId: string;
   approvalWithdrawDraftStepName: string;
+  // One signature bound by an approval left on the default subject, and one
+  // nothing signs — the two states the canvas advisory must tell apart.
+  signatureWarningFlowId: string;
 }
 
 // A fork flow whose two mutually-exclusive branches capture the same `amount`
@@ -445,6 +448,7 @@ const seedApprovalRequest = async (
 import {
   seedApprovalFirstFlow,
   seedApprovalSubjectSession,
+  seedSignatureWarningFlow,
   seedWithdrawableApprovalSession,
 } from "./e2e-fixtures-approval";
 
@@ -672,6 +676,7 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
   const approvalSubject = await seedApprovalSubjectSession(container, ownerUserId);
   const approvalFirstFlowId = await seedApprovalFirstFlow(container, ownerUserId);
   const approvalWithdraw = await seedWithdrawableApprovalSession(container, ownerUserId);
+  const signatureWarningFlowId = await seedSignatureWarningFlow(container, ownerUserId);
 
   return {
     flowId: flow.id,
@@ -686,6 +691,7 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     approvalFirstFlowId,
     approvalWithdrawSessionId: approvalWithdraw.sessionId,
     approvalWithdrawDraftStepName: approvalWithdraw.draftStepName,
+    signatureWarningFlowId,
   };
 };
 

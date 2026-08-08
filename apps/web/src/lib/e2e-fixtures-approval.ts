@@ -14,6 +14,7 @@ const SEED_WITHDRAW_SESSION_TITLE = "E2E SEED Approval Withdraw Session";
 const SEED_WITHDRAW_DRAFT_STEP = "Draft the request";
 const SEED_WITHDRAW_REQUEST_MESSAGE =
   "Board meets Thursday — a signature before then would help.";
+const SEED_SIGNATURE_WARNING_FLOW_NAME = "E2E SEED Signature Warning Flow";
 
 export const seedApprovalSubjectSession = async (
   container: Container,
@@ -486,6 +487,107 @@ export const seedWithdrawableApprovalSession = async (
 
 // An approval with no step before it, so the config editor has to warn that a
 // change request has nowhere to return to (ADR-044 §2).
+// A flow carrying one bound signature and one unbound one, so the canvas
+// advisory has both states to tell apart in a single screenshot.
+//
+// The bound one is deliberately bound the way the reported bug was authored:
+// the approval names its slot but sits on the "last completed step" default, so
+// it stores no `approvalSubject` at all. The advisory must resolve that default
+// to the step upstream and stay quiet about it.
+const signatureField = (key: string, label: string) => ({
+  key,
+  label,
+  type: "signature" as const,
+  optional: true,
+  raw: `${label} (approval)`,
+});
+
+export const seedSignatureWarningFlow = async (
+  container: Container,
+  ownerUserId: string,
+): Promise<string> => {
+  const flow = unwrap(
+    await container.useCases.createFlow.execute({
+      name: SEED_SIGNATURE_WARNING_FLOW_NAME,
+      description: "Seeded flow with one bound signature and one nothing signs",
+      expertRole: "Delegation Officer",
+      ownerUserId,
+    }),
+    "create signature warning flow",
+  );
+
+  const instrumentNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "conversational",
+      name: "Prepare the instrument",
+      positionX: 120,
+      positionY: 120,
+      config: {
+        aiInstruction: "Draft the delegation instrument.",
+        doneWhen: "The instrument is drafted.",
+        outputType: "generate_document",
+        documentTemplatePath: "templates/e2e-seed-instrument.docx",
+        documentTemplateContent:
+          "Delegation to {{Delegate Name}}.\n{{ Supervisor Signature (approval) }}",
+        documentTemplateFields: [
+          { key: "delegate_name", label: "Delegate Name", type: "text", optional: false, raw: "Delegate Name" },
+          signatureField("supervisor_signature", "Supervisor Signature"),
+        ],
+      },
+    }),
+    "create signature warning instrument node",
+  );
+
+  const signOffNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "approval",
+      name: "Sign-off",
+      positionX: 420,
+      positionY: 120,
+      // No `approvalSubject`: the subject is left on the default, which is what
+      // the modal persists for the empty choice.
+      config: {
+        approverSource: "first_level_supervisor",
+        signatureFieldKey: "supervisor_signature",
+      },
+    }),
+    "create signature warning approval node",
+  );
+
+  const annexeNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "conversational",
+      name: "Prepare the annexe",
+      positionX: 720,
+      positionY: 120,
+      config: {
+        aiInstruction: "Draft the annexe.",
+        doneWhen: "The annexe is drafted.",
+        outputType: "generate_document",
+        documentTemplatePath: "templates/e2e-seed-annexe.docx",
+        documentTemplateContent: "Annexe.\n{{ Annexe Signature (approval) }}",
+        documentTemplateFields: [signatureField("annexe_signature", "Annexe Signature")],
+      },
+    }),
+    "create signature warning annexe node",
+  );
+
+  for (const [fromNodeId, toNodeId] of [
+    [instrumentNode.id, signOffNode.id],
+    [signOffNode.id, annexeNode.id],
+  ] as const) {
+    unwrap(
+      await container.useCases.createFlowEdge.execute({ flowId: flow.id, fromNodeId, toNodeId }),
+      "create signature warning edge",
+    );
+  }
+
+  return flow.id;
+};
+
 export const seedApprovalFirstFlow = async (
   container: Container,
   ownerUserId: string,

@@ -179,9 +179,25 @@ const approvalStep = (id: string, subjectNodeId: string, signatureFieldKey?: str
   },
 });
 
+// An approval left on "the last completed step" — the default — stores no
+// subject at all, because `decodeApprovalSubject` returns undefined for the
+// empty choice. This is the shape the reported bug was authored in.
+const defaultSubjectApprovalStep = (id: string, signatureFieldKey?: string): GuidanceNode => ({
+  id,
+  position: { x: 300, y: 0 },
+  type: "approvalNode",
+  data: {
+    name: "Sign-off",
+    config: { ...(signatureFieldKey ? { signatureFieldKey } : {}) },
+  },
+});
+
 describe("findUnclaimedSignatureSlots", () => {
   it("reports a signature no approval step signs", () => {
-    const slots = findUnclaimedSignatureSlots([documentStep("doc", ["supervisor_signature"])]);
+    const slots = findUnclaimedSignatureSlots(
+      [documentStep("doc", ["supervisor_signature"])],
+      [],
+    );
 
     expect(slots).toEqual([
       { nodeId: "doc", stepName: "Draft the instrument", label: "supervisor signature" },
@@ -193,7 +209,7 @@ describe("findUnclaimedSignatureSlots", () => {
       findUnclaimedSignatureSlots([
         documentStep("doc", ["supervisor_signature"]),
         approvalStep("appr", "doc", "supervisor_signature"),
-      ]),
+      ], []),
     ).toEqual([]);
   });
 
@@ -204,7 +220,7 @@ describe("findUnclaimedSignatureSlots", () => {
       findUnclaimedSignatureSlots([
         documentStep("doc", ["supervisor_signature"]),
         approvalStep("appr", "doc"),
-      ]),
+      ], []),
     ).toEqual([]);
   });
 
@@ -213,13 +229,13 @@ describe("findUnclaimedSignatureSlots", () => {
     const slots = findUnclaimedSignatureSlots([
       documentStep("doc", ["first_signature", "second_signature"]),
       approvalStep("appr", "doc", "first_signature"),
-    ]);
+    ], []);
 
     expect(slots.map((slot) => slot.label)).toEqual(["second signature"]);
   });
 
   it("ignores a step that declares no signature", () => {
-    expect(findUnclaimedSignatureSlots([documentStep("doc", [])])).toEqual([]);
+    expect(findUnclaimedSignatureSlots([documentStep("doc", [])], [])).toEqual([]);
   });
 
   // An approval step pointing somewhere else cannot claim this step's slot.
@@ -228,7 +244,56 @@ describe("findUnclaimedSignatureSlots", () => {
       documentStep("doc", ["supervisor_signature"]),
       documentStep("other", []),
       approvalStep("appr", "other", "supervisor_signature"),
-    ]);
+    ], []);
+
+    expect(slots.map((slot) => slot.nodeId)).toEqual(["doc"]);
+  });
+
+  // The reported bug: the author picked the slot, but the approval sat on the
+  // default subject, which stores no `approvalSubject` — so the claim was
+  // scoped to nothing and the advisory fired on a flow that was already bound.
+  it("reports nothing when a default-subject approval names the slot", () => {
+    expect(
+      findUnclaimedSignatureSlots(
+        [documentStep("doc", ["supervisor_signature"]), defaultSubjectApprovalStep("appr", "supervisor_signature")],
+        [edge("doc", "appr")],
+      ),
+    ).toEqual([]);
+  });
+
+  // The decide-time lone-slot fallback does not care how the subject was
+  // resolved, so neither does this.
+  it("treats a lone slot as claimed by a default-subject approval downstream of it", () => {
+    expect(
+      findUnclaimedSignatureSlots(
+        [documentStep("doc", ["supervisor_signature"]), defaultSubjectApprovalStep("appr")],
+        [edge("doc", "appr")],
+      ),
+    ).toEqual([]);
+  });
+
+  // "The last completed step" is the nearest one upstream, so a slot on an
+  // earlier step is not signed by this approval and is still reported.
+  it("resolves the default subject to the nearest upstream step declaring signatures", () => {
+    const slots = findUnclaimedSignatureSlots(
+      [
+        documentStep("first", ["early_signature"]),
+        documentStep("second", ["late_signature"]),
+        defaultSubjectApprovalStep("appr", "late_signature"),
+      ],
+      [edge("first", "second"), edge("second", "appr")],
+    );
+
+    expect(slots.map((slot) => slot.nodeId)).toEqual(["first"]);
+  });
+
+  // A step downstream of the approval has not run when the approval decides,
+  // so its signature is not the one being signed.
+  it("does not resolve the default subject forwards to a later step", () => {
+    const slots = findUnclaimedSignatureSlots(
+      [defaultSubjectApprovalStep("appr", "supervisor_signature"), documentStep("doc", ["supervisor_signature"])],
+      [edge("appr", "doc")],
+    );
 
     expect(slots.map((slot) => slot.nodeId)).toEqual(["doc"]);
   });

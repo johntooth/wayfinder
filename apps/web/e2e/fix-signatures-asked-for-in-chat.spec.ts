@@ -66,6 +66,43 @@ test.describe('the canvas warns about a signature nobody signs', () => {
     );
   });
 
+  // The reported regression: the author bound the signature but left the
+  // approval on the default subject, which stores no `approvalSubject` — so the
+  // claim was scoped to nothing and the advisory fired on a bound flow.
+  test('stays quiet about a slot bound by an approval on the default subject', async ({ page }) => {
+    const flowId = seed?.signatureWarningFlowId;
+    test.skip(!flowId, 'No seeded signature-warning flow — run the seed setup project');
+
+    await page.goto(`/flows/${flowId}/config`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(1_200);
+
+    // The flow declares two signatures: one signed by a default-subject
+    // approval, one nothing signs. Only the second may be reported.
+    await expect(page.locator('[role="status"][data-unclaimed-signatures]')).toHaveAttribute(
+      'data-unclaimed-signatures',
+      '1',
+    );
+    await expect(page.getByText(/Supervisor Signature/)).toHaveCount(0);
+  });
+
+  test('names the unsigned slot, its step, and how to bind it', async ({ page }) => {
+    const flowId = seed?.signatureWarningFlowId;
+    test.skip(!flowId, 'No seeded signature-warning flow — run the seed setup project');
+
+    await page.goto(`/flows/${flowId}/config`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(1_200);
+
+    // "A signature is unsigned" is not actionable; the slot and the step it sits
+    // on are, and the copy has to carry the binding steps with them.
+    const advisory = page.locator('[role="status"][data-unclaimed-signatures]');
+    await expect(advisory).toContainText('Annexe Signature');
+    await expect(advisory).toContainText('Prepare the annexe');
+    await expect(advisory).toContainText(/render blank on the finished document/i);
+    await expect(advisory).toContainText(/What is being approved\?/i);
+  });
+
   test('the warning band stacks advisories rather than overlapping them', async ({ page }) => {
     const flowId = seed?.approvalSubjectFlowId;
     test.skip(!flowId, 'No seeded approval flow — run the seed setup project');

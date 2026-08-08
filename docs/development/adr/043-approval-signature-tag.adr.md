@@ -184,6 +184,18 @@ signs — a named key, or the lone-slot fallback above — and is scoped by subj
 step, so an approval signing "signature" on one document cannot claim a
 same-named slot on another.
 
+**Amended v0.27.1 — the advisory resolves the default subject too.** Scoping a
+claim by subject step is only sound if every approval *has* a resolvable subject
+step, and one shape does not: the default stores no `approvalSubject` at all, so
+a correctly bound approval left on it claimed nothing and the advisory fired on a
+flow that was already signed. The advisory now resolves an unnamed subject the
+way the runtime will — the nearest step upstream of the approval that declares
+signatures — walking predecessors only, since a step downstream has not run when
+the approval decides. The two halves of this amendment were added in the same
+version and had to agree: making the default subject targetable while the
+advisory still treated it as targeting nothing is what produced the false
+warning.
+
 **Amended v0.26.2 — a lone slot is bound explicitly, not implicitly.** As first
 written, this table hid the control for exactly one slot and called it "bound
 automatically". Nothing bound it: `signatureFieldKey` stayed empty in the config,
