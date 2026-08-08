@@ -43,8 +43,23 @@ export const buildExtractionSystemPrompt = (input: BuildExtractionSystemPromptIn
     ? `\n\n<how_to_read_documents>\n  ${guidance}\n</how_to_read_documents>`
     : "";
 
+  // Unlike the conversational node, extraction reads third-party documents whose
+  // date convention it does not control, so it cannot simply assert day-first —
+  // that would fix a UK-origin source and corrupt a US-origin one. It anchors its
+  // own output format, then reasons about the source, and routes a genuinely
+  // undetermined order to the low-confidence band for human review. The 30-45
+  // range clears EXTRACTION_CONFIDENCE_FLOOR (below which applyConfidenceFloor
+  // blanks the value) and sits under AMBER_THRESHOLD, so it bands red.
   const fieldFormatsBlock = `\n\n<field_formats>
   Each field has a required format. When the source gives you information for a field, silently reformat it into the required format yourself whenever you reasonably can — for example, turn "next Tuesday" or "3rd of June" into DD-MM-YYYY, or "twelve hundred dollars" into $1,200.00. For (options) fields, map what the source says to the closest listed value. Never invent a value to satisfy a format — leave it blank when it is genuinely absent.
+
+  Dates need particular care, because the source documents may not use the same convention you write. The format you output is always day-first: in DD-MM-YYYY the first number is the day and the second is the month, so 10 August 2026 is written 10-08-2026, never 08-10-2026. Work out which number is the day and which is the month before you reformat:
+  - A month written in words ("10 Aug 2026") or an ISO date ("2026-08-10") is already unambiguous — read it directly.
+  - A component above 12 settles the order by itself: in "13/08/2026" the 13 can only be the day.
+  - Otherwise look for corroboration in the same document — a date spelled out elsewhere, a covering letter, or another date whose order is already settled.
+  - If the order is still genuinely undetermined, such as a bare "08/10/2026" in a document that never spells a date out, do not guess silently. Give your best reading, set a confidence between 30 and 45, and state in the rationale that the day/month order could not be determined from the source. A flagged value gets reviewed by a person; a confidently wrong date does not.
+
+  Never swap a day and month to make a date look more plausible.
 
 ${buildFieldConstraintsText(templateFields)}
 </field_formats>`;
