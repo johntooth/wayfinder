@@ -51,6 +51,7 @@ Enforced by `validate.sh` and ESLint — skills that write code must respect the
 - All port interfaces use the **Result pattern**: `{ data: T } | { error: DomainError }`. Never throw across boundaries.
 - Domain entities are plain TypeScript — no decorators, no ORM annotations.
 - DB table names use group prefixes: `core_`, `ai_`, `kb_`, `admin_`, `app_`, `job_`. Columns are snake_case. Every table has `id` (uuid), `created_at`, `updated_at`. **Sole exception:** `core_audit_log` is append-only and omits `updated_at` — a row is written once and never updated (see ADR-033).
+- Schema changes ship as generated migrations only — never `drizzle-kit push`. A migration must carry existing rows across unless the loss is deliberate; one that destroys rows (`DROP TABLE`/`DROP COLUMN`/`TRUNCATE`/`DELETE FROM`/type change) or that existing rows can make fail (`SET NOT NULL`, `ADD COLUMN … NOT NULL` with no default, `ADD CONSTRAINT … UNIQUE`, `CREATE UNIQUE INDEX`) must declare `-- data-impact: preserved | destructive, approved | blocking, approved — <reason>` in the SQL file. Enforced by `migration-safety.test.ts`; see [`docs/guides/database-conventions.md`](docs/guides/database-conventions.md).
 
 ---
 

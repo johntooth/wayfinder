@@ -1,3 +1,5 @@
+-- data-impact: preserved — the unique index covers app_usage_budgets, created empty in this
+-- same migration, so no existing row can violate it.
 CREATE TABLE "app_usage_budgets" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" uuid NOT NULL,

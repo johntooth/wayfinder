@@ -243,10 +243,14 @@ if [ -f packages/adapters/package.json ]; then
     echo "  migration failed — check DATABASE_URL in .env"
     exit 1
   }
-  echo "→ verifying schema is in sync (drizzle-kit push)"
-  pnpm --filter "$ADAPTERS_PKG" db:push || {
-    echo "  schema push failed — check DATABASE_URL in .env"
-    exit 1
+  # Generated migrations are the only thing that alters the schema. This asks
+  # the one question the old `drizzle-kit push` step was there for — has the
+  # schema been edited without generating a migration? — by diffing the schema
+  # against its own snapshot instead of against the live database, so it never
+  # offers to truncate a table and it stops complaining once a migration exists.
+  echo "→ checking the schema matches its migrations"
+  pnpm --filter "$ADAPTERS_PKG" -s db:drift || {
+    echo "  starting anyway — the app will run against the migrated schema, not the edited one"
   }
 else
   FRAMEWORK_SCOPE=$(cat .framework-scope 2>/dev/null || echo "@rbrasier")

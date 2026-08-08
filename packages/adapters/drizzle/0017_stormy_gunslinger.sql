@@ -1,3 +1,6 @@
+-- data-impact: destructive, approved — TRUNCATE clears kb_document_chunks. 1536-dimension
+-- embeddings cannot cast to 384 and are not comparable to the new model's vectors, so the
+-- chunks are re-embedded from the stored extracted_text (ADR-017).
 -- ADR-017: standardise embeddings on 384 dimensions (was 1536).
 -- The HNSW index is dimension-bound and 1536-d rows cannot cast to 384, so we
 -- drop the index, clear incompatible chunks, alter the column, and recreate the
