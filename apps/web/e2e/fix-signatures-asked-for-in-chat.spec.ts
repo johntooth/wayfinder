@@ -46,7 +46,7 @@ test.describe('a signature is never asked for in the conversation', () => {
 });
 
 test.describe('the canvas warns about a signature nobody signs', () => {
-  test('names the unsigned slot and how to bind it', async ({ page }) => {
+  test('stays silent on a flow whose signatures are all bound', async ({ page }) => {
     const flowId = seed?.approvalSubjectFlowId;
     test.skip(!flowId, 'No seeded approval flow — run the seed setup project');
 
@@ -54,9 +54,16 @@ test.describe('the canvas warns about a signature nobody signs', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1_200);
 
-    // The seeded flow binds every slot, so the warning must stay silent — a
-    // warning that fires on a correct flow is worse than none.
-    await expect(page.locator('[data-unclaimed-signatures="0"]')).toBeVisible();
+    // The seeded flow binds every slot by name, so the warning must stay silent —
+    // a warning that fires on a correct flow is worse than none.
+    //
+    // Asserted by count, not visibility: the live region stays mounted and
+    // renders nothing when there is nothing to report, so it has no box and is
+    // never "visible" in the silent state this test is about.
+    await expect(page.locator('[role="status"][data-unclaimed-signatures]')).toHaveAttribute(
+      'data-unclaimed-signatures',
+      '0',
+    );
   });
 
   test('the warning band stacks advisories rather than overlapping them', async ({ page }) => {
