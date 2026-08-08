@@ -76,6 +76,17 @@ describe("lineToModel", () => {
   it("returns an empty model for a blank line", () => {
     expect(lineToModel("   ")).toEqual(emptyModel());
   });
+
+  // Every reviewed row is re-serialised from its model and written back into the
+  // stored .docx (buildAnnotationEdits). A signature the editor reads as text is
+  // therefore a signature it deletes from the author's own document.
+  it("reads an (approval) tag as a signature, not as text", () => {
+    expect(lineToModel("Delegate Sign Off (approval)")).toMatchObject({
+      label: "Delegate Sign Off",
+      type: "signature",
+      optional: true,
+    });
+  });
 });
 
 describe("modelToLine", () => {
@@ -125,6 +136,20 @@ describe("modelToLine", () => {
       optional: true,
     });
   });
+
+  // The keyword is (approval); `signature` is the parsed type name, so emitting
+  // the type would produce a line the parser rejects.
+  it("emits (approval) for a signature rather than rewriting it as (optional)", () => {
+    expect(modelToLine(model({ label: "Delegate Sign Off", type: "signature", optional: true }))).toBe(
+      "Delegate Sign Off (approval)",
+    );
+  });
+
+  it("round-trips a signature through the parser unchanged", () => {
+    const line = "Delegate Sign Off (approval)";
+
+    expect(modelToLine(lineToModel(line))).toBe(line);
+  });
 });
 
 describe("hasNonDefaultConfig", () => {
@@ -160,6 +185,12 @@ describe("hasNonDefaultConfig", () => {
   it("ignores the field type on its own — the type has its own control", () => {
     expect(hasNonDefaultConfig(model({ type: "currency" }))).toBe(false);
   });
+
+  // A signature is optional by construction, not by an author's choice, so the
+  // accented cog would fire on every signature row and mean nothing.
+  it("ignores a signature's implicit optionality", () => {
+    expect(hasNonDefaultConfig(model({ type: "signature", optional: true }))).toBe(false);
+  });
 });
 
 describe("withType", () => {
@@ -182,6 +213,30 @@ describe("withType", () => {
   it("keeps the label and optionality", () => {
     const changed = withType(model({ optional: true }), "date");
     expect(changed).toMatchObject({ label: "Supplier Name", optional: true, type: "date" });
+  });
+
+  // parseTemplateField rejects a signature carrying any of these, so a switch
+  // that kept them would emit a line the author cannot save.
+  it("clears every constraint when switching to a signature", () => {
+    const changed = withType(
+      model({ type: "select", options: ["A"], maxLength: 40, min: 1, max: 10 }),
+      "signature",
+    );
+
+    expect(changed.options).toEqual([]);
+    expect(changed.maxLength).toBeUndefined();
+    expect(changed.min).toBeUndefined();
+    expect(changed.max).toBeUndefined();
+  });
+
+  it("forces a signature optional, matching what the parser produces", () => {
+    expect(withType(model({ optional: false }), "signature").optional).toBe(true);
+  });
+
+  it("emits a saveable line after a switch to signature", () => {
+    expect(modelToLine(withType(model({ type: "number", min: 1 }), "signature"))).toBe(
+      "Supplier Name (approval)",
+    );
   });
 });
 

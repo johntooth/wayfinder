@@ -2043,6 +2043,112 @@ describe("DecideApproval", () => {
       expect(record["manager_review.verification_code"]).toMatch(/^[0-9A-F]{12}$/);
     });
 
+    // Flows authored before v0.26.2 saw no slot dropdown when their template
+    // declared exactly one signature, so `signatureFieldKey` was never written
+    // and every one of those approvals decided without signing anything. The
+    // fallback binds the lone slot so those flows sign without being re-saved.
+    const seedSubjectTemplate = (
+      nodes: Awaited<ReturnType<typeof seedFlow>>["nodes"],
+      signatureKeys: string[],
+    ) => {
+      nodes.add(
+        approvalNode({
+          id: "node-draft",
+          type: "conversational",
+          name: "Prepare instrument",
+          config: {
+            outputType: "generate_document",
+            documentTemplateFields: [
+              { key: "amount", label: "Amount", type: "text", optional: false, raw: "Amount" },
+              ...signatureKeys.map((key) => ({
+                key,
+                label: key.replace(/_/g, " "),
+                type: "signature",
+                optional: true,
+                raw: `${key} (approval)`,
+              })),
+            ],
+          },
+        }),
+      );
+    };
+
+    it("signs the lone slot when the node config never named one", async () => {
+      const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+      seedSubjectTemplate(nodes, ["delegate_signature"]);
+      const approval = await seedConfirmed(approvals);
+      const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+      await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "approved",
+      });
+
+      const record = approvals.rows.get(approval.id)!.recordSnapshot!;
+      expect(record.signatureFieldKey).toBe("delegate_signature");
+      expect(record.attestationText).toContain("Jane Doe");
+    });
+
+    it("signs nothing rather than guessing when the subject declares several", async () => {
+      const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+      seedSubjectTemplate(nodes, ["delegate_signature", "finance_signature"]);
+      const approval = await seedConfirmed(approvals);
+      const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+      await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "approved",
+      });
+
+      // Writing a named person's attestation into the wrong signature line on a
+      // governance document is worse than leaving the document unsigned.
+      expect(approvals.rows.get(approval.id)!.recordSnapshot!.signatureFieldKey).toBeUndefined();
+    });
+
+    it("keeps an explicit slot in preference to the fallback", async () => {
+      const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+      seedSubjectTemplate(nodes, ["delegate_signature", "finance_signature"]);
+      nodes.add(
+        approvalNode({
+          id: "node-appr",
+          name: "Manager review",
+          config: {
+            approverSource: "first_level_supervisor",
+            signatureFieldKey: "finance_signature",
+          },
+        }),
+      );
+      const approval = await seedConfirmed(approvals);
+      const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+      await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "approved",
+      });
+
+      expect(approvals.rows.get(approval.id)!.recordSnapshot!.signatureFieldKey).toBe(
+        "finance_signature",
+      );
+    });
+
+    it("signs nothing when the subject step declares no signature at all", async () => {
+      const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
+      seedSubjectTemplate(nodes, []);
+      const approval = await seedConfirmed(approvals);
+      const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
+
+      await sut.execute({
+        approvalId: approval.id,
+        decidedByUserId: "manager-1",
+        decision: "approved",
+      });
+
+      expect(approvals.rows.get(approval.id)!.recordSnapshot!.signatureFieldKey).toBeUndefined();
+    });
+
     it("triggers the document re-render after the decision commits", async () => {
       const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
       const applied: string[] = [];

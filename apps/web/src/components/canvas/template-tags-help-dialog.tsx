@@ -31,6 +31,14 @@ const TYPE_ROWS: AnnotationRow[] = [
   { annotation: "(yesno)", meaning: "Shorthand for a Yes / No answer" },
 ];
 
+const SIGNATURE_ROWS: AnnotationRow[] = [
+  {
+    annotation: "(approval)",
+    meaning:
+      "A signature slot, filled by the approval step that signs it — approver name, decision, UTC timestamp, comment and a verification code. Never asked for in chat, never editable by hand, and implicitly optional so an unsigned document is not treated as incomplete. Takes no other annotation. Cannot go inside a (repeat) block: one approval is one decision, not a list. .docx only.",
+  },
+];
+
 const NARRATIVE_ROWS: AnnotationRow[] = [
   {
     annotation: "(narrative)",
@@ -81,6 +89,7 @@ const COMBINED_EXAMPLES = [
   "{{ Employee Email (email) }}",
   "{{ Notes (text) (maxlen: 200) (optional) }}",
   '{{ Background (narrative: "Summarise the rationale in 2–3 paragraphs") }}',
+  "{{ Delegate Sign Off (approval) }}",
   "{{#Risk Section}} … {{ Risk Narrative (narrative) }} … {{/Risk Section}}",
   "{{#Recommendations (repeat)}} {{ Owner }}: {{ Action }} {{/Recommendations}}",
 ];
@@ -163,6 +172,16 @@ Fee: {{ Contract Value (currency) (optional) }}`}
               value. Narrative fields are filled into the document but kept out of reporting.
             </p>
             <AnnotationTable rows={NARRATIVE_ROWS} />
+          </div>
+
+          <div className="space-y-2">
+            <SectionHeading>Signatures</SectionHeading>
+            <p className="text-[12px] leading-[1.55] text-[#5c574c]">
+              Put one of these wherever an approver&apos;s sign-off belongs. Each signature slot is
+              claimed by one approval step in the flow, so a document needing a delegate and a
+              finance sign-off carries two slots and two approval steps.
+            </p>
+            <AnnotationTable rows={SIGNATURE_ROWS} />
           </div>
 
           <div className="space-y-2">

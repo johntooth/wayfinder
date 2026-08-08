@@ -139,12 +139,51 @@ behaves by count:
 | Signature fields in the subject step's template | Control |
 | --- | --- |
 | 0 | no control shown; the approval simply records no signature |
-| 1 | bound automatically, dropdown hidden — there is no choice to make |
-| 2+ | a dropdown listing each slot by its `label`, required before save |
+| 1+ | a dropdown listing each slot by its `label`, required before save; a lone slot arrives pre-selected |
 
 Two approval nodes in the same flow must not target the same
 `signatureFieldKey` on the same document; that is a config-time validation
 error, not a runtime surprise.
+
+**Amended v0.26.2 — a lone slot is bound explicitly, not implicitly.** As first
+written, this table hid the control for exactly one slot and called it "bound
+automatically". Nothing bound it: `signatureFieldKey` stayed empty in the config,
+`DecideApproval` read it as `null`, and `ApplyApprovalSignature` returned
+`no_signature_slot`. Every single-signature template went unsigned while the
+editor said the opposite. A control that claims an effect it does not have is
+worse than no control, so the dropdown now appears from the first slot.
+
+Two approval steps must still not claim one slot, so the pre-selection is a
+default the author can see and change — not a silent write.
+
+The runtime keeps a **fallback for flows already saved under the old
+behaviour**: when a node's `signatureFieldKey` is empty and the subject step
+declares exactly one signature, `DecideApproval` binds that slot. This is
+deliberately narrow. With two or more slots an empty key stays unbound, because
+guessing which of several signatures a step fills would put a named person's
+attestation in the wrong place on the document — a worse failure than not
+signing at all.
+
+### 5a. A signature is a first-class type in the annotation editor
+
+`(approval)` is a type the template author selects, not merely one the parser
+tolerates. The guided annotation editor lists it beside Text and Narrative, and
+the annotation reference documents it.
+
+This is a correctness requirement, not a convenience. The editor round-trips
+every reviewed row through `modelToLine` and writes the result back into the
+stored `.docx` (`buildAnnotationEdits`). A row the editor cannot represent is a
+row it silently rewrites: before v0.26.2 a signature loaded as a plain text
+field and saved as `{{ Name (optional) }}`, destroying the slot in the author's
+own document. Any field type the parser accepts must therefore be a type the
+editor can hold and re-emit unchanged.
+
+Because a signature carries no author-supplied value, its per-field settings are
+empty of constraints — no length, bound, multiplicity or required toggle, all of
+which `parseTemplateField` rejects on a signature anyway.
+
+The structured-conversation editor still omits it, for the reason §2 gives: no
+document, no signature.
 
 Note the scope this settles: ADR-040 keeps **one subject per approval node**.
 Multiple signatures do not change that. A document with three signature slots is
@@ -235,6 +274,14 @@ guessing would produce a signature nobody can rely on.
   `buildRenderData`, the structured-field editor). Missing one is a silent
   wrong-behaviour bug, so the type must be added to the domain first and the
   compiler used to find the rest.
+
+  This is what the v0.26.2 fix ran into, and the compiler did **not** find it.
+  The annotation editor's `fieldRowTypeOf` maps a `TemplateField` onto its own
+  narrower `FieldRowType`, and it ends in a `default:` arm rather than an
+  exhaustive one — so `signature` fell through to `text` with no type error.
+  Every place a domain type is narrowed onto a UI vocabulary needs an explicit
+  arm per member, because a `default:` turns an unhandled case into plausible
+  wrong behaviour instead of a build failure.
 - The attestation block is **not** a qualified electronic signature. Anywhere it
   is described to users it must be called what it is; overclaiming legal
   standing is the failure mode to avoid.

@@ -72,9 +72,11 @@ sequential approvals, all reachable in today's code:
   `{{ Delegate Signature (approval) }}` tag, which the conversational node
   **never asks the operator for** and which is filled from the approval record
   when the decision is made.
-- Where a template declares **more than one** signature slot, the approval node
+- Where a template declares **one or more** signature slots, the approval node
   config offers a **dropdown to choose which slot this step fills**, so a
   document requiring several sign-offs is built from several approval steps.
+  A single slot arrives pre-selected rather than hidden, so the author can always
+  see what the step signs.
 - The approval record is **namespaced by step**, so a flow with several approval
   steps produces a report-ready record that names, at minimum, the **date/time,
   approver name, approver email, decision and comment** for each.
@@ -125,7 +127,7 @@ sequential approvals, all reachable in today's code:
 | `ApprovalStatus` | `packages/domain/src/entities/approval.ts` | existing (add variant) | gains `approved_with_edits`, derived at decision time. `ApprovalDecision` (the approver's input) is unchanged at three values. No migration — `status` is a `text` column with a TS-only enum and no CHECK constraint. |
 | `isApproved(status)` | `packages/domain/src/entities/approval.ts` | new (predicate) | the single definition of "this approval approved", for future readers. No existing site needs converting — control flow branches on `decision`, not `status`. |
 | `TemplateFieldType: "signature"` | `packages/domain/src/entities/template-field.ts` | existing (add variant) | parsed from the `(approval)` annotation. Excluded from `nodeFieldSet`, so it is never gathered conversationally. |
-| `ApprovalNodeConfig.signatureFieldKey` | `packages/domain/src/entities/flow-node.ts` | existing (add field) | which signature slot this approval step fills. Auto-bound when the template has exactly one; chosen from a dropdown when it has several. |
+| `ApprovalNodeConfig.signatureFieldKey` | `packages/domain/src/entities/flow-node.ts` | existing (add field) | which signature slot this approval step fills. Chosen from a dropdown whenever the subject step declares any; pre-selected when there is only one. Left empty on a lone-slot template, the decision binds that slot at runtime so flows saved before v0.26.2 still sign. |
 | Attestation block | `packages/application` (render path) | new (pure builder) | the rendered signature value: name, email, role, decision, UTC timestamp, comment and a verification code derived from the ADR-033 hash chain. |
 | `ApprovalNodeConfig.changesRequestedTarget` | `packages/domain/src/entities/flow-node.ts` | existing (add field) | `{ kind: "step"; nodeId }` \| `{ kind: "nearest_editable" }` (default). Where a change request returns the session. |
 | `PendingApprovalContext.previousStep` | `packages/application/src/use-cases/approvals/list-pending-approvals-with-context.ts` | existing (change) | resolves from `approvalSubject` instead of `advancedFrom`, at read time so the current revision is shown. |
@@ -144,8 +146,9 @@ sequential approvals, all reachable in today's code:
    decision was made, and it never changes afterwards.
 6. As a **template author**, I can place `{{ Delegate Signature (approval) }}` in
    a .docx and know the operator will never be asked to fill it in.
-7. As a **flow owner**, when my template has several signature slots I can say
-   which one each approval step signs.
+7. As a **flow owner**, when my template declares signature slots I can say which
+   one each approval step signs, and see that choice whether there is one slot or
+   several.
 8. As an **approver**, my decision, comment and identity appear in the document
    itself once I decide.
 9. As a **reporting user**, I can read a flow's approvals and tell each step's
@@ -167,9 +170,15 @@ sequential approvals, all reachable in today's code:
 
 - `apps/web/src/components/canvas/node-config-modal-approval.tsx` — the "What is
   being approved" selector (prior-step dropdown defaulting to last completed +
-  custom free-text), the signature-slot dropdown (shown only when the subject
-  step's template declares more than one signature field), **and** the "On
+  custom free-text), the signature-slot dropdown (shown whenever the subject
+  step's template declares at least one signature field), **and** the "On
   changes requested, return to:" dropdown.
+- `apps/web/src/components/canvas/field-row-model.ts` and `field-row.tsx` — the
+  guided annotation editor, which must be able to hold and re-emit a signature
+  row unchanged, since every reviewed row is written back into the stored `.docx`.
+- `apps/web/src/components/canvas/annotation-reference.tsx` and
+  `template-tags-help-dialog.tsx` — the two places a template author reads the
+  annotation grammar, both of which must list `(approval)`.
 - Approval-raise application use-case — resolve the subject (step snapshot or AI
   summary), attach to the approval, snapshot at decision.
 - `list-pending-approvals-with-context.ts` — resolve the approver's document /
@@ -242,9 +251,18 @@ new table.
       document is written as a new revision with the prior one retained.
 - [ ] A `rejected` / `changes_requested` decision renders the block naming that
       decision; an undecided slot renders empty.
-- [ ] A template with 2+ signature fields shows a slot dropdown in the approval
-      node config; with exactly one it binds automatically; two nodes cannot
+- [ ] A template with 1+ signature fields shows a slot dropdown in the approval
+      node config, pre-selected when there is exactly one; two nodes cannot
       target the same slot.
+- [ ] An approval node saved with no `signatureFieldKey` against a subject step
+      declaring exactly one signature still signs that slot on decision; with two
+      or more it signs none, rather than guessing.
+- [ ] A `(approval)` row survives the guided annotation editor untouched — it
+      loads as a signature, not as text, and saving re-emits
+      `{{ Name (approval) }}` rather than rewriting the author's document.
+- [ ] `(approval)` appears in the annotation reference and the template tags help
+      dialog, and is selectable as a field type in the template editor but not in
+      the structured-conversation editor.
 - [ ] `recordSnapshot` keys are prefixed with the step key and include at least
       `decision`, `approver_name`, `approver_email`, `decided_at` and `comment`
       for every decided approval.

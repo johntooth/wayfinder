@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PriorStepField } from "@rbrasier/domain";
 import {
+  anyPriorStepHasSignature,
   approvalSubjectChoice,
   approvalSubjectFromChoice,
   CUSTOM_SUBJECT_CHOICE,
@@ -177,16 +178,31 @@ describe("signature slots", () => {
     expect(signatureSlotControl([])).toEqual({ mode: "none" });
   });
 
-  it("binds automatically when there is exactly one, since there is no choice", () => {
-    expect(signatureSlotControl([{ key: "delegate_signature", label: "Delegate Signature" }])).toEqual(
-      { mode: "auto", key: "delegate_signature" },
-    );
+  // The "auto" mode this replaces bound nothing: it rendered no control, left
+  // signatureFieldKey empty in the saved config, and DecideApproval then read
+  // null — so a single-signature template was never signed while the modal said
+  // it would be (ADR-043 §5, amended v0.26.2).
+  it("still asks with exactly one, so the choice is written rather than assumed", () => {
+    const slots = [{ key: "delegate_signature", label: "Delegate Signature" }];
+
+    expect(signatureSlotControl(slots)).toEqual({ mode: "choose", slots });
   });
 
   it("asks the author to pick when there are two or more", () => {
     const slots = signatureSlotsFor(fields, "node-draft");
 
     expect(signatureSlotControl(slots)).toEqual({ mode: "choose", slots });
+  });
+
+  // Drives the explanation shown on the default subject, where no template is
+  // knowable until the session runs. Gated so it never fires on the many flows
+  // that have no signature anywhere.
+  it("notices a signature elsewhere in the flow, whatever the chosen subject", () => {
+    expect(anyPriorStepHasSignature(fields)).toBe(true);
+    expect(anyPriorStepHasSignature(fields.filter((entry) => entry.field.type !== "signature"))).toBe(
+      false,
+    );
+    expect(anyPriorStepHasSignature([])).toBe(false);
   });
 
   it("rejects two approval steps signing the same slot", () => {

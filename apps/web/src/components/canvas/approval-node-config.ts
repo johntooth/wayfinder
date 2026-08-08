@@ -102,18 +102,25 @@ export const signatureSlotsFor = (
 export type SignatureSlotControl =
   // The template declares none, so the approval simply records no signature.
   | { mode: "none" }
-  // Exactly one: there is no choice to make, so it binds without a control.
-  | { mode: "auto"; key: string }
-  // Two or more: the author must say which slot this step signs.
+  // One or more: the author says which slot this step signs, and a lone slot
+  // arrives pre-selected rather than hidden.
   | { mode: "choose"; slots: Array<{ key: string; label: string }> };
 
+// There is deliberately no "bind it automatically" mode. One existed until
+// v0.26.2 and bound nothing: it rendered no control, so `signatureFieldKey` was
+// never written, and every single-signature template decided without signing
+// while the modal said otherwise (ADR-043 §5, amended).
 export const signatureSlotControl = (
   slots: Array<{ key: string; label: string }>,
-): SignatureSlotControl => {
-  if (slots.length === 0) return { mode: "none" };
-  if (slots.length === 1) return { mode: "auto", key: slots[0]!.key };
-  return { mode: "choose", slots };
-};
+): SignatureSlotControl =>
+  slots.length === 0 ? { mode: "none" } : { mode: "choose", slots };
+
+// Whether any step earlier in the flow declares a signature at all. Drives the
+// explanation shown on the default subject, where the subject step — and so its
+// template — is not known until the session runs. Without this the hint would
+// fire on every flow, including the many that have no signature anywhere.
+export const anyPriorStepHasSignature = (priorStepFields: PriorStepField[]): boolean =>
+  priorStepFields.some((entry) => entry.field.type === "signature");
 
 // Two approval steps must not sign the same slot on the same document — a
 // config-time error, not a runtime surprise (ADR-043 §5).

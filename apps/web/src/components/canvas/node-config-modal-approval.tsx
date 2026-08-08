@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import type { PriorStepField } from "@rbrasier/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  anyPriorStepHasSignature,
   approvalSubjectChoice,
   approvalSubjectFromChoice,
   CUSTOM_SUBJECT_CHOICE,
@@ -51,6 +53,17 @@ export function NodeConfigModalApproval({
     priorSteps,
     values.changesRequestedTargetNodeId,
   );
+  const onDefaultSubject =
+    values.approvalSubjectKind === "step" && !values.approvalSubjectNodeId;
+
+  // A lone slot is pre-selected by writing it, not by displaying it. Displaying
+  // a default while leaving the config empty is exactly the v0.26.2 bug: the
+  // author reads "this step signs X" and the decision then finds no slot key.
+  const onlySlotKey = slots.length === 1 ? slots[0]!.key : null;
+  useEffect(() => {
+    if (!onlySlotKey || values.signatureFieldKey) return;
+    set("signatureFieldKey", onlySlotKey);
+  }, [onlySlotKey, values.signatureFieldKey, set]);
 
   return (
     <>
@@ -139,11 +152,12 @@ export function NodeConfigModalApproval({
           <Label htmlFor="approval-signature-slot">Which signature does this step sign?</Label>
           <select
             id="approval-signature-slot"
+            data-approval-signature-slot
             className={SELECT_CLASS}
             value={values.signatureFieldKey}
             onChange={(e) => set("signatureFieldKey", e.target.value)}
           >
-            <option value="">Choose a signature…</option>
+            <option value="">No signature — just record the decision</option>
             {slotControl.slots.map((slot) => (
               <option key={slot.key} value={slot.key}>
                 {slot.label}
@@ -154,17 +168,21 @@ export function NodeConfigModalApproval({
             <p className={WARNING_CLASS}>{slotConflict}</p>
           ) : (
             <p className={HINT_CLASS}>
-              That step&apos;s template has more than one signature, so this step needs to say which
-              one it fills.
+              On approval, the decision is written into this signature and the document is saved as a
+              new version. The earlier version is kept.
+              {slotControl.slots.length > 1
+                ? " That step's template has several signatures, so each approval step signs a different one."
+                : ""}
             </p>
           )}
         </div>
       )}
 
-      {slotControl.mode === "auto" && (
+      {onDefaultSubject && anyPriorStepHasSignature(priorStepFields) && (
         <p className={HINT_CLASS}>
-          On approval, the decision is written into that step&apos;s signature and the document is
-          saved as a new version. The earlier version is kept.
+          A step earlier in this flow has a signature slot. To sign it, name that step above —
+          on the default the subject is whichever step happens to finish last, so there is no
+          template to pick a signature from until the session runs.
         </p>
       )}
 
