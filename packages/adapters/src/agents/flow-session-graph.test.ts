@@ -120,6 +120,26 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     expect(result.data).toContain("DD-MM-YYYY");
   });
 
+  it("anchors DD-MM-YYYY as day-first in both directions so dates are not read month-first", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "generate_document" as const,
+        documentTemplateContent: "Start: {{ Start Date (date) }}",
+      },
+      templateFields: [
+        { key: "start_date", label: "Start Date", type: "date", optional: false, raw: "Start Date (date)" },
+      ],
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toContain("the first number is the day and the second is the month");
+    // Writing a spoken date out, and reading an already-formatted one back —
+    // the reported bug was the second direction, at finalisation.
+    expect(result.data).toContain("10-08-2026, never 08-10-2026");
+    expect(result.data).toContain("10 August 2026, never 8 October 2026");
+  });
+
   it("falls back to nodeConfig.documentTemplateFields when templateFields is not supplied", () => {
     const result = agent.buildSystemPrompt({
       ...baseInput,
