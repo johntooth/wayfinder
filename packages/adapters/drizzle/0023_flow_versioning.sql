@@ -1,3 +1,5 @@
+-- data-impact: preserved — the unique index covers app_flow_versions, created empty in this
+-- same migration, so no existing row can violate it.
 CREATE TABLE "app_flow_versions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"flow_id" uuid NOT NULL,

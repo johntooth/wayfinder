@@ -1,3 +1,5 @@
+-- data-impact: preserved — the DELETE is inside the retention purge function this migration
+-- defines, not executed by it. Applying the migration removes no rows.
 -- Append-only enforcement for core_audit_log (ADR-033).
 --
 -- A reject trigger blocks every UPDATE/DELETE on the audit table, so append-only
