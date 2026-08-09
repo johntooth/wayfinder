@@ -8,11 +8,13 @@ import type {
   IAdjudicator,
   IChunkStore,
   IClassificationLensReader,
+  IClassificationLensWriter,
   IEvaluationRepository,
   IFinancialExtractor,
   ILanguageModel,
   IProcurementClassifier,
   IProcurementExtractionReader,
+  IStagedCorpusReader,
   ProcurementResponse,
   Result,
   ResponseGroup,
@@ -149,12 +151,29 @@ const classifier: IProcurementClassifier = buildColdStartClassifier({
   lensReader,
 });
 
+const stagedCorpusReader: IStagedCorpusReader = {
+  async listCorpora() {
+    return ok([{ corpusId: evaluationId, documentCount: 1 }]);
+  },
+  async listDocuments() {
+    return ok([{ documentId: "doc-1", chunkCount: 2, preview: "Response of Acme" }]);
+  },
+};
+
+const lensWriter: IClassificationLensWriter = {
+  async saveLens() {
+    return ok(undefined);
+  },
+};
+
 const dependencies = (overrides: Partial<RedlineModuleDependencies> = {}): RedlineModuleDependencies => ({
   repository: new InMemoryRepository(),
   classifier,
   financialExtractor,
   extractionReader,
   languageModel,
+  stagedCorpusReader,
+  lensWriter,
   productName: "Platform",
   ...overrides,
 });

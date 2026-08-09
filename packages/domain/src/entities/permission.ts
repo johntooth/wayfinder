@@ -10,7 +10,8 @@ export type PermissionKey =
   | "group:manage_own"
   | "extraction:author"
   | "extraction:run"
-  | "evaluation:review";
+  | "evaluation:review"
+  | "evaluation:create";
 
 export interface PermissionDefinition {
   readonly key: PermissionKey;
@@ -74,6 +75,12 @@ export const PERMISSIONS: readonly PermissionDefinition[] = [
     label: "Review procurement evaluations",
     description:
       "Open the redline evaluation-review surface: the delineated response grid, pricing pivots, and Excel export for a tender.",
+  },
+  {
+    key: "evaluation:create",
+    label: "Create procurement evaluations",
+    description:
+      "Start a new evaluation over a staged corpus: choose its documents, the brand behind each, and the fields responses are read against. Reviewing an evaluation does not confer this.",
   },
 ];
 

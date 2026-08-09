@@ -128,4 +128,16 @@ describe("PERMISSIONS registry", () => {
     expect(evaluationReview?.label.length).toBeGreaterThan(0);
     expect(evaluationReview?.description.length).toBeGreaterThan(0);
   });
+
+  it("keeps creating an evaluation a separate key from reviewing one", () => {
+    const keys = PERMISSIONS.map((permission) => permission.key);
+
+    expect(keys).toContain("evaluation:create");
+
+    const evaluationCreate = PERMISSIONS.find(
+      (permission) => permission.key === "evaluation:create",
+    );
+    expect(evaluationCreate?.label.length).toBeGreaterThan(0);
+    expect(evaluationCreate?.description.length).toBeGreaterThan(0);
+  });
 });

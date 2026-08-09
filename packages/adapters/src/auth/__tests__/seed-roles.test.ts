@@ -93,6 +93,7 @@ describe("seedRoles", () => {
         "extraction:author",
         "extraction:run",
         "evaluation:review",
+        "evaluation:create",
       ].sort(),
     );
 
