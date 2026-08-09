@@ -16,6 +16,9 @@ const makeController = (
     openPricingPivot?: ReturnType<typeof vi.fn>;
     buildWorkbook?: ReturnType<typeof vi.fn>;
     openDocument?: ReturnType<typeof vi.fn>;
+    listStagedCorpora?: ReturnType<typeof vi.fn>;
+    listStagedDocuments?: ReturnType<typeof vi.fn>;
+    createEvaluation?: ReturnType<typeof vi.fn>;
   } = {},
 ) => {
   return {
@@ -49,6 +52,19 @@ const makeController = (
     buildWorkbook:
       overrides.buildWorkbook ??
       vi.fn().mockResolvedValue(ok({ sheets: [[]], sheetNames: ["Review"] })),
+    listStagedCorpora:
+      overrides.listStagedCorpora ??
+      vi.fn().mockResolvedValue(ok([{ corpusId: "tender-2026", documentCount: 2 }])),
+    listStagedDocuments:
+      overrides.listStagedDocuments ??
+      vi.fn().mockResolvedValue(
+        ok([{ documentId: "hashA", chunkCount: 3, preview: "Response of Acme" }]),
+      ),
+    createEvaluation:
+      overrides.createEvaluation ??
+      vi
+        .fn()
+        .mockResolvedValue(ok({ id: "tender-2026", name: "Panel 2026", stage: "documents_uploaded" })),
   };
 };
 
@@ -427,5 +443,140 @@ describe("evaluation.document", () => {
         documentId,
       }),
     ).rejects.toThrow(/womblex-ingest is unreachable/i);
+  });
+});
+
+// The create half (delivery-plan §2 item 1). Until these three the router had
+// five queries and no mutation, so nothing served could bring an evaluation into
+// being — a terminal script was the only way in.
+
+const createInput = {
+  corpusId: "tender-2026",
+  name: "Panel 2026",
+  documents: [{ documentId: "hashA", brand: "Acme" }],
+  fields: [{ name: "Warranty", definition: "The warranty offered." }],
+};
+
+const reviewerContext = (container: Container): TrpcContext => ({
+  ...contextWith(container),
+  isAdmin: false,
+  permissions: new Set<PermissionKey>(["evaluation:review"]),
+});
+
+describe("evaluation.stagedCorpora", () => {
+  it("returns the corpora the create screen picks from", async () => {
+    const controller = makeController();
+
+    const result = await createCaller(
+      contextWith(makeContainer(controller)),
+    ).evaluation.stagedCorpora();
+
+    expect(result).toEqual([{ corpusId: "tender-2026", documentCount: 2 }]);
+  });
+
+  it("refuses a reviewer, who cannot start an evaluation", async () => {
+    const controller = makeController();
+
+    await expect(
+      createCaller(reviewerContext(makeContainer(controller))).evaluation.stagedCorpora(),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(controller.listStagedCorpora).not.toHaveBeenCalled();
+  });
+});
+
+describe("evaluation.stagedDocuments", () => {
+  it("returns a corpus's documents with the previews that make hashes choosable", async () => {
+    const controller = makeController();
+
+    const result = await createCaller(
+      contextWith(makeContainer(controller)),
+    ).evaluation.stagedDocuments({ corpusId: "tender-2026" });
+
+    expect(controller.listStagedDocuments).toHaveBeenCalledWith({ corpusId: "tender-2026" });
+    expect(result[0]?.preview).toBe("Response of Acme");
+  });
+
+  it("surfaces an unstaged corpus as NOT_FOUND", async () => {
+    const controller = makeController({
+      listStagedDocuments: vi
+        .fn()
+        .mockResolvedValue(err(domainError("NOT_FOUND", "no corpus staged under ghost"))),
+    });
+
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.stagedDocuments({
+        corpusId: "ghost",
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+});
+
+describe("evaluation.create", () => {
+  it("creates the evaluation and returns it for the screen to redirect on", async () => {
+    const controller = makeController();
+
+    const result = await createCaller(contextWith(makeContainer(controller))).evaluation.create(
+      createInput,
+    );
+
+    expect(controller.createEvaluation).toHaveBeenCalledWith(createInput);
+    expect(result.id).toBe("tender-2026");
+    expect(result.stage).toBe("documents_uploaded");
+  });
+
+  it("admits a non-admin caller holding evaluation:create", async () => {
+    const controller = makeController();
+    const context = {
+      ...contextWith(makeContainer(controller)),
+      isAdmin: false,
+      permissions: new Set<PermissionKey>(["evaluation:create"]),
+    };
+
+    await expect(createCaller(context).evaluation.create(createInput)).resolves.toBeDefined();
+  });
+
+  it("refuses a reviewer: opening a tender is not starting one", async () => {
+    const controller = makeController();
+
+    await expect(
+      createCaller(reviewerContext(makeContainer(controller))).evaluation.create(createInput),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(controller.createEvaluation).not.toHaveBeenCalled();
+  });
+
+  it("refuses an unauthenticated caller", async () => {
+    const controller = makeController();
+    const context = { ...contextWith(makeContainer(controller)), userId: null };
+
+    await expect(createCaller(context).evaluation.create(createInput)).rejects.toThrow(
+      /authentication required/i,
+    );
+    expect(controller.createEvaluation).not.toHaveBeenCalled();
+  });
+
+  it("maps a second evaluation over the same corpus to CONFLICT", async () => {
+    const controller = makeController({
+      createEvaluation: vi
+        .fn()
+        .mockResolvedValue(
+          err(domainError("ALREADY_EXISTS", "an evaluation already exists over corpus tender-2026")),
+        ),
+    });
+
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.create(createInput),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("keeps a malformed shape off the wire rather than passing it to the domain", async () => {
+    const controller = makeController();
+
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.create({
+        ...createInput,
+        documents: [],
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(controller.createEvaluation).not.toHaveBeenCalled();
   });
 });

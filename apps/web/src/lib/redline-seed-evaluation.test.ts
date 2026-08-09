@@ -9,6 +9,7 @@ import type {
   ILanguageModel,
   IProcurementClassifier,
   IProcurementExtractionReader,
+  IStagedCorpusReader,
   ProcurementResponse,
   ResponseGroup,
   Vendor,
@@ -151,6 +152,18 @@ const manifest = () => {
   return parsed.data;
 };
 
+// The seeder does not create an evaluation from a staged corpus — IngestDocuments
+// makes it — but the controller it drives now carries the create half, so the
+// container needs both ports present.
+const stagedCorpusReader: IStagedCorpusReader = {
+  async listCorpora() {
+    return ok([]);
+  },
+  async listDocuments() {
+    return ok([]);
+  },
+};
+
 const dependencies = () => {
   const repository = new InMemoryRepository();
   const lensWriter = new RecordingLensWriter();
@@ -164,6 +177,8 @@ const dependencies = () => {
       financialExtractor,
       extractionReader,
       languageModel,
+      stagedCorpusReader,
+      lensWriter,
       productName: "Light fleet",
     }),
   };

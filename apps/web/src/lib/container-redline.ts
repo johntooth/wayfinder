@@ -11,6 +11,7 @@ import type {
   ILanguageModel,
   IProcurementClassifier,
   IProcurementExtractionReader,
+  IStagedCorpusReader,
 } from "@redline/redline-domain";
 import {
   ColdStartClassifier,
@@ -23,6 +24,7 @@ import {
   DrizzleClassificationLensWriter,
   DrizzleEvaluationRepository,
   DrizzleMoneySpanStore,
+  DrizzleStagedCorpusReader,
   HttpAdjudicator,
   WomblexExtractionReader,
   createRedlinePostgres,
@@ -52,6 +54,10 @@ export interface RedlineModuleDependencies {
   readonly financialExtractor: IFinancialExtractor;
   readonly extractionReader: IProcurementExtractionReader;
   readonly languageModel: ILanguageModel;
+  // The create half (delivery-plan §2 item 1). The served container carried no
+  // write capability until an evaluation could be started from the browser.
+  readonly stagedCorpusReader: IStagedCorpusReader;
+  readonly lensWriter: IClassificationLensWriter;
   readonly productName: string;
 }
 
@@ -72,6 +78,8 @@ export const buildRedlineModule = (
     financialExtractor: dependencies.financialExtractor,
     extractionReader: dependencies.extractionReader,
     languageModel: dependencies.languageModel,
+    stagedCorpusReader: dependencies.stagedCorpusReader,
+    lensWriter: dependencies.lensWriter,
     productName: dependencies.productName,
   });
   if (container.error) return container;
@@ -161,6 +169,8 @@ const resolveRedlineAdapters = (input: ResolveRedlineModuleInput) => {
     }),
     extractionReader,
     languageModel: new RedlineLanguageModelBridge(input.wayfinderLanguageModel),
+    stagedCorpusReader: new DrizzleStagedCorpusReader(database),
+    lensWriter: new DrizzleClassificationLensWriter(database),
     productName: env.REDLINE_PRODUCT_NAME ?? "the product",
   };
 };
@@ -177,6 +187,8 @@ export const resolveRedlineModule = (
     financialExtractor: adapters.financialExtractor,
     extractionReader: adapters.extractionReader,
     languageModel: adapters.languageModel,
+    stagedCorpusReader: adapters.stagedCorpusReader,
+    lensWriter: adapters.lensWriter,
     productName: adapters.productName,
   });
 };
@@ -204,6 +216,8 @@ export const resolveRedlineSeedDependencies = (
     financialExtractor: adapters.financialExtractor,
     extractionReader: adapters.extractionReader,
     languageModel: adapters.languageModel,
+    stagedCorpusReader: adapters.stagedCorpusReader,
+    lensWriter: adapters.lensWriter,
     productName: adapters.productName,
   });
   if (module.error) return module;
@@ -214,7 +228,7 @@ export const resolveRedlineSeedDependencies = (
       repository: adapters.repository,
       extractionReader: adapters.extractionReader,
     }),
-    lensWriter: new DrizzleClassificationLensWriter(adapters.database),
+    lensWriter: adapters.lensWriter,
     workflowController: module.data.workflowController,
   });
 };

@@ -54,6 +54,7 @@ const SYSTEM_ROLE_SEEDS: SystemRoleSeed[] = [
       "extraction:author",
       "extraction:run",
       "evaluation:review",
+      "evaluation:create",
     ],
   },
 ];
