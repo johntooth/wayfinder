@@ -16,7 +16,10 @@ import { test, expect } from "./helpers/base";
 //   1. Two separate Outcome columns, one per approval step, each captioned with
 //      its own step name.
 //   2. The approver is named, not identified by a user id.
-//   3. The report says which step each approval applies to.
+//
+// The third behaviour this phase added — an "Applies to" column naming the
+// signed step — was retired in v0.27.6; its absence is asserted in
+// enhance-flow-insights-menu-ui.spec.ts.
 
 const INSIGHTS_PATH = "/admin/dashboards/insights";
 const SUBJECT_FLOW_NAME = "E2E SEED Approval Subject Flow";
@@ -61,16 +64,12 @@ test.describe("Flow Insights: approval steps segmented by step", () => {
     await expect(page.getByRole("columnheader", { name: /outcome/i })).toHaveCount(2);
   });
 
-  test("the report names the approver and what the approval applies to", async ({ page }) => {
+  test("the report names the approver", async ({ page }) => {
     test.skip(!(await openSubjectFlow(page)), "Seeded approval-subject flow not in insights");
 
     // The approver as a person, not the raw user id the projection used to hold.
     await expect(page.getByRole("cell", { name: "Jane Doe" }).first()).toBeVisible();
     await expect(page.getByRole("cell", { name: "Sam Patel" }).first()).toBeVisible();
-
-    // And which step each sign-off was about.
-    await expect(page.getByRole("columnheader", { name: /applies to/i }).first()).toBeVisible();
-    await expect(page.getByRole("cell", { name: /Prepare instrument/i }).first()).toBeVisible();
   });
 
   test("a step decided twice shows its latest decision, noting the revision", async ({ page }) => {

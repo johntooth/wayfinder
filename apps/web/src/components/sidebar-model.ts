@@ -32,6 +32,24 @@ export const formatRecentChatMeta = (
   now: Date = new Date(),
 ): string => `${recentChatStatusLabel(status)} · ${relativeAge(updatedAt, now)}`;
 
+// How many chats the Recent block shows. The rail scrolls, so this is not what
+// keeps the footer on screen — it is what keeps the scroll itself short enough
+// to be worth doing, on an account with hundreds of chats.
+export const RECENT_CHATS_LIMIT = 8;
+
+// Structural subset of a session — the rail decides what to show from these two
+// alone, so the helper does not need the whole list payload to be testable.
+interface RecentChatCandidate {
+  id: string;
+  status: SessionStatus;
+}
+
+// Which chats the Recent block shows, in the order given. Abandoned chats are
+// dropped before the cap is applied, not after: a run of abandoned chats at the
+// top would otherwise eat the whole allowance and leave the block near-empty.
+export const recentChatSessions = <T extends RecentChatCandidate>(sessions: readonly T[]): T[] =>
+  sessions.filter((session) => session.status !== "abandoned").slice(0, RECENT_CHATS_LIMIT);
+
 // Which single rail item is active. Resolved across the whole candidate set
 // rather than per-item, because "is this href a prefix of the path" is true for
 // every ancestor at once — which is how /chats and /chats/<id> both came to

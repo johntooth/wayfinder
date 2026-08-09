@@ -53,8 +53,15 @@ export const deriveStepKeys = (labels: string[]): string[] => {
 // coincidence alone until this existed.
 //
 // The original four keys and their labels are fixed by history: rows written
-// before `revision`, `approver_email` and `applies_to` existed are keyed this
-// way, and changing a key would strand them in a column that no longer appears.
+// before `revision` and `approver_email` existed are keyed this way, and
+// changing a key would strand them in a column that no longer appears.
+//
+// `applies_to` was projected here until it was retired: it restated the column
+// group's own step name in prose, so it cost a column and told a reader nothing.
+// The subject itself is unaffected — it stays frozen in `record_snapshot` as
+// `subject_description` (ADR-040 §5) and still shows on every approval surface.
+// The report skips the stale column rather than the rows being rewritten, so
+// approvals decided before the retirement read the same as ones after it.
 //
 // `revision` counts the times the step has been decided, because a change
 // request routes work back and re-entering the step raises a fresh request — so
@@ -70,7 +77,6 @@ export const APPROVAL_PROJECTION_FIELDS: readonly {
   { key: "decided_at", label: "Decided at", type: "text" },
   { key: "decided_by", label: "Decided by", type: "text" },
   { key: "approver_email", label: "Approver email", type: "text" },
-  { key: "applies_to", label: "Applies to", type: "text" },
   { key: "comment", label: "Comment", type: "text" },
 ];
 

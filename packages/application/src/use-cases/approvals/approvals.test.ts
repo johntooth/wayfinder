@@ -1828,7 +1828,10 @@ describe("DecideApproval", () => {
         expect(projected(stepOutputs, "approver_email")).toBe("manager@corp.test");
       });
 
-      it("projects what the approval applies to", async () => {
+      // The subject is still frozen into the record and still shown on every
+      // approval surface; what it no longer does is take a report column, where
+      // it only restated the step name the column group is already headed by.
+      it("projects six fields and no longer says what the approval applies to", async () => {
         const { approvals, sessions, nodes, stepOutputs, users } = await seedFlow();
         const approval = await seedConfirmed(approvals);
         const sut = buildRecording({ approvals, sessions, nodes, stepOutputs, users });
@@ -1839,7 +1842,17 @@ describe("DecideApproval", () => {
           decision: "approved",
         });
 
-        expect(projected(stepOutputs, "applies_to")).toContain("Prepare instrument");
+        const projection = stepOutputs.rows.find(
+          (row) => row.nodeId === "node-appr" && row.fields.some((f) => f.key === "outcome"),
+        );
+        expect(projection?.fields.map((f) => f.key)).toEqual([
+          "outcome",
+          "revision",
+          "decided_at",
+          "decided_by",
+          "approver_email",
+          "comment",
+        ]);
       });
 
       it("falls back to the approver's email when no name was recorded", async () => {
@@ -1884,7 +1897,6 @@ describe("DecideApproval", () => {
 
         expect(projected(stepOutputs, "decided_by")).toBe("manager-1");
         expect(projected(stepOutputs, "approver_email")).toBe("");
-        expect(projected(stepOutputs, "applies_to")).toBe("");
       });
 
       // A change request routes work back; re-entering the step raises a fresh
