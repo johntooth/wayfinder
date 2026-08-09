@@ -40,8 +40,15 @@ export function CreateEvaluationContent() {
     { corpusId },
     { enabled: corpusId !== "" },
   );
+  const utils = trpc.useUtils();
   const createMutation = trpc.evaluation.create.useMutation({
-    onSuccess: (evaluation) => router.push(`/evaluations/${evaluation.id}/grouping`),
+    onSuccess: (evaluation) => {
+      // The index list is cached for 30s (query-client staleTime). Without this
+      // a specialist who creates an evaluation and goes back to /evaluations
+      // within that window is shown a list that does not contain it.
+      void utils.evaluation.list.invalidate();
+      router.push(`/evaluations/${evaluation.id}/grouping`);
+    },
   });
 
   // Switching corpus abandons choices made against the previous one — a document

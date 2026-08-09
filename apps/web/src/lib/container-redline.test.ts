@@ -92,17 +92,14 @@ class FakeChunkStore implements IChunkStore {
 
 const adjudicator: IAdjudicator = {
   async adjudicate(request: AdjudicationRequest): Promise<Result<Adjudication>> {
+    // Adjudication returns one chosen topic and its reasoning. This fixture was
+    // written against an earlier shape carrying a topics[] with per-topic
+    // evidence, which is why it stopped typechecking against the domain the fork
+    // now resolves.
     return ok({
       documentId: request.documentId,
-      topics: [
-        {
-          topicId: request.candidates[0]?.topicId ?? "req-1",
-          evidenceChunkIds: request.passages.map((passage) => passage.chunkId),
-          rationale: "",
-        },
-      ],
-      exception: null,
-      cost: null,
+      chosenTopicId: request.candidates[0]?.topicId ?? "req-1",
+      rationale: `chose from ${request.passages.length} passages`,
     });
   },
 };
