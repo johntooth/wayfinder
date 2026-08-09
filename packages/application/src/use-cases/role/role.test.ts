@@ -165,6 +165,7 @@ describe("ListRoles", () => {
     expect(byKey.get("admins")!.sort()).toEqual(
       [
         "chat:create",
+        "evaluation:create",
         "evaluation:review",
         "extraction:author",
         "extraction:run",
