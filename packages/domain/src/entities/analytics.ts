@@ -3,6 +3,7 @@ import type { MessageRole } from "./conversation";
 import type { StepOutputField } from "./session-step-output";
 import type { TemplateFieldType } from "./template-field";
 import { computeForkSiblingGroups, type FlowGraphEdge } from "./flow-graph";
+import type { FlowNodeType } from "./flow-node";
 import { aggregateConfidence, type ExtractionRecord } from "./extraction-record";
 
 export const parseNumeric = (value: string): number | null => {
@@ -36,6 +37,10 @@ export interface AnalyticsNode {
   id: string;
   name: string;
   colour: string | null;
+  // Absent for a caller that does not resolve node types. Only the field report
+  // reads it, to tell an approval step's projected decision apart from an
+  // author's template field.
+  type?: FlowNodeType;
 }
 
 // ── Overview dashboard DTOs ──────────────────────────────────────────────────
@@ -94,6 +99,10 @@ export interface FieldReportColumn {
   label: string;
   type: TemplateFieldType;
   options?: string[];
+  // The kind of step the column came from, when the caller supplied it. An
+  // `approval` column is a projected decision rather than an authored field, so
+  // the UI labels it with its step name and the collapse rules leave it alone.
+  nodeType?: FlowNodeType;
   // Same key on fork-sibling (mutually-unreachable live) nodes — collapsible in
   // the "Combine forked steps" view. Absent when the column has no safe sibling.
   collapseGroupId?: string;
@@ -375,6 +384,7 @@ export const computeNodeBreakdown = (
 interface NodeForReport {
   id: string;
   name: string;
+  type?: FlowNodeType;
 }
 
 interface SessionForReport {
@@ -413,6 +423,17 @@ const annotateCollapseGroups = (
   }
 
   for (const [fieldKey, fieldColumns] of byFieldKey.entries()) {
+    // Every approval step projects the same key set (`outcome`, `decided_at`,
+    // …), so a shared key across approval steps is an artefact of the
+    // projection, not the reused template slot both rules below exist to
+    // coalesce. Merging two sign-offs into one column loses which step decided
+    // what, which is the whole point of the step-namespaced record (ADR-040 §5).
+    //
+    // The *group* is skipped, not just its approval columns: a step deleted from
+    // the flow has no type to test, and leaving its historical column behind
+    // would let the version rule merge it onto a live sign-off.
+    if (fieldColumns.some((column) => column.nodeType === "approval")) continue;
+
     const liveColumns = fieldColumns.filter((column) => liveNodeIds.has(column.nodeId));
     const liveNodeIdsForKey = liveColumns.map((column) => column.nodeId);
     for (const group of computeForkSiblingGroups(liveNodeIdsForKey, edges)) {
@@ -441,7 +462,7 @@ export const computeFieldReport = (
   sessions: SessionForReport[],
   edges?: FlowGraphEdge[],
 ): FieldReport => {
-  const nodeMap = new Map(nodes.map((node) => [node.id, node.name]));
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
   const sessionMap = new Map(sessions.map((session) => [session.id, session]));
 
   const columns: FieldReportColumn[] = [];
@@ -456,14 +477,16 @@ export const computeFieldReport = (
       const columnKey = `${output.nodeId}:${field.key}`;
       if (!seenColumnKeys.has(columnKey)) {
         seenColumnKeys.add(columnKey);
+        const node = nodeMap.get(output.nodeId);
         columns.push({
           columnKey,
           nodeId: output.nodeId,
-          nodeName: nodeMap.get(output.nodeId) ?? output.nodeId,
+          nodeName: node?.name ?? output.nodeId,
           fieldKey: field.key,
           label: field.label,
           type: field.type,
           options: field.options,
+          ...(node?.type ? { nodeType: node.type } : {}),
         });
       }
     }

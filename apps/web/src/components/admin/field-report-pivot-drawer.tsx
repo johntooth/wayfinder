@@ -33,13 +33,13 @@ import {
 type MeasureKind = "count" | "sum" | "avg";
 
 const selectStyle =
-  "h-9 rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 text-[13px] text-[#1a1814] outline-none focus:border-[#3a5fd9] focus:bg-white";
+  "h-9 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 text-[13px] text-[#1c1b19] outline-none focus:border-[#2f56d3] focus:bg-white";
 
-const labelStyle = "block text-[11px] font-medium uppercase tracking-wide text-[#6d6a65] mb-1";
+const labelStyle = "block text-[11px] font-medium uppercase tracking-wide text-[#666055] mb-1";
 
-const AXIS_STYLE = { fontSize: 11, fill: "#918d87" };
+const AXIS_STYLE = { fontSize: 11, fill: "#736d5f" };
 
-const SERIES_COLOURS = ["#3a5fd9", "#2e9e6a", "#d98a3a", "#c2385a", "#7c5cbf", "#2f9bb3"];
+const SERIES_COLOURS = ["#2f56d3", "#1f6b4d", "#d98a3a", "#a8324c", "#7c5cbf", "#2f9bb3"];
 
 const groupLabel = (value: string): string => (value === "" ? "(none)" : value);
 
@@ -126,7 +126,7 @@ export function FieldReportPivotDrawer({
         </SheetHeader>
 
         <SheetBody className="space-y-5">
-          <div className="grid grid-cols-2 gap-3 rounded-[9px] border border-[#efede8] bg-[#f7f6f3] p-3">
+          <div className="grid grid-cols-2 gap-3 rounded-[9px] border border-[#f5f3ee] bg-[#faf9f7] p-3">
             <div>
               <span className={labelStyle}>Group by</span>
               <select
@@ -200,11 +200,11 @@ export function FieldReportPivotDrawer({
           </div>
 
           {!hasRows && (
-            <p className="text-[13px] text-[#6d6a65]">No sessions match the current filters.</p>
+            <p className="text-[13px] text-[#666055]">No sessions match the current filters.</p>
           )}
 
           {hasRows && noNumericData && (
-            <p className="text-[13px] text-[#6d6a65]">
+            <p className="text-[13px] text-[#666055]">
               No numeric data in “{measureColumn?.label ?? "—"}” for the filtered sessions.
             </p>
           )}
@@ -214,7 +214,7 @@ export function FieldReportPivotDrawer({
               <div className="h-[240px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#efede8" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f5f3ee" />
                     <XAxis dataKey="name" tick={AXIS_STYLE} interval={0} />
                     <YAxis tick={AXIS_STYLE} allowDecimals={measureKind !== "count"} />
                     <Tooltip />
@@ -228,7 +228,7 @@ export function FieldReportPivotDrawer({
                         />
                       ))
                     ) : (
-                      <Bar dataKey="value" name={measureHeading} fill="#3a5fd9" radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="value" name={measureHeading} fill="#2f56d3" radius={[3, 3, 0, 0]} />
                     )}
                     {pivot.secondaryGroups && <Legend wrapperStyle={{ fontSize: 11 }} />}
                   </BarChart>

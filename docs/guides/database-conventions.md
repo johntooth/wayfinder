@@ -48,6 +48,49 @@ across many tables.
   `packages/adapters/src/db/schema/*`.
 - Commit the generated SQL files alongside the schema change.
 - Never edit applied migrations — write a new one.
+- Migrations are the only thing that changes the schema. **Never run
+  `drizzle-kit push`**: it diffs the live database instead of the migration
+  history, so it records nothing, re-runs the same statements on every start,
+  and offers to truncate tables that hold rows. `validate.sh` fails if a `push`
+  call reappears in any script or manifest.
+- `pnpm db:drift` answers the question push was used for — *has the schema been
+  edited without generating a migration?* — by diffing the schema against its
+  own snapshot. It needs no database. `restart.sh` warns on drift; `validate.sh`
+  fails on it.
+
+## Destructive migrations
+
+A migration runs against databases that already hold data. **Carry the data
+across unless losing it is the point.** In practice that means writing the
+migration in steps rather than accepting what `db:generate` emitted:
+
+```sql
+-- wrong: fails the moment a row already exists
+ALTER TABLE "app_flows" ADD COLUMN "owner_id" uuid NOT NULL;
+
+-- right: add, backfill, then constrain
+ALTER TABLE "app_flows" ADD COLUMN "owner_id" uuid;--> statement-breakpoint
+UPDATE "app_flows" SET "owner_id" = '…' WHERE "owner_id" IS NULL;--> statement-breakpoint
+ALTER TABLE "app_flows" ALTER COLUMN "owner_id" SET NOT NULL;
+```
+
+Any migration containing a statement that destroys rows (`DROP TABLE`,
+`DROP COLUMN`, `TRUNCATE`, `DELETE FROM`, a column type change) or that existing
+rows can make fail (`SET NOT NULL`, `ADD COLUMN … NOT NULL` with no default,
+`ADD CONSTRAINT … UNIQUE`, `CREATE UNIQUE INDEX`) must declare what it does to
+them, as a comment anywhere in the file:
+
+| Declaration | Means |
+| --- | --- |
+| `-- data-impact: preserved — <how>` | Existing rows survive; say what carries them |
+| `-- data-impact: destructive, approved — <why>` | Rows are deliberately removed |
+| `-- data-impact: blocking, approved — <why>` | The statement rejects existing rows, and that is acceptable here |
+
+`preserved` is the expectation. The two `approved` kinds are the "unless
+otherwise specified" exception — deliberate, reasoned, and visible to a reviewer
+in the diff. `migration-safety.test.ts` fails `pnpm test` on any flagged
+migration that declares nothing, so the rule cannot be forgotten rather than
+decided.
 
 ## Adding a table
 

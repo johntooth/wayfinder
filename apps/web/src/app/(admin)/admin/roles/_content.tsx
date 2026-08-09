@@ -86,7 +86,7 @@ export function AdminRolesContent() {
                         <div className="font-medium">
                           {permission.label}
                           {PENDING_PERMISSIONS.has(permission.key) && (
-                            <Badge variant="outline" className="ml-2 font-normal text-[#9b6215]">
+                            <Badge variant="outline" className="ml-2 font-normal text-[#8a5a1d]">
                               feature not enabled yet
                             </Badge>
                           )}
@@ -194,7 +194,7 @@ function RolesManagementCard() {
         {rolesQuery.isPending ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
-          <ul className="divide-y divide-[#ece9e3]">
+          <ul className="divide-y divide-[#f0ede8]">
             {rolesQuery.data?.map((entry) => {
               const role = entry.role;
               const canRename = !role.isImmutable;
@@ -203,7 +203,7 @@ function RolesManagementCard() {
                 <li key={role.id} className="flex items-center justify-between gap-3 py-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-[#1a1814]">{role.name}</span>
+                      <span className="font-medium text-[#1c1b19]">{role.name}</span>
                       {role.isDefault && <Badge variant="outline">default</Badge>}
                       {role.isImmutable && <Badge variant="outline">locked</Badge>}
                       {role.isSystem && !role.isImmutable && !role.isDefault && (

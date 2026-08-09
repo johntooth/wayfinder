@@ -110,8 +110,8 @@ export function AdminFlowsContent() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#dedad2] bg-white pl-5 pr-[52px]">
-        <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1a1814]">All Flows</h1>
+      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#e7e3db] bg-white pl-5 pr-[52px]">
+        <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1c1b19]">All Flows</h1>
         <Button onClick={() => setCreating(true)}>New Flow</Button>
       </header>
 
@@ -148,7 +148,7 @@ export function AdminFlowsContent() {
                         {flow.icon && <span className="mr-1">{flow.icon}</span>}
                         {flow.name}
                       </TableCell>
-                      <TableCell className="max-w-xs truncate text-[#6d6a65]">
+                      <TableCell className="max-w-xs truncate text-[#666055]">
                         {flow.description ?? "—"}
                       </TableCell>
                       <TableCell>
@@ -158,13 +158,13 @@ export function AdminFlowsContent() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#eef1fc] text-xs font-medium text-[#3a5fd9]">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#eaeefb] text-xs font-medium text-[#2f56d3]">
                             {getOwnerInitials(flow)}
                           </span>
                           <span className="text-[13px]">{getOwnerName(flow)}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-[13px] text-[#6d6a65]">
+                      <TableCell className="text-[13px] text-[#666055]">
                         {new Date(flow.updatedAt).toLocaleDateString()}
                       </TableCell>
                       <TableCell className="space-x-2 text-right">
@@ -250,7 +250,7 @@ export function AdminFlowsContent() {
                     <Label htmlFor="owner-select">Select user</Label>
                     <select
                       id="owner-select"
-                      className="flex h-10 w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#3a5fd9] focus:bg-white focus:outline-none"
+                      className="flex h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none"
                       value={assignOwner.userId}
                       onChange={(e) => setAssignOwner({ ...assignOwner, userId: e.target.value })}
                     >

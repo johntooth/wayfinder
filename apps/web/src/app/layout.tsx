@@ -1,22 +1,22 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { DM_Sans, DM_Mono } from "next/font/google";
+import { Figtree, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { NavigationProgress } from "@/components/navigation-progress";
 import { SiteBanner } from "@/components/site-banner";
 import { TrpcProvider } from "@/trpc/Provider";
 import "@/styles/globals.css";
 
-const dmSans = DM_Sans({
+const figtree = Figtree({
   subsets: ["latin"],
-  variable: "--font-dm-sans",
-  weight: ["300", "400", "500", "600"],
+  variable: "--font-figtree",
+  weight: ["400", "500", "600", "700"],
   display: "swap",
 });
 
-const dmMono = DM_Mono({
+const jetBrainsMono = JetBrains_Mono({
   subsets: ["latin"],
-  variable: "--font-dm-mono",
+  variable: "--font-jetbrains-mono",
   weight: ["400", "500"],
   display: "swap",
 });
@@ -28,7 +28,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${dmSans.variable} ${dmMono.variable}`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${figtree.variable} ${jetBrainsMono.variable}`}
+    >
       {/* A flex column so the site banner subtracts from the viewport instead
           of adding to it — the route layouts below fill the remaining space
           rather than each claiming a full screen height. */}

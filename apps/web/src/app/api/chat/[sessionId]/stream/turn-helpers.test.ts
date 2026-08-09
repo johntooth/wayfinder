@@ -717,6 +717,69 @@ describe("applyAdvanceSideEffects", () => {
     expect(llm.generateObject).toHaveBeenCalled();
   });
 
+  it("retrieves against the step when the opener has no gathered context", async () => {
+    // Regression guard: the opening turn of a session has no user message and
+    // no gathered context, so retrieving on `gatheredContext` alone embedded an
+    // empty string and returned nothing — the first thing the assistant said
+    // was ungrounded, and a flow-wide policy could not reach it.
+    const retrieveExecute = vi.fn().mockResolvedValue({ data: [], error: null });
+    const listBySession = vi.fn().mockResolvedValue({ data: [], error: null });
+    const conversationalNode = makeNode({
+      id: "node-2",
+      config: {
+        aiInstruction: "Capture the new employee's full name and start date.",
+        doneWhen: "Name and start date captured.",
+        outputType: "conversation_only",
+      } as unknown as FlowNode["config"],
+    });
+
+    const container = {
+      repos: {
+        ...noChangeRequests(),
+        sessionMessages: {
+          listBySession,
+          updateDocumentStatus: vi.fn(),
+          create: vi.fn().mockResolvedValue({ data: {}, error: null }),
+        },
+        sessionUploads: { listBySession: vi.fn().mockResolvedValue({ data: [], error: null }) },
+        usageRepo: {},
+      },
+      runtimeConfig: {
+        getSessionUploadConfig: vi.fn().mockResolvedValue({ maxFileSizeBytes: 1, totalBudgetChars: 1000 }),
+      },
+      useCases: {
+        generateDocument: { execute: vi.fn() },
+        retrieveDocumentChunks: { execute: retrieveExecute },
+        isFeatureEnabledForUser: { execute: vi.fn().mockResolvedValue({ data: false, error: null }) },
+        resolveStepSkills: { execute: vi.fn().mockResolvedValue({ data: [], error: null }) },
+      },
+      services: {
+        llm: {
+          provider: "anthropic",
+          generateObject: vi.fn().mockResolvedValue({
+            data: {
+              object: { response: "Hi", rationale: "r", stepCompleteConfidence: 0, contextGathered: [] },
+              usage: { promptTokens: 1, completionTokens: 1, systemTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+            },
+          }),
+          streamText: vi.fn(),
+          streamObject: vi.fn(),
+        },
+        errorLogger: { log: vi.fn() },
+        sessionAgent: { buildSystemPrompt: vi.fn().mockReturnValue({ data: "prompt", error: null }) },
+      },
+    };
+
+    await applyAdvanceSideEffects({
+      ...baseInput({ container, nodes: [completedDocNode, conversationalNode], newNodeId: "node-2" }),
+      gatheredContext: "",
+    });
+
+    const queries = retrieveExecute.mock.calls[0]![0].queries as string[];
+    expect(queries.length).toBeGreaterThan(0);
+    expect(queries.join(" ")).toContain("Capture the new employee's full name and start date.");
+  });
+
   it("awaits document generation before opening the next step", async () => {
     // Regression guard (bug 1): the next-step opener must not run until the
     // document has finished generating. Generation is held open on a deferred

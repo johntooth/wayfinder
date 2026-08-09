@@ -1,12 +1,8 @@
 import { domainError, err, ok } from "@rbrasier/domain";
 import type { IReindexSourceRepository, ReindexableDocument, Result } from "@rbrasier/domain";
 import type { Database } from "../db/client";
-import {
-  app_flow_nodes,
-  app_flows,
-  app_session_uploads,
-  kb_context_doc_content,
-} from "../db/schema/wayfinder";
+import { app_flow_nodes, app_flows, app_session_uploads } from "../db/schema/wayfinder";
+import { kb_context_doc_content } from "../db/schema/kb";
 import { logRepoError } from "./log-repo-error";
 
 const hasText = (text: string | null): text is string =>

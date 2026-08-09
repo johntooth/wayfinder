@@ -12,7 +12,37 @@ export interface DisplayColumn {
   options?: string[];
   memberKeys: string[];
   stepNames: string[];
+  nodeType?: FieldReportColumn["nodeType"];
 }
+
+// A heading that stands alone, for anywhere a column is read without its step
+// beside it — the xlsx export, the pivot's group-by list. An approval step
+// projects the same generic labels as every other approval step ("Outcome",
+// "Comment"), so its own label identifies nothing; a merged column names the
+// steps it coalesced. Everything else is already unambiguous.
+export const qualifiedColumnLabel = (column: DisplayColumn): string => {
+  if (column.stepNames.length > 1) return `${column.stepNames.join(" · ")} — ${column.label}`;
+  if (column.nodeType === "approval") return `${column.nodeName} — ${column.label}`;
+  return column.label;
+};
+
+// How many passes it took to reach the decision now showing, for the outcome
+// cell of an approval step — `null` on a first pass, so the ordinary case reads
+// clean and only a step that went back and round again is marked.
+//
+// The count rides its own column, which is what a report filters and pivots on;
+// this is the at-a-glance reading of it, so "approved" beside a step that was
+// once sent back does not look like it sailed through first time.
+export const approvalRevisionNote = (
+  column: DisplayColumn,
+  values: Record<string, string>,
+): string | null => {
+  if (column.nodeType !== "approval" || column.fieldKey !== "outcome") return null;
+
+  const revision = Number(values[`${column.nodeId}:revision`]);
+  if (!Number.isFinite(revision) || revision < 2) return null;
+  return `Revision ${revision}`;
+};
 
 export interface NodeGroup {
   nodeId: string;
@@ -78,6 +108,7 @@ export const buildDisplayColumns = (
       options: lead.options,
       memberKeys: members.map((member) => member.columnKey),
       stepNames,
+      nodeType: lead.nodeType,
     };
   });
 };

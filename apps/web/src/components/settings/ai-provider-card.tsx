@@ -218,7 +218,7 @@ export function AiProviderCard({ connectivity }: { connectivity: ConnectivityCon
               />
             </div>
 
-            <hr className="border-[#dedad2]" />
+            <hr className="border-[#e7e3db]" />
 
             <p className="text-xs text-muted-foreground">
               Credentials for {PROVIDER_LABEL[provider]}. Leave a field blank to keep its stored

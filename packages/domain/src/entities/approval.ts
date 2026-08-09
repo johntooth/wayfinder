@@ -12,17 +12,22 @@ export type ApproverSource =
 // changed their own subject step while it was pending (ADR-045 §4). A
 // self-declared "approved with edits" could be claimed without editing and
 // withheld after editing, which makes it worthless exactly where it matters.
+// `withdrawn` is the one terminal status an *approver* never produces: the
+// originator takes their own request back before it is decided. Recorded rather
+// than deleted, so the trail keeps who asked whom and that it was pulled.
 export type ApprovalStatus =
   | "pending"
   | "approved"
   | "approved_with_edits"
   | "rejected"
-  | "changes_requested";
+  | "changes_requested"
+  | "withdrawn";
 
 // The three terminal decisions an approver can *choose*. `pending` is excluded —
-// a decision always moves the row out of `pending` — and so is
-// `approved_with_edits`, which is not a button. Widening `ApprovalStatus` is
-// therefore free at every branch point, because control flow reads the decision.
+// a decision always moves the row out of `pending` — and so are
+// `approved_with_edits`, which is not a button, and `withdrawn`, which is not
+// the approver's to reach. Widening `ApprovalStatus` is therefore free at every
+// branch point, because control flow reads the decision.
 export type ApprovalDecision = "approved" | "rejected" | "changes_requested";
 
 // Every status that means "this approval approved". The single definition, so a
@@ -33,6 +38,13 @@ export type ApprovalDecision = "approved" | "rejected" | "changes_requested";
 export const APPROVED_STATUSES: readonly ApprovalStatus[] = ["approved", "approved_with_edits"];
 
 export const isApproved = (status: ApprovalStatus): boolean => APPROVED_STATUSES.includes(status);
+
+// Which slice of an approver's approvals to read. `pending` is their queue —
+// what still needs them. `decided` is their history: everything they have
+// already ruled on. A flow can hold several decisions for one approval step,
+// because a change request routes work back and re-entering the node raises a
+// fresh row, so history lists rows rather than steps.
+export type ApprovalListScope = "pending" | "decided" | "all";
 
 export interface Approval {
   readonly id: string;
@@ -50,6 +62,10 @@ export interface Approval {
   readonly decidedByUserId: string | null;
   readonly decidedAt: Date | null;
   readonly comment: string | null;
+  // What the originator wrote to the approver when sending the request. Kept
+  // apart from `comment`, which is the approver's decision comment on the same
+  // row: sharing one column would have the decision overwrite the request.
+  readonly requestMessage: string | null;
   // Frozen at decision time and never recomputed (ADR-040 §3). Carries the
   // session's `stepOutputs` alongside a flat, dot-separated record whose keys are
   // prefixed by the approval step's key — `<step_key>.decision`,
@@ -72,6 +88,7 @@ export interface NewApproval {
   approverEmail?: string | null;
   isOverride?: boolean;
   status?: ApprovalStatus;
+  requestMessage?: string | null;
   recordSnapshot?: Record<string, unknown> | null;
 }
 
@@ -83,5 +100,6 @@ export interface ApprovalUpdate {
   decidedByUserId?: string | null;
   decidedAt?: Date | null;
   comment?: string | null;
+  requestMessage?: string | null;
   recordSnapshot?: Record<string, unknown> | null;
 }

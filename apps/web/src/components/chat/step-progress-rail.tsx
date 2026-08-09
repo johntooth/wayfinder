@@ -1,69 +1,74 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { type StepState, stepState } from "@/components/layout/app-header-model";
 import type { StepRailItem } from "@/lib/flow-utils";
-
-type StepState = "pending" | "current" | "complete";
 
 interface StepProgressRailProps {
   steps: StepRailItem[];
   currentNodeId: string | null;
   completedNodeIds: string[];
   rightSlot?: ReactNode;
+  // "inline" is the header's second line: badges and labels on one row, no
+  // border, no fill. "band" is the standalone bar retained for surfaces that
+  // render the rail outside a header.
+  variant?: "inline" | "band";
 }
 
 const badgeClass: Record<StepState, string> = {
-  complete: "bg-[#2e9e6a] text-white",
-  current:  "bg-[#3a5fd9] text-white",
-  pending:  "bg-[#e6e3dc] text-[#5a5650]",
+  complete: "bg-[#1f6b4d] text-white",
+  current:  "border-[1.5px] border-[#2f56d3] text-[#2f56d3]",
+  pending:  "border-[1.5px] border-[#dedad2] text-[#736d5f]",
 };
 
 const labelClass: Record<StepState, string> = {
-  complete: "text-[#247c53]",
-  current:  "font-semibold text-[#3a5fd9]",
-  pending:  "text-[#5a5650]",
+  complete: "text-[#5c574c]",
+  current:  "font-semibold text-[#2f56d3]",
+  pending:  "text-[#736d5f]",
 };
 
-const getState = (
-  nodeId: string | null,
-  currentNodeId: string | null,
-  completedNodeIds: string[],
-): StepState => {
-  if (nodeId === null) return "pending";
-  if (completedNodeIds.includes(nodeId)) return "complete";
-  if (nodeId === currentNodeId) return "current";
-  return "pending";
-};
-
-export function StepProgressRail({ steps, currentNodeId, completedNodeIds, rightSlot }: StepProgressRailProps) {
+export function StepProgressRail({
+  steps,
+  currentNodeId,
+  completedNodeIds,
+  rightSlot,
+  variant = "band",
+}: StepProgressRailProps) {
   if (steps.length === 0 && !rightSlot) return null;
 
+  const isInline = variant === "inline";
+
   return (
-    <div className="flex shrink-0 items-center gap-3 overflow-x-auto border-b border-[#dedad2] bg-white px-4 py-[10px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div
+      data-testid={isInline ? "step-rail-inline" : "step-rail-band"}
+      className={`flex shrink-0 items-center gap-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+        isInline ? "" : "border-b border-[#e7e3db] bg-white px-4 py-[10px]"
+      }`}
+    >
       <div className="flex min-w-max flex-1 items-center gap-0">
         {steps.map((step, index) => {
-          const state = getState(step.nodeId, currentNodeId, completedNodeIds);
+          const state = stepState(step, currentNodeId, completedNodeIds);
           return (
             <div key={step.key} className="flex items-center">
-              <div className="flex flex-col items-center gap-1">
-                <div
-                  className={`flex h-[22px] min-w-[22px] items-center justify-center rounded-full px-1 text-[10px] font-bold ${badgeClass[state]}`}
+              <span className="flex items-center gap-[6px]">
+                <span
+                  className={`flex h-[15px] min-w-[15px] items-center justify-center rounded-full px-[3px] text-[9px] font-bold ${badgeClass[state]}`}
                 >
                   {state === "complete" ? "✓" : step.label}
-                </div>
+                </span>
                 <span
-                  className={`max-w-[80px] truncate text-center text-[12px] font-medium ${labelClass[state]}`}
+                  className={`max-w-[150px] truncate text-[11.5px] ${labelClass[state]}`}
                   title={step.title}
                 >
                   {step.title}
                 </span>
-              </div>
+              </span>
               {index < steps.length - 1 && (
-                <div
-                  className={`mx-1 h-px w-6 ${
+                <span
+                  className={`mx-[10px] h-px w-[22px] shrink-0 ${
                     step.nodeId !== null && completedNodeIds.includes(step.nodeId)
-                      ? "bg-[#2e9e6a]/70"
-                      : "bg-[#dedad2]"
+                      ? "bg-[#bcd0c2]"
+                      : "bg-[#e7e3db]"
                   }`}
                 />
               )}

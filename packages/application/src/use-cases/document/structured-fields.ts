@@ -150,6 +150,7 @@ export const extractStructuredFields = async (
     `Return a JSON object with exactly these keys: ${JSON.stringify(keys)}.`,
     `Fill each value using the session context below.`,
     `\nEach field has a required format. Reformat the information the user provided into the required format whenever you reasonably can — for example, parse a written date into DD-MM-YYYY, or format an amount as currency. Only leave a value blank when its field is marked optional and the information is genuinely missing.`,
+    `\nDates are always day-first: in DD-MM-YYYY the first number is the day and the second is the month. This holds in both directions. Writing one out, "10 Aug 2026" becomes 10-08-2026, never 08-10-2026. Reading one the session already captured in that format, 10-08-2026 means 10 August 2026, never 8 October 2026. Carry such a date through exactly as written — never reorder its day and month.`,
     `\n<field_constraints>\n${buildFieldConstraintsText(input.fields)}\n</field_constraints>`,
     generationGuidance,
     changeRequestsSection,

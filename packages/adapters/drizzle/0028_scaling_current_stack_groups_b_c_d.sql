@@ -1,3 +1,7 @@
+-- data-impact: destructive, approved — drops app_session_typing, which held only ephemeral
+-- typing indicators superseded by app_session_participants. Every other statement carries
+-- existing rows across: the added columns are nullable, defaulted, or bigserial (which
+-- supplies a sequence value for the rows already there).
 CREATE TABLE "app_session_participants" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"session_id" uuid NOT NULL,

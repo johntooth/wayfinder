@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/sidebar";
-import { HelpMenu } from "@/components/help-menu";
 import { SetupWizardMount } from "@/components/onboarding/setup-wizard-mount";
 import { SidebarProvider } from "@/components/sidebar-context";
 import { createServerHelpers } from "@/trpc/server";
@@ -41,10 +40,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       <HydrateClient>
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <AppSidebar isAdmin={true} />
-          <div className="flex flex-1 flex-col overflow-hidden bg-[#f7f6f3]">
+          <div className="flex flex-1 flex-col overflow-hidden bg-[#faf9f7]">
             {children}
           </div>
-          <HelpMenu />
           <SetupWizardMount />
         </div>
       </HydrateClient>

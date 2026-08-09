@@ -62,6 +62,25 @@ describe("extractStructuredFields", () => {
     expect(call.prompt).toContain("Session transcript:");
   });
 
+  it("anchors DD-MM-YYYY as day-first so a captured date is not re-read month-first", async () => {
+    const fields = [field({ key: "start_date", label: "Start Date", type: "date" })];
+    const languageModel = makeLanguageModel({ start_date: "10-08-2026" });
+
+    const result = await extractStructuredFields(languageModel, {
+      fields,
+      transcript: "User: 10 Aug\nAssistant: captured 10-08-2026",
+      contextDocs: [],
+      instruction: "Gather the dates.",
+      purpose: "documentGeneration",
+    });
+
+    expect(result.error).toBeUndefined();
+    const call = (languageModel.generateObject as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(call.prompt).toContain("the first number is the day and the second is the month");
+    expect(call.prompt).toContain("10-08-2026, never 08-10-2026");
+    expect(call.prompt).toContain("10 August 2026, never 8 October 2026");
+  });
+
   it("includes extracted context-document text in the prompt", async () => {
     const docs: FlowContextDoc[] = [
       {

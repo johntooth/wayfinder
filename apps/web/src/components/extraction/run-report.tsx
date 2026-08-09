@@ -32,13 +32,13 @@ export function RunReport({ runId, live = false }: RunReportProps) {
 
   return (
     <section className="flex flex-col gap-[8px]">
-      <h2 className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#6d6a65]">
+      <h2 className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#666055]">
         Field report
       </h2>
-      <div className="overflow-x-auto rounded-[10px] border border-[#e5e1d8] bg-white">
+      <div className="overflow-x-auto rounded-[10px] border border-[#e7e3db] bg-white">
         <table className="w-full border-collapse text-[13px]">
           <thead>
-            <tr className="border-b border-[#e5e1d8] text-left text-[11px] uppercase tracking-[0.05em] text-[#6d6a65]">
+            <tr className="border-b border-[#e7e3db] text-left text-[11px] uppercase tracking-[0.05em] text-[#666055]">
               <th scope="col" className="px-[12px] py-[8px]">Record</th>
               {report.columns.map((column) => (
                 <th key={column.fieldKey} scope="col" className="px-[12px] py-[8px]">
@@ -49,8 +49,8 @@ export function RunReport({ runId, live = false }: RunReportProps) {
           </thead>
           <tbody>
             {report.rows.map((row) => (
-              <tr key={row.recordId} className="border-b border-[#f0ede7]">
-                <td className="px-[12px] py-[8px] font-medium text-[#3a352e]">
+              <tr key={row.recordId} className="border-b border-[#f5f3ee]">
+                <td className="px-[12px] py-[8px] font-medium text-[#3d382f]">
                   <span className="flex items-center gap-[6px]">
                     <span
                       className={`inline-block h-[9px] w-[9px] rounded-full ${BAND_DOT[confidenceBand(row.aggregateConfidence)]}`}
@@ -59,8 +59,8 @@ export function RunReport({ runId, live = false }: RunReportProps) {
                   </span>
                 </td>
                 {report.columns.map((column) => (
-                  <td key={column.fieldKey} className="px-[12px] py-[8px] text-[#5a5650]">
-                    {row.values[column.fieldKey] || <span className="text-[#b6b1a8]">—</span>}
+                  <td key={column.fieldKey} className="px-[12px] py-[8px] text-[#5c574c]">
+                    {row.values[column.fieldKey] || <span className="text-[#c9c3b5]">—</span>}
                   </td>
                 ))}
               </tr>

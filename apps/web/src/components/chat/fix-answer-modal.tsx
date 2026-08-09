@@ -98,7 +98,7 @@ export function FixAnswerModal({
                 </FieldGroupLabel>
                 <p
                   aria-labelledby="flagged-answer-label"
-                  className="max-h-28 overflow-auto rounded-md border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-xs text-[#5a554d]"
+                  className="max-h-28 overflow-auto rounded-md border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-xs text-[#5c574c]"
                 >
                   {flaggedAnswer}
                 </p>
@@ -118,7 +118,7 @@ export function FixAnswerModal({
                 <Label htmlFor="reason">Why is it wrong?</Label>
                 <select
                   id="reason"
-                  className="h-9 w-full rounded-md border border-[#dedad2] bg-white px-3 text-sm"
+                  className="h-9 w-full rounded-md border border-[#e7e3db] bg-white px-3 text-sm"
                   value={reason}
                   onChange={(event) => setReason(event.target.value as Reason)}
                 >

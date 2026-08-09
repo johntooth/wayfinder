@@ -14,7 +14,7 @@ import {
   type SessionUpload,
   type TurnStreamWriter,
 } from "@rbrasier/domain";
-import { resolveChangeRequests } from "@rbrasier/application";
+import { buildTurnRetrievalQueries, resolveChangeRequests } from "@rbrasier/application";
 import { turnResponseSchema, type DocumentData } from "@rbrasier/shared";
 import type { getContainer } from "@/lib/container";
 import { OUTSTANDING_CONTEXT_KEY } from "./gate-holds";
@@ -519,12 +519,19 @@ export async function generateInitialMessage(input: GenerateInitialMessageInput)
   try {
     const newNodeConfig = newNode.config as unknown as ConversationalNodeConfig;
 
-    // No user message yet for an opening turn — retrieve against the context
-    // gathered so far so the AI still sees the most relevant document excerpts.
+    // No user message yet for an opening turn. The context gathered so far is
+    // one retrieval key — and on the first step of a session it is empty, which
+    // used to mean the opener retrieved nothing at all. The step's own
+    // instruction and field set is the other, and it is never empty, so the
+    // opening message is grounded in the flow's guidance from the first word.
     const retrievalResult = await container.useCases.retrieveDocumentChunks.execute({
       flowId: flow.id,
       sessionId,
-      query: gatheredContext,
+      queries: buildTurnRetrievalQueries({
+        nodeConfig: newNodeConfig,
+        recentMessages: [],
+        latestUserMessage: gatheredContext,
+      }),
     });
     const retrievedChunks = retrievalResult.error ? [] : retrievalResult.data;
 

@@ -95,7 +95,7 @@ export function NodeConfigModalConversational({
               <button
                 type="button"
                 onClick={onOpenSkillPicker}
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[#666055] transition-colors hover:bg-[#f5f3ee] hover:text-[#1c1b19]"
                 aria-label="Add skills"
               >
                 <Sparkles size={13} />
@@ -106,7 +106,7 @@ export function NodeConfigModalConversational({
               <button
                 type="button"
                 onClick={onOpenMcpPicker}
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[#666055] transition-colors hover:bg-[#f5f3ee] hover:text-[#1c1b19]"
                 aria-label="Add MCP tools"
               >
                 <Plug size={13} />
@@ -124,14 +124,14 @@ export function NodeConfigModalConversational({
               return (
                 <span
                   key={id}
-                  className="inline-flex items-center gap-1 rounded-full border border-[#c5d0f7] bg-[#eef1fc] px-2 py-0.5 text-[11px] text-[#3a5fd9]"
+                  className="inline-flex items-center gap-1 rounded-full border border-[#c3cef2] bg-[#eaeefb] px-2 py-0.5 text-[11px] text-[#2f56d3]"
                 >
                   <Sparkles size={10} />
                   {skill?.name ?? "Skill"}
                   <button
                     type="button"
                     aria-label={`Remove ${skill?.name ?? "skill"}`}
-                    className="text-[#3a5fd9] hover:text-[#25439c]"
+                    className="text-[#2f56d3] hover:text-[#25439c]"
                     onClick={() => removeSkill(id)}
                   >
                     <X size={11} />
@@ -180,8 +180,8 @@ export function NodeConfigModalConversational({
               key={option.value}
               className={`flex flex-1 cursor-pointer items-center justify-center rounded-[9px] border px-3 py-2 text-center text-[13px] transition-colors ${
                 values.outputType === option.value
-                  ? "border-[#3a5fd9] bg-[#eef1fc] font-medium text-[#3a5fd9]"
-                  : "border-[#dedad2] text-[#5a5650] hover:bg-[#efede8]"
+                  ? "border-[#2f56d3] bg-[#eaeefb] font-medium text-[#2f56d3]"
+                  : "border-[#e7e3db] text-[#5c574c] hover:bg-[#f5f3ee]"
               }`}
             >
               <input
@@ -204,33 +204,33 @@ export function NodeConfigModalConversational({
             <button
               type="button"
               aria-label="How template tags work"
-              className="flex h-4 w-4 items-center justify-center rounded-full text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+              className="flex h-4 w-4 items-center justify-center rounded-full text-[#666055] transition-colors hover:bg-[#f5f3ee] hover:text-[#1c1b19]"
               onClick={onOpenHelpDialog}
             >
               <HelpCircle size={13} />
             </button>
           </div>
-          <p className="text-[12px] text-[#6d6a65]">
+          <p className="text-[12px] text-[#666055]">
             Upload the document this step should produce. The AI fills it in during the
             conversation, so wherever a detail changes each time, it becomes a field to capture.
           </p>
-          <p className="text-[12px] text-[#6d6a65]">
+          <p className="text-[12px] text-[#666055]">
             Already marked up with tags (e.g <code className="font-mono">{EXAMPLE_TAG}</code>)? Those
             are picked up automatically — otherwise we&apos;ll show you how to add them.
           </p>
           {!onUploadTemplate ? (
-            <p className="rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3 text-[12px] text-[#6d6a65]">
+            <p className="rounded-[9px] border border-dashed border-[#e7e3db] bg-[#faf9f7] p-3 text-[12px] text-[#666055]">
               Save this step first, then re-open to upload a template.
             </p>
           ) : values.documentTemplateFilename ? (
             <div className="space-y-1.5">
-              <div className="flex items-center gap-2 rounded-[9px] border border-[#c0e8d5] bg-[#eaf6f0] px-3 py-2">
-                <span className="flex-1 truncate text-[12px] text-[#247c53]">
+              <div className="flex items-center gap-2 rounded-[9px] border border-[#c0e8d5] bg-[#e3efe5] px-3 py-2">
+                <span className="flex-1 truncate text-[12px] text-[#1f6b4d]">
                   {values.documentTemplateFilename}
                 </span>
                 <button
                   type="button"
-                  className="shrink-0 text-[12px] text-[#6d6a65] hover:text-[#5a5650]"
+                  className="shrink-0 text-[12px] text-[#666055] hover:text-[#5c574c]"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading}
                 >
@@ -238,7 +238,7 @@ export function NodeConfigModalConversational({
                 </button>
                 <button
                   type="button"
-                  className="shrink-0 text-[12px] text-[#c2385a] hover:text-[#a02e4b]"
+                  className="shrink-0 text-[12px] text-[#a8324c] hover:text-[#a02e4b]"
                   onClick={() => {
                     set("documentTemplatePath", null);
                     set("documentTemplateFilename", null);
@@ -253,9 +253,9 @@ export function NodeConfigModalConversational({
                 </button>
               </div>
               {values.documentTemplateFormat === "xlsx" && (
-                <p className="text-[12px] text-[#6d6a65]">
+                <p className="text-[12px] text-[#666055]">
                   Spreadsheet detected —{" "}
-                  <span className="font-medium text-[#247c53]">
+                  <span className="font-medium text-[#1f6b4d]">
                     {values.spreadsheetTemplateMode === "tags" ? "Tag mode" : "Header-row mode"}
                   </span>
                   {values.spreadsheetTemplateMode === "tags"
@@ -267,7 +267,7 @@ export function NodeConfigModalConversational({
                 {onEditTemplateFields && (
                   <button
                     type="button"
-                    className="flex items-center gap-1 text-[12px] text-[#3a5fd9] transition-colors hover:text-[#2e4bb0]"
+                    className="flex items-center gap-1 text-[12px] text-[#2f56d3] transition-colors hover:text-[#1f3ea8]"
                     onClick={onEditTemplateFields}
                     disabled={isUploading}
                   >
@@ -277,7 +277,7 @@ export function NodeConfigModalConversational({
                 {templateDownloadUrl && (
                   <a
                     href={templateDownloadUrl}
-                    className="flex items-center gap-1 text-[12px] text-[#6d6a65] transition-colors hover:text-[#3a5fd9]"
+                    className="flex items-center gap-1 text-[12px] text-[#666055] transition-colors hover:text-[#2f56d3]"
                   >
                     <Download size={13} /> Keep your master copy in sync
                   </a>
@@ -287,7 +287,7 @@ export function NodeConfigModalConversational({
           ) : (
             <button
               type="button"
-              className="w-full rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-4 text-center text-[13px] text-[#6d6a65] transition-colors hover:border-[#c5d0f7] hover:bg-[#eef1fc] hover:text-[#3a5fd9] disabled:opacity-50"
+              className="w-full rounded-[9px] border border-dashed border-[#e7e3db] bg-[#faf9f7] p-4 text-center text-[13px] text-[#666055] transition-colors hover:border-[#c3cef2] hover:bg-[#eaeefb] hover:text-[#2f56d3] disabled:opacity-50"
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
             >
@@ -301,7 +301,7 @@ export function NodeConfigModalConversational({
             className="sr-only"
             onChange={handleFileChange}
           />
-          {uploadError && <p className="text-[12px] text-[#c2385a]">{uploadError}</p>}
+          {uploadError && <p className="text-[12px] text-[#a8324c]">{uploadError}</p>}
         </div>
       )}
 
@@ -317,7 +317,7 @@ export function NodeConfigModalConversational({
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-0.5">
             <Label htmlFor="allow-manual-edit">Allow manual field editing</Label>
-            <p className="text-[12px] text-[#6d6a65]">
+            <p className="text-[12px] text-[#666055]">
               {values.outputType === "structured"
                 ? "Operators can correct the captured field values on the record after this step completes."
                 : "Operators can correct the generated document’s field values before approval."}
@@ -330,7 +330,7 @@ export function NodeConfigModalConversational({
             aria-checked={values.allowManualEdit}
             onClick={() => set("allowManualEdit", !values.allowManualEdit)}
             className={`relative mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-              values.allowManualEdit ? "bg-[#1f8a4c]" : "bg-[#d7d3cc]"
+              values.allowManualEdit ? "bg-[#1f6b4d]" : "bg-[#dedad2]"
             }`}
           >
             <span
@@ -346,7 +346,7 @@ export function NodeConfigModalConversational({
         <Label htmlFor="done-when-mode">Done when…</Label>
         <select
           id="done-when-mode"
-          className="flex h-10 w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#3a5fd9] focus:bg-white focus:outline-none"
+          className="flex h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none"
           value={doneWhenMode}
           onChange={(e) => handleDoneWhenModeChange(e.target.value)}
         >
@@ -367,7 +367,7 @@ export function NodeConfigModalConversational({
           />
         )}
         {doneWhenMode === "template" && (
-          <p className="rounded-[9px] border border-[#c5d0f7] bg-[#eef1fc] px-3 py-2 text-[12px] text-[#3a5fd9]">
+          <p className="rounded-[9px] border border-[#c3cef2] bg-[#eaeefb] px-3 py-2 text-[12px] text-[#2f56d3]">
             This step is complete when all required fields have been gathered from the user.
           </p>
         )}
@@ -377,7 +377,7 @@ export function NodeConfigModalConversational({
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-0.5">
             <Label htmlFor="require-confirmation">Require confirmation before completing this step</Label>
-            <p className="text-[12px] text-[#6d6a65]">
+            <p className="text-[12px] text-[#666055]">
               When this step is complete, hold it open until the operator clicks Proceed instead of advancing automatically.
             </p>
           </div>
@@ -388,7 +388,7 @@ export function NodeConfigModalConversational({
             aria-checked={values.requireConfirmation}
             onClick={() => set("requireConfirmation", !values.requireConfirmation)}
             className={`relative mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-              values.requireConfirmation ? "bg-[#1f8a4c]" : "bg-[#d7d3cc]"
+              values.requireConfirmation ? "bg-[#1f6b4d]" : "bg-[#dedad2]"
             }`}
           >
             <span

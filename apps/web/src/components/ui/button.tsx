@@ -9,22 +9,22 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "border border-[#3a5fd9] bg-[#3a5fd9] text-white hover:opacity-90",
+          "border border-[#2f56d3] bg-[#2f56d3] text-white hover:border-[#1f3ea8] hover:bg-[#1f3ea8]",
         destructive:
           "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         danger:
-          "border border-[#f3ccd6] bg-[#fdeef2] text-[#c2385a] hover:bg-[#fde8ef]",
+          "border border-[#f3ccd6] bg-[#f9e8eb] text-[#a8324c] hover:bg-[#fde8ef]",
         outline:
-          "border border-[#dedad2] bg-white text-[#1a1814] hover:bg-[#efede8]",
+          "border border-[#e7e3db] bg-white text-[#1c1b19] hover:bg-[#f5f3ee]",
         secondary:
-          "border border-[#dedad2] bg-white text-[#1a1814] hover:bg-[#efede8]",
+          "border border-[#e7e3db] bg-white text-[#1c1b19] hover:bg-[#f5f3ee]",
         ghost:
-          "border border-[#dedad2] bg-transparent text-[#1a1814] hover:bg-[#efede8]",
-        link: "text-[#3a5fd9] underline-offset-4 hover:underline",
+          "border border-[#e7e3db] bg-transparent text-[#1c1b19] hover:bg-[#f5f3ee]",
+        link: "text-[#2f56d3] underline-offset-4 hover:underline",
       },
       size: {
         default: "px-4 py-2",
-        sm: "px-[11px] py-[5px] text-xs",
+        sm: "px-[10px] py-[5px] text-[12.5px]",
         lg: "px-8 py-[10px]",
         icon: "h-8 w-8",
       },

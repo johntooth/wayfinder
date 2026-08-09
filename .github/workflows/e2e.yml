@@ -27,6 +27,13 @@ jobs:
   # machines. Each shard is a fully independent job with its own Postgres +
   # MinIO + app, so there is no cross-shard data contention. Playwright reruns
   # the setup/seed/cleanup project dependencies inside every shard.
+  #
+  # Six shards. Playwright balances a `--shard=i/n` split by test count (not
+  # file count), so the specs land roughly evenly across the six without any
+  # manual grouping here. Every extra shard also re-pays the same fixed setup —
+  # install, migrate, browser download, embedding warm-up, app boot — so shards
+  # buy less wall-clock the further you push them; six is where the remaining
+  # per-shard test time still dominates that fixed cost.
   e2e:
     name: Playwright E2E (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
@@ -34,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
 
     services:
       postgres:
@@ -85,6 +92,10 @@ jobs:
       # Lets the authenticated scheduler-tick spec reach the durable-claim path
       # (otherwise the endpoint short-circuits with 503 before claimDue runs).
       SCHEDULER_TICK_SECRET: e2e-scheduler-tick-secret
+      # Migrations run as their own step (`pnpm db:migrate`), so the app must not
+      # repeat them on boot — the deployment pattern ADR-047 prescribes, and it
+      # keeps seconds off every app start here.
+      RUN_MIGRATIONS_ON_START: "false"
       TEST_AUTH_BYPASS: "true"
       TEST_ADMIN_EMAIL: admin@example.com
       # Points Entra sign-in at the mock identity provider started below, so the
@@ -251,6 +262,10 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wayfinder_e2e_pki
+      # Migrations run as their own step (`pnpm db:migrate`), so the app must not
+      # repeat them on boot — the deployment pattern ADR-047 prescribes, and it
+      # keeps seconds off every app start here.
+      RUN_MIGRATIONS_ON_START: "false"
       BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET || 'e2e-test-secret-must-be-at-least-32-chars-long' }}
       BETTER_AUTH_URL: http://localhost:3000
       SETTINGS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"

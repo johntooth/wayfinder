@@ -71,4 +71,34 @@ describe("approvalPatchToColumns", () => {
 
     expect(columns.record_snapshot).toBeNull();
   });
+
+  it("maps the originator's request message to its own column", () => {
+    const columns = approvalPatchToColumns({
+      requestMessage: "Board meets Thursday — a signature before then would help.",
+    });
+
+    expect(columns.request_message).toContain("Board meets Thursday");
+  });
+
+  // The request note and the approver's decision comment share a row. A
+  // decision must not carry the note away with it, which is why they are two
+  // columns rather than one.
+  it("leaves the request message untouched when a decision writes its comment", () => {
+    const columns = approvalPatchToColumns({
+      status: "approved",
+      comment: "Within delegated authority.",
+    });
+
+    expect(columns).not.toHaveProperty("request_message");
+  });
+
+  it("records a withdrawal as a status with no decider", () => {
+    const columns = approvalPatchToColumns({
+      status: "withdrawn",
+      decidedAt: new Date("2026-08-07T09:30:00.000Z"),
+    });
+
+    expect(columns.status).toBe("withdrawn");
+    expect(columns).not.toHaveProperty("decided_by_user_id");
+  });
 });

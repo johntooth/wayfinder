@@ -1,0 +1,117 @@
+# Wayfinder on one host: web, api, Postgres and object storage.
+#
+#   cp .env.min.example.prod .env      # then fill in the secrets
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# To upgrade, change WAYFINDER_VERSION and repeat the `up -d`. Migrations run
+# automatically as their own service before the app starts — see
+# docs/guides/upgrading.md.
+#
+# This is NOT docker-compose.yml. That file runs infrastructure only, for local
+# development against a host-run app, and ./restart.sh depends on it.
+
+name: wayfinder
+
+x-app-environment: &app-environment
+  NODE_ENV: production
+  DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/wayfinder
+  SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?generate with openssl rand -hex 32}
+  SCHEDULER_TICK_SECRET: ${SCHEDULER_TICK_SECRET:?generate with openssl rand -hex 32}
+  # Migrations are the migrate service's job, never a side effect of app boot.
+  RUN_MIGRATIONS_ON_START: "false"
+  # Bundled MinIO. These are this file's own credentials rather than anything the
+  # operator chose, so presetting them costs no security and saves an evaluator
+  # from pasting them into the setup wizard. Every other integration — AI
+  # provider, mail, sign-in — is left for the wizard, which tests each connection
+  # before accepting it.
+  MINIO_ENDPOINT: storage
+  MINIO_PORT: "9000"
+  MINIO_USE_SSL: "false"
+  MINIO_PATH_STYLE: "true"
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+  MINIO_BUCKET: ${MINIO_BUCKET:-wayfinder-documents}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: wayfinder
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d wayfinder"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  storage:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      # Matches docker-compose.yml: `mc` is not guaranteed to be present in the
+      # server image, but curl and the health endpoint are.
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # Runs to completion on every `up`, including every upgrade, then exits. The
+  # app services wait for it, so they never start against an unmigrated schema.
+  # Safe to run concurrently and safe to re-run: it takes an advisory lock and an
+  # already-current database is a no-op.
+  migrate:
+    image: ghcr.io/rbrasier/wayfinder:${WAYFINDER_VERSION:-latest}
+    command: ["migrate"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: *app-environment
+
+  web:
+    image: ghcr.io/rbrasier/wayfinder:${WAYFINDER_VERSION:-latest}
+    command: ["web"]
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      storage:
+        condition: service_healthy
+    environment:
+      <<: *app-environment
+      WEB_PORT: "3000"
+      # Sign-in callbacks, the first-run /setup link and notification email links
+      # are all built from this, so the localhost default breaks a real host.
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?set to the public origin, no trailing slash}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?generate with openssl rand -hex 32}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+
+  api:
+    image: ghcr.io/rbrasier/wayfinder:${WAYFINDER_VERSION:-latest}
+    command: ["api"]
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      storage:
+        condition: service_healthy
+    environment:
+      <<: *app-environment
+      API_PORT: "3001"
+      # The scheduler heartbeat POSTs the web app's internal tick endpoint.
+      WEB_BASE_URL: http://web:3000
+
+volumes:
+  postgres-data:
+  minio-data:

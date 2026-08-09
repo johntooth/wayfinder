@@ -249,7 +249,7 @@ export function AdminAuditContent() {
                 ))}
                 {page && page.rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-[#6d6a65]">
+                    <TableCell colSpan={5} className="text-center text-[#666055]">
                       No audit events match these filters.
                     </TableCell>
                   </TableRow>
@@ -258,7 +258,7 @@ export function AdminAuditContent() {
             </Table>
 
             <div className="flex items-center justify-between">
-              <span className="text-[13px] text-[#6d6a65]">
+              <span className="text-[13px] text-[#666055]">
                 {total === 0
                   ? "0 events"
                   : `${offset + 1}–${Math.min(offset + PAGE_SIZE, total)} of ${total}`}
@@ -304,9 +304,9 @@ export function AdminAuditContent() {
               <Detail label="Resource ID" value={selected.resourceId ?? "—"} />
               <Detail label="Hash" value={selected.hash} />
               <div>
-                <dt className="font-semibold uppercase text-[11px] text-[#6d6a65]">Metadata</dt>
+                <dt className="font-semibold uppercase text-[11px] text-[#666055]">Metadata</dt>
                 <dd>
-                  <pre className="mt-1 overflow-x-auto rounded bg-[#f7f6f3] p-2 text-[12px]">
+                  <pre className="mt-1 overflow-x-auto rounded bg-[#faf9f7] p-2 text-[12px]">
                     {JSON.stringify(selected.metadata, null, 2)}
                   </pre>
                 </dd>
@@ -322,7 +322,7 @@ export function AdminAuditContent() {
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-2">
-      <dt className="w-32 shrink-0 font-semibold uppercase text-[11px] text-[#6d6a65]">{label}</dt>
+      <dt className="w-32 shrink-0 font-semibold uppercase text-[11px] text-[#666055]">{label}</dt>
       <dd className="break-all">{value}</dd>
     </div>
   );

@@ -1,4 +1,5 @@
 import {
+  APPROVAL_PROJECTION_FIELDS,
   buildApprovalDecisionMessage,
   buildApprovalRecord,
   buildAttestationBlock,
@@ -39,6 +40,7 @@ import {
   SUBJECT_NODE_ID_KEY,
 } from "./approval-record-keys";
 import type { ResolveApprovalSubject } from "./resolve-approval-subject";
+import { loneSignatureSlot } from "./signature-slot";
 
 export interface DecideApprovalInput {
   approvalId: string;
@@ -60,12 +62,23 @@ export interface DecideApprovalOutput {
   sessionCompleted: boolean;
 }
 
-const field = (key: string, label: string, value: string): StepOutputField => ({
+// A projected decision field. The label comes from the shared definition rather
+// than the call site, so the report's column headings and the keys underneath
+// them can never drift apart.
+const field = (key: string, value: string): StepOutputField => ({
   key,
-  label,
+  label: APPROVAL_PROJECTION_FIELDS.find((definition) => definition.key === key)?.label ?? key,
   type: "text",
   value,
 });
+
+const readRecordString = (
+  record: Record<string, unknown> | null,
+  key: string,
+): string | null => {
+  const value = record?.[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+};
 
 const stringOrNull = (value: unknown): string | null =>
   typeof value === "string" && value.length > 0 ? value : null;
@@ -353,7 +366,9 @@ export class DecideApproval {
     const config = (nodes.find((node) => node.id === approval.nodeId)?.config ??
       {}) as unknown as ApprovalNodeConfig;
 
-    return { description, nodeId, signatureFieldKey: config.signatureFieldKey ?? null };
+    const signatureFieldKey =
+      config.signatureFieldKey ?? loneSignatureSlot(nodes, nodeId);
+    return { description, nodeId, signatureFieldKey };
   }
 
   // The atomic core: the pending-guard update and the session write share one
@@ -558,18 +573,68 @@ export class DecideApproval {
 
   // Best-effort denormalised projection — the approval row stays the source of
   // truth, so a projection failure must not fail the decision.
+  //
+  // Identity and subject are read back out of the record frozen moments ago
+  // rather than re-resolved. A second resolution could disagree with the first,
+  // which would leave the report contradicting the document that was signed.
   private async projectDecision(approval: Approval, decidedAt: Date): Promise<void> {
+    const record = approval.recordSnapshot;
+    const stepKey = readRecordString(record, STEP_KEY);
+    const recorded = (suffix: string): string =>
+      stepKey ? (readRecordString(record, `${stepKey}.${suffix}`) ?? "") : "";
+
+    const approverEmail = recorded("approver_email");
+    // A blank cell in a governance report is worse than a raw id, so this walks
+    // down to whatever identifies the decider at all. The record is built by
+    // optional dependencies, so an unwired path reaches the last fallback.
+    const decidedBy =
+      recorded("approver_name") || approverEmail || (approval.decidedByUserId ?? "");
+
     await this.sessionStepOutputs.create({
       sessionId: approval.sessionId,
       flowId: approval.flowId,
       nodeId: approval.nodeId,
       fields: [
-        field("outcome", "Outcome", approval.status),
-        field("decided_at", "Decided at", decidedAt.toISOString()),
-        field("decided_by", "Decided by", approval.decidedByUserId ?? ""),
-        field("comment", "Comment", approval.comment ?? ""),
+        field("outcome", approval.status),
+        field("revision", String(await this.decisionCount(approval))),
+        field("decided_at", decidedAt.toISOString()),
+        field("decided_by", decidedBy),
+        field("approver_email", approverEmail),
+        field("applies_to", await this.appliesTo(approval, recorded("subject_description"))),
+        field("comment", approval.comment ?? ""),
       ],
     });
+  }
+
+  // Which pass through this step the decision is, counting from one. A change
+  // request routes work back, and re-entering the step raises a fresh request
+  // rather than reopening the old one, so a step can be decided several times.
+  // Counted from the approval rows — the source of truth — rather than from the
+  // projections, which are best-effort and may have missed a write.
+  //
+  // Runs after the decision commits, so this decision is already among them.
+  // A read failure reports the pass it certainly is rather than none.
+  private async decisionCount(approval: Approval): Promise<number> {
+    const listed = await this.approvals.listBySession(approval.sessionId);
+    if (listed.error) return 1;
+
+    const decided = listed.data.filter(
+      (candidate) => candidate.nodeId === approval.nodeId && candidate.status !== "pending",
+    );
+    return Math.max(decided.length, 1);
+  }
+
+  // What the approver signed off, as a report column. The frozen description is
+  // preferred; a record written before the subject was resolvable falls back to
+  // the subject step's own name, which still answers "which step is this about".
+  private async appliesTo(approval: Approval, subjectDescription: string): Promise<string> {
+    if (subjectDescription) return subjectDescription;
+
+    const subjectNodeId = readRecordString(approval.recordSnapshot, SUBJECT_NODE_ID_KEY);
+    if (!subjectNodeId) return "";
+
+    const nodes = await this.flowNodesOfFlow(approval.flowId);
+    return nodes.find((node) => node.id === subjectNodeId)?.name ?? "";
   }
 
   private async advance(

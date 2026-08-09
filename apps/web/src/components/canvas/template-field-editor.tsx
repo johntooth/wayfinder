@@ -89,7 +89,7 @@ export function TemplateFieldEditor({
   return (
     <div className="space-y-1">
       <Label>{label}</Label>
-      <p className="text-[12px] text-[#6d6a65]">{helpText}</p>
+      <p className="text-[12px] text-[#666055]">{helpText}</p>
       <div className="space-y-2">
         {rows.map((line, index) => {
           const error = lineError(line, disallowSection);
@@ -101,25 +101,25 @@ export function TemplateFieldEditor({
                   onChange={(e) => setLine(index, e.target.value)}
                   placeholder="e.g. Preferred Vendor (text)"
                   aria-invalid={error ? true : undefined}
-                  className={error ? "border-[#c2385a]" : undefined}
+                  className={error ? "border-[#a8324c]" : undefined}
                 />
                 <button
                   type="button"
                   aria-label="Remove field"
-                  className="shrink-0 rounded-md p-1.5 text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#c2385a]"
+                  className="shrink-0 rounded-md p-1.5 text-[#666055] transition-colors hover:bg-[#f5f3ee] hover:text-[#a8324c]"
                   onClick={() => removeRow(index)}
                 >
                   <X size={14} />
                 </button>
               </div>
-              {error && <p className="text-[12px] text-[#c2385a]">{error}</p>}
+              {error && <p className="text-[12px] text-[#a8324c]">{error}</p>}
             </div>
           );
         })}
       </div>
       <button
         type="button"
-        className="mt-1 flex items-center gap-1 text-[12px] text-[#3a5fd9] transition-colors hover:text-[#2e4bb0]"
+        className="mt-1 flex items-center gap-1 text-[12px] text-[#2f56d3] transition-colors hover:text-[#1f3ea8]"
         onClick={addRow}
       >
         <Plus size={13} /> Add field

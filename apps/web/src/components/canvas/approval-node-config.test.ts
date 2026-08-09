@@ -5,6 +5,7 @@ import {
   approvalSubjectFromChoice,
   CUSTOM_SUBJECT_CHOICE,
   decodeApprovalSubject,
+  defaultSubjectNodeId,
   describeApprovalSubject,
   decodeChangesRequestedTarget,
   editableReturnSteps,
@@ -21,10 +22,11 @@ const priorField = (
   nodeId: string,
   key: string,
   type: PriorStepField["field"]["type"],
+  stepNumber = 1,
 ): PriorStepField => ({
   nodeId,
-  stepLabel: `1. ${nodeId}`,
-  stepNumber: 1,
+  stepLabel: `${stepNumber}. ${nodeId}`,
+  stepNumber,
   stepName: nodeId,
   field: { key, label: key.replace(/_/g, " "), type },
 });
@@ -156,10 +158,10 @@ describe("editableReturnSteps", () => {
 
 describe("signature slots", () => {
   const fields = [
-    priorField("node-draft", "amount", "currency"),
-    priorField("node-draft", "delegate_signature", "signature"),
-    priorField("node-draft", "finance_signature", "signature"),
-    priorField("node-other", "legal_signature", "signature"),
+    priorField("node-other", "legal_signature", "signature", 1),
+    priorField("node-draft", "amount", "currency", 2),
+    priorField("node-draft", "delegate_signature", "signature", 2),
+    priorField("node-draft", "finance_signature", "signature", 2),
   ];
 
   it("lists the subject step's signature fields only", () => {
@@ -169,18 +171,40 @@ describe("signature slots", () => {
     ]);
   });
 
-  it("lists nothing when the subject is the last-completed default", () => {
-    expect(signatureSlotsFor(fields, "")).toEqual([]);
+  // The default previously offered nothing, so the common single-document flow
+  // could not target its own signature without the author naming the step by
+  // hand — and an unnamed slot is never signed.
+  it("resolves the last-completed default to the nearest earlier step", () => {
+    expect(signatureSlotsFor(fields, "").map((slot) => slot.key)).toEqual([
+      "delegate_signature",
+      "finance_signature",
+    ]);
+    expect(defaultSubjectNodeId(fields)).toBe("node-draft");
+  });
+
+  it("offers nothing on the default when no earlier step declares fields", () => {
+    expect(signatureSlotsFor([], "")).toEqual([]);
+    expect(defaultSubjectNodeId([])).toBe("");
+  });
+
+  it("offers nothing when the nearest earlier step declares no signature", () => {
+    const noSignatures = [priorField("node-draft", "amount", "currency", 2)];
+
+    expect(signatureSlotsFor(noSignatures, "")).toEqual([]);
   });
 
   it("shows no control when the template declares no signature", () => {
     expect(signatureSlotControl([])).toEqual({ mode: "none" });
   });
 
-  it("binds automatically when there is exactly one, since there is no choice", () => {
-    expect(signatureSlotControl([{ key: "delegate_signature", label: "Delegate Signature" }])).toEqual(
-      { mode: "auto", key: "delegate_signature" },
-    );
+  // The "auto" mode this replaces bound nothing: it rendered no control, left
+  // signatureFieldKey empty in the saved config, and DecideApproval then read
+  // null — so a single-signature template was never signed while the modal said
+  // it would be (ADR-043 §5, amended v0.26.2).
+  it("still asks with exactly one, so the choice is written rather than assumed", () => {
+    const slots = [{ key: "delegate_signature", label: "Delegate Signature" }];
+
+    expect(signatureSlotControl(slots)).toEqual({ mode: "choose", slots });
   });
 
   it("asks the author to pick when there are two or more", () => {

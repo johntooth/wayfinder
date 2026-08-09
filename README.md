@@ -21,15 +21,15 @@ Full detail on every feature — including approvals, knowledge base curation, c
 governance, and accessibility — lives in [`docs/features.md`](docs/features.md).
 Highlights:
 
-- **Visual Canvas Builder** — drag-and-drop node editor; admins configure each step's AI instructions, completion criteria, and output type without writing code.
-- **Streaming Chat Sessions** — users follow published flows via a multi-turn chat that advances automatically as AI confidence crosses threshold, with full reasoning transparency and real-time collaboration.
-- **DOCX Document Generation** — flow steps fill Word templates from the conversation, with typed field annotations, optional sections, and a pre-generation evaluation gate that catches incomplete documents before they're created.
-- **Step Approvals** — flows can include a human sign-off gate with federated approver resolution (Entra, HR data, or RAG) and full decision context.
-- **Knowledge Base & RAG** — pgvector-backed retrieval over uploaded documents, with an SME curation workflow for correcting and improving what the AI knows.
-- **n8n Automation & Scheduling** — flow steps can trigger external workflows or run unattended on a cron schedule.
-- **Analytics & Cost Governance** — usage dashboards, per-flow insights, and per-user spend caps with warn-then-block enforcement.
-- **Multi-Provider AI** — Anthropic, OpenAI, Mistral, and AWS Bedrock, configurable per deployment.
-- **Enterprise Access Control** — Microsoft Entra ID login, custom roles, and WCAG 2.2 AA accessibility.
+- **Guided, Governed Sessions** — users are walked through the process one step at a time in a chat that only advances when the AI's confidence clears the threshold the flow owner set, so the process is followed rather than improvised.
+- **Finished Documents, Not Transcripts** — steps fill Word templates from the conversation, with typed field annotations, optional sections, and a pre-generation gate that holds the step until the document would actually be complete.
+- **Authored by the Process Owner, Not a Developer** — the person who owns the process builds it on a drag-and-drop canvas: instructions, completion criteria, branching, and output per step, with no code and no prompt engineering.
+- **Human Sign-Off Where It Matters** — approval nodes pause a session for a named approver — resolved from Entra, HR data, or the flow's own reference material — who sees the actual output before deciding.
+- **Grounded in Your Own Material** — pgvector retrieval over uploaded documents, with an SME curation loop for correcting and improving what the AI knows when it gets something wrong.
+- **Nothing the AI Does Is Opaque** — every turn exposes its reasoning, sources, and confidence score, and every decision, edit, and approval lands in a durable audit trail.
+- **Steps That Need No Human** — a step can hand off to an n8n workflow, and a whole flow can run unattended on a plain-language schedule.
+- **Spend and Usage Under Control** — per-user daily, weekly, or monthly caps with warn-then-block enforcement, alongside dashboards showing where users drop off and what documents actually contain.
+- **Fits the Organisation** — Microsoft Entra ID sign-in, custom roles, WCAG 2.2 AA accessibility, and a choice of Anthropic, OpenAI, Mistral, or AWS Bedrock per deployment.
 
 ---
 
@@ -95,9 +95,30 @@ override.
 
 See [`docs/guides/setup-local.md`](docs/guides/setup-local.md).
 
-## Railway deployment
+## Deployment
 
-See [`docs/guides/setup-railway.md`](docs/guides/setup-railway.md).
+Wayfinder ships as a public container image — `ghcr.io/rbrasier/wayfinder` — so
+no deployment target needs a build toolchain.
+
+The whole stack on one host:
+
+```bash
+cp .env.min.example.prod .env    # then fill in the secrets it names
+docker compose -f docker-compose.prod.yml up -d
+```
+
+That brings up web, api, Postgres and object storage, runs migrations as their
+own step, and leaves you at the first-run `/setup` page. Object storage, the AI
+provider, mail and sign-in are all configured there — not in environment
+variables.
+
+| Target | Guide |
+|---|---|
+| Docker Compose (single host) | `docker-compose.prod.yml` |
+| Railway | [`docs/guides/setup-railway.md`](docs/guides/setup-railway.md) |
+| AWS (ECS Fargate + RDS + S3) | [`docs/guides/setup-aws.md`](docs/guides/setup-aws.md) |
+| Azure (Container Apps + Flexible Server) | [`docs/guides/setup-azure.md`](docs/guides/setup-azure.md) |
+| Upgrading an existing deployment | [`docs/guides/upgrading.md`](docs/guides/upgrading.md) |
 
 ## Locked out of admin
 
@@ -176,4 +197,4 @@ any modifications must be released under the same licence.
 
 ---
 
-_Last updated: 5 July 2026_
+_Last updated: 5 August 2026_

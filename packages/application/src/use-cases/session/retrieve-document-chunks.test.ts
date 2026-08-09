@@ -20,6 +20,16 @@ class FakeEmbeddings implements IEmbeddingsProvider {
   }
 }
 
+class FakeEmbeddingsPerQuery implements IEmbeddingsProvider {
+  public calls: string[] = [];
+  // A distinct vector per query, so the repo fake can tell which query it is
+  // being asked about.
+  async embed(text: string): Promise<Result<number[]>> {
+    this.calls.push(text);
+    return ok([this.calls.length]);
+  }
+}
+
 class FakeChunkRepo implements IDocumentChunkRepository {
   public searches: DocumentChunkSearch[] = [];
   // Returns a result list keyed by which scope was searched, so a test can
@@ -107,8 +117,8 @@ describe("RetrieveDocumentChunks", () => {
     expect(flowSearch).toMatchObject({
       flowId: "flow-1",
       sessionId: null,
-      limit: 5,
-      minSimilarity: 0.5,
+      limit: 8,
+      minSimilarity: 0.25,
     });
 
     const sessionSearch = findScope(repo.searches, "session");
@@ -150,6 +160,86 @@ describe("RetrieveDocumentChunks", () => {
 
     expect(findScope(repo.searches, "flow")).toMatchObject({ limit: 3, minSimilarity: 0.7 });
     expect(findScope(repo.searches, "session")).toMatchObject({ limit: 12, minSimilarity: 0.1 });
+  });
+
+  it("embeds each distinct query once and merges what they return", async () => {
+    // The turn's two retrieval keys (message + step). Each is embedded and each
+    // searches both scopes, because a step query that reaches the policy is the
+    // whole point — the message query alone is what missed it.
+    const stepChunk: RetrievedChunk = {
+      filename: "policy.pdf",
+      chunkIndex: 3,
+      chunkText: "All new employees must commence employment on a Monday.",
+      sourceType: "flow_context_doc",
+      similarity: 0.44,
+    };
+    const embeddings = new FakeEmbeddingsPerQuery();
+    class PerQueryRepo extends FakeChunkRepo {
+      async search(input: DocumentChunkSearch): Promise<Result<RetrievedChunk[]>> {
+        this.searches.push(input);
+        if (!input.flowId) return ok([]);
+        return ok(input.embedding[0] === 1 ? [flowChunk] : [stepChunk]);
+      }
+    }
+    const repo = new PerQueryRepo();
+    const useCase = new RetrieveDocumentChunks(embeddings, repo);
+
+    const result = await useCase.execute({
+      flowId: "flow-1",
+      sessionId: "sess-1",
+      queries: ["are there any options for a start date?", "Capture the start date."],
+    });
+
+    expect(embeddings.calls).toEqual([
+      "are there any options for a start date?",
+      "Capture the start date.",
+    ]);
+    expect(result.data).toEqual([flowChunk, stepChunk]);
+  });
+
+  it("returns a chunk both queries matched exactly once, at its best similarity", async () => {
+    const weaker: RetrievedChunk = { ...flowChunk, similarity: 0.31 };
+    const stronger: RetrievedChunk = { ...flowChunk, similarity: 0.77 };
+    const embeddings = new FakeEmbeddingsPerQuery();
+    class PerQueryRepo extends FakeChunkRepo {
+      async search(input: DocumentChunkSearch): Promise<Result<RetrievedChunk[]>> {
+        this.searches.push(input);
+        if (!input.flowId) return ok([]);
+        return ok(input.embedding[0] === 1 ? [weaker] : [stronger]);
+      }
+    }
+    const useCase = new RetrieveDocumentChunks(embeddings, new PerQueryRepo());
+
+    const result = await useCase.execute({
+      flowId: "flow-1",
+      sessionId: null,
+      queries: ["first", "second"],
+    });
+
+    expect(result.data).toEqual([stronger]);
+  });
+
+  it("skips blank and duplicate queries without spending an embedding call", async () => {
+    const embeddings = new FakeEmbeddingsPerQuery();
+    const useCase = new RetrieveDocumentChunks(embeddings, new FakeChunkRepo());
+
+    await useCase.execute({
+      flowId: "flow-1",
+      sessionId: null,
+      queries: ["same", "   ", "same"],
+    });
+
+    expect(embeddings.calls).toEqual(["same"]);
+  });
+
+  it("returns an empty list when every query is blank", async () => {
+    const embeddings = new FakeEmbeddingsPerQuery();
+    const useCase = new RetrieveDocumentChunks(embeddings, new FakeChunkRepo());
+
+    const result = await useCase.execute({ flowId: "flow-1", sessionId: null, queries: ["", " "] });
+
+    expect(result.data).toEqual([]);
+    expect(embeddings.calls).toHaveLength(0);
   });
 
   it("propagates an embedding failure", async () => {

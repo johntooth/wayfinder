@@ -26,7 +26,12 @@ import {
 import { trpc } from "@/trpc/client";
 import { exportInsightsXlsx } from "@/components/admin/field-report-export";
 import { FieldReportPivotDrawer } from "@/components/admin/field-report-pivot-drawer";
-import { buildDisplayColumns, type NodeGroup } from "@/components/admin/field-report-columns";
+import {
+  approvalRevisionNote,
+  buildDisplayColumns,
+  qualifiedColumnLabel,
+  type NodeGroup,
+} from "@/components/admin/field-report-columns";
 
 type DatePreset = "all" | "this_year" | "last_90" | "last_30";
 type FilterOperator = "gte" | "lte";
@@ -35,9 +40,9 @@ type StatusFilter = "all" | "complete" | "active" | "abandoned";
 const STORAGE_PREFIX = "wayfinder:field-report";
 
 const selectStyle =
-  "h-9 rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 text-[13px] text-[#1a1814] outline-none focus:border-[#3a5fd9] focus:bg-white";
+  "h-9 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 text-[13px] text-[#1c1b19] outline-none focus:border-[#2f56d3] focus:bg-white";
 
-const labelStyle = "block text-[11px] font-medium uppercase tracking-wide text-[#6d6a65] mb-1";
+const labelStyle = "block text-[11px] font-medium uppercase tracking-wide text-[#666055] mb-1";
 
 const formatDate = (date: Date | string): string =>
   new Date(date).toISOString().slice(0, 10).split("-").reverse().join("-");
@@ -49,8 +54,8 @@ const formatStatus = (status: string): string => {
 };
 
 const statusBadgeClass = (status: string): string => {
-  if (status === "complete") return "text-[#247c53]";
-  if (status === "abandoned") return "text-[#c2385a]";
+  if (status === "complete") return "text-[#1f6b4d]";
+  if (status === "abandoned") return "text-[#a8324c]";
   return "text-[#9a6229]";
 };
 
@@ -269,6 +274,13 @@ export function FieldReportSection({
     [displayColumns, filterColumnKey],
   );
 
+  // The drawer lists columns in a flat select with no step grouping, so each
+  // entry has to name its own step.
+  const pivotColumns = useMemo(
+    () => displayColumns.map((col) => ({ ...col, label: qualifiedColumnLabel(col) })),
+    [displayColumns],
+  );
+
   const filteredRows = useMemo((): FieldReportSessionRow[] => {
     const now = new Date();
     const dateThreshold = getDateThreshold(datePreset, now);
@@ -332,8 +344,11 @@ export function FieldReportSection({
   const handleExport = useCallback(async () => {
     setIsExporting(true);
     try {
+      // The sheet has no second header line to carry a step name, so the
+      // heading has to stand on its own or a two-approval flow exports two
+      // columns both headed "Outcome".
       const exportColumns = displayedColumns.map((col) => ({
-        label: col.label,
+        label: qualifiedColumnLabel(col),
         type: col.type,
         memberKeys: col.memberKeys,
       }));
@@ -380,7 +395,7 @@ export function FieldReportSection({
             Template field reporting
           </CardTitle>
         </CardHeader>
-        <CardContent className="text-[13px] text-[#6d6a65]">
+        <CardContent className="text-[13px] text-[#666055]">
           No template field values captured yet. Add validation annotations to your template tags
           (e.g.{" "}
           <code className="font-mono">
@@ -402,7 +417,7 @@ export function FieldReportSection({
           <div className="flex items-center gap-3">
             {hasForkGroups && (
               <label
-                className="flex cursor-pointer items-center gap-1.5 text-[12px] text-[#5a5650]"
+                className="flex cursor-pointer items-center gap-1.5 text-[12px] text-[#5c574c]"
                 title="Combine fork-sibling steps that capture the same field into one column"
               >
                 <input
@@ -416,7 +431,7 @@ export function FieldReportSection({
             )}
             {hasVersionGroups && (
               <label
-                className="flex cursor-pointer items-center gap-1.5 text-[12px] text-[#5a5650]"
+                className="flex cursor-pointer items-center gap-1.5 text-[12px] text-[#5c574c]"
                 title="Combine the same field captured across different versions of this flow"
               >
                 <input
@@ -431,7 +446,7 @@ export function FieldReportSection({
             <button
               type="button"
               onClick={handleReset}
-              className="text-[12px] text-[#3a5fd9] hover:underline"
+              className="text-[12px] text-[#2f56d3] hover:underline"
             >
               Reset filters
             </button>
@@ -457,15 +472,15 @@ export function FieldReportSection({
           </div>
         </div>
 
-        <div className="flex gap-6 border-t pt-3 text-[13px] text-[#5a5650]">
+        <div className="flex gap-6 border-t pt-3 text-[13px] text-[#5c574c]">
           <span>
-            <span className="font-semibold text-[#1a1814]">{sessionSummary.total}</span> sessions
+            <span className="font-semibold text-[#1c1b19]">{sessionSummary.total}</span> sessions
           </span>
           <span>
-            <span className="font-semibold text-[#247c53]">{sessionSummary.completed}</span> completed
+            <span className="font-semibold text-[#1f6b4d]">{sessionSummary.completed}</span> completed
           </span>
           <span>
-            <span className="font-semibold text-[#6d6a65]">
+            <span className="font-semibold text-[#666055]">
               {sessionSummary.active + sessionSummary.abandoned}
             </span>{" "}
             in progress or abandoned
@@ -474,7 +489,7 @@ export function FieldReportSection({
       </CardHeader>
 
       <CardContent className="space-y-4">
-        <div className="flex flex-wrap items-end gap-3 rounded-[9px] border border-[#efede8] bg-[#f7f6f3] p-3">
+        <div className="flex flex-wrap items-end gap-3 rounded-[9px] border border-[#f5f3ee] bg-[#faf9f7] p-3">
           <div>
             <span className={labelStyle}>Date range</span>
             <select
@@ -586,9 +601,9 @@ export function FieldReportSection({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-[12px] text-[#6d6a65]">
+        <div className="flex items-center gap-2 text-[12px] text-[#666055]">
           <span>
-            <span className="font-medium text-[#1a1814]">{filteredRows.length}</span> of{" "}
+            <span className="font-medium text-[#1c1b19]">{filteredRows.length}</span> of{" "}
             {report.rows.length} sessions match
           </span>
           {matchStats && (
@@ -616,8 +631,11 @@ export function FieldReportSection({
                 {displayedColumns.map((col) => (
                   <TableHead key={col.columnKey}>
                     {col.label}
-                    {col.stepNames.length > 1 && (
-                      <span className="block text-[10px] font-normal normal-case text-[#6d6a65]">
+                    {/* An approval step projects the same generic labels as every
+                        other one, so without its name several sign-offs all read
+                        "Outcome" with nothing to tell them apart. */}
+                    {(col.stepNames.length > 1 || col.nodeType === "approval") && (
+                      <span className="block text-[10px] font-normal normal-case text-[#666055]">
                         {col.stepNames.join(" · ")}
                       </span>
                     )}
@@ -630,7 +648,7 @@ export function FieldReportSection({
                 <TableRow>
                   <TableCell
                     colSpan={2 + displayedColumns.length}
-                    className="text-center text-[13px] text-[#6d6a65]"
+                    className="text-center text-[13px] text-[#666055]"
                   >
                     No sessions match the current filters.
                   </TableCell>
@@ -638,17 +656,41 @@ export function FieldReportSection({
               )}
               {filteredRows.map((row) => (
                 <TableRow key={row.sessionId}>
-                  <TableCell className="whitespace-nowrap text-[12px] text-[#6d6a65]">
+                  <TableCell className="whitespace-nowrap text-[12px] text-[#666055]">
                     {formatDate(row.startedAt)}
                   </TableCell>
                   <TableCell className={`text-[12px] font-medium ${statusBadgeClass(row.status)}`}>
                     {formatStatus(row.status)}
                   </TableCell>
-                  {displayedColumns.map((col) => (
-                    <TableCell key={col.columnKey} className="max-w-[220px] truncate text-[13px]">
-                      {coalesceValue(row.values, col.memberKeys) || "—"}
-                    </TableCell>
-                  ))}
+                  {displayedColumns.map((col) => {
+                    const value = coalesceValue(row.values, col.memberKeys) || "—";
+                    // A step sent back and re-decided shows where it landed;
+                    // without this, "approved" reads as a clean first pass.
+                    const revisionNote = approvalRevisionNote(col, row.values);
+                    if (!revisionNote) {
+                      return (
+                        <TableCell
+                          key={col.columnKey}
+                          className="max-w-[220px] truncate text-[13px]"
+                        >
+                          {value}
+                        </TableCell>
+                      );
+                    }
+                    // The note is the part that must survive: truncating the
+                    // cell as a whole would clip exactly it, and a long outcome
+                    // beside a double-digit count is where that first bites.
+                    return (
+                      <TableCell key={col.columnKey} className="max-w-[220px] text-[13px]">
+                        <span className="flex items-baseline gap-1">
+                          <span className="truncate">{value}</span>
+                          <span className="shrink-0 text-[11px] text-[#666055]">
+                            ({revisionNote})
+                          </span>
+                        </span>
+                      </TableCell>
+                    );
+                  })}
                 </TableRow>
               ))}
             </TableBody>
@@ -663,12 +705,12 @@ export function FieldReportSection({
           </DialogHeader>
           <DialogBody className="space-y-4">
             <div>
-              <p className="mb-2 text-[12px] font-medium uppercase tracking-wide text-[#6d6a65]">
+              <p className="mb-2 text-[12px] font-medium uppercase tracking-wide text-[#666055]">
                 Always shown
               </p>
               <div className="space-y-2">
                 {["Started", "Status"].map((label) => (
-                  <label key={label} className="flex cursor-not-allowed items-center gap-2 text-[13px] text-[#6d6a65]">
+                  <label key={label} className="flex cursor-not-allowed items-center gap-2 text-[13px] text-[#666055]">
                     <input type="checkbox" checked disabled className="h-3.5 w-3.5" />
                     {label}
                   </label>
@@ -677,14 +719,14 @@ export function FieldReportSection({
             </div>
             {columnsByNode.map((group) => (
               <div key={group.nodeId}>
-                <p className="mb-2 text-[12px] font-medium uppercase tracking-wide text-[#6d6a65]">
+                <p className="mb-2 text-[12px] font-medium uppercase tracking-wide text-[#666055]">
                   {group.nodeName}
                 </p>
                 <div className="space-y-2">
                   {group.columns.map((col) => (
                     <label
                       key={col.columnKey}
-                      className="flex cursor-pointer items-center gap-2 text-[13px] text-[#1a1814]"
+                      className="flex cursor-pointer items-center gap-2 text-[13px] text-[#1c1b19]"
                     >
                       <input
                         type="checkbox"
@@ -693,7 +735,7 @@ export function FieldReportSection({
                         onChange={(event) => handleColumnsChange(col.columnKey, event.target.checked)}
                       />
                       {col.label}
-                      <span className="ml-auto text-[11px] uppercase tracking-wide text-[#6d6a65]">
+                      <span className="ml-auto text-[11px] uppercase tracking-wide text-[#666055]">
                         {col.type}
                       </span>
                     </label>
@@ -708,7 +750,7 @@ export function FieldReportSection({
       <FieldReportPivotDrawer
         open={summariseOpen}
         onOpenChange={setSummariseOpen}
-        columns={displayColumns}
+        columns={pivotColumns}
         rows={filteredRows}
       />
     </Card>

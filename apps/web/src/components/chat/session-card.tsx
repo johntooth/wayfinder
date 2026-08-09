@@ -24,9 +24,9 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const STATUS_BADGE: Record<string, string> = {
-  active: "bg-[#eef1fc] text-[#3a5fd9] border border-[#c5d0f7]",
-  complete: "bg-[#eaf6f0] text-[#247c53] border border-[#c0e8d5]",
-  abandoned: "bg-[#efede8] text-[#6d6a65] border border-[#dedad2]",
+  active: "bg-[#eaeefb] text-[#2f56d3] border border-[#c3cef2]",
+  complete: "bg-[#e3efe5] text-[#1f6b4d] border border-[#c0e8d5]",
+  abandoned: "bg-[#f5f3ee] text-[#666055] border border-[#e7e3db]",
 };
 
 const formatRelativeTime = (date: Date): string => {
@@ -61,7 +61,7 @@ const computeProgress = (
 
 export function SessionCard({ session, flow, userBadge, stepInfo, lastMessage }: SessionCardProps) {
   const title = session.title ?? flow?.name ?? "Untitled session";
-  const badgeClass = STATUS_BADGE[session.status] ?? "bg-[#efede8] text-[#6d6a65] border border-[#dedad2]";
+  const badgeClass = STATUS_BADGE[session.status] ?? "bg-[#f5f3ee] text-[#666055] border border-[#e7e3db]";
   const statusLabel = STATUS_LABEL[session.status] ?? session.status;
   // A never-done step has no completion to measure, so the bar and percentage
   // would be meaningless — the step counter and status badge stay.
@@ -70,31 +70,31 @@ export function SessionCard({ session, flow, userBadge, stepInfo, lastMessage }:
 
   return (
     <Link href={`/chats/${session.id}`} className="block w-full">
-      <div className="flex cursor-pointer items-center gap-[14px] rounded-[14px] border-[1.5px] border-[#dedad2] bg-white p-[16px_18px] transition-[border-color,box-shadow] hover:border-[#3a5fd9] hover:shadow-[0_2px_8px_rgba(0,0,0,.09),0_12px_36px_rgba(0,0,0,.07)]">
+      <div className="flex cursor-pointer items-center gap-[14px] rounded-[14px] border-[1.5px] border-[#e7e3db] bg-white p-[16px_18px] transition-[border-color,box-shadow] hover:border-[#2f56d3] hover:shadow-[0_2px_8px_rgba(0,0,0,.09),0_12px_36px_rgba(0,0,0,.07)]">
 
         {/* Icon */}
-        <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[11px] bg-[#eef1fc] text-[18px]">
+        <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[11px] bg-[#eaeefb] text-[18px]">
           {flow?.icon ?? "💬"}
         </div>
 
         {/* Centre: title + flow · preview */}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-semibold tracking-[-0.2px] text-[#1a1814]">
+          <p className="truncate text-[14px] font-semibold tracking-[-0.2px] text-[#1c1b19]">
             {title}
           </p>
-          <p className="mt-[3px] truncate text-[12.5px] leading-[1.4] text-[#6d6a65]">
+          <p className="mt-[3px] truncate text-[12.5px] leading-[1.4] text-[#666055]">
             {flow && (
-              <span className="font-medium text-[#3a5fd9]">{flow.name}</span>
+              <span className="font-medium text-[#2f56d3]">{flow.name}</span>
             )}
             {flow && lastMessage && <span className="text-[#726f6b]"> · </span>}
             {lastMessage && <span>{lastMessage}</span>}
           </p>
           {userBadge && (
             <div className="mt-[6px] flex items-center gap-[5px]">
-              <div className="flex h-[22px] w-[22px] items-center justify-center rounded-full border border-[#dedad2] bg-[#efede8] text-[9px] font-bold text-[#6d6a65]">
+              <div className="flex h-[22px] w-[22px] items-center justify-center rounded-full border border-[#e7e3db] bg-[#f5f3ee] text-[9px] font-bold text-[#666055]">
                 {userBadge.initials}
               </div>
-              <span className="text-[11px] text-[#6d6a65]">{userBadge.name}</span>
+              <span className="text-[11px] text-[#666055]">{userBadge.name}</span>
             </div>
           )}
         </div>
@@ -111,13 +111,13 @@ export function SessionCard({ session, flow, userBadge, stepInfo, lastMessage }:
             </div>
 
             {showsProgress && (
-              <div className="h-[4px] overflow-hidden rounded-full bg-[#e6e3dc]">
+              <div className="h-[4px] overflow-hidden rounded-full bg-[#ebe8e0]">
                 {progress !== null && (
                   <div
                     className="h-full rounded-full transition-all"
                     style={{
                       width: `${progress}%`,
-                      backgroundColor: progress === 100 ? "#2e9e6a" : progress >= 60 ? "#3a5fd9" : "#d97706",
+                      backgroundColor: progress === 100 ? "#1f6b4d" : progress >= 60 ? "#2f56d3" : "#d97706",
                     }}
                   />
                 )}
@@ -126,7 +126,7 @@ export function SessionCard({ session, flow, userBadge, stepInfo, lastMessage }:
 
             {stepInfo && stepInfo.totalSteps > 0 && (
               <div
-                className={`flex font-mono text-[11px] text-[#6d6a65] ${
+                className={`flex font-mono text-[11px] text-[#666055] ${
                   showsProgress ? "justify-between" : "justify-center"
                 }`}
               >

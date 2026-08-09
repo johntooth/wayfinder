@@ -37,24 +37,24 @@ export function RecordCard({ messageId, canEdit = false, onEdited }: RecordCardP
     <div className="my-3 flex justify-center">
       <div
         data-testid="record-card"
-        className="w-full max-w-sm rounded-[10px] border border-[#dedad2] bg-white p-[12px_14px] shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
+        className="w-full max-w-sm rounded-[10px] border border-[#e7e3db] bg-white p-[12px_14px] shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
       >
         <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#eef1fc] text-[#3a5fd9]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#eaeefb] text-[#2f56d3]">
             <ClipboardList className="h-[18px] w-[18px] stroke-[1.8]" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold text-[#1a1814]">Record</p>
+            <p className="text-[13px] font-semibold text-[#1c1b19]">Record</p>
             {fieldsQuery.isLoading ? (
-              <p className="mt-1 text-[11px] text-[#6d6a65]">Loading record…</p>
+              <p className="mt-1 text-[11px] text-[#666055]">Loading record…</p>
             ) : fields.length === 0 ? (
-              <p className="mt-1 text-[11px] text-[#6d6a65]">No fields captured.</p>
+              <p className="mt-1 text-[11px] text-[#666055]">No fields captured.</p>
             ) : (
               <dl className="mt-1.5 space-y-1">
                 {fields.map((field) => (
                   <div key={field.key} className="flex gap-2 text-[12px]">
-                    <dt className="shrink-0 font-medium text-[#6d6a65]">{field.label}:</dt>
-                    <dd className="min-w-0 flex-1 truncate text-[#1a1814]">{renderValue(field)}</dd>
+                    <dt className="shrink-0 font-medium text-[#666055]">{field.label}:</dt>
+                    <dd className="min-w-0 flex-1 truncate text-[#1c1b19]">{renderValue(field)}</dd>
                   </div>
                 ))}
               </dl>

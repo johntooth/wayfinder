@@ -115,8 +115,8 @@ export function FlowMetadataDialog({
                   type="button"
                   className={`flex h-10 w-10 items-center justify-center rounded-[9px] border text-xl transition-colors ${
                     values.icon === icon
-                      ? "border-[#3a5fd9] bg-[#eef1fc]"
-                      : "border-[#dedad2] hover:bg-[#efede8]"
+                      ? "border-[#2f56d3] bg-[#eaeefb]"
+                      : "border-[#e7e3db] hover:bg-[#f5f3ee]"
                   }`}
                   onClick={() => setValues({ ...values, icon })}
                 >
@@ -126,7 +126,7 @@ export function FlowMetadataDialog({
               {/* The current icon when it was chosen from the expanded set, so a
                   custom pick stays visible alongside the six quick options. */}
               {!ICONS.includes(values.icon) && (
-                <div className="flex h-10 w-10 items-center justify-center rounded-[9px] border border-[#3a5fd9] bg-[#eef1fc] text-xl">
+                <div className="flex h-10 w-10 items-center justify-center rounded-[9px] border border-[#2f56d3] bg-[#eaeefb] text-xl">
                   {values.icon}
                 </div>
               )}

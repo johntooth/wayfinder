@@ -72,7 +72,7 @@ export function N8nExtractionInfoDialog({ open, onClose, variant }: N8nExtractio
           <DialogCloseButton />
         </DialogHeader>
         <DialogBody className="max-h-[70vh] overflow-y-auto">
-          <p className="text-[13px] leading-[1.55] text-[#5a5650]">
+          <p className="text-[13px] leading-[1.55] text-[#5c574c]">
             Wayfinder reads a workflow&apos;s {noun} automatically, trying each method below in
             order and stopping at the first that yields something. The last method only runs if
             the workflow has been executed at least once.
@@ -81,19 +81,19 @@ export function N8nExtractionInfoDialog({ open, onClose, variant }: N8nExtractio
             {METHODS[variant].map((method, index) => (
               <li
                 key={method.title}
-                className="flex gap-3 rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] p-3"
+                className="flex gap-3 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] p-3"
               >
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#1f8a4c] text-[12px] font-semibold text-white">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#1f6b4d] text-[12px] font-semibold text-white">
                   {index + 1}
                 </span>
                 <div className="min-w-0">
-                  <p className="text-[13px] font-medium text-[#1a1814]">{method.title}</p>
-                  <p className="text-[12px] leading-[1.5] text-[#5a5650]">{method.detail}</p>
+                  <p className="text-[13px] font-medium text-[#1c1b19]">{method.title}</p>
+                  <p className="text-[12px] leading-[1.5] text-[#5c574c]">{method.detail}</p>
                 </div>
               </li>
             ))}
           </ol>
-          <p className="text-[12px] leading-[1.55] text-[#6d6a65]">
+          <p className="text-[12px] leading-[1.55] text-[#666055]">
             To make the {noun} explicit, add an Edit Fields (Set) node named
             {" "}
             <code className="font-mono">{variant === "inputs" ? "Inputs" : "Outputs"}</code> to your

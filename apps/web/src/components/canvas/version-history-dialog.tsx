@@ -67,26 +67,26 @@ export function VersionHistoryDialog({
           <DialogCloseButton />
         </DialogHeader>
         <DialogBody>
-          {listQuery.isLoading && <p className="text-[13px] text-[#5a5650]">Loading history…</p>}
+          {listQuery.isLoading && <p className="text-[13px] text-[#5c574c]">Loading history…</p>}
           {listQuery.data?.length === 0 && (
-            <p className="text-[13px] text-[#5a5650]">
+            <p className="text-[13px] text-[#5c574c]">
               No versions yet. Publishing this flow records its first version.
             </p>
           )}
 
-          <ul className="flex flex-col divide-y divide-[#dedad2]">
+          <ul className="flex flex-col divide-y divide-[#e7e3db]">
             {listQuery.data?.map((version) => {
               const isSelected = version.id === selectedVersionId;
               return (
                 <li key={version.id} className="py-3">
                   <div className="flex items-center gap-3">
-                    <span className="text-[13px] font-semibold text-[#1a1814]">
+                    <span className="text-[13px] font-semibold text-[#1c1b19]">
                       {version.versionNumber === null ? "Draft" : `Version ${version.versionNumber}`}
                     </span>
                     <Badge variant={version.status === "published" ? "default" : "secondary"}>
                       {version.status}
                     </Badge>
-                    <span className="text-[12px] text-[#5a5650]">{formatDate(version.publishedAt)}</span>
+                    <span className="text-[12px] text-[#5c574c]">{formatDate(version.publishedAt)}</span>
                     <div className="ml-auto flex items-center gap-2">
                       <Button
                         size="sm"
@@ -107,27 +107,27 @@ export function VersionHistoryDialog({
                       )}
                     </div>
                   </div>
-                  <div className="mt-1 flex flex-wrap gap-x-3 text-[12px] text-[#5a5650]">
+                  <div className="mt-1 flex flex-wrap gap-x-3 text-[12px] text-[#5c574c]">
                     {version.publishedByName && <span>by {version.publishedByName}</span>}
                     {version.changeSummary && <span>· {version.changeSummary}</span>}
                   </div>
 
                   {isSelected && (
-                    <div className="mt-3 rounded-[10px] border border-[#dedad2] bg-[#faf9f6] p-3">
+                    <div className="mt-3 rounded-[10px] border border-[#e7e3db] bg-[#faf9f6] p-3">
                       {detailQuery.isLoading && (
-                        <p className="text-[12px] text-[#5a5650]">Loading snapshot…</p>
+                        <p className="text-[12px] text-[#5c574c]">Loading snapshot…</p>
                       )}
                       {detailQuery.data && (
-                        <div className="flex flex-col gap-2 text-[12px] text-[#1a1814]">
+                        <div className="flex flex-col gap-2 text-[12px] text-[#1c1b19]">
                           <p className="font-semibold">{detailQuery.data.snapshot.flow.name}</p>
-                          <p className="text-[#5a5650]">
+                          <p className="text-[#5c574c]">
                             {detailQuery.data.snapshot.nodes.length} step(s),{" "}
                             {detailQuery.data.snapshot.edges.length} connection(s)
                           </p>
                           <ul className="flex flex-col gap-1">
                             {detailQuery.data.snapshot.nodes.map((node) => (
                               <li key={node.id} className="flex items-center gap-2">
-                                <span className="rounded-[6px] bg-[#efede8] px-1.5 py-0.5 text-[11px]">
+                                <span className="rounded-[6px] bg-[#f5f3ee] px-1.5 py-0.5 text-[11px]">
                                   {node.type}
                                 </span>
                                 <span>{node.name || "Untitled step"}</span>

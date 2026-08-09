@@ -229,6 +229,90 @@ describe("EvaluateStepReadiness", () => {
     expect(documentGenerator.extractFields).not.toHaveBeenCalled();
   });
 
+  // The gate extracts and grades a field set, so a signature reaching it is
+  // reported as missing information and streamed at the operator as "Supervisor
+  // signature is blank" — then asked for by name. Only the approval step that
+  // owns the slot may ever fill it (ADR-043 §2).
+  const signature = (key: string): TemplateField => ({
+    key,
+    label: key.replace(/_/g, " "),
+    type: "signature",
+    optional: true,
+    raw: `${key} (approval)`,
+  });
+
+  it("never asks the extraction model for a signature slot", async () => {
+    const languageModel = makeLanguageModel({ guidanceConfidence: 95, criteriaConfidence: 95 });
+    const useCase = new EvaluateStepReadiness(
+      languageModel,
+      makeDocumentGenerator(),
+      makeObjectStorage(),
+    );
+
+    await useCase.execute({
+      messages,
+      flow: makeFlow(),
+      node: makeNode({
+        documentTemplateFields: [field("project_title"), signature("supervisor_signature")],
+      }),
+    });
+
+    const extractionCalls = vi
+      .mocked(languageModel.generateObject)
+      .mock.calls.filter(([input]) => (input as { purpose: string }).purpose === "documentGeneration");
+    expect(extractionCalls.length).toBeGreaterThan(0);
+    for (const [input] of extractionCalls) {
+      expect(JSON.stringify(input)).not.toContain("supervisor_signature");
+      expect(JSON.stringify(input)).not.toContain("supervisor signature");
+    }
+  });
+
+  it("never grades a signature slot as missing", async () => {
+    const languageModel = makeLanguageModel({ guidanceConfidence: 95, criteriaConfidence: 95 });
+    const useCase = new EvaluateStepReadiness(
+      languageModel,
+      makeDocumentGenerator(),
+      makeObjectStorage(),
+    );
+
+    const result = await useCase.execute({
+      messages,
+      flow: makeFlow(),
+      node: makeNode({
+        documentTemplateFields: [field("project_title"), signature("supervisor_signature")],
+      }),
+    });
+
+    const gradingCalls = vi
+      .mocked(languageModel.generateObject)
+      .mock.calls.filter(([input]) => (input as { purpose: string }).purpose === "documentGrading");
+    for (const [input] of gradingCalls) {
+      expect(JSON.stringify(input)).not.toContain("supervisor_signature");
+    }
+    expect(result.data?.fieldValues).not.toHaveProperty("supervisor_signature");
+  });
+
+  // A step whose only remaining tags are signatures has nothing left to gather,
+  // so the gate must not hold it open waiting for values nobody may supply.
+  it("treats a template of signatures alone as having no field set to grade", async () => {
+    const documentGenerator = makeDocumentGenerator();
+    const useCase = new EvaluateStepReadiness(
+      makeLanguageModel({ guidanceConfidence: 95, criteriaConfidence: 95 }),
+      documentGenerator,
+      makeObjectStorage(),
+    );
+
+    const result = await useCase.execute({
+      messages,
+      flow: makeFlow(),
+      node: makeNode({ documentTemplateFields: [signature("supervisor_signature")] }),
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.passed).toBe(true);
+    expect(result.data?.fieldValues).toEqual({});
+  });
+
   it("returns a validation error when the node has no template configured", async () => {
     const useCase = new EvaluateStepReadiness(
       makeLanguageModel(),

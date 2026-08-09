@@ -2,6 +2,16 @@
 // when the originator chooses "Close request" (no route-back).
 export type SessionStatus = "active" | "complete" | "abandoned" | "cancelled";
 
+// The statuses that mean the work is gone, not merely finished. An approval
+// raised against one of these can never be acted on — deciding it would advance
+// a session nobody is running — so it must not sit in an approver's queue.
+// `complete` is deliberately absent: a completed session's approvals were the
+// thing that completed it.
+export const DISCARDED_SESSION_STATUSES: readonly SessionStatus[] = ["abandoned", "cancelled"];
+
+export const isSessionDiscarded = (status: SessionStatus): boolean =>
+  DISCARDED_SESSION_STATUSES.includes(status);
+
 // In-flight auto-node execution awaiting an n8n callback, keyed by correlationId
 // on Session.pendingExecutions. sentAt makes a stuck execution observable.
 export interface PendingExecution {

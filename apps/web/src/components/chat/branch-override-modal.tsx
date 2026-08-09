@@ -46,7 +46,7 @@ export function BranchOverrideModal({
           <DialogCloseButton />
         </DialogHeader>
         <DialogBody>
-          <p className="text-[13px] leading-[1.55] text-[#5a5650]">
+          <p className="text-[13px] leading-[1.55] text-[#5c574c]">
             Wayfinder could not determine the next step automatically. Select which step to advance to.
           </p>
           <div className="flex flex-col gap-2">
@@ -57,8 +57,8 @@ export function BranchOverrideModal({
                 onClick={() => setSelected(branch.nodeId)}
                 className={`rounded-[10px] border-[1.5px] px-4 py-3 text-left text-[13px] transition-colors ${
                   selected === branch.nodeId
-                    ? "border-[#3a5fd9] bg-[#eef1fc] text-[#1a1814]"
-                    : "border-[#dedad2] text-[#5a5650] hover:bg-[#efede8]"
+                    ? "border-[#2f56d3] bg-[#eaeefb] text-[#1c1b19]"
+                    : "border-[#e7e3db] text-[#5c574c] hover:bg-[#f5f3ee]"
                 }`}
               >
                 {branch.nodeName}

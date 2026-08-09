@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/empty-state";
 import { ExtractionList, type ExtractionFlowRow } from "@/components/extraction/extraction-list";
+import { AppHeader } from "@/components/layout/app-header";
 import { trpc } from "@/trpc/client";
 
 export function SynthesiseContent() {
@@ -44,19 +45,21 @@ export function SynthesiseContent() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#dedad2] bg-white pl-5 pr-[52px]">
-        <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1a1814]">
-          Synthesise Information
-        </h1>
-        {!flowsQuery.error && (
-          <Button onClick={() => setCreating(true)}>New synthesis</Button>
-        )}
-      </header>
+      <AppHeader
+        title="Synthesise Information"
+        actions={
+          !flowsQuery.error ? (
+            <Button size="sm" onClick={() => setCreating(true)}>
+              New synthesis
+            </Button>
+          ) : undefined
+        }
+      />
 
       <div className="flex-1 overflow-auto">
         <div className="container py-6">
           {flowsQuery.isPending ? (
-            <p className="text-[13px] text-[#8a857c]">Loading…</p>
+            <p className="text-[13px] text-[#736d5f]">Loading…</p>
           ) : flowsQuery.error ? (
             <EmptyState
               heading="Synthesise Information is not available"

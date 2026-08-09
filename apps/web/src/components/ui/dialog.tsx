@@ -48,7 +48,7 @@ DialogContent.displayName = DialogPrimitive.Content.displayName;
 export const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex items-center justify-between border-b border-[#dedad2] px-[22px] pb-[15px] pt-[18px]",
+      "flex items-center justify-between border-b border-[#e7e3db] px-[22px] pb-[15px] pt-[18px]",
       className,
     )}
     {...props}
@@ -64,7 +64,7 @@ DialogBody.displayName = "DialogBody";
 export const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex items-center justify-end gap-2 border-t border-[#dedad2] px-[22px] py-[14px]",
+      "flex items-center justify-end gap-2 border-t border-[#e7e3db] px-[22px] py-[14px]",
       className,
     )}
     {...props}
@@ -78,7 +78,7 @@ export const DialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn("text-[16px] font-bold tracking-[-0.3px] text-[#1a1814]", className)}
+    className={cn("text-[16px] font-bold tracking-[-0.3px] text-[#1c1b19]", className)}
     {...props}
   />
 ));
@@ -90,7 +90,7 @@ export const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cn("text-[13px] leading-[1.55] text-[#5a5650]", className)}
+    className={cn("text-[13px] leading-[1.55] text-[#5c574c]", className)}
     {...props}
   />
 ));
@@ -100,7 +100,7 @@ export function DialogCloseButton({ className }: { className?: string }) {
   return (
     <DialogPrimitive.Close
       className={cn(
-        "flex h-7 w-7 items-center justify-center rounded-[8px] bg-[#efede8] text-[#5a5650] transition-colors hover:bg-[#e6e3dc]",
+        "flex h-7 w-7 items-center justify-center rounded-[8px] bg-[#f5f3ee] text-[#5c574c] transition-colors hover:bg-[#ebe8e0]",
         className,
       )}
     >

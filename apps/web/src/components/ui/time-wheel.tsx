@@ -41,14 +41,14 @@ export function TimeWheel({ hour, minute, onChange }: TimeWheelProps) {
   const { hour: hour12, period } = to12Hour(hour);
 
   return (
-    <div className="flex items-stretch justify-center gap-2 rounded-[12px] border border-[#ece9e3] bg-[#faf9f7] p-2">
+    <div className="flex items-stretch justify-center gap-2 rounded-[12px] border border-[#f0ede8] bg-[#faf9f7] p-2">
       <WheelPicker
         ariaLabel="Hour"
         options={HOUR_OPTIONS}
         value={hour12}
         onChange={(next) => onChange({ hour: to24Hour(next, period), minute })}
       />
-      <span className="self-center text-[16px] font-semibold text-[#5a5650]">:</span>
+      <span className="self-center text-[16px] font-semibold text-[#5c574c]">:</span>
       <WheelPicker
         ariaLabel="Minute"
         options={MINUTE_OPTIONS}

@@ -112,7 +112,7 @@ export function NominationDialog({
               ) : (
                 <select
                   id="nomination-join"
-                  className="rounded-md border border-[#d6d2ca] bg-white px-2 py-1 text-sm"
+                  className="rounded-md border border-[#dedad2] bg-white px-2 py-1 text-sm"
                   value={joinId}
                   onChange={(event) => setJoinId(event.target.value)}
                 >

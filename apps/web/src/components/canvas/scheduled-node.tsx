@@ -16,7 +16,7 @@ export interface ScheduledNodeData {
   [key: string]: unknown;
 }
 
-const DEFAULT_COLOUR = "#1f8a4c";
+const DEFAULT_COLOUR = "#1f6b4d";
 
 const scheduleSubtitle = (kind: string | null, spec: string | null, recurring?: boolean): string => {
   if (!kind || !spec) return "No schedule set yet";

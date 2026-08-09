@@ -10,58 +10,78 @@
        status dropdown against the otherwise-light UI. */
     color-scheme: light;
 
-    /* Tailwind HSL vars */
-    --background: 40 20% 96%;
-    --foreground: 35 12% 10%;
+    /* Tailwind HSL vars — derived from the Storybook ramp below so that
+       bg-background / text-primary consumers move with the design system
+       instead of drifting into a second palette. */
+    --background: 40 25% 98%;
+    --foreground: 40 6% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 35 12% 10%;
-    --primary: 226 67% 54%;
+    --card-foreground: 40 6% 11%;
+    --primary: 226 64% 51%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 40 15% 92%;
-    --secondary-foreground: 35 12% 10%;
-    --muted: 40 15% 92%;
-    /* 42% lightness keeps muted text at ≥4.5:1 on white/cards (WCAG 1.4.3 AA).
-       Lighter values (the previous 46%) fall to ~4.4:1 and fail. */
-    --muted-foreground: 35 8% 42%;
-    --accent: 40 15% 88%;
-    --accent-foreground: 35 12% 10%;
+    --secondary: 40 22% 95%;
+    --secondary-foreground: 40 6% 11%;
+    --muted: 40 22% 95%;
+    /* Tracks --text3. Both are held at ≥4.5:1 on every surface muted text is
+       allowed to sit on (WCAG 1.4.3 AA) — see the note on --text3 below and the
+       enforcing test in src/lib/design-tokens.test.ts. */
+    --muted-foreground: 40 10% 36%;
+    --accent: 40 20% 90%;
+    --accent-foreground: 40 6% 11%;
     /* Darkened from 0 84% 60% (#ef4343, 3.78:1 with white text) to meet
        WCAG 1.4.3 AA (≥4.5:1) — matches Tailwind red-600 (#dc2626, 4.83:1). */
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 38 16% 83%;
-    --input: 38 16% 83%;
-    --ring: 226 67% 54%;
-    --radius: 0.5rem;
+    --border: 38 25% 88%;
+    --input: 38 25% 88%;
+    --ring: 226 64% 51%;
+    --radius: 0.5625rem;
 
-    /* ── Storybook design tokens ─────────────────────────────── */
-    --bg:            #f7f6f3;
-    --bg2:           #efede8;
-    --bg3:           #e6e3dc;
+    /* ── Storybook design tokens — warm paper ramp ───────────────
+       Mirrors docs/development/storybook/index.html. The TypeScript mirror in
+       src/lib/design-tokens.ts asserts the contrast obligations below. */
+    --bg:            #faf9f7;
+    --bg2:           #f5f3ee;
+    --bg3:           #ebe8e0;
     --surface:       #ffffff;
-    --wf-primary:    #3a5fd9;
-    --primary-light: #eef1fc;
-    --primary-dim:   #c5d0f7;
-    --wf-border:     #dedad2;
-    --border-strong: #c9c4ba;
-    --wf-text:       #1a1814;
-    --text2:         #5a5650;
-    /* Muted text token, darkened from #918d87 (3.3:1) to meet WCAG 1.4.3 AA
-       (≥4.5:1 on white and the light card surfaces). */
-    --text3:         #6d6a65;
-    --success:       #2e9e6a;
-    --success-bg:    #eaf6f0;
-    --warning:       #c17a1a;
-    --warning-bg:    #fdf3e3;
-    --rose:          #c2385a;
-    --rose-bg:       #fdeef2;
-    --teal:          #0e8a7a;
-    --teal-bg:       #e6f7f5;
-    --purple:        #7c3aed;
-    --purple-light:  #f3eeff;
-    --sh:            0 1px 3px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.05);
-    --sh-md:         0 2px 8px rgba(0,0,0,.09), 0 12px 36px rgba(0,0,0,.07);
-    --sh-xl:         0 4px 24px rgba(0,0,0,.13), 0 20px 60px rgba(0,0,0,.10);
+    --wf-primary:    #2f56d3;
+    --primary-light: #eaeefb;
+    --primary-dim:   #c3cef2;
+    --wf-border:     #e7e3db;
+    --border-strong: #dedad2;
+    --border-dashed: #d8d3c7;
+    --wf-text:       #1c1b19;
+    --text2:         #5c574c;
+    /* The design mockup specifies #8a8272 here and #a09884 for --text4. On
+       white those are 3.81:1 and 2.87:1, and the rail fill (--bg2) is darker
+       still — all below WCAG 1.4.3 AA. These are the same hues scaled toward
+       black until they clear 4.5:1 on --surface, --bg and --bg2. The mockup
+       lightness survives on --rule and --dot, which carry no text. */
+    --text3:         #666055;
+    --text4:         #736d5f;
+    /* Decoration only — hairlines and nav dots, never text. */
+    --rule:          #e7e3db;
+    --dot:           #c9c3b5;
+    --success:       #1f6b4d;
+    --success-bg:    #e3efe5;
+    --success-border:#c7e0cf;
+    --warning:       #8a5a1d;
+    --warning-bg:    #f6e9d8;
+    --warning-border:#e6d0ab;
+    --rose:          #a8324c;
+    --rose-bg:       #f9e8eb;
+    --teal:          #14312e;
+    --teal-bg:       #e6f2ee;
+    --purple:        #5b3fa8;
+    --purple-light:  #efeafa;
+    /* Elevation — low, warm, diffuse. */
+    --sh:            0 1px 2px rgba(28,27,25,.04), 0 4px 12px -8px rgba(28,27,25,.18);
+    --sh-md:         0 2px 6px rgba(28,27,25,.06), 0 12px 28px -18px rgba(28,27,25,.30);
+    --sh-xl:         0 4px 16px rgba(28,27,25,.08), 0 32px 64px -28px rgba(28,27,25,.36);
+    /* Radii */
+    --radius-sm:     7px;
+    --radius-lg:     14px;
+    --radius-xl:     18px;
   }
 
 }
@@ -72,12 +92,13 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-dm-sans), -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: var(--font-figtree), -apple-system, BlinkMacSystemFont, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
     -webkit-font-smoothing: antialiased;
+    text-wrap: pretty;
   }
   .font-mono {
-    font-family: var(--font-dm-mono), 'Courier New', monospace;
+    font-family: var(--font-jetbrains-mono), ui-monospace, 'Courier New', monospace;
   }
 }
 
@@ -134,7 +155,7 @@
   background: linear-gradient(
     90deg,
     transparent,
-    color-mix(in srgb, var(--primary, #3a5fd9) 28%, transparent),
+    color-mix(in srgb, var(--primary, #2f56d3) 28%, transparent),
     transparent
   );
   animation: run-progress-sweep 1.8s ease-in-out infinite;

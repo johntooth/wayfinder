@@ -31,15 +31,15 @@ function FlowRow({ flow, editHref }: { flow: ExtractionFlowRow; editHref: string
   const pagedOlder = olderRuns.slice(page * RUNS_PER_PAGE, page * RUNS_PER_PAGE + RUNS_PER_PAGE);
 
   return (
-    <div className="rounded-[11px] border border-[#e5e1d8] bg-white">
+    <div className="rounded-[11px] border border-[#e7e3db] bg-white">
       <div className="flex items-center justify-between px-[16px] py-[12px]">
         <div>
-          <h3 className="text-[14px] font-semibold text-[#1a1814]">{flow.name}</h3>
+          <h3 className="text-[14px] font-semibold text-[#1c1b19]">{flow.name}</h3>
           <span
             className={`mt-[2px] inline-block rounded-[5px] px-[6px] py-[1px] text-[10.5px] font-semibold uppercase tracking-[0.04em] ${
               flow.status === "published"
-                ? "bg-[#eaf6f0] text-[#247c53]"
-                : "bg-[#f0ede7] text-[#6d6a65]"
+                ? "bg-[#e3efe5] text-[#1f6b4d]"
+                : "bg-[#f5f3ee] text-[#666055]"
             }`}
           >
             {flow.status}
@@ -53,22 +53,22 @@ function FlowRow({ flow, editHref }: { flow: ExtractionFlowRow; editHref: string
       </div>
 
       {/* Sub-row 1 — most recent run (or "not yet run") */}
-      <div className="border-t border-[#f0ede7] px-[16px] py-[8px] text-[13px] text-[#5a5650]">
+      <div className="border-t border-[#f5f3ee] px-[16px] py-[8px] text-[13px] text-[#5c574c]">
         {latestRun ? (
           <span>
             Latest run — {new Date(latestRun.startedAt).toLocaleString()} ({latestRun.status})
           </span>
         ) : (
-          <span className="text-[#8a857c]">Not yet run</span>
+          <span className="text-[#736d5f]">Not yet run</span>
         )}
       </div>
 
       {/* Sub-row 2 — show more, when older runs exist */}
       {olderRuns.length > 0 && (
-        <div className="border-t border-[#f0ede7] px-[16px] py-[8px] text-[13px]">
+        <div className="border-t border-[#f5f3ee] px-[16px] py-[8px] text-[13px]">
           <button
             type="button"
-            className="text-[#3a5fd9] hover:underline"
+            className="text-[#2f56d3] hover:underline"
             onClick={() => setShowAll((value) => !value)}
           >
             {showAll ? "Hide older runs" : `Show ${olderRuns.length} older run${olderRuns.length === 1 ? "" : "s"}`}
@@ -76,7 +76,7 @@ function FlowRow({ flow, editHref }: { flow: ExtractionFlowRow; editHref: string
           {showAll && (
             <div className="mt-[6px] flex flex-col gap-[4px]">
               {pagedOlder.map((run) => (
-                <span key={run.id} className="text-[#5a5650]">
+                <span key={run.id} className="text-[#5c574c]">
                   {new Date(run.startedAt).toLocaleString()} ({run.status})
                 </span>
               ))}
@@ -91,7 +91,7 @@ function FlowRow({ flow, editHref }: { flow: ExtractionFlowRow; editHref: string
                   >
                     Previous
                   </Button>
-                  <span className="text-[#8a857c]">
+                  <span className="text-[#736d5f]">
                     Page {page + 1} of {pageCount}
                   </span>
                   <Button

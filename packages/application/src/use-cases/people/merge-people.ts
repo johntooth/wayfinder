@@ -1,9 +1,15 @@
 import type { Person } from "@rbrasier/domain";
 
-// Higher rank wins when the same email appears in more than one source. A record
-// already tied to an account beats one that is not; Entra beats the HR upload;
-// a free-typed email is the weakest.
+// Higher rank wins when the same email appears in more than one source. An
+// existing account beats everything: it is the only record whose person can
+// actually sign in and act. Then any record already tied to an account, then
+// Entra, then the HR upload; a free-typed email is the weakest.
+//
+// The account source is ranked explicitly rather than relying on it being
+// searched first — de-duplication that depends on directory ordering is
+// de-duplication that breaks when someone reorders the list.
 const rank = (person: Person): number => {
+  if (person.source === "user") return 4;
   if (person.userId) return 3;
   if (person.source === "entra") return 2;
   if (person.source === "hr") return 1;

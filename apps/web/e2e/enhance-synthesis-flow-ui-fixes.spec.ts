@@ -6,7 +6,8 @@
  *
  * Verifies the user-facing behaviour each change introduced:
  *   - Sidebar: Settings is no longer a nav link; the user details block in the
- *     bottom left navigates to /settings instead.
+ *     bottom left reaches /settings instead. (v0.23.3 put that behind the
+ *     block's account menu rather than making the block itself the link.)
  *   - Help menu: an "About" item opens the About modal, which carries the app
  *     version and the configured links; "Contact developers" is gone.
  *   - Admin configuration: sections start collapsed and expand on click, and
@@ -16,6 +17,7 @@
  */
 
 import { test, expect } from './helpers/base';
+import { openAccountMenu } from './helpers/account-menu';
 import { openSettingsSection } from './helpers/settings';
 
 test.describe('Sidebar: settings moved to the user details block', () => {
@@ -26,11 +28,14 @@ test.describe('Sidebar: settings moved to the user details block', () => {
     await expect(page.getByRole('link', { name: 'Settings', exact: true })).toHaveCount(0);
   });
 
-  test('clicking the user details block opens the settings page', async ({ page }) => {
+  test('the user details block reaches the settings page', async ({ page }) => {
     await page.goto('/chats');
     await page.waitForLoadState('networkidle');
 
-    await page.getByRole('link', { name: 'Settings' }).click();
+    // v0.23.3 turned the block from a direct link into a menu trigger, so
+    // Settings is now one level down rather than the block's own destination.
+    await openAccountMenu(page);
+    await page.getByRole('menuitem', { name: 'Settings' }).click();
 
     await expect(page).toHaveURL(/\/settings$/);
     await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
