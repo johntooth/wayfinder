@@ -12,7 +12,7 @@ export interface ConversationalNodeData {
   [key: string]: unknown;
 }
 
-const DEFAULT_COLOUR = "#3a5fd9";
+const DEFAULT_COLOUR = "#2f56d3";
 
 export function ConversationalNode({ data, selected }: NodeProps) {
   const nodeData = data as ConversationalNodeData;

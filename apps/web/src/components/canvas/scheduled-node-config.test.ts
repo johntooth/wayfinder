@@ -59,7 +59,7 @@ describe("scheduledValuesFromConfig", () => {
 describe("scheduledConfigFromValues", () => {
   const base: NodeConfigValues = {
     name: "Wait",
-    colour: "#1f8a4c",
+    colour: "#1f6b4d",
     type: "scheduled",
     aiInstruction: "",
     doneWhen: "",

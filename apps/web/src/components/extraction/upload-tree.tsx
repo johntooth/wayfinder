@@ -56,14 +56,14 @@ function FolderRow({
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center gap-[6px] py-[3px] text-left text-[13px] text-[#3a352e]"
+        className="flex w-full items-center gap-[6px] py-[3px] text-left text-[13px] text-[#3d382f]"
         style={{ paddingLeft: `${depth * 16}px` }}
         aria-expanded={open}
       >
         {open ? (
-          <ChevronDown className="h-[14px] w-[14px] shrink-0 text-[#8a857c]" />
+          <ChevronDown className="h-[14px] w-[14px] shrink-0 text-[#736d5f]" />
         ) : (
-          <ChevronRight className="h-[14px] w-[14px] shrink-0 text-[#8a857c]" />
+          <ChevronRight className="h-[14px] w-[14px] shrink-0 text-[#736d5f]" />
         )}
         <Folder className="h-[14px] w-[14px] shrink-0 text-[#c79a3e]" />
         <span className="font-medium">{node.name}</span>
@@ -93,17 +93,17 @@ function FileRow({
 }) {
   return (
     <div
-      className="group flex items-center gap-[6px] py-[3px] text-[13px] text-[#5a5650]"
+      className="group flex items-center gap-[6px] py-[3px] text-[13px] text-[#5c574c]"
       style={{ paddingLeft: `${depth * 16 + 20}px` }}
     >
-      <FileIcon className="h-[13px] w-[13px] shrink-0 text-[#8a857c]" />
+      <FileIcon className="h-[13px] w-[13px] shrink-0 text-[#736d5f]" />
       <span className="flex-1 truncate">{file.name}</span>
       {onRemove ? (
         <button
           type="button"
           aria-label={`Remove ${file.name}`}
           onClick={() => onRemove(file)}
-          className="shrink-0 rounded p-[2px] text-[#b6b1a8] opacity-0 transition hover:bg-[#fbecea] hover:text-[#c2385a] group-hover:opacity-100"
+          className="shrink-0 rounded p-[2px] text-[#c9c3b5] opacity-0 transition hover:bg-[#fbecea] hover:text-[#a8324c] group-hover:opacity-100"
         >
           <X className="h-[13px] w-[13px]" />
         </button>
@@ -120,7 +120,7 @@ export function UploadTree({
   onRemove?: (file: UploadedFile) => void;
 }) {
   if (files.length === 0) {
-    return <p className="py-[8px] text-[12.5px] text-[#8a857c]">No files uploaded yet.</p>;
+    return <p className="py-[8px] text-[12.5px] text-[#736d5f]">No files uploaded yet.</p>;
   }
 
   const root = buildTree(files);

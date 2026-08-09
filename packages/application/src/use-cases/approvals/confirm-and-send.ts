@@ -16,6 +16,9 @@ export interface ConfirmAndSendInput {
   approverUserId?: string | null;
   approverEmail?: string | null;
   isOverride: boolean;
+  // The originator's note to this approver, carried into the request email and
+  // shown alongside the request when they come to decide.
+  requestMessage?: string | null;
 }
 
 // Persists the operator-confirmed (or overridden) approver and fires the
@@ -45,6 +48,9 @@ export class ConfirmAndSend {
       approverUserId: input.approverUserId ?? null,
       approverEmail: input.approverEmail ?? null,
       isOverride: input.isOverride,
+      // Blank is not a message: storing "" would put an empty block in the
+      // email and an empty panel in the approver's view.
+      requestMessage: input.requestMessage?.trim() || null,
     });
     if (updated.error) return updated;
 

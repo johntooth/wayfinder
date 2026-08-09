@@ -56,7 +56,7 @@ export function WheelPicker({ options, value, onChange, ariaLabel }: WheelPicker
       aria-label={ariaLabel}
     >
       <div
-        className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 rounded-md border-y border-[#dedad2] bg-[#efece6]/40"
+        className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 rounded-md border-y border-[#e7e3db] bg-[#efece6]/40"
         style={{ height: ITEM_HEIGHT }}
       />
       <div
@@ -73,7 +73,7 @@ export function WheelPicker({ options, value, onChange, ariaLabel }: WheelPicker
             aria-selected={option.value === value}
             onClick={() => onChange(option.value)}
             className={`flex w-full snap-center items-center justify-center text-[14px] ${
-              option.value === value ? "font-semibold text-[#1a1814]" : "text-[#6d6a65]"
+              option.value === value ? "font-semibold text-[#1c1b19]" : "text-[#666055]"
             }`}
             style={{ height: ITEM_HEIGHT }}
           >

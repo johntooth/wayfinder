@@ -204,6 +204,22 @@ The tag names the exact `VERSION` being shipped (e.g. `v0.19.4`). Because the
 stage is no longer encoded in the digits, note the line in the GitHub Release
 title (e.g. "v0.19.4 — alpha-2").
 
+### Publishing the container image
+
+Pushing a `v*` tag starts `.github/workflows/publish.yml`, which builds and
+pushes `ghcr.io/rbrasier/wayfinder:<version>` publicly. The workflow refuses to
+publish a tag whose `VERSION` file disagrees with the tag name, and it moves
+`latest` only for a tag on a release line — never for one on `main`.
+
+**`/release` never publishes inline.** It offers to hand off to **`/publish`**
+after tagging. A registry failure part-way through a release would otherwise
+leave a pushed tag with no image and no clean way to resume; `/publish` is
+separately re-runnable and safe to retry for the same tag.
+
+Published tags are immutable. A bad image gets a new PATCH version — it is never
+replaced in place. Deployers upgrade by pointing at the new tag and running
+migrations as their own step, per [`upgrading.md`](upgrading.md).
+
 ### Forward-merge cadence
 
 Merge the release branch into `main` after each fix lands, or at minimum

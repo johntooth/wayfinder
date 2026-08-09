@@ -61,7 +61,7 @@ export function FieldRow({
         aria-label={`Field ${index + 1} type`}
         value={model.type}
         onChange={(event) => onChangeType(event.target.value as FieldRowType)}
-        className="h-10 shrink-0 rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-2 text-[13px] text-[#1a1814] focus:border-[#3a5fd9] focus:bg-white focus:outline-none"
+        className="h-10 shrink-0 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-2 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none"
       >
         {typeOptions.map((option) => (
           <option key={option.value} value={option.value}>
@@ -76,8 +76,8 @@ export function FieldRow({
         title={configured ? "Options set" : "Field settings"}
         className={`shrink-0 rounded-md p-1.5 transition-colors ${
           configured
-            ? "text-[#3a5fd9] hover:bg-[#eef1fc] hover:text-[#2e4bb0]"
-            : "text-[#6d6a65] hover:bg-[#efede8] hover:text-[#1a1814]"
+            ? "text-[#2f56d3] hover:bg-[#eaeefb] hover:text-[#1f3ea8]"
+            : "text-[#666055] hover:bg-[#f5f3ee] hover:text-[#1c1b19]"
         }`}
         onClick={onOpenConfig}
       >
@@ -86,7 +86,7 @@ export function FieldRow({
       <button
         type="button"
         aria-label={`Remove field ${index + 1}`}
-        className="shrink-0 rounded-md p-1.5 text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#c2385a]"
+        className="shrink-0 rounded-md p-1.5 text-[#666055] transition-colors hover:bg-[#f5f3ee] hover:text-[#a8324c]"
         onClick={onRemove}
       >
         <X size={14} />
@@ -115,6 +115,7 @@ export function FieldConfigModal({
 }) {
   const isNumeric = model.type === "number" || model.type === "currency";
   const hasOptions = model.type === "select" || model.type === "multiselect";
+  const isSignature = model.type === "signature";
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -126,30 +127,43 @@ export function FieldConfigModal({
           <DialogCloseButton />
         </DialogHeader>
         <DialogBody>
-          <div className="flex items-center justify-between gap-3">
-            <div className="space-y-0.5">
-              <Label htmlFor="field-required">Required</Label>
-              <p className="text-[12px] text-[#6d6a65]">
-                When on, this value must be captured before the step can complete.
-              </p>
-            </div>
-            <button
-              id="field-required"
-              type="button"
-              role="switch"
-              aria-checked={!model.optional}
-              onClick={() => onChange({ optional: !model.optional })}
-              className={`relative mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                !model.optional ? "bg-[#1f8a4c]" : "bg-[#d7d3cc]"
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  !model.optional ? "translate-x-4" : "translate-x-0.5"
+          {/* A signature carries no author-supplied value, so there is nothing
+              for a length, bound or required toggle to constrain — and
+              parseTemplateField rejects a signature that carries any of them. */}
+          {isSignature && (
+            <p className="text-[12px] leading-[1.55] text-[#5c574c]">
+              This slot is filled by the approval step that signs it — the approver&apos;s name,
+              decision, date and comment are written in when they decide. Nobody is asked for it
+              during the conversation, and it has no settings.
+            </p>
+          )}
+
+          {!isSignature && (
+            <div className="flex items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="field-required">Required</Label>
+                <p className="text-[12px] text-[#666055]">
+                  When on, this value must be captured before the step can complete.
+                </p>
+              </div>
+              <button
+                id="field-required"
+                type="button"
+                role="switch"
+                aria-checked={!model.optional}
+                onClick={() => onChange({ optional: !model.optional })}
+                className={`relative mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                  !model.optional ? "bg-[#1f6b4d]" : "bg-[#dedad2]"
                 }`}
-              />
-            </button>
-          </div>
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    !model.optional ? "translate-x-4" : "translate-x-0.5"
+                  }`}
+                />
+              </button>
+            </div>
+          )}
 
           {model.type === "text" && (
             <div className="space-y-1">
@@ -174,7 +188,7 @@ export function FieldConfigModal({
                 value={model.instruction ?? ""}
                 onChange={(event) => onChange({ instruction: event.target.value })}
                 placeholder="e.g. Summarise the background to this procurement in two paragraphs"
-                className="w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#3a5fd9] focus:bg-white focus:outline-none"
+                className="w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none"
               />
             </div>
           )}
@@ -217,9 +231,9 @@ export function FieldConfigModal({
                   })
                 }
                 placeholder={"Approved\nRejected\nPending"}
-                className="w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#3a5fd9] focus:bg-white focus:outline-none"
+                className="w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none"
               />
-              <p className="text-[12px] text-[#6d6a65]">
+              <p className="text-[12px] text-[#666055]">
                 Commas are not allowed inside a choice — put each choice on its own line.
               </p>
             </div>

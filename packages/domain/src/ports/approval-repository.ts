@@ -1,5 +1,14 @@
-import type { Approval, ApprovalUpdate, NewApproval } from "../entities/approval";
+import type { Approval, ApprovalListScope, ApprovalUpdate, NewApproval } from "../entities/approval";
 import type { Result } from "../result";
+
+// How an approver is matched to their approvals. An email-only assignment
+// (ADR-018) is raised before the recipient has an account, so both keys are
+// needed and `approverEmail` may legitimately be null for a caller who has not
+// been assigned anything by address.
+export interface ApproverQuery {
+  approverUserId: string;
+  approverEmail: string | null;
+}
 
 export interface IApprovalRepository {
   create(input: NewApproval): Promise<Result<Approval>>;
@@ -10,10 +19,14 @@ export interface IApprovalRepository {
   // Matches approvals routed by user id and approvals routed only by email. An
   // approval can be assigned by email before the recipient has a user account
   // (ADR-018), so the logged-in user must claim it once their email matches.
-  listPendingForApprover(input: {
-    approverUserId: string;
-    approverEmail: string | null;
-  }): Promise<Result<Approval[]>>;
+  // Excludes approvals whose session was discarded: the originator abandoning a
+  // chat must clear the request it raised, not leave it awaiting a decision
+  // nobody can act on.
+  listPendingForApprover(input: ApproverQuery): Promise<Result<Approval[]>>;
+  // The same match widened past `pending`, for the approver's own history.
+  // `decided` additionally matches approvals this user decided but is no longer
+  // the assignee of — their decision is theirs regardless of later reassignment.
+  listForApprover(input: ApproverQuery & { scope: ApprovalListScope }): Promise<Result<Approval[]>>;
   // Every approval raised on a session, newest first. Used to grant an approver
   // read-only access to the session they were asked to sign off on.
   listBySession(sessionId: string): Promise<Result<Approval[]>>;

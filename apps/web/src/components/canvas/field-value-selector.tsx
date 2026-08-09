@@ -5,7 +5,7 @@ import type { FieldValueSource, PriorStepField, TemplateField } from "@rbrasier/
 import { Input } from "@/components/ui/input";
 
 const SELECT_CLASS =
-  "flex h-9 w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-1.5 text-[13px] text-[#1a1814] focus:border-[#3a5fd9] focus:bg-white focus:outline-none";
+  "flex h-9 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-1.5 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none";
 
 export const encodeSource = (source: FieldValueSource): string => {
   if (source.kind === "ai") return "ai";
@@ -128,11 +128,11 @@ export function FieldValueList({
       {fields.map((field) => (
         <div
           key={field.key}
-          className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] items-center gap-2 rounded-[9px] border border-[#ece9e3] bg-[#faf9f7] p-2"
+          className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] items-center gap-2 rounded-[9px] border border-[#f0ede8] bg-[#faf9f7] p-2"
         >
           <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-[13px] font-medium text-[#1a1814]">{field.label}</span>
-            <span className="shrink-0 rounded bg-[#efede8] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#6d6a65]">
+            <span className="truncate text-[13px] font-medium text-[#1c1b19]">{field.label}</span>
+            <span className="shrink-0 rounded bg-[#f5f3ee] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#666055]">
               {field.type}
             </span>
           </div>
@@ -145,7 +145,7 @@ export function FieldValueList({
             <button
               type="button"
               aria-label={`Remove ${field.label}`}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-[#c2385a] transition-colors hover:bg-[#fdf3f5]"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-[#a8324c] transition-colors hover:bg-[#fdf3f5]"
               onClick={() => onRemove(field.key)}
             >
               ×
@@ -160,16 +160,16 @@ export function FieldValueList({
 }
 
 export function ReadOnlyFieldList({ fields, emptyText }: { fields: TemplateField[]; emptyText: string }) {
-  if (fields.length === 0) return <p className="text-[12px] text-[#6d6a65]">{emptyText}</p>;
+  if (fields.length === 0) return <p className="text-[12px] text-[#666055]">{emptyText}</p>;
   return (
     <div className="flex flex-wrap gap-1.5">
       {fields.map((field) => (
         <span
           key={field.key}
-          className="inline-flex items-center gap-1 rounded-md border border-[#dedad2] bg-[#f7f6f3] px-2 py-1 text-[12px] text-[#5a5650]"
+          className="inline-flex items-center gap-1 rounded-md border border-[#e7e3db] bg-[#faf9f7] px-2 py-1 text-[12px] text-[#5c574c]"
         >
           {field.label}
-          <span className="text-[10px] uppercase tracking-wide text-[#6d6a65]">{field.type}</span>
+          <span className="text-[10px] uppercase tracking-wide text-[#666055]">{field.type}</span>
         </span>
       ))}
     </div>

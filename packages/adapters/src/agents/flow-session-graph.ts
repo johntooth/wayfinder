@@ -150,6 +150,8 @@ const buildFieldFormatsBlock = (templateFields: TemplateField[]): string => {
   return `\n\n<field_formats>
   This step captures fields with required formats. When the user gives you information for a field, silently reformat it into the required format yourself whenever you reasonably can — for example, turn "next Tuesday" or "3rd of June" into DD-MM-YYYY, or "twelve hundred dollars" into $1,200.00. Only ask the user to clarify when you genuinely cannot determine or format a value. For (options) fields, map what the user says to the closest listed value; if none clearly fits, ask them to choose.
 
+  Dates are always day-first: in DD-MM-YYYY the first number is the day and the second is the month. This holds in both directions. Writing one out, "10 Aug 2026" becomes 10-08-2026, never 08-10-2026. Reading one that is already in that format, 10-08-2026 means 10 August 2026, never 8 October 2026. Keep the month the user named, and never swap a day and month to reach a date that looks more plausible.
+
 ${indented}
 </field_formats>`;
 };

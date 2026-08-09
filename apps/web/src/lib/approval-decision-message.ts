@@ -43,3 +43,23 @@ export const parseApprovalDecisionMessage = (
 // Client-side by necessity: the server only knows UTC, and a decision time shown
 // in the wrong timezone is worse than one not shown at all.
 export const formatDecisionMoment = (decidedAt: Date): string => decidedAt.toLocaleString();
+
+// The feed leads with the approver's name, so the outcome has to read as a verb
+// phrase following it rather than as the standalone sentence the domain writes.
+//
+// Keyed on the sentence rather than the status because the status is not in the
+// persisted message — only its rendered line is. An unrecognised sentence passes
+// through unchanged, so a future domain wording lands as a slightly stilted line
+// rather than a blank or a wrong verb.
+const VERB_PHRASE: Record<string, string> = {
+  "Approval granted.": "granted approval.",
+  "Approval granted, with edits made by the approver.": "granted approval, with edits.",
+  "Changes requested by the approver.": "requested a change.",
+  "Approval rejected — routed back to the originator.":
+    "rejected approval — routed back to the originator.",
+  "Approval rejected — the request was closed.":
+    "rejected approval — the request was closed.",
+};
+
+export const decisionVerbPhrase = (outcome: string): string =>
+  VERB_PHRASE[outcome.trim()] ?? outcome;

@@ -64,8 +64,6 @@ import {
   ListUsersForRole,
   LogAuditEvent,
   LogError,
-  NotifyOnApprovalDecided,
-  NotifyOnApprovalRequested,
   NotifyOnFlowShared,
   NotifyOnSessionComplete,
   ConfirmStepAdvance,
@@ -112,6 +110,7 @@ import {
   UpdateUser,
   UpsertFeatureFlag,
 } from "@rbrasier/application";
+import { buildApprovalNotifiers } from "./container-approval-notifiers";
 import { buildApprovalUseCases } from "./container-approval-use-cases";
 import { buildDocumentUseCases } from "./container-document-use-cases";
 import { buildOnboarding } from "./container-onboarding";
@@ -451,22 +450,20 @@ const build = () => {
     auditLogger,
     notificationConfig,
   );
-  const notifyOnApprovalRequested = new NotifyOnApprovalRequested(
-    notificationLog,
-    emailSender,
-    users,
-    flows,
-    auditLogger,
-    notificationConfig,
-  );
-  const notifyOnApprovalDecided = new NotifyOnApprovalDecided(
-    notificationLog,
-    emailSender,
-    users,
-    flows,
-    auditLogger,
-    notificationConfig,
-  );
+  const {
+    notifyOnApprovalRequested,
+    notifyOnApprovalDecided,
+    notifyOnApprovalWithdrawn,
+    notifyOnApprovalReassigned,
+  } =
+    buildApprovalNotifiers({
+      notificationLog,
+      emailSender,
+      users,
+      flows,
+      auditLogger,
+      notificationConfig,
+    });
 
   const approvals = new DrizzleApprovalRepository(db);
   const hrDatasets = new DrizzleHrDatasetRepository(db);
@@ -478,7 +475,7 @@ const build = () => {
     languageModel: llm,
     sessionStepOutputs,
   });
-  const { spreadsheetParser, graphClient, graphPeopleDirectory, hrPeopleDirectory, reportingLineResolver } =
+  const { spreadsheetParser, graphClient, graphPeopleDirectory, hrPeopleDirectory, userPeopleDirectory, reportingLineResolver } =
     buildPeopleDirectory({ env, hrDatasets, users });
 
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
@@ -607,6 +604,7 @@ const build = () => {
     unitOfWork,
     approvals,
     sessions,
+    sessionParticipants,
     sessionMessages,
     sessionStepOutputs,
     flowNodes,
@@ -623,6 +621,8 @@ const build = () => {
     updateDocumentFields: documentUseCases.updateDocumentFields,
     notifyOnApprovalRequested,
     notifyOnApprovalDecided,
+    notifyOnApprovalWithdrawn,
+    notifyOnApprovalReassigned,
   });
 
   return {
@@ -758,7 +758,10 @@ const build = () => {
       setUsageLimitsEnabled: new SetUsageLimitsEnabled(systemSettings),
       getFlowDeepDive: new GetFlowDeepDive(flows, flowNodes, analyticsRepo, sessionStepOutputs, flowEdges),
       ...approvalUseCases,
-      searchPeople: new SearchPeople([graphPeopleDirectory, hrPeopleDirectory]),
+      // Accounts first: they are the people who can actually act on what they
+      // are sent, and ranking makes them win a de-dupe against the same address
+      // from Entra or HR. The external directories augment the list (ADR-018).
+      searchPeople: new SearchPeople([userPeopleDirectory, graphPeopleDirectory, hrPeopleDirectory]),
       importHrDataset: new ImportHrDataset(
         spreadsheetParser,
         hrDatasets,

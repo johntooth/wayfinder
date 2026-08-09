@@ -5,7 +5,7 @@
 
 import type { ApprovalStatus } from "./approval";
 import type { ApprovalNodeConfig } from "./flow-node";
-import { deriveFieldKey } from "./template-field";
+import { deriveFieldKey, type TemplateFieldType } from "./template-field";
 
 // What the approver is being asked to sign off. `nodeId` absent or null means
 // the last completed step, which is both the default and what an approval node
@@ -45,6 +45,34 @@ export const deriveStepKeys = (labels: string[]): string[] => {
     return key;
   });
 };
+
+// What a decided approval projects onto its node's step outputs, so the Insights
+// field report can show the decision beside the values it governs. Named here,
+// next to the record these values are read from, because the writer
+// (`DecideApproval`) and the report that renders them agreed on the literals by
+// coincidence alone until this existed.
+//
+// The original four keys and their labels are fixed by history: rows written
+// before `revision`, `approver_email` and `applies_to` existed are keyed this
+// way, and changing a key would strand them in a column that no longer appears.
+//
+// `revision` counts the times the step has been decided, because a change
+// request routes work back and re-entering the step raises a fresh request — so
+// one approval step can hold several decisions, each projecting its own row. It
+// is a number rather than text so it filters, sorts and pivots as one.
+export const APPROVAL_PROJECTION_FIELDS: readonly {
+  key: string;
+  label: string;
+  type: TemplateFieldType;
+}[] = [
+  { key: "outcome", label: "Outcome", type: "text" },
+  { key: "revision", label: "Revision", type: "number" },
+  { key: "decided_at", label: "Decided at", type: "text" },
+  { key: "decided_by", label: "Decided by", type: "text" },
+  { key: "approver_email", label: "Approver email", type: "text" },
+  { key: "applies_to", label: "Applies to", type: "text" },
+  { key: "comment", label: "Comment", type: "text" },
+];
 
 export interface ApprovalRecordInput {
   stepKey: string;

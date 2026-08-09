@@ -9,9 +9,15 @@ import {
   type User,
   type UserUpdate,
 } from "@rbrasier/domain";
-import { eq, inArray, sql, type SQL } from "drizzle-orm";
+import { eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { core_users } from "../db/schema/core";
+
+// `%` and `_` are wildcards to LIKE, so a name containing one would otherwise
+// widen the search rather than narrow it. Exported for the unit test — the
+// escaping is the part of this query worth asserting without a database.
+export const escapeLikePattern = (value: string): string =>
+  value.replace(/[\\%_]/g, (character) => `\\${character}`);
 
 // One IN query over the requested ids — the batch read that removes the
 // per-participant N+1 (scaling wall #6). Callers guarantee a non-empty list.
@@ -104,6 +110,26 @@ export class DrizzleUserRepository implements IUserRepository {
       return ok(rows.map(toEntity));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list users.", cause));
+    }
+  }
+
+  async search(input: { query: string; limit: number }): Promise<Result<User[]>> {
+    const term = input.query.trim();
+    // A blank query would match every row; the type-ahead only searches once
+    // the operator has typed something, and this makes that a guarantee.
+    if (term.length === 0) return ok([]);
+
+    try {
+      const pattern = `%${escapeLikePattern(term)}%`;
+      const rows = await this.db
+        .select()
+        .from(core_users)
+        .where(or(ilike(core_users.name, pattern), ilike(core_users.email, pattern)))
+        .orderBy(core_users.name)
+        .limit(input.limit);
+      return ok(rows.map(toEntity));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to search users.", cause));
     }
   }
 

@@ -77,7 +77,7 @@ function PrimaryCard({
     <button
       type="button"
       onClick={() => onSelect(type)}
-      className="flex flex-col items-start gap-2.5 rounded-[9px] border border-[#dedad2] bg-white p-3 text-left transition-colors hover:border-[#c5d0f7] hover:bg-[#f7f8fc]"
+      className="flex flex-col items-start gap-2.5 rounded-[9px] border border-[#e7e3db] bg-white p-3 text-left transition-colors hover:border-[#c3cef2] hover:bg-[#f7f8fc]"
     >
       <span
         aria-hidden
@@ -87,8 +87,8 @@ function PrimaryCard({
         <Icon size={17} />
       </span>
       <span className="min-w-0">
-        <span className="block text-[13px] font-medium text-[#1a1814]">{label}</span>
-        <span className="block text-[11.5px] leading-snug text-[#6d6a65]">{description}</span>
+        <span className="block text-[13px] font-medium text-[#1c1b19]">{label}</span>
+        <span className="block text-[11.5px] leading-snug text-[#666055]">{description}</span>
       </span>
     </button>
   );
@@ -106,7 +106,7 @@ function AdvancedCard({
     <button
       type="button"
       onClick={() => onSelect(type)}
-      className="flex w-full items-center gap-2.5 rounded-[8px] border border-[#dedad2] bg-white px-3 py-2.5 text-left transition-colors hover:border-[#c5d0f7] hover:bg-[#f7f8fc]"
+      className="flex w-full items-center gap-2.5 rounded-[8px] border border-[#e7e3db] bg-white px-3 py-2.5 text-left transition-colors hover:border-[#c3cef2] hover:bg-[#f7f8fc]"
     >
       <span
         aria-hidden
@@ -116,8 +116,8 @@ function AdvancedCard({
         <Icon size={14} />
       </span>
       <span className="min-w-0">
-        <span className="block text-[12px] font-medium text-[#1a1814]">{label}</span>
-        <span className="block text-[11px] leading-snug text-[#6d6a65]">{description}</span>
+        <span className="block text-[12px] font-medium text-[#1c1b19]">{label}</span>
+        <span className="block text-[11px] leading-snug text-[#666055]">{description}</span>
       </span>
     </button>
   );
@@ -154,7 +154,7 @@ export function NodeTypePickerModal({
           <DialogCloseButton />
         </DialogHeader>
         <DialogBody className="space-y-3">
-          <p className="text-[13px] text-[#5a5650]">Choose the type of step to add.</p>
+          <p className="text-[13px] text-[#5c574c]">Choose the type of step to add.</p>
           <div className="space-y-2">
             {row1.length > 0 && (
               <div className="grid grid-cols-2 gap-2">

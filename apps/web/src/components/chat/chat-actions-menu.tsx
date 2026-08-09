@@ -102,11 +102,11 @@ export function ChatActionsMenu({
         </Button>
 
         {menuOpen && (
-          <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-[9px] border border-[#dedad2] bg-white py-1 shadow-md">
+          <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-[9px] border border-[#e7e3db] bg-white py-1 shadow-md">
             {!isReadOnly && (
               <button
                 type="button"
-                className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
                 onClick={handleRenameOpen}
               >
                 Rename
@@ -115,7 +115,7 @@ export function ChatActionsMenu({
             {!isReadOnly && (
               <button
                 type="button"
-                className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
                 onClick={handleClose}
               >
                 Abandon
@@ -123,14 +123,14 @@ export function ChatActionsMenu({
             )}
             <button
               type="button"
-              className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+              className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
               onClick={handleShowData}
             >
               Show data
             </button>
             <button
               type="button"
-              className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+              className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
               onClick={handleShare}
             >
               Share
@@ -138,7 +138,7 @@ export function ChatActionsMenu({
             {!isReadOnly && (
               <button
                 type="button"
-                className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
                 onClick={handleCollaborate}
               >
                 Collaborate

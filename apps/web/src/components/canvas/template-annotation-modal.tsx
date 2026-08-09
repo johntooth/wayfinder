@@ -238,7 +238,7 @@ export function TemplateAnnotationModal({
 
         <DialogBody className="min-h-0 flex-1 overflow-y-auto">
           {error && (
-            <p className="mb-3 rounded-[9px] border border-[#f0c9d4] bg-[#fdeef2] px-3 py-2 text-[12px] text-[#c2385a]">
+            <p className="mb-3 rounded-[9px] border border-[#f0c9d4] bg-[#f9e8eb] px-3 py-2 text-[12px] text-[#a8324c]">
               {error}
             </p>
           )}
@@ -259,7 +259,7 @@ export function TemplateAnnotationModal({
 
           {step === "review" && (
             <div className="space-y-3">
-              <p className="text-[12px] text-[#6d6a65]">
+              <p className="text-[12px] text-[#666055]">
                 Check each data field, set its type, and use the cog for choices and limits. The line
                 beneath each row is what goes into your document — copy it into Word any time.
               </p>
@@ -289,7 +289,7 @@ export function TemplateAnnotationModal({
               Cancel
             </Button>
             {step === "review" && blockedReason && (
-              <span className="text-[12px] text-[#6d6a65]">{blockedReason}</span>
+              <span className="text-[12px] text-[#666055]">{blockedReason}</span>
             )}
           </div>
 
@@ -345,7 +345,7 @@ export function TemplateAnnotationModal({
 
 function Working({ message }: { message: string }) {
   return (
-    <div className="flex items-center justify-center gap-2 py-10 text-[13px] text-[#6d6a65]">
+    <div className="flex items-center justify-center gap-2 py-10 text-[13px] text-[#666055]">
       <Loader2 size={16} className="animate-spin" />
       {message}
     </div>
@@ -362,21 +362,21 @@ function FoundFields({
   return (
     <div className="space-y-3">
       <div className="space-y-1">
-        <p className="text-[14px] font-medium text-[#1a1814]">
+        <p className="text-[14px] font-medium text-[#1c1b19]">
           {fields.length === 1 ? "1 data field found" : `${fields.length} data fields found`}
         </p>
-        <p className="text-[13px] text-[#5a5650]">
+        <p className="text-[13px] text-[#5c574c]">
           These are the placeholders in your document. Accept them as they are, or change their
           names and types first.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-x-6 gap-y-1 rounded-[9px] border border-[#e6e3dc] bg-[#f7f6f3] p-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-x-6 gap-y-1 rounded-[9px] border border-[#ebe8e0] bg-[#faf9f7] p-3 sm:grid-cols-2">
         {fields.map((row) => (
           <div key={row.id} className="flex items-baseline gap-1.5 text-[12px]">
-            <span className="text-[#3a5fd9]">•</span>
-            <span className="truncate text-[#1a1814]">{row.model.label || row.line}</span>
-            <span className="shrink-0 text-[#6d6a65]">({rowTypeLabel(row)})</span>
+            <span className="text-[#2f56d3]">•</span>
+            <span className="truncate text-[#1c1b19]">{row.model.label || row.line}</span>
+            <span className="shrink-0 text-[#666055]">({rowTypeLabel(row)})</span>
           </div>
         ))}
       </div>
@@ -395,8 +395,8 @@ function NoFieldsYet({ onOpenReference }: { onOpenReference: () => void }) {
   return (
     <div className="space-y-3">
       <div className="space-y-1">
-        <p className="text-[14px] font-medium text-[#1a1814]">No data fields yet</p>
-        <p className="text-[13px] text-[#5a5650]">
+        <p className="text-[14px] font-medium text-[#1c1b19]">No data fields yet</p>
+        <p className="text-[13px] text-[#5c574c]">
           This document has no placeholders in it. Open it in Word and type a name in double braces
           wherever a value belongs — like this:
         </p>
@@ -404,11 +404,11 @@ function NoFieldsYet({ onOpenReference }: { onOpenReference: () => void }) {
 
       <AnnotationTypingDemo />
 
-      <p className="text-[12px] text-[#5a5650]">
+      <p className="text-[12px] text-[#5c574c]">
         Every kind of field is listed in the{" "}
         <button
           type="button"
-          className="font-medium text-[#3a5fd9] underline hover:text-[#2e4bb0]"
+          className="font-medium text-[#2f56d3] underline hover:text-[#1f3ea8]"
           onClick={onOpenReference}
         >
           complete list of annotations
@@ -428,13 +428,13 @@ function ReuploadPanel({
 }) {
   return (
     <div className="space-y-3">
-      <p className="text-[13px] text-[#5a5650]">
+      <p className="text-[13px] text-[#5c574c]">
         When you are done editing, upload the document here to pick the flow back up with your new
         data fields.
       </p>
       <button
         type="button"
-        className="flex w-full flex-col items-center gap-2 rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-6 text-center text-[13px] text-[#6d6a65] transition-colors hover:border-[#c5d0f7] hover:bg-[#eef1fc] hover:text-[#3a5fd9]"
+        className="flex w-full flex-col items-center gap-2 rounded-[9px] border border-dashed border-[#e7e3db] bg-[#faf9f7] p-6 text-center text-[13px] text-[#666055] transition-colors hover:border-[#c3cef2] hover:bg-[#eaeefb] hover:text-[#2f56d3]"
         onClick={() => inputRef.current?.click()}
       >
         <Upload size={20} />
@@ -468,13 +468,13 @@ function ReviewRow({
 
   if (row.locked) {
     return (
-      <div className="flex items-start gap-2 rounded-[9px] border border-[#e6e3dc] bg-[#f7f6f3] px-3 py-2">
-        <Lock size={13} className="mt-0.5 shrink-0 text-[#6d6a65]" />
+      <div className="flex items-start gap-2 rounded-[9px] border border-[#ebe8e0] bg-[#faf9f7] px-3 py-2">
+        <Lock size={13} className="mt-0.5 shrink-0 text-[#666055]" />
         <div className="min-w-0 space-y-0.5">
-          <code className="block truncate font-mono text-[12px] text-[#5a5650]">
+          <code className="block truncate font-mono text-[12px] text-[#5c574c]">
             {`{{${row.line}}}`}
           </code>
-          <p className="text-[11px] text-[#6d6a65]">
+          <p className="text-[11px] text-[#666055]">
             An include/repeat block. It is kept exactly as it is — edit it in Word.
           </p>
         </div>
@@ -485,7 +485,7 @@ function ReviewRow({
   return (
     <div
       className={`space-y-1.5 rounded-[9px] border p-2.5 ${
-        validation.blocking.length > 0 ? "border-[#f0c9d4] bg-[#fdfafb]" : "border-[#e6e3dc]"
+        validation.blocking.length > 0 ? "border-[#f0c9d4] bg-[#fdfafb]" : "border-[#ebe8e0]"
       }`}
     >
       <FieldRow
@@ -499,12 +499,12 @@ function ReviewRow({
         labelPlaceholder="e.g. Supplier Name"
       />
 
-      <code className="block truncate font-mono text-[11px] text-[#6d6a65]">
+      <code className="block truncate font-mono text-[11px] text-[#666055]">
         {row.line.trim() ? `{{ ${row.line.trim()} }}` : "— removed from the document —"}
       </code>
 
       {validation.blocking.map((message) => (
-        <p key={message} className="flex items-start gap-1 text-[11px] text-[#c2385a]">
+        <p key={message} className="flex items-start gap-1 text-[11px] text-[#a8324c]">
           <AlertTriangle size={12} className="mt-0.5 shrink-0" />
           {message}
         </p>
@@ -516,7 +516,7 @@ function ReviewRow({
           <span>{warning.message}</span>
           <button
             type="button"
-            className="shrink-0 font-medium text-[#3a5fd9] hover:text-[#2e4bb0]"
+            className="shrink-0 font-medium text-[#2f56d3] hover:text-[#1f3ea8]"
             onClick={() => onAcceptCorrection(warning.correctedLine)}
           >
             Fix
@@ -525,7 +525,7 @@ function ReviewRow({
       ))}
 
       {duplicateCount > 1 && (
-        <p className="text-[11px] text-[#6d6a65]">
+        <p className="text-[11px] text-[#666055]">
           Asked once, fills {duplicateCount} places in the document.
         </p>
       )}

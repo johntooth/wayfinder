@@ -142,13 +142,13 @@ export function FlowConfigHeader({
             <MoreHorizontal size={16} />
           </Button>
           {flowMenuOpen && (
-            <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-[9px] border border-[#dedad2] bg-white py-1 shadow-md">
+            <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-[9px] border border-[#e7e3db] bg-white py-1 shadow-md">
               {flowStatus === "published" ? (
                 <>
                   {hasUnpublishedChanges && (
                     <button
                       type="button"
-                      className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                      className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
                       onClick={() => {
                         setFlowMenuOpen(false);
                         setHasUnpublishedChanges(false);
@@ -165,7 +165,7 @@ export function FlowConfigHeader({
                   )}
                   <button
                     type="button"
-                    className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                    className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
                     onClick={() => {
                       setFlowMenuOpen(false);
                       setFlowStatus("draft");
@@ -180,7 +180,7 @@ export function FlowConfigHeader({
               ) : (
                 <button
                   type="button"
-                  className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                  className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
                   onClick={() => {
                     setFlowMenuOpen(false);
                     setFlowStatus("published");
@@ -200,7 +200,7 @@ export function FlowConfigHeader({
               {flowStatus !== "published" && canPublishToEveryone && (
                 <button
                   type="button"
-                  className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                  className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
                   onClick={() => {
                     setFlowMenuOpen(false);
                     setFlowStatus("published");
@@ -220,7 +220,7 @@ export function FlowConfigHeader({
               {canPublishToGroup && (
                 <button
                   type="button"
-                  className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                  className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
                   onClick={() => {
                     setFlowMenuOpen(false);
                     setGroupDialogOpen(true);
@@ -232,7 +232,7 @@ export function FlowConfigHeader({
               {canPublishToOrganisation && flowVisibility !== "organisation" && (
                 <button
                   type="button"
-                  className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                  className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
                   onClick={publishToOrganisation}
                 >
                   Publish to {myOrganisation?.name ?? "my organisation"}
@@ -241,7 +241,7 @@ export function FlowConfigHeader({
               {flowStatus === "published" && canPublishToEveryone && flowVisibility === "private" && (
                 <button
                   type="button"
-                  className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                  className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
                   onClick={() => {
                     setFlowMenuOpen(false);
                     setFlowVisibility("global");
@@ -256,7 +256,7 @@ export function FlowConfigHeader({
               {flowStatus === "published" && flowVisibility !== "private" && (
                 <button
                   type="button"
-                  className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                  className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
                   onClick={() => {
                     setFlowMenuOpen(false);
                     setFlowVisibility("private");
@@ -271,7 +271,7 @@ export function FlowConfigHeader({
               )}
               <button
                 type="button"
-                className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
                 onClick={() => {
                   setFlowMenuOpen(false);
                   setEditingMetadata(true);
@@ -281,7 +281,7 @@ export function FlowConfigHeader({
               </button>
               <button
                 type="button"
-                className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
                 onClick={() => {
                   setFlowMenuOpen(false);
                   setVersionHistoryOpen(true);
@@ -289,10 +289,10 @@ export function FlowConfigHeader({
               >
                 Version history
               </button>
-              <div className="my-1 border-t border-[#dedad2]" />
+              <div className="my-1 border-t border-[#e7e3db]" />
               <button
                 type="button"
-                className="w-full px-3 py-2 text-left text-[13px] text-[#c2385a] hover:bg-[#fdf3f5]"
+                className="w-full px-3 py-2 text-left text-[13px] text-[#a8324c] hover:bg-[#fdf3f5]"
                 onClick={() => {
                   setFlowMenuOpen(false);
                   setDeleteConfirmOpen(true);
@@ -362,21 +362,21 @@ function GroupVisibilityDialog({
             see it in their workspace.
           </DialogDescription>
           {groups.length === 0 ? (
-            <p className="text-[13px] text-[#6d6a65]">You are not in any groups yet.</p>
+            <p className="text-[13px] text-[#666055]">You are not in any groups yet.</p>
           ) : (
             <ul className="space-y-1">
               {groups.map((group) => (
                 <li key={group.id}>
                   <label
                     htmlFor={`group-${group.id}`}
-                    className="flex cursor-pointer items-center gap-2.5 rounded-[9px] border border-[#dedad2] px-3 py-2 text-[13px] text-[#1a1814] transition-colors hover:bg-[#efede8]"
+                    className="flex cursor-pointer items-center gap-2.5 rounded-[9px] border border-[#e7e3db] px-3 py-2 text-[13px] text-[#1c1b19] transition-colors hover:bg-[#f5f3ee]"
                   >
                     <input
                       type="checkbox"
                       id={`group-${group.id}`}
                       checked={selected.includes(group.id)}
                       onChange={() => toggle(group.id)}
-                      className="h-4 w-4 accent-[#3a5fd9]"
+                      className="h-4 w-4 accent-[#2f56d3]"
                     />
                     {group.name}
                   </label>

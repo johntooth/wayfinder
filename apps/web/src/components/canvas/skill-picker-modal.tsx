@@ -52,14 +52,14 @@ export function SkillPickerModal({ open, selectedIds, onChange, onClose }: Skill
           <DialogCloseButton />
         </DialogHeader>
         <DialogBody className="space-y-3">
-          <p className="text-[12px] text-[#857f76]">
+          <p className="text-[12px] text-[#736d5f]">
             Attach reusable skills to steer the AI. Upload skills on the Skills page.
           </p>
           {skills.length > 0 && (
             <div className="relative">
               <Search
                 size={14}
-                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#918d87]"
+                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#736d5f]"
               />
               <Input
                 value={query}
@@ -70,11 +70,11 @@ export function SkillPickerModal({ open, selectedIds, onChange, onClose }: Skill
             </div>
           )}
           {skills.length === 0 ? (
-            <p className="text-[13px] text-[#857f76]">No skills available yet.</p>
+            <p className="text-[13px] text-[#736d5f]">No skills available yet.</p>
           ) : filtered.length === 0 ? (
-            <p className="text-[13px] text-[#857f76]">No skills match “{query}”.</p>
+            <p className="text-[13px] text-[#736d5f]">No skills match “{query}”.</p>
           ) : (
-            <div className="max-h-[46vh] space-y-1.5 overflow-y-auto rounded-[9px] border border-[#dedad2] p-2.5">
+            <div className="max-h-[46vh] space-y-1.5 overflow-y-auto rounded-[9px] border border-[#e7e3db] p-2.5">
               {filtered.map((skill) => (
                 <label key={skill.id} className="flex cursor-pointer items-start gap-2 text-[13px]">
                   <input
@@ -86,7 +86,7 @@ export function SkillPickerModal({ open, selectedIds, onChange, onClose }: Skill
                   <span>
                     <span className="font-medium">{skill.name}</span>
                     {skill.description ? (
-                      <span className="text-[#857f76]"> — {skill.description}</span>
+                      <span className="text-[#736d5f]"> — {skill.description}</span>
                     ) : null}
                   </span>
                 </label>

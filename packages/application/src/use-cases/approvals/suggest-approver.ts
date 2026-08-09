@@ -15,6 +15,12 @@ import {
   type Result,
 } from "@rbrasier/domain";
 import { delegationPositionSchema, type DelegationPosition } from "@rbrasier/shared";
+import {
+  describeApprover,
+  describeAssignedApprover,
+  type AssignedApprover,
+  type SuggestedApprover,
+} from "./approver-identity";
 
 export interface SuggestApproverInput {
   sessionId: string;
@@ -23,15 +29,10 @@ export interface SuggestApproverInput {
   requestedByUserId: string;
 }
 
-export interface SuggestedApprover {
-  userId: string;
-  name: string | null;
-  email: string;
-}
-
 export interface SuggestApproverOutput {
   approval: Approval;
   suggestedApprover: SuggestedApprover | null;
+  assignedApprover: AssignedApprover | null;
 }
 
 // Reaching an approval node: compute a *suggested* approver from the node's
@@ -54,8 +55,9 @@ export class SuggestApprover {
     const existing = await this.approvals.findPendingByNode(input.sessionId, input.nodeId);
     if (existing.error) return existing;
     if (existing.data) {
-      const suggestedApprover = await this.describe(existing.data.suggestedApproverUserId);
-      return ok({ approval: existing.data, suggestedApprover });
+      const suggestedApprover = await describeApprover(this.users, existing.data.suggestedApproverUserId);
+      const assignedApprover = await describeAssignedApprover(this.users, existing.data);
+      return ok({ approval: existing.data, suggestedApprover, assignedApprover });
     }
 
     const nodeResult = await this.flowNodes.findById(input.nodeId);
@@ -79,8 +81,9 @@ export class SuggestApprover {
     });
     if (created.error) return created;
 
-    const suggestedApprover = await this.describe(suggestedUserId);
-    return ok({ approval: created.data, suggestedApprover });
+    const suggestedApprover = await describeApprover(this.users, suggestedUserId);
+    const assignedApprover = await describeAssignedApprover(this.users, created.data);
+    return ok({ approval: created.data, suggestedApprover, assignedApprover });
   }
 
   private async resolveSuggestion(
@@ -164,10 +167,4 @@ export class SuggestApprover {
     return position;
   }
 
-  private async describe(userId: string | null): Promise<SuggestedApprover | null> {
-    if (!userId) return null;
-    const userResult = await this.users.findById(userId);
-    if (userResult.error || !userResult.data) return null;
-    return { userId: userResult.data.id, name: userResult.data.name, email: userResult.data.email };
-  }
 }

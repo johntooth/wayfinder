@@ -73,13 +73,13 @@ export function StructuredFieldEditor({ lines, onChange, onOpenHelp }: Structure
         <button
           type="button"
           aria-label="How field types work"
-          className="flex h-4 w-4 items-center justify-center rounded-full text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+          className="flex h-4 w-4 items-center justify-center rounded-full text-[#666055] transition-colors hover:bg-[#f5f3ee] hover:text-[#1c1b19]"
           onClick={onOpenHelp}
         >
           <HelpCircle size={13} />
         </button>
       </div>
-      <p className="text-[12px] text-[#6d6a65]">
+      <p className="text-[12px] text-[#666055]">
         Add each value the AI should capture. Pick a type, and use the cog to set whether it is
         required, limits, and any choices.
       </p>
@@ -100,7 +100,7 @@ export function StructuredFieldEditor({ lines, onChange, onOpenHelp }: Structure
 
       <button
         type="button"
-        className="mt-1 flex items-center gap-1 text-[12px] text-[#3a5fd9] transition-colors hover:text-[#2e4bb0]"
+        className="mt-1 flex items-center gap-1 text-[12px] text-[#2f56d3] transition-colors hover:text-[#1f3ea8]"
         onClick={addRow}
       >
         <Plus size={13} /> Add field

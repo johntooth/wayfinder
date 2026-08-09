@@ -1,0 +1,101 @@
+name: Publish container image
+
+# Publishing happens here, in CI, and never from a maintainer's machine — the
+# only credential involved is the workflow's own GITHUB_TOKEN (ADR-046 §2).
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing git tag to publish (e.g. v0.24.0)"
+        required: true
+        type: string
+
+concurrency:
+  group: publish-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and push to GHCR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          # The release-line check below asks which branches contain the tag.
+          # The default shallow checkout fetches the tag alone and creates no
+          # remote-tracking branches, so that question has no answer and
+          # `latest` would never move.
+          fetch-depth: 0
+
+      - name: Resolve version and release line
+        id: resolve
+        run: |
+          set -euo pipefail
+          GIT_TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${GIT_TAG#v}"
+          FILE_VERSION="$(cat VERSION)"
+
+          # A tag that disagrees with the VERSION file would publish an image
+          # whose About modal contradicts its own tag.
+          if [ "$VERSION" != "$FILE_VERSION" ]; then
+            echo "::error::Tag $GIT_TAG implies version $VERSION but VERSION says $FILE_VERSION"
+            exit 1
+          fi
+
+          # `latest` tracks the current release line only. Pointing it at main
+          # would hand unfinished work to anyone who omitted a tag (ADR-046 §2).
+          # Not masked with `|| true`: an empty result must mean "the tag is on
+          # no release branch", never "the lookup failed", or a broken checkout
+          # would silently degrade into skipping `latest`.
+          BRANCHES="$(git branch -r --contains "$GIT_TAG")"
+          if echo "$BRANCHES" | grep -q "origin/release/"; then
+            echo "publish_latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish_latest=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/rbrasier/wayfinder:${{ steps.resolve.outputs.version }}
+            ${{ steps.resolve.outputs.publish_latest == 'true' && 'ghcr.io/rbrasier/wayfinder:latest' || '' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summarise
+        run: |
+          {
+            echo "### Published \`ghcr.io/rbrasier/wayfinder\`"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Version | \`${{ steps.resolve.outputs.version }}\` |"
+            echo "| Digest | \`${{ steps.push.outputs.digest }}\` |"
+            echo "| Moved \`latest\` | ${{ steps.resolve.outputs.publish_latest }} |"
+            echo ""
+            echo "\`\`\`bash"
+            echo "docker pull ghcr.io/rbrasier/wayfinder:${{ steps.resolve.outputs.version }}"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"

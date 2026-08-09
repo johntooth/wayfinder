@@ -44,7 +44,7 @@ export function OrganisationsToggleCard() {
             disabled={enabledQuery.isLoading || setEnabled.isPending}
             onClick={() => setEnabled.mutate({ enabled: !enabled })}
             className={`relative mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-              enabled ? "bg-[#1f8a4c]" : "bg-[#d7d3cc]"
+              enabled ? "bg-[#1f6b4d]" : "bg-[#dedad2]"
             }`}
           >
             <span

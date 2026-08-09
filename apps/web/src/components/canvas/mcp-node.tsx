@@ -13,7 +13,7 @@ export interface McpNodeData {
   [key: string]: unknown;
 }
 
-const DEFAULT_COLOUR = "#0e8a7a";
+const DEFAULT_COLOUR = "#14312e";
 
 export function McpNode({ data, selected }: NodeProps) {
   const nodeData = data as McpNodeData;

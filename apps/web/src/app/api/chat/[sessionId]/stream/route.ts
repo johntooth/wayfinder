@@ -1,9 +1,11 @@
 import { createDataStreamResponse } from "ai";
 import {
+  doneWhenGuidance,
   normaliseAdvanceConfidenceThreshold,
   type ConversationalNodeConfig,
   type SessionEvent,
 } from "@rbrasier/domain";
+import { buildTurnRetrievalQueries } from "@rbrasier/application";
 import { streamTurnRequestSchema } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
 import { tooManyRequestsResponse } from "@/lib/rate-limit";
@@ -146,10 +148,18 @@ export async function POST(
     // agent never sees the file it was just given.
     container.repos.sessionUploads.listBySession(sessionId),
     container.repos.users.findById(authSession.userId),
+    // Two retrieval keys, not one: the operator's message rarely names the
+    // guidance that governs it ("are there any options for a start date?" does
+    // not mention the Monday rule), so the step's own instruction and field set
+    // supply a second query aimed at exactly that.
     container.useCases.retrieveDocumentChunks.execute({
       flowId: flow.id,
       sessionId,
-      query: lastUserMessage,
+      queries: buildTurnRetrievalQueries({
+        nodeConfig,
+        recentMessages: dbMessages,
+        latestUserMessage: lastUserMessage,
+      }),
     }),
   ]);
 
@@ -216,9 +226,8 @@ export async function POST(
       const config = node.config as { doneWhen?: string; aiInstruction?: string; instruction?: string };
       // doneWhen may hold a sentinel meaning "template complete" — that string is not
       // meaningful guidance for choosing a branch, so fall back to the instruction.
-      const doneWhenPurpose =
-        config.doneWhen && config.doneWhen !== "__TEMPLATE_COMPLETE__" ? config.doneWhen : undefined;
-      const purpose = doneWhenPurpose ?? config.aiInstruction ?? config.instruction;
+      const purpose =
+        doneWhenGuidance(config.doneWhen) ?? config.aiInstruction ?? config.instruction;
       return { id: node.id, name: node.name, purpose };
     });
 

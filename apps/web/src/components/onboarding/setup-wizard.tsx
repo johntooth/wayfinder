@@ -37,6 +37,49 @@ function StepIntro({ children }: { children: React.ReactNode }) {
   return <p className="text-sm text-muted-foreground">{children}</p>;
 }
 
+// Same badge vocabulary as the chat step rail — complete ticks, current is
+// outlined and numbered, pending is muted — so "where am I in a sequence" reads
+// identically wherever it appears in the product.
+function WizardStepRail({ current }: { current: StepIndex }) {
+  return (
+    <div className="flex items-center gap-[10px] pt-[2px]">
+      {STEP_TITLES.map((title, index) => {
+        const isComplete = index < current;
+        const isCurrent = index === current;
+        return (
+          <div key={title} className="flex items-center gap-[10px]">
+            <span className="flex items-center gap-[6px]">
+              <span
+                className={`flex h-[15px] min-w-[15px] items-center justify-center rounded-full px-[3px] text-[9px] font-bold ${
+                  isComplete
+                    ? "bg-[#1f6b4d] text-white"
+                    : isCurrent
+                      ? "border-[1.5px] border-[#2f56d3] text-[#2f56d3]"
+                      : "border-[1.5px] border-[#dedad2] text-[#736d5f]"
+                }`}
+              >
+                {isComplete ? "✓" : index + 1}
+              </span>
+              <span
+                className={`text-[11.5px] ${
+                  isCurrent ? "font-semibold text-[#2f56d3]" : "text-[#736d5f]"
+                }`}
+              >
+                {title}
+              </span>
+            </span>
+            {index < STEP_TITLES.length - 1 && (
+              <span
+                className={`h-px w-[22px] shrink-0 ${isComplete ? "bg-[#bcd0c2]" : "bg-[#e7e3db]"}`}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function SetupWizard({ forceOpen = false, onClose }: Props) {
   const utils = trpc.useUtils();
   const onboardingQuery = trpc.settings.getOnboardingState.useQuery(undefined, {
@@ -178,6 +221,7 @@ export function SetupWizard({ forceOpen = false, onClose }: Props) {
             <DialogTitle data-testid="setup-wizard-title">
               Set up Wayfinder — Step {step + 1} of 3: {STEP_TITLES[step]}
             </DialogTitle>
+            <WizardStepRail current={step} />
           </DialogHeader>
 
           <DialogBody className="max-h-[70vh] space-y-4 overflow-y-auto">

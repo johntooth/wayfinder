@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { Node } from "@xyflow/react";
 import type { ApprovalSubject, PriorStepField } from "@rbrasier/domain";
-import type { PriorStep } from "@/components/canvas/approval-node-config";
+import { defaultSubjectNodeId, type PriorStep } from "@/components/canvas/approval-node-config";
 import { compareStepLabels } from "@/lib/flow-utils";
 import { readFields } from "@/lib/canvas/rf-adapters";
 
@@ -91,30 +91,39 @@ export const usePriorStepViews = (
 
   // Signature slots other approval steps already claim on the same subject step,
   // so two nodes cannot be saved targeting one slot (ADR-043 §5).
+  //
+  // An unset subject is the last-completed-step default, which now resolves to
+  // the nearest earlier step declaring fields — the same resolution the slot list
+  // uses. Without that, two approval steps both left on the default would each be
+  // offered the whole slot list with no conflict reported between them.
   const takenSignatureFieldKeys = useMemo<string[]>(() => {
-    const editing = rfNodes.find((node) => node.id === editingNodeId);
-    const editingSubject = (
-      ((editing?.data as { config?: Record<string, unknown> })?.config ?? {}) as Record<
-        string,
-        unknown
-      >
-    ).approvalSubject as ApprovalSubject | undefined;
-    const subjectNodeId = editingSubject?.kind === "step" ? (editingSubject.nodeId ?? "") : "";
-    if (!subjectNodeId) return [];
-    const keys: string[] = [];
-    for (const node of rfNodes) {
-      if (node.id === editingNodeId || node.type !== "approvalNode") continue;
-      const config = ((node.data as { config?: Record<string, unknown> }).config ?? {}) as Record<
+    const subjectOf = (node: Node | undefined): string => {
+      const config = ((node?.data as { config?: Record<string, unknown> })?.config ?? {}) as Record<
         string,
         unknown
       >;
       const subject = config.approvalSubject as ApprovalSubject | undefined;
-      if (subject?.kind !== "step" || subject.nodeId !== subjectNodeId) continue;
+      const named = subject?.kind === "step" ? (subject.nodeId ?? "") : "";
+      if (subject?.kind === "custom") return "";
+      return named || defaultSubjectNodeId(priorStepFields);
+    };
+
+    const subjectNodeId = subjectOf(rfNodes.find((node) => node.id === editingNodeId));
+    if (!subjectNodeId) return [];
+
+    const keys: string[] = [];
+    for (const node of rfNodes) {
+      if (node.id === editingNodeId || node.type !== "approvalNode") continue;
+      if (subjectOf(node) !== subjectNodeId) continue;
+      const config = ((node.data as { config?: Record<string, unknown> }).config ?? {}) as Record<
+        string,
+        unknown
+      >;
       const key = config.signatureFieldKey;
       if (typeof key === "string" && key) keys.push(key);
     }
     return keys;
-  }, [editingNodeId, rfNodes]);
+  }, [editingNodeId, rfNodes, priorStepFields]);
 
 
   return { priorStepFields, priorSteps, takenSignatureFieldKeys };

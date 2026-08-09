@@ -22,7 +22,7 @@ import {
 import { trpc } from "@/trpc/client";
 import { FlowSelector } from "@/components/admin/flow-selector";
 
-const AXIS_STYLE = { fontSize: 11, fill: "#918d87" };
+const AXIS_STYLE = { fontSize: 11, fill: "#736d5f" };
 
 const formatDuration = (seconds: number): string => {
   if (seconds <= 0) return "—";
@@ -33,9 +33,9 @@ const formatDuration = (seconds: number): string => {
 };
 
 const completionColour = (rate: number): string => {
-  if (rate >= 75) return "#2e9e6a";
+  if (rate >= 75) return "#1f6b4d";
   if (rate >= 40) return "#d98a3a";
-  return "#c2385a";
+  return "#a8324c";
 };
 
 const truncate = (value: string, max = 14): string =>
@@ -78,8 +78,8 @@ export function AdminFlowDeepDive() {
     <div className="h-full overflow-auto">
       <div className="container space-y-4 py-8">
         <div>
-          <h1 className="text-lg font-semibold text-[#1a1814]">Flow usage</h1>
-          <p className="text-[13px] text-[#6d6a65]">
+          <h1 className="text-lg font-semibold text-[#1c1b19]">Flow usage</h1>
+          <p className="text-[13px] text-[#666055]">
             Select a flow to see its node-level breakdown — drop-off, confidence and completion.
           </p>
         </div>
@@ -91,11 +91,11 @@ export function AdminFlowDeepDive() {
             {data.nodeBreakdown.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={confidenceData} margin={{ top: 8, right: 12, bottom: 0, left: -16 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#efede8" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f5f3ee" />
                   <XAxis dataKey="name" tick={AXIS_STYLE} interval={0} />
                   <YAxis domain={[0, 100]} tick={AXIS_STYLE} />
                   <Tooltip />
-                  <Bar dataKey="value" name="Avg confidence" fill="#3a5fd9" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="value" name="Avg confidence" fill="#2f56d3" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -107,11 +107,11 @@ export function AdminFlowDeepDive() {
             {data.nodeBreakdown.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={dropOffData} margin={{ top: 8, right: 12, bottom: 0, left: -16 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#efede8" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f5f3ee" />
                   <XAxis dataKey="name" tick={AXIS_STYLE} interval={0} />
                   <YAxis allowDecimals={false} tick={AXIS_STYLE} />
                   <Tooltip />
-                  <Bar dataKey="value" name="Drop-off" fill="#c2385a" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="value" name="Drop-off" fill="#a8324c" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -154,7 +154,7 @@ export function AdminFlowDeepDive() {
                     <TableCell className="text-right">{node.dropOff}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#efede8]">
+                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#f5f3ee]">
                           <div
                             className="h-full rounded-full"
                             style={{
@@ -163,7 +163,7 @@ export function AdminFlowDeepDive() {
                             }}
                           />
                         </div>
-                        <span className="w-9 text-right text-[12px] text-[#5a5650]">
+                        <span className="w-9 text-right text-[12px] text-[#5c574c]">
                           {node.completionRate}%
                         </span>
                       </div>
@@ -172,7 +172,7 @@ export function AdminFlowDeepDive() {
                 ))}
                 {data.nodeBreakdown.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-[13px] text-[#6d6a65]">
+                    <TableCell colSpan={7} className="text-center text-[13px] text-[#666055]">
                       No node activity recorded for this flow yet.
                     </TableCell>
                   </TableRow>
@@ -201,7 +201,7 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 
 function EmptyChart() {
   return (
-    <div className="flex h-full items-center justify-center text-[13px] text-[#6d6a65]">
+    <div className="flex h-full items-center justify-center text-[13px] text-[#666055]">
       Not enough data yet.
     </div>
   );

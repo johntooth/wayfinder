@@ -355,9 +355,12 @@ while IFS= read -r script_file; do
   [ -n "$script_file" ] || continue
   while IFS= read -r array_name; do
     [ -n "$array_name" ] || continue
-    # The safe form ${NAME[@]+"${NAME[@]}"} contains the unsafe form as a
-    # substring, so a line only counts as unguarded when the "[@]+" token is absent.
-    unguarded=$(grep -n "\"\${${array_name}\[@\]}\"" "$script_file" 2>/dev/null \
+    # Both subscripts abort identically on bash 3.2 — "${arr[@]}" and
+    # "${arr[*]}" alike — so both are checked. The safe forms
+    # ${NAME[@]+"${NAME[@]}"} and ${NAME[@]+${NAME[*]}} contain the unsafe form
+    # as a substring, so a line only counts as unguarded when the "[@]+" token
+    # is absent from it.
+    unguarded=$(grep -nE "\"\\\$\{${array_name}\[[@*]\]\}\"" "$script_file" 2>/dev/null \
       | grep -v "\${${array_name}\[@\]+" || true)
     [ -n "$unguarded" ] || continue
     while IFS= read -r hit; do
@@ -386,6 +389,33 @@ if [ -z "$ENTRA_EXPORTS" ]; then
 else
   fail "restart.sh exports Entra credentials, which auto-enables Entra on a mocked install:"
   echo "$ENTRA_EXPORTS" | sed 's/^/  /'
+fi
+
+# ── 22. the schema has a migration behind every change ───────────────────────
+# Compares the schema against its own snapshot, so unlike section 4 it needs no
+# database and runs in CI. Catches a schema edit that was never generated into a
+# migration — the state that used to be papered over by `drizzle-kit push`.
+section "22. schema matches its generated migrations"
+if pnpm --filter "@rbrasier/adapters" -s db:drift; then
+  pass "schema matches its migrations"
+else
+  fail "schema has changes with no migration — run pnpm db:generate and commit the SQL"
+fi
+
+# ── 23. nothing pushes the schema straight at the database ───────────────────
+# `drizzle-kit push` diffs the live database instead of the migration history.
+# On this schema that diff never converges, so it re-runs the same statements on
+# every start and asks to truncate tables that hold rows. Migrations only.
+section "23. no drizzle-kit push in scripts or package manifests"
+PUSH_CALLS=$(grep -rnE "drizzle-kit push|db:push" \
+    restart.sh scripts package.json packages/*/package.json apps/*/package.json \
+    2>/dev/null \
+  | grep -vE "^[^:]+:[0-9]+:[[:space:]]*#" || true)
+if [ -z "$PUSH_CALLS" ]; then
+  pass "no drizzle-kit push — the schema only changes through migrations"
+else
+  fail "drizzle-kit push found — it can truncate tables and records nothing in the migration history:"
+  echo "$PUSH_CALLS" | sed 's/^/  /'
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────

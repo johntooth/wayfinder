@@ -42,6 +42,17 @@ class InMemoryUsers implements IUserRepository {
     return ok(found);
   }
 
+  async search(input: { query: string; limit: number }): Promise<Result<User[]>> {
+    const term = input.query.trim().toLowerCase();
+    if (term.length === 0) return ok([]);
+    const matches = [...this.rows.values()].filter(
+      (row) =>
+        row.email.toLowerCase().includes(term) ||
+        (row.name ?? "").toLowerCase().includes(term),
+    );
+    return ok(matches.slice(0, input.limit));
+  }
+
   async list(): Promise<Result<User[]>> {
     return ok([...this.store.values()]);
   }

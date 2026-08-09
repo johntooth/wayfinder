@@ -39,6 +39,20 @@ const resolveNextApproval = async (
   };
 };
 
+// Every mutation in the session router publishes this; none in this router did.
+// The chat holds one EventSource keyed on it, so without it an open chat never
+// learns that a request was sent, decided, withdrawn or reassigned — it would
+// correct only on the next unrelated refresh.
+//
+// Fire-and-forget, matching the session router: the row has already committed,
+// and a bus failure must not fail the action that succeeded.
+const publishSessionUpdated = (
+  ctx: { container: Container },
+  sessionId: string,
+): void => {
+  void ctx.container.services.sessionEvents.publish(sessionId, { type: "session.updated" });
+};
+
 export const approvalRouter = router({
   // Reaching an approval node: compute the suggestion and write/return the
   // pending row that gates the session.
@@ -71,6 +85,19 @@ export const approvalRouter = router({
       return { ...result.data, subject: subject.data };
     }),
 
+  // The gate's source of truth once a row exists. Read-only on purpose:
+  // `suggest` has to be a mutation because it raises the row, and a UI reading
+  // through a mutation can never refetch — which is what left the originator
+  // showing "Choose the approver" for a request the previous approver had
+  // already sent.
+  forNode: authenticatedProcedure
+    .input(z.object({ sessionId: z.string().uuid(), nodeId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.loadPendingApproval.execute(input);
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
   confirmAndSend: authenticatedProcedure
     .input(
       z.object({
@@ -78,6 +105,10 @@ export const approvalRouter = router({
         approverUserId: z.string().uuid().nullish(),
         approverEmail: z.string().email().nullish(),
         isOverride: z.boolean(),
+        // The originator's note to the approver. Bounded like the decision
+        // comment — it travels by email, and a whole document does not belong
+        // in one.
+        requestMessage: z.string().max(2000).nullish(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -86,8 +117,65 @@ export const approvalRouter = router({
         approverUserId: input.approverUserId ?? null,
         approverEmail: input.approverEmail ?? null,
         isOverride: input.isOverride,
+        requestMessage: input.requestMessage ?? null,
       });
       if (result.error) throw toTrpcError(result.error);
+      publishSessionUpdated(ctx, result.data.sessionId);
+      return result.data;
+    }),
+
+  // Changing who an open request is with, without pulling the work back a step.
+  // Gated in the use case to the session owner or an admin — on a chained
+  // approval the row's requester is the previous approver, not the person
+  // watching the chat.
+  reassign: authenticatedProcedure
+    .input(
+      z.object({
+        approvalId: z.string().uuid(),
+        approverUserId: z.string().uuid().nullish(),
+        approverEmail: z.string().email().nullish(),
+        isOverride: z.boolean().optional(),
+        // Undefined keeps the note the request already carries; a supplied
+        // value replaces it.
+        requestMessage: z.string().max(2000).nullish(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.reassignApproval.execute({
+        approvalId: input.approvalId,
+        reassignedByUserId: ctx.userId,
+        approverUserId: input.approverUserId ?? null,
+        approverEmail: input.approverEmail ?? null,
+        isOverride: input.isOverride,
+        ...(input.requestMessage !== undefined
+          ? { requestMessage: input.requestMessage }
+          : {}),
+        isAdmin: ctx.isAdmin,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      publishSessionUpdated(ctx, result.data.approval.sessionId);
+      return result.data;
+    }),
+
+  // The originator taking their own request back before it is decided. The
+  // use case gates it to the requester (or an admin) and returns the session to
+  // the nearest prior conversational step.
+  withdraw: authenticatedProcedure
+    .input(
+      z.object({
+        approvalId: z.string().uuid(),
+        reason: z.string().max(2000).nullish(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.withdrawApproval.execute({
+        approvalId: input.approvalId,
+        withdrawnByUserId: ctx.userId,
+        reason: input.reason ?? null,
+        isAdmin: ctx.isAdmin,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      publishSessionUpdated(ctx, result.data.approval.sessionId);
       return result.data;
     }),
 
@@ -112,9 +200,23 @@ export const approvalRouter = router({
         isAdmin: ctx.isAdmin,
       });
       if (result.error) throw toTrpcError(result.error);
+      publishSessionUpdated(ctx, result.data.approval.sessionId);
 
       const nextApproval = await resolveNextApproval(ctx.container, result.data.newNodeId);
-      return { ...result.data, nextApproval };
+      // Who to tell, when email cannot tell them. Best-effort by construction:
+      // the decision has already committed, so a resolution failure costs a
+      // suggestion, not the decision.
+      const notify = await ctx.container.useCases.resolveDecisionNotifyTargets.execute({
+        approval: result.data.approval,
+        newNodeId: result.data.newNodeId,
+        sessionCompleted: result.data.sessionCompleted,
+        decidedByUserId: ctx.userId,
+      });
+      return {
+        ...result.data,
+        nextApproval,
+        notifyTargets: notify.error ? [] : notify.data,
+      };
     }),
 
   // Enriched with the context the approver needs to decide: chat name, who
@@ -122,13 +224,48 @@ export const approvalRouter = router({
   listPending: authenticatedProcedure.query(async ({ ctx }) => {
     const userResult = await ctx.container.repos.users.findById(ctx.userId);
     if (userResult.error) throw toTrpcError(userResult.error);
-    const result = await ctx.container.useCases.listPendingApprovalsWithContext.execute({
+    const result = await ctx.container.useCases.listApprovalsWithContext.execute({
       approverUserId: ctx.userId,
       approverEmail: userResult.data?.email ?? null,
     });
     if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
+
+  // The same context, widened past the pending queue so an approver can review
+  // what they have already decided and where that work ended up.
+  list: authenticatedProcedure
+    .input(z.object({ scope: z.enum(["pending", "decided", "all"]).default("pending") }))
+    .query(async ({ ctx, input }) => {
+      const userResult = await ctx.container.repos.users.findById(ctx.userId);
+      if (userResult.error) throw toTrpcError(userResult.error);
+      const result = await ctx.container.useCases.listApprovalsWithContext.execute({
+        approverUserId: ctx.userId,
+        approverEmail: userResult.data?.email ?? null,
+        scope: input.scope,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  // One decision, for its own page. The authorisation lives in the use case
+  // because the rule is about the approval rather than the session: being named
+  // on any approval of a session already opens that session (ADR-018), but a
+  // decision record is only readable by the people it is about.
+  get: authenticatedProcedure
+    .input(z.object({ approvalId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const userResult = await ctx.container.repos.users.findById(ctx.userId);
+      if (userResult.error) throw toTrpcError(userResult.error);
+      const result = await ctx.container.useCases.listApprovalsWithContext.getById({
+        approvalId: input.approvalId,
+        viewerUserId: ctx.userId,
+        viewerEmail: userResult.data?.email ?? null,
+        isAdmin: ctx.isAdmin,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
 
   // Whether an approval request can actually be emailed. False when notifications
   // are disabled or no transport is configured, so the gate can offer the

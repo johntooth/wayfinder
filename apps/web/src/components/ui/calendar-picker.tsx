@@ -52,23 +52,23 @@ export function CalendarPicker({ year, month, day, onSelect, onMonthChange }: Ca
   const grid = buildMonthGrid(year, month);
 
   return (
-    <div className="rounded-[12px] border border-[#ece9e3] bg-[#faf9f7] p-3">
+    <div className="rounded-[12px] border border-[#f0ede8] bg-[#faf9f7] p-3">
       <div className="mb-2 flex items-center justify-between">
         <button
           type="button"
           aria-label="Previous month"
-          className="h-7 w-7 rounded-md text-[#5a5650] hover:bg-[#efede8]"
+          className="h-7 w-7 rounded-md text-[#5c574c] hover:bg-[#f5f3ee]"
           onClick={() => onMonthChange(addMonths({ year, month }, -1))}
         >
           ‹
         </button>
-        <span className="text-[13px] font-medium text-[#1a1814]">
+        <span className="text-[13px] font-medium text-[#1c1b19]">
           {MONTH_NAMES[month - 1]} {year}
         </span>
         <button
           type="button"
           aria-label="Next month"
-          className="h-7 w-7 rounded-md text-[#5a5650] hover:bg-[#efede8]"
+          className="h-7 w-7 rounded-md text-[#5c574c] hover:bg-[#f5f3ee]"
           onClick={() => onMonthChange(addMonths({ year, month }, 1))}
         >
           ›
@@ -76,7 +76,7 @@ export function CalendarPicker({ year, month, day, onSelect, onMonthChange }: Ca
       </div>
       <div className="grid grid-cols-7 gap-1 text-center">
         {WEEKDAY_HEADINGS.map((heading, index) => (
-          <span key={index} className="text-[11px] font-medium text-[#6d6a65]">
+          <span key={index} className="text-[11px] font-medium text-[#666055]">
             {heading}
           </span>
         ))}
@@ -91,8 +91,8 @@ export function CalendarPicker({ year, month, day, onSelect, onMonthChange }: Ca
               onClick={() => onSelect({ year, month, day: cell })}
               className={`h-8 rounded-md text-[13px] transition-colors ${
                 selected
-                  ? "bg-[#1f8a4c] font-semibold text-white"
-                  : "text-[#1a1814] hover:bg-[#efede8]"
+                  ? "bg-[#1f6b4d] font-semibold text-white"
+                  : "text-[#1c1b19] hover:bg-[#f5f3ee]"
               }`}
             >
               {cell}

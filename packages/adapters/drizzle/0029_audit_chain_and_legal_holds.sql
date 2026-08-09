@@ -1,3 +1,7 @@
+-- data-impact: blocking, approved — core_audit_log.hash is NOT NULL with no default, so this
+-- applies only while the audit log is empty; a database that already holds audit rows must
+-- backfill hash and prev_hash before migrating past this point. sequence is bigserial and
+-- backfills itself, which is what lets core_audit_log_sequence_idx stay unique.
 CREATE TABLE "app_legal_holds" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"name" text NOT NULL,

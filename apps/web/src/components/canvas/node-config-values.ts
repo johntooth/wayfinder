@@ -79,7 +79,7 @@ export interface NodeConfigValues {
 
 export const DEFAULT_VALUES: NodeConfigValues = {
   name: "",
-  colour: "#3a5fd9",
+  colour: "#2f56d3",
   type: "conversational",
   aiInstruction: "",
   // Producing a document is what most steps are for, so the modal opens on it

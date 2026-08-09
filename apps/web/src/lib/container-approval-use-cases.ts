@@ -3,10 +3,14 @@ import {
   ApproverEditSubjectFields,
   ConfirmAndSend,
   DecideApproval,
-  ListPendingApprovals,
-  ListPendingApprovalsWithContext,
+  ListApprovals,
+  ListApprovalsWithContext,
+  LoadPendingApproval,
   ResolveApprovalSubject,
+  ReassignApproval,
+  ResolveDecisionNotifyTargets,
   SuggestApprover,
+  WithdrawApproval,
   type UpdateDocumentFields,
 } from "@rbrasier/application";
 import type {
@@ -21,6 +25,7 @@ import type {
   IObjectStorage,
   IReportingLineResolver,
   ISessionMessageRepository,
+  ISessionParticipantRepository,
   ISessionRepository,
   ISessionStepOutputRepository,
   IUnitOfWork,
@@ -32,6 +37,7 @@ export interface ApprovalUseCaseDeps {
   unitOfWork: IUnitOfWork;
   approvals: IApprovalRepository;
   sessions: ISessionRepository;
+  sessionParticipants: ISessionParticipantRepository;
   sessionMessages: ISessionMessageRepository;
   sessionStepOutputs: ISessionStepOutputRepository;
   flowNodes: IFlowNodeRepository;
@@ -48,6 +54,8 @@ export interface ApprovalUseCaseDeps {
   updateDocumentFields: UpdateDocumentFields;
   notifyOnApprovalRequested: ConstructorParameters<typeof ConfirmAndSend>[2];
   notifyOnApprovalDecided: ConstructorParameters<typeof DecideApproval>[6];
+  notifyOnApprovalWithdrawn: ConstructorParameters<typeof WithdrawApproval>[8];
+  notifyOnApprovalReassigned: ConstructorParameters<typeof ReassignApproval>[5];
 }
 
 // The approval use-case cluster, factored out of the main container to keep
@@ -81,6 +89,7 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
       deps.users,
       deps.sessionMessages,
       deps.updateDocumentFields,
+      deps.flowNodes,
     ),
     suggestApprover: new SuggestApprover(
       deps.approvals,
@@ -111,8 +120,29 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
       resolveApprovalSubject,
       applyApprovalSignature,
     ),
-    listPendingApprovals: new ListPendingApprovals(deps.approvals),
-    listPendingApprovalsWithContext: new ListPendingApprovalsWithContext(
+    withdrawApproval: new WithdrawApproval(
+      deps.unitOfWork,
+      deps.approvals,
+      deps.sessions,
+      deps.sessionStepOutputs,
+      deps.auditLogger,
+      deps.sessionMessages,
+      deps.users,
+      deps.flowNodes,
+      deps.notifyOnApprovalWithdrawn,
+    ),
+    reassignApproval: new ReassignApproval(
+      deps.approvals,
+      deps.sessions,
+      deps.auditLogger,
+      deps.sessionMessages,
+      deps.users,
+      deps.notifyOnApprovalReassigned,
+      deps.notifyOnApprovalRequested,
+    ),
+    loadPendingApproval: new LoadPendingApproval(deps.approvals, deps.users),
+    listApprovals: new ListApprovals(deps.approvals),
+    listApprovalsWithContext: new ListApprovalsWithContext(
       deps.approvals,
       deps.sessions,
       deps.users,
@@ -120,6 +150,13 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
       deps.sessionStepOutputs,
       deps.flowNodes,
       resolveApprovalSubject,
+    ),
+    resolveDecisionNotifyTargets: new ResolveDecisionNotifyTargets(
+      deps.sessions,
+      deps.sessionParticipants,
+      deps.users,
+      deps.flowNodes,
+      deps.approvals,
     ),
   };
 };

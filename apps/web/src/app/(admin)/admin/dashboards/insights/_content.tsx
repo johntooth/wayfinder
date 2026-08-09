@@ -36,8 +36,8 @@ export function AdminFlowInsights() {
     <div className="h-full overflow-auto">
       <div className="container space-y-4 py-8">
         <div>
-          <h1 className="text-lg font-semibold text-[#1a1814]">Flow insights</h1>
-          <p className="text-[13px] text-[#6d6a65]">
+          <h1 className="text-lg font-semibold text-[#1c1b19]">Flow insights</h1>
+          <p className="text-[13px] text-[#666055]">
             Select a flow to report on the template field values captured across its sessions.
           </p>
         </div>

@@ -31,6 +31,14 @@ const TYPE_ROWS: AnnotationRow[] = [
   { annotation: "(yesno)", meaning: "Shorthand for a Yes / No answer" },
 ];
 
+const SIGNATURE_ROWS: AnnotationRow[] = [
+  {
+    annotation: "(approval)",
+    meaning:
+      "A signature slot, filled by the approval step that signs it — approver name, decision, UTC timestamp, comment and a verification code. Never asked for in chat, never editable by hand, and implicitly optional so an unsigned document is not treated as incomplete. Takes no other annotation. Cannot go inside a (repeat) block: one approval is one decision, not a list. .docx only.",
+  },
+];
+
 const NARRATIVE_ROWS: AnnotationRow[] = [
   {
     annotation: "(narrative)",
@@ -81,21 +89,22 @@ const COMBINED_EXAMPLES = [
   "{{ Employee Email (email) }}",
   "{{ Notes (text) (maxlen: 200) (optional) }}",
   '{{ Background (narrative: "Summarise the rationale in 2–3 paragraphs") }}',
+  "{{ Delegate Sign Off (approval) }}",
   "{{#Risk Section}} … {{ Risk Narrative (narrative) }} … {{/Risk Section}}",
   "{{#Recommendations (repeat)}} {{ Owner }}: {{ Action }} {{/Recommendations}}",
 ];
 
 function AnnotationTable({ rows }: { rows: AnnotationRow[] }) {
   return (
-    <div className="overflow-hidden rounded-[9px] border border-[#dedad2]">
+    <div className="overflow-hidden rounded-[9px] border border-[#e7e3db]">
       <table className="w-full border-collapse text-[12px]">
         <tbody>
           {rows.map((row, index) => (
-            <tr key={row.annotation} className={index > 0 ? "border-t border-[#dedad2]" : ""}>
-              <td className="w-[42%] whitespace-nowrap bg-[#f7f6f3] px-3 py-2 align-top font-mono text-[#1a1814]">
+            <tr key={row.annotation} className={index > 0 ? "border-t border-[#e7e3db]" : ""}>
+              <td className="w-[42%] whitespace-nowrap bg-[#faf9f7] px-3 py-2 align-top font-mono text-[#1c1b19]">
                 {row.annotation}
               </td>
-              <td className="px-3 py-2 align-top leading-[1.5] text-[#5a5650]">{row.meaning}</td>
+              <td className="px-3 py-2 align-top leading-[1.5] text-[#5c574c]">{row.meaning}</td>
             </tr>
           ))}
         </tbody>
@@ -106,7 +115,7 @@ function AnnotationTable({ rows }: { rows: AnnotationRow[] }) {
 
 function SectionHeading({ children }: { children: ReactNode }) {
   return (
-    <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[#6d6a65]">{children}</h3>
+    <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[#666055]">{children}</h3>
   );
 }
 
@@ -123,7 +132,7 @@ export function TemplateTagsHelpDialog({ open, onClose }: TemplateTagsHelpDialog
           <DialogCloseButton />
         </DialogHeader>
         <DialogBody className="max-h-[70vh] overflow-y-auto">
-          <p className="text-[13px] leading-[1.55] text-[#5a5650]">
+          <p className="text-[13px] leading-[1.55] text-[#5c574c]">
             Your <code className="font-mono">.docx</code> template must contain at least one{" "}
             <code className="font-mono">{"{{ tag }}"}</code> placeholder. The AI reads the tag
             names to know what to gather from you during chat, then fills them in when the
@@ -132,8 +141,8 @@ export function TemplateTagsHelpDialog({ open, onClose }: TemplateTagsHelpDialog
             consistent and makes the values usable for reporting.
           </p>
 
-          <div className="rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] p-3">
-            <pre className="m-0 whitespace-pre-wrap font-mono text-[12px] leading-[1.55] text-[#1a1814]">
+          <div className="rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] p-3">
+            <pre className="m-0 whitespace-pre-wrap font-mono text-[12px] leading-[1.55] text-[#1c1b19]">
 {`Client: {{ Client Name }}
 Start date: {{ Start Date (date) }}
 Fee: {{ Contract Value (currency) (optional) }}`}
@@ -157,7 +166,7 @@ Fee: {{ Contract Value (currency) (optional) }}`}
 
           <div className="space-y-2">
             <SectionHeading>Narrative prose</SectionHeading>
-            <p className="text-[12px] leading-[1.55] text-[#5a5650]">
+            <p className="text-[12px] leading-[1.55] text-[#5c574c]">
               Use these for open-ended, narrative-driven documents — committee papers, business
               cases, board reports — where the AI should write the content rather than slot in a
               value. Narrative fields are filled into the document but kept out of reporting.
@@ -166,8 +175,18 @@ Fee: {{ Contract Value (currency) (optional) }}`}
           </div>
 
           <div className="space-y-2">
+            <SectionHeading>Signatures</SectionHeading>
+            <p className="text-[12px] leading-[1.55] text-[#5c574c]">
+              Put one of these wherever an approver&apos;s sign-off belongs. Each signature slot is
+              claimed by one approval step in the flow, so a document needing a delegate and a
+              finance sign-off carries two slots and two approval steps.
+            </p>
+            <AnnotationTable rows={SIGNATURE_ROWS} />
+          </div>
+
+          <div className="space-y-2">
             <SectionHeading>Optional sections</SectionHeading>
-            <p className="text-[12px] leading-[1.55] text-[#5a5650]">
+            <p className="text-[12px] leading-[1.55] text-[#5c574c]">
               Wrap a block of the template between matching open / close tags to make it
               optional. The names must match exactly, and a section pairs well with narrative
               fields inside it.
@@ -177,7 +196,7 @@ Fee: {{ Contract Value (currency) (optional) }}`}
 
           <div className="space-y-2">
             <SectionHeading>Repeating groups</SectionHeading>
-            <p className="text-[12px] leading-[1.55] text-[#5a5650]">
+            <p className="text-[12px] leading-[1.55] text-[#5c574c]">
               Use a repeating group for a list where every item has the same fields — a
               recommendations table, an options appraisal, a set of suppliers. Mark the open tag
               with <code className="font-mono">(repeat)</code>; the AI extracts a list and the block
@@ -189,17 +208,17 @@ Fee: {{ Contract Value (currency) (optional) }}`}
 
           <div className="space-y-2">
             <SectionHeading>Combining annotations</SectionHeading>
-            <p className="text-[12px] leading-[1.55] text-[#5a5650]">
+            <p className="text-[12px] leading-[1.55] text-[#5c574c]">
               Annotations can be stacked — list each one in its own brackets, in any order:
             </p>
-            <div className="rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] p-3">
-              <pre className="m-0 whitespace-pre-wrap font-mono text-[12px] leading-[1.55] text-[#1a1814]">
+            <div className="rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] p-3">
+              <pre className="m-0 whitespace-pre-wrap font-mono text-[12px] leading-[1.55] text-[#1c1b19]">
 {COMBINED_EXAMPLES.join("\n")}
               </pre>
             </div>
           </div>
 
-          <p className="text-[12px] leading-[1.55] text-[#6d6a65]">
+          <p className="text-[12px] leading-[1.55] text-[#666055]">
             Spacing inside the brackets doesn&apos;t matter — <code className="font-mono">( email )</code>,{" "}
             <code className="font-mono">(email)</code> and <code className="font-mono">(min:&nbsp;&nbsp;60)</code>{" "}
             all work. If an annotation isn&apos;t recognised, the upload is rejected with an

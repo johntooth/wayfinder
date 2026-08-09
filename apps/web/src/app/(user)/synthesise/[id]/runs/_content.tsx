@@ -47,17 +47,17 @@ export function RunsContent({ flowId }: { flowId: string }) {
     <div className="mx-auto max-w-[1100px] px-[20px] py-[28px]">
       <div className="mb-[20px] flex items-center justify-between">
         <div>
-          <Link href="/synthesise" className="text-[12px] text-[#3a5fd9] hover:underline">
+          <Link href="/synthesise" className="text-[12px] text-[#2f56d3] hover:underline">
             ← Back to Synthesise Information
           </Link>
-          <h1 className="mt-[4px] text-[20px] font-bold text-[#1a1814]">Runs</h1>
+          <h1 className="mt-[4px] text-[20px] font-bold text-[#1c1b19]">Runs</h1>
         </div>
-        <Link href={`/synthesise/${flowId}/edit`} className="text-[12px] text-[#3a5fd9] hover:underline">
+        <Link href={`/synthesise/${flowId}/edit`} className="text-[12px] text-[#2f56d3] hover:underline">
           Edit synthesis
         </Link>
       </div>
 
-      <div className="mb-[24px] flex flex-wrap items-center gap-[10px] rounded-[10px] border border-[#e5e1d8] bg-white p-[16px]">
+      <div className="mb-[24px] flex flex-wrap items-center gap-[10px] rounded-[10px] border border-[#e7e3db] bg-white p-[16px]">
         <input
           type="file"
           multiple
@@ -72,7 +72,7 @@ export function RunsContent({ flowId }: { flowId: string }) {
         >
           {startMutation.isPending ? "Starting…" : "Start run"}
         </Button>
-        <span className="text-[12px] text-[#8a857c]">
+        <span className="text-[12px] text-[#736d5f]">
           Requires a published synthesis. Preview turns on by default above 5 files.
         </span>
       </div>

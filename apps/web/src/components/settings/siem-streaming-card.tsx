@@ -127,7 +127,7 @@ export function SiemStreamingCard() {
               <Label htmlFor="siem-format">Format</Label>
               <select
                 id="siem-format"
-                className="flex w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-[9px] text-[13px]"
+                className="flex w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-[9px] text-[13px]"
                 value={format}
                 onChange={(event) => setFormat(event.target.value as SiemFormat)}
               >

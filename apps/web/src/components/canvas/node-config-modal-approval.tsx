@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import type { PriorStepField } from "@rbrasier/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +9,7 @@ import {
   approvalSubjectChoice,
   approvalSubjectFromChoice,
   CUSTOM_SUBJECT_CHOICE,
+  defaultSubjectNodeId,
   editableReturnSteps,
   noEditablePredecessorWarning,
   signatureSlotConflict,
@@ -18,9 +20,9 @@ import {
 import type { ApproverSourceMode, NodeConfigValues } from "./node-config-modal";
 
 const SELECT_CLASS =
-  "flex h-10 w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#1f8a4c] focus:bg-white focus:outline-none";
+  "flex h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-[#1f6b4d] focus:bg-white focus:outline-none";
 
-const HINT_CLASS = "text-[12px] text-[#6d6a65]";
+const HINT_CLASS = "text-[12px] text-[#666055]";
 const WARNING_CLASS = "text-[12px] text-[#a8601a]";
 
 export interface NodeConfigModalApprovalProps {
@@ -51,6 +53,20 @@ export function NodeConfigModalApproval({
     priorSteps,
     values.changesRequestedTargetNodeId,
   );
+  const onDefaultSubject =
+    values.approvalSubjectKind === "step" && !values.approvalSubjectNodeId;
+  const defaultSubjectLabel =
+    priorStepFields.find((entry) => entry.nodeId === defaultSubjectNodeId(priorStepFields))
+      ?.stepLabel ?? "the last completed step";
+
+  // A lone slot is pre-selected by writing it, not by displaying it. Displaying
+  // a default while leaving the config empty is exactly the v0.26.2 bug: the
+  // author reads "this step signs X" and the decision then finds no slot key.
+  const onlySlotKey = slots.length === 1 ? slots[0]!.key : null;
+  useEffect(() => {
+    if (!onlySlotKey || values.signatureFieldKey) return;
+    set("signatureFieldKey", onlySlotKey);
+  }, [onlySlotKey, values.signatureFieldKey, set]);
 
   return (
     <>
@@ -139,11 +155,12 @@ export function NodeConfigModalApproval({
           <Label htmlFor="approval-signature-slot">Which signature does this step sign?</Label>
           <select
             id="approval-signature-slot"
+            data-approval-signature-slot
             className={SELECT_CLASS}
             value={values.signatureFieldKey}
             onChange={(e) => set("signatureFieldKey", e.target.value)}
           >
-            <option value="">Choose a signature…</option>
+            <option value="">No signature — just record the decision</option>
             {slotControl.slots.map((slot) => (
               <option key={slot.key} value={slot.key}>
                 {slot.label}
@@ -154,17 +171,21 @@ export function NodeConfigModalApproval({
             <p className={WARNING_CLASS}>{slotConflict}</p>
           ) : (
             <p className={HINT_CLASS}>
-              That step&apos;s template has more than one signature, so this step needs to say which
-              one it fills.
+              On approval, the decision is written into this signature and the document is saved as a
+              new version. The earlier version is kept.
+              {slotControl.slots.length > 1
+                ? " That step's template has several signatures, so each approval step signs a different one."
+                : ""}
             </p>
           )}
         </div>
       )}
 
-      {slotControl.mode === "auto" && (
+      {onDefaultSubject && slotControl.mode === "choose" && (
         <p className={HINT_CLASS}>
-          On approval, the decision is written into that step&apos;s signature and the document is
-          saved as a new version. The earlier version is kept.
+          These are the signatures on <strong>{defaultSubjectLabel}</strong>, the step this default
+          will reach in a straight-through flow. If the flow branches, name the step above instead
+          so the signature cannot follow the wrong path.
         </p>
       )}
 

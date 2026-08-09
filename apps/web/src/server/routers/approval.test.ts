@@ -6,16 +6,31 @@ import { approvalRouter } from "./approval";
 
 const createCaller = createCallerFactory(router({ approval: approvalRouter }));
 
+const approvalId = "11111111-1111-1111-1111-111111111111";
+
+const publish = vi.fn().mockResolvedValue(undefined);
+
 const makeContainer = (): Container =>
   ({
-    services: { errorLogger: { log: async () => undefined } },
+    services: {
+      errorLogger: { log: async () => undefined },
+      // The chat's EventSource is keyed on this. A decision that does not
+      // publish leaves every open chat showing a request that has moved on.
+      sessionEvents: { publish },
+    },
     repos: { users: { findById: vi.fn().mockResolvedValue(ok({ email: "a@b.c" })) } },
     useCases: {
       decideApproval: {
-        execute: vi
-          .fn()
-          .mockResolvedValue(ok({ advanced: true, newNodeId: null, sessionCompleted: false })),
+        execute: vi.fn().mockResolvedValue(
+          ok({
+            approval: { id: approvalId, sessionId: "sess-1" },
+            advanced: true,
+            newNodeId: null,
+            sessionCompleted: false,
+          }),
+        ),
       },
+      resolveDecisionNotifyTargets: { execute: vi.fn().mockResolvedValue(ok([])) },
     },
   }) as unknown as Container;
 
@@ -27,9 +42,17 @@ const contextWith = (container: Container): TrpcContext => ({
   headers: new Headers(),
 });
 
-const approvalId = "11111111-1111-1111-1111-111111111111";
-
 describe("approval.decide", () => {
+  it("tells open chats the session changed", async () => {
+    publish.mockClear();
+    const caller = createCaller(contextWith(makeContainer()));
+
+    await caller.approval.decide({ approvalId, decision: "approved" });
+
+    // Keyed on the session, not the approval — the chat watches the session.
+    expect(publish).toHaveBeenCalledWith("sess-1", { type: "session.updated" });
+  });
+
   // `approved_with_edits` is derived by the system, never chosen. If it ever
   // becomes selectable the control is worthless — an approver could claim it
   // without editing, or withhold it after editing (ADR-045 §4).

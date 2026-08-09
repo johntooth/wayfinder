@@ -147,16 +147,16 @@ export function RunResults({ flowId, runId }: RunResultsProps) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#dedad2] bg-white pl-5 pr-[52px]">
+      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#e7e3db] bg-white pl-5 pr-[52px]">
         <div className="flex items-center gap-2">
           <Link
             href={`/synthesise/${flowId}/edit`}
             aria-label="Back to edit the flow"
-            className="flex h-7 w-7 items-center justify-center rounded-[7px] text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+            className="flex h-7 w-7 items-center justify-center rounded-[7px] text-[#666055] transition-colors hover:bg-[#f5f3ee] hover:text-[#1c1b19]"
           >
             <ChevronLeft size={16} />
           </Link>
-          <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1a1814]">Summary of outputs</h1>
+          <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1c1b19]">Summary of outputs</h1>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -180,20 +180,20 @@ export function RunResults({ flowId, runId }: RunResultsProps) {
               <MoreHorizontal size={16} />
             </Button>
             {menuOpen && (
-              <div className="absolute right-0 top-full z-50 mt-1 w-52 rounded-[9px] border border-[#dedad2] bg-white py-1 shadow-md">
+              <div className="absolute right-0 top-full z-50 mt-1 w-52 rounded-[9px] border border-[#e7e3db] bg-white py-1 shadow-md">
                 <button
                   type="button"
                   disabled={downloading !== null}
-                  className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8] disabled:text-[#b6b1a8]"
+                  className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee] disabled:text-[#c9c3b5]"
                   onClick={() => startDownload("json")}
                 >
                   {downloading === "json" ? "Preparing…" : "Download JSON"}
                 </button>
-                <div className="my-1 border-t border-[#dedad2]" />
+                <div className="my-1 border-t border-[#e7e3db]" />
                 <button
                   type="button"
                   disabled={generateMutation.isPending}
-                  className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8] disabled:text-[#b6b1a8]"
+                  className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee] disabled:text-[#c9c3b5]"
                   onClick={() => {
                     setMenuOpen(false);
                     generateMutation.mutate({ runId });
@@ -205,24 +205,24 @@ export function RunResults({ flowId, runId }: RunResultsProps) {
                   <>
                     <a
                       href={artifactHref(runId, "document")}
-                      className="block px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                      className="block px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
                       onClick={() => setMenuOpen(false)}
                     >
                       Download document
                     </a>
                     <a
                       href={artifactHref(runId, "summary-doc")}
-                      className="block px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                      className="block px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
                       onClick={() => setMenuOpen(false)}
                     >
                       Download summary doc
                     </a>
                   </>
                 ) : null}
-                <div className="my-1 border-t border-[#dedad2]" />
+                <div className="my-1 border-t border-[#e7e3db]" />
                 <Link
                   href={`/synthesise/${flowId}/runs`}
-                  className="block px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                  className="block px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
                   onClick={() => setMenuOpen(false)}
                 >
                   All runs
@@ -235,7 +235,7 @@ export function RunResults({ flowId, runId }: RunResultsProps) {
 
       <div className="flex-1 overflow-auto">
         <div className="mx-auto flex max-w-[1100px] flex-col gap-[16px] px-[20px] py-[20px]">
-          <div className="rounded-[10px] border border-[#e5e1d8] bg-white px-[14px] py-[10px]">
+          <div className="rounded-[10px] border border-[#e7e3db] bg-white px-[14px] py-[10px]">
             <RunProgress runId={runId} />
           </div>
 
@@ -245,7 +245,7 @@ export function RunResults({ flowId, runId }: RunResultsProps) {
 
           {!data || !result ? (
             resultsQuery.error ? null : (
-              <p className="text-[13px] text-[#8a857c]">Loading results…</p>
+              <p className="text-[13px] text-[#736d5f]">Loading results…</p>
             )
           ) : (
             <>

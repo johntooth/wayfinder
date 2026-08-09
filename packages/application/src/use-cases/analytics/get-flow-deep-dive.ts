@@ -104,6 +104,7 @@ export class GetFlowDeepDive {
       id: node.id,
       name: node.name,
       colour: node.colour,
+      type: node.type,
     }));
 
     const flowSessions = sessionsResult.data.filter((session) => session.flowId === selectedFlowId);

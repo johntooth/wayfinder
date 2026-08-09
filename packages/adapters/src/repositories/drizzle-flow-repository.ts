@@ -13,7 +13,8 @@ import {
 } from "@rbrasier/domain";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { Database } from "../db/client";
-import { app_flows, kb_context_doc_content } from "../db/schema/wayfinder";
+import { app_flows } from "../db/schema/wayfinder";
+import { kb_context_doc_content } from "../db/schema/kb";
 import { logRepoError } from "./log-repo-error";
 
 type StoredContextDoc = typeof app_flows.$inferSelect["context_docs"][number];

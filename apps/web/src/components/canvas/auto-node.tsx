@@ -15,7 +15,7 @@ export interface AutoNodeData {
   [key: string]: unknown;
 }
 
-const DEFAULT_COLOUR = "#7c3aed";
+const DEFAULT_COLOUR = "#5b3fa8";
 
 export function AutoNode({ data, selected }: NodeProps) {
   const nodeData = data as AutoNodeData;

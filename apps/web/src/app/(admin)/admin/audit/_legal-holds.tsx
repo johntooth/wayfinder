@@ -71,7 +71,7 @@ export function LegalHoldsCard() {
             <Label htmlFor="hold-scope">Scope</Label>
             <select
               id="hold-scope"
-              className="flex w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-[9px] text-[13px]"
+              className="flex w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-[9px] text-[13px]"
               value={scopeKind}
               onChange={(event) => setScopeKind(event.target.value as ScopeKind)}
             >
@@ -137,7 +137,7 @@ export function LegalHoldsCard() {
             })}
             {holdsQuery.data && holdsQuery.data.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-[#6d6a65]">
+                <TableCell colSpan={5} className="text-center text-[#666055]">
                   No legal holds.
                 </TableCell>
               </TableRow>

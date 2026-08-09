@@ -2,7 +2,11 @@
 // backing system produced the record so the UI can label it and the federation
 // layer can de-duplicate by email across sources.
 
-export type PersonSource = "entra" | "hr" | "email";
+// `user` is an existing Wayfinder account. It ranks above the external
+// directories because it is the only source whose people can actually act on
+// what they are sent — an approver with no account cannot decide until one
+// exists (ADR-018, step-approvals PRD §12).
+export type PersonSource = "user" | "entra" | "hr" | "email";
 
 export interface Person {
   readonly source: PersonSource;

@@ -8,7 +8,7 @@ import type {
 } from "@rbrasier/domain";
 import { and, cosineDistance, desc, eq, gte, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
-import { kb_document_chunks } from "../db/schema/wayfinder";
+import { kb_document_chunks } from "../db/schema/kb";
 import { logRepoError } from "./log-repo-error";
 
 const FLOW_SCOPED_SOURCES = ["flow_context_doc", "template"] as const;

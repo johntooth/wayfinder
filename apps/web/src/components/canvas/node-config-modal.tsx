@@ -457,7 +457,7 @@ export function NodeConfigModal({
               <DialogCloseButton />
             </DialogHeader>
             <DialogBody>
-              <p className="text-[13px] leading-[1.55] text-[#5a5650]">
+              <p className="text-[13px] leading-[1.55] text-[#5c574c]">
                 This will delete the step and all its connected edges. This cannot be undone.
               </p>
             </DialogBody>
@@ -478,7 +478,7 @@ export function NodeConfigModal({
                 <button
                   type="button"
                   aria-label={view === "edit" ? "Preview prompt" : "Back to edit"}
-                  className="ml-auto mr-1 rounded-md p-1 text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814] disabled:opacity-50"
+                  className="ml-auto mr-1 rounded-md p-1 text-[#666055] transition-colors hover:bg-[#f5f3ee] hover:text-[#1c1b19] disabled:opacity-50"
                   onClick={handleToggleView}
                   disabled={isLoadingPreview}
                 >
@@ -492,16 +492,16 @@ export function NodeConfigModal({
               <>
                 <DialogBody className="flex max-h-[70vh] flex-col gap-3 overflow-hidden">
                   {previewError ? (
-                    <p className="text-[13px] text-[#c2385a]">{previewError}</p>
+                    <p className="text-[13px] text-[#a8324c]">{previewError}</p>
                   ) : (
                     <>
                       <div className="flex items-center justify-between">
-                        <p className="text-[12px] text-[#6d6a65]">
+                        <p className="text-[12px] text-[#666055]">
                           System prompt sent to the AI for this step (read-only)
                         </p>
                         <CopyButton text={previewPrompt ?? ""} />
                       </div>
-                      <pre className="flex-1 overflow-y-auto whitespace-pre-wrap rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] p-3 font-mono text-[12px] leading-[1.6] text-[#1a1814]">
+                      <pre className="flex-1 overflow-y-auto whitespace-pre-wrap rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] p-3 font-mono text-[12px] leading-[1.6] text-[#1c1b19]">
                         {previewPrompt}
                       </pre>
                     </>
@@ -629,10 +629,10 @@ export function NodeConfigModal({
                     />
                   )}
 
-                  <div className="flex items-start justify-between gap-3 border-t border-[#ece9e3] pt-3">
+                  <div className="flex items-start justify-between gap-3 border-t border-[#f0ede8] pt-3">
                     <div className="space-y-0.5">
                       <Label htmlFor="notify-on-complete">Notify chat participants when step complete</Label>
-                      <p className="text-[12px] text-[#6d6a65]">
+                      <p className="text-[12px] text-[#666055]">
                         Emails everyone in the chat once this step finishes.
                       </p>
                     </div>
@@ -643,7 +643,7 @@ export function NodeConfigModal({
                       aria-checked={values.notifyOnComplete}
                       onClick={() => set("notifyOnComplete", !values.notifyOnComplete)}
                       className={`relative mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                        values.notifyOnComplete ? "bg-[#1f8a4c]" : "bg-[#d7d3cc]"
+                        values.notifyOnComplete ? "bg-[#1f6b4d]" : "bg-[#dedad2]"
                       }`}
                     >
                       <span
