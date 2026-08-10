@@ -446,6 +446,7 @@ export class RuntimeConfigStore {
         anthropic: config.apiKeys.anthropic ? "••••••" : null,
         openai: config.apiKeys.openai ? "••••••" : null,
         mistral: config.apiKeys.mistral ? "••••••" : null,
+        groq: config.apiKeys.groq ? "••••••" : null,
         bedrock: config.apiKeys.bedrock
           ? {
               region: config.apiKeys.bedrock.region,

@@ -15,5 +15,8 @@ export default async function EvaluationsIndexPage() {
   const { isAdmin, permissions } = await createServerTrpcContext();
   if (!isAdmin && !permissions.has("evaluation:review")) notFound();
 
-  return <EvaluationsIndexContent />;
+  // Resolved here rather than queried in the client: the page already holds the
+  // caller's permissions, and offering a link that 404s would be worse than not
+  // offering it.
+  return <EvaluationsIndexContent canCreate={isAdmin || permissions.has("evaluation:create")} />;
 }

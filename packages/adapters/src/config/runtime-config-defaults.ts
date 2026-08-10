@@ -65,7 +65,7 @@ import {
 } from "@rbrasier/shared";
 
 export const ALL_PURPOSES: AiPurpose[] = ["chat", "documentGeneration", "branching"];
-export const ALL_PROVIDERS: ProviderName[] = ["anthropic", "openai", "mistral", "bedrock"];
+export const ALL_PROVIDERS: ProviderName[] = ["anthropic", "openai", "mistral", "bedrock", "groq"];
 
 export const DEFAULT_MODELS_FOR: Record<ProviderName, Record<AiPurpose, string>> = {
   anthropic: {
@@ -88,6 +88,14 @@ export const DEFAULT_MODELS_FOR: Record<ProviderName, Record<AiPurpose, string>>
     documentGeneration: "anthropic.claude-opus-5",
     branching: "anthropic.claude-sonnet-5",
   },
+  // One model across all three purposes: Groq's catalogue turns over quickly, so
+  // a second id here is a second thing to go stale. Override per purpose in the
+  // admin Settings page when a run wants a larger or smaller model.
+  groq: {
+    chat: "openai/gpt-oss-120b",
+    documentGeneration: "openai/gpt-oss-120b",
+    branching: "openai/gpt-oss-120b",
+  },
 };
 
 export interface EnvDefaults {
@@ -96,6 +104,7 @@ export interface EnvDefaults {
     anthropic: string | null;
     openai: string | null;
     mistral: string | null;
+    groq: string | null;
     bedrock: BedrockCredentials | null;
   };
   storage: StorageConfig;
@@ -158,6 +167,7 @@ export const parseAiConfig = (raw: string, fallback: AiConfig): AiConfig => {
       anthropic: typeof rawKeys.anthropic === "string" && rawKeys.anthropic.length > 0 ? rawKeys.anthropic : fallback.apiKeys.anthropic,
       openai: typeof rawKeys.openai === "string" && rawKeys.openai.length > 0 ? rawKeys.openai : fallback.apiKeys.openai,
       mistral: typeof rawKeys.mistral === "string" && rawKeys.mistral.length > 0 ? rawKeys.mistral : fallback.apiKeys.mistral,
+      groq: typeof rawKeys.groq === "string" && rawKeys.groq.length > 0 ? rawKeys.groq : fallback.apiKeys.groq,
       bedrock: bedrockKeyPresent
         ? parseBedrockCredentials(rawKeys.bedrock, fallback.apiKeys.bedrock)
         : fallback.apiKeys.bedrock,
@@ -295,6 +305,10 @@ export const MODEL_CONTEXT_WINDOWS: Record<ProviderName, Record<string, number>>
     "anthropic.claude-sonnet-4-5-20250929-v1:0": 200_000,
     "anthropic.claude-sonnet-5": 1_000_000,
     "anthropic.claude-opus-5": 1_000_000,
+  },
+  groq: {
+    "openai/gpt-oss-120b": 131_072,
+    "openai/gpt-oss-20b": 131_072,
   },
 };
 

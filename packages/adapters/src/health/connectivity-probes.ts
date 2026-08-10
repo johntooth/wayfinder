@@ -97,7 +97,7 @@ interface HttpProbeDeps {
   timeoutMs?: number;
 }
 
-const AI_HTTP_ENDPOINT: Record<"anthropic" | "openai" | "mistral", (key: string) => Omit<HttpProbeOptions, "fetchFn" | "timeoutMs">> = {
+const AI_HTTP_ENDPOINT: Record<"anthropic" | "openai" | "mistral" | "groq", (key: string) => Omit<HttpProbeOptions, "fetchFn" | "timeoutMs">> = {
   anthropic: (key) => ({
     url: "https://api.anthropic.com/v1/models?limit=1",
     headers: { "x-api-key": key, "anthropic-version": ANTHROPIC_VERSION },
@@ -108,6 +108,12 @@ const AI_HTTP_ENDPOINT: Record<"anthropic" | "openai" | "mistral", (key: string)
   }),
   mistral: (key) => ({
     url: "https://api.mistral.ai/v1/models",
+    headers: { Authorization: `Bearer ${key}` },
+  }),
+  // Its own host, not OpenAI's — the same distinction the provider registry
+  // draws. Probing api.openai.com with a Groq key would report a false failure.
+  groq: (key) => ({
+    url: "https://api.groq.com/openai/v1/models",
     headers: { Authorization: `Bearer ${key}` },
   }),
 };

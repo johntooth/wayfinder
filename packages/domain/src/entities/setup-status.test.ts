@@ -24,7 +24,7 @@ const storage = (overrides: Partial<StorageConfig> = {}): StorageConfig => ({
 
 const ai = (overrides: Partial<AiConfig> = {}): AiConfig => ({
   provider: "anthropic",
-  apiKeys: { anthropic: "sk-ant", openai: null, mistral: null, bedrock: null },
+  apiKeys: { anthropic: "sk-ant", openai: null, mistral: null, groq: null, bedrock: null },
   models: { chat: "m", documentGeneration: "m", branching: "m" },
   ...overrides,
 });
@@ -55,7 +55,7 @@ describe("isAiConfigured", () => {
   });
 
   it("is false when the selected provider's key is missing", () => {
-    expect(isAiConfigured(ai({ apiKeys: { anthropic: null, openai: null, mistral: null, bedrock: null } }))).toBe(false);
+    expect(isAiConfigured(ai({ apiKeys: { anthropic: null, openai: null, mistral: null, groq: null, bedrock: null } }))).toBe(false);
   });
 
   it("checks bedrock credentials for the bedrock provider", () => {
@@ -65,6 +65,7 @@ describe("isAiConfigured", () => {
         anthropic: null,
         openai: null,
         mistral: null,
+        groq: null,
         bedrock: { region: "us-east-1", accessKeyId: "a", secretAccessKey: "s" },
       },
     });

@@ -8,11 +8,13 @@ import type {
   IAdjudicator,
   IChunkStore,
   IClassificationLensReader,
+  IClassificationLensWriter,
   IEvaluationRepository,
   IFinancialExtractor,
   ILanguageModel,
   IProcurementClassifier,
   IProcurementExtractionReader,
+  IStagedCorpusReader,
   ProcurementResponse,
   Result,
   ResponseGroup,
@@ -90,10 +92,14 @@ class FakeChunkStore implements IChunkStore {
 
 const adjudicator: IAdjudicator = {
   async adjudicate(request: AdjudicationRequest): Promise<Result<Adjudication>> {
+    // Adjudication returns one chosen topic and its reasoning. This fixture was
+    // written against an earlier shape carrying a topics[] with per-topic
+    // evidence, which is why it stopped typechecking against the domain the fork
+    // now resolves.
     return ok({
       documentId: request.documentId,
       chosenTopicId: request.candidates[0]?.topicId ?? "req-1",
-      rationale: "",
+      rationale: `chose from ${request.passages.length} passages`,
     });
   },
 };
@@ -142,12 +148,29 @@ const classifier: IProcurementClassifier = buildColdStartClassifier({
   lensReader,
 });
 
+const stagedCorpusReader: IStagedCorpusReader = {
+  async listCorpora() {
+    return ok([{ corpusId: evaluationId, documentCount: 1 }]);
+  },
+  async listDocuments() {
+    return ok([{ documentId: "doc-1", chunkCount: 2, preview: "Response of Acme" }]);
+  },
+};
+
+const lensWriter: IClassificationLensWriter = {
+  async saveLens() {
+    return ok(undefined);
+  },
+};
+
 const dependencies = (overrides: Partial<RedlineModuleDependencies> = {}): RedlineModuleDependencies => ({
   repository: new InMemoryRepository(),
   classifier,
   financialExtractor,
   extractionReader,
   languageModel,
+  stagedCorpusReader,
+  lensWriter,
   productName: "Platform",
   ...overrides,
 });

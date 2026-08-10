@@ -14,6 +14,7 @@ export interface AiConfig {
     anthropic: string | null;
     openai: string | null;
     mistral: string | null;
+    groq: string | null;
     bedrock: BedrockCredentials | null;
   };
   models: Record<AiPurpose, string>;

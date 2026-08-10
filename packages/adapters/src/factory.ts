@@ -44,6 +44,7 @@ export interface AdaptersConfig {
     anthropic?: string;
     openai?: string;
     mistral?: string;
+    groq?: string;
     bedrock?: {
       region: string;
       accessKeyId: string;
@@ -113,6 +114,7 @@ export function createAdapters(db: Database, config: AdaptersConfig): Adapters {
       anthropic: aiKeys.anthropic ?? null,
       openai: aiKeys.openai ?? null,
       mistral: aiKeys.mistral ?? null,
+      groq: aiKeys.groq ?? null,
       bedrock: aiKeys.bedrock ?? null,
     },
     storage: {

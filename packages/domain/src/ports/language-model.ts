@@ -1,6 +1,6 @@
 import type { Result } from "../result";
 
-export type ProviderName = "anthropic" | "openai" | "mistral" | "bedrock";
+export type ProviderName = "anthropic" | "openai" | "mistral" | "bedrock" | "groq";
 
 // Provider-specific message annotations passed through opaquely by the port so a
 // caller can, e.g., mark a message with Anthropic `cacheControl` without the

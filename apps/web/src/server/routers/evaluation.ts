@@ -16,7 +16,10 @@ import type {
   Evaluation,
   ExtractionElement,
   Result,
+  StagedCorpus,
+  StagedDocument,
 } from "@redline/redline-domain";
+import type { CreateEvaluationInput } from "@redline/redline-application";
 import { isErr } from "@redline/redline-domain";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -35,6 +38,9 @@ import { permissionProcedure, router } from "../trpc";
 // with a real container field.
 interface EvaluationController {
   listEvaluations(): Promise<Result<readonly Evaluation[]>>;
+  listStagedCorpora(): Promise<Result<readonly StagedCorpus[]>>;
+  listStagedDocuments(input: { corpusId: string }): Promise<Result<readonly StagedDocument[]>>;
+  createEvaluation(input: CreateEvaluationInput): Promise<Result<Evaluation>>;
   openReviewGrid(input: { evaluationId: string }): Promise<Result<ReviewGrid>>;
   openPricingPivot(input: { evaluationId: string }): Promise<Result<PricingPivot>>;
   buildWorkbook(input: { evaluationId: string }): Promise<Result<EvaluationWorkbook>>;
@@ -89,6 +95,12 @@ const toTrpcError = (error: DomainError): TRPCError =>
 // authenticatedProcedure, which permissionProcedure composes.
 const reviewProcedure = permissionProcedure("evaluation:review");
 
+// Creating an evaluation is a write, and the review key's own description covers
+// opening the grid, the pivots and the export — not bringing a tender into
+// being. Split the same way the fork splits extraction:author from
+// extraction:run, so a reviewer cannot start one.
+const createProcedure = permissionProcedure("evaluation:create");
+
 // An evaluationId is operator-authored — `redline_evaluations.id` is `text`, the
 // domain type is `string`, and the corpus manifest lets the operator name it. A
 // uuid() input rejected every such evaluation here, so it was created and then
@@ -122,6 +134,23 @@ const documentInput = evaluationIdInput.extend({
   element: z.number().int().nonnegative().optional(),
 });
 
+// A corpus id is the prefix an operator staged under, so it is a non-blank
+// string and never a uuid — the same reasoning as evaluationId above. A brand is
+// what the specialist types; a field is a name plus the prose an adjudicator
+// reasons from. All of it is validated again in the domain, which owns the
+// blank-name and unknown-document rules; this schema only keeps malformed shapes
+// off the wire.
+const createInput = z.object({
+  corpusId: z.string().min(1),
+  name: z.string().min(1),
+  documents: z
+    .array(z.object({ documentId: z.string().min(1), brand: z.string().min(1) }))
+    .min(1),
+  fields: z
+    .array(z.object({ name: z.string().min(1), definition: z.string().min(1) }))
+    .min(1),
+});
+
 export const evaluationRouter = router({
   // The evaluations index (delivery-plan item 2): the way in for a specialist who
   // has neither the URL shape nor an evaluation id. Unlike its siblings this
@@ -132,6 +161,34 @@ export const evaluationRouter = router({
     const evaluations = await controllerOf(ctx).listEvaluations();
     if (isErr(evaluations)) throw toTrpcError(evaluations.error);
     return evaluations.data;
+  }),
+
+  // What the create screen picks from: the corpora the sidecar's load path has
+  // already staged. Gated on create, not review — it is the first step of
+  // starting an evaluation, and it discloses which corpora exist.
+  stagedCorpora: createProcedure.query(async ({ ctx }) => {
+    const corpora = await controllerOf(ctx).listStagedCorpora();
+    if (isErr(corpora)) throw toTrpcError(corpora.error);
+    return corpora.data;
+  }),
+
+  // One corpus's documents, each with the opening passage that makes an opaque
+  // womblex source_hash choosable.
+  stagedDocuments: createProcedure
+    .input(z.object({ corpusId: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const documents = await controllerOf(ctx).listStagedDocuments({ corpusId: input.corpusId });
+      if (isErr(documents)) throw toTrpcError(documents.error);
+      return documents.data;
+    }),
+
+  // The router's first mutation. Until it existed an evaluation could only be
+  // created by a terminal script reading a hand-written manifest, so nothing in
+  // the browser could start one.
+  create: createProcedure.input(createInput).mutation(async ({ ctx, input }) => {
+    const created = await controllerOf(ctx).createEvaluation(input);
+    if (isErr(created)) throw toTrpcError(created.error);
+    return created.data;
   }),
 
   // The sortable/filterable review table for an evaluation at the review stage.

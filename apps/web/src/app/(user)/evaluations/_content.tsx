@@ -33,17 +33,28 @@ function StageBadge({ stage }: { stage: IntakeStage }) {
   );
 }
 
-export function EvaluationsIndexContent() {
+export function EvaluationsIndexContent({ canCreate }: { canCreate: boolean }) {
   const evaluationsQuery = trpc.evaluation.list.useQuery();
 
   return (
     <div className="mx-auto flex max-w-[1200px] flex-col gap-[16px] px-[20px] py-[24px]">
-      <header className="flex flex-col gap-[4px]">
-        <h1 className="text-[20px] font-bold text-[#1a1814]">Evaluations</h1>
-        <p className="max-w-[640px] text-[13px] text-[#5a5650]">
-          Every procurement evaluation, most recent first. Open one to see each
-          response delineated by topic and brand.
-        </p>
+      <header className="flex items-start justify-between gap-[12px]">
+        <div className="flex flex-col gap-[4px]">
+          <h1 className="text-[20px] font-bold text-[#1a1814]">Evaluations</h1>
+          <p className="max-w-[640px] text-[13px] text-[#5a5650]">
+            Every procurement evaluation, most recent first. Open one to see each
+            response delineated by topic and brand.
+          </p>
+        </div>
+        {canCreate && (
+          <Link
+            href="/evaluations/new"
+            data-testid="new-evaluation"
+            className="shrink-0 rounded-[6px] bg-[#3a5fd9] px-[12px] py-[7px] text-[13px] font-medium text-white"
+          >
+            New evaluation
+          </Link>
+        )}
       </header>
 
       {evaluationsQuery.isPending && (
@@ -58,8 +69,8 @@ export function EvaluationsIndexContent() {
 
       {evaluationsQuery.data?.length === 0 && (
         <p className="text-[13px] text-[#6d6a65]" data-testid="evaluations-empty">
-          No evaluations yet. One appears here once a corpus has been ingested and
-          grouped.
+          No evaluations yet. Start one over a staged corpus to see its responses
+          delineated here.
         </p>
       )}
 

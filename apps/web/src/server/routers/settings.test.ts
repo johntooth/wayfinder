@@ -10,6 +10,7 @@ const stored: AiConfig["apiKeys"] = {
   anthropic: "sk-stored-anthropic",
   openai: null,
   mistral: null,
+  groq: null,
   bedrock: {
     region: "us-east-1",
     accessKeyId: "AKIA-stored",

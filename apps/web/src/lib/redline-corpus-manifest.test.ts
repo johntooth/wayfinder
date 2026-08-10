@@ -123,6 +123,22 @@ describe("parseCorpusManifest", () => {
     expect(parsed.data?.lens.rules).toEqual([]);
   });
 
+  // A hard rule matches an identifier token, never prose. A pattern no token can
+  // satisfy would silently never fire and fall through to the model, so the
+  // parser rejects it here, naming the rule.
+  it("rejects a rule whose pattern can match no identifier, naming the rule", () => {
+    const parsed = parseCorpusManifest({
+      ...validManifest,
+      lens: {
+        ...validManifest.lens,
+        rules: [{ id: "rule-sla", pattern: "service level", topicId: "topic-safety" }],
+      },
+    });
+
+    expect(parsed.error?.code).toBe("VALIDATION_FAILED");
+    expect(parsed.error?.message).toContain("rule-sla");
+  });
+
   it("carries a consortium's members through to the vendor input", () => {
     const parsed = parseCorpusManifest({
       ...validManifest,

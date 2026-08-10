@@ -319,6 +319,7 @@ const build = () => {
       openai: env.OPENAI_API_KEY ?? null,
       mistral: env.MISTRAL_API_KEY ?? null,
       bedrock: bedrockEnvCredentials,
+      groq: env.GROQ_API_KEY ?? null,
     },
     storage: {
       endpoint: env.MINIO_ENDPOINT,

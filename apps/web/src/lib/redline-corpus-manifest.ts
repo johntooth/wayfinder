@@ -1,4 +1,4 @@
-import { domainError, err, ok, type Result } from "@redline/redline-domain";
+import { domainError, err, isErr, makeHardRule, ok, type Result } from "@redline/redline-domain";
 import type { ResponseGroupInput, VendorInput } from "@redline/redline-application";
 import type { ClassificationLensDefinition } from "@redline/redline-domain";
 
@@ -96,7 +96,13 @@ const readRules = (lens: Record<string, unknown>): Result<ClassificationLensDefi
     const topicId = readString(raw, "topicId", path);
     if (topicId.error) return topicId;
 
-    rules.push({ id: id.data, pattern: pattern.data, topicId: topicId.data });
+    // makeHardRule owns the pattern's matchability: a rule matches an identifier
+    // token, never prose, so a pattern no token can satisfy is an authoring
+    // error rejected here rather than silently never firing.
+    const rule = makeHardRule({ id: id.data, pattern: pattern.data, topicId: topicId.data });
+    if (isErr(rule)) return rule;
+
+    rules.push(rule.data);
   }
   return ok(rules);
 };
