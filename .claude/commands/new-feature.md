@@ -26,7 +26,59 @@ Ask all of these via `AskUserQuestion` before proceeding:
    - Which LLM provider should be the default? (`anthropic` / `openai` / `mistral`)
    - Should Langfuse observability be enabled day one or stubbed out?
 
-**After gathering answers:** Output a bulleted summary to the chat covering: the docs that will be generated (PRD, ADRs, phase doc), the key entities and features to be covered, any DB changes and their table prefix, and the planned version bump. Do this as regular chat text — do NOT put it inside `AskUserQuestion`. Then use `AskUserQuestion` to ask: "Does this look right before I generate the docs?" Wait for confirmation before starting the workflow.
+---
+
+## Change Summary — before any doc is written
+
+Once the questions are answered, and before creating a single file, output the
+change summary below to the chat as regular markdown. Do **not** put it inside
+`AskUserQuestion`.
+
+This skill plans; it does not build. Every section here describes what the
+generated docs will specify, not work being carried out now.
+
+**Headline first.** Open with 3–5 lines of plain prose covering the whole
+feature, so the user can approve on the headline alone without reading the
+sections.
+
+**Then these sections, in this order,** each an `###` heading with bullets under it:
+
+| Section | What it covers |
+|---|---|
+| Goal | The problem being solved and who it is for, in their terms |
+| Business rules changing | Every rule the feature introduces, stated with its triggering condition and resulting behaviour — e.g. "when `status = "approved"`, the document locks and further revisions are rejected" |
+| UI / visible behaviour | What the user will see — screens, states, copy, empty and error states — each tied to the type, data structure or rule that drives it |
+| Data & types | Domain entities, value objects and TypeScript types the feature introduces, with the shape of each |
+| Files & packages touched | The docs to be generated (PRD, ADRs, phase doc) by path, plus the `domain` / `application` / `adapters` / `apps` packages the phase doc will target, so architecture-boundary problems surface at planning time |
+| Database & migration impact | Tables and their group prefix, and whether the phase doc will call for a generated migration and its `-- data-impact:` declaration |
+| Version, branch & PR target | The MINOR or PATCH bump the feature warrants against `main`'s version line — planned here, applied by `/build`, never by this skill |
+| Risks | What could break, and anything destructive or irreversible |
+| Out of scope | What is deliberately not being covered by these docs |
+
+**Omit any section that does not apply** — no heading, no "N/A" placeholder.
+Since this skill writes no code, sections with nothing to say simply disappear.
+
+**Cap each section at 5 bullets.** If more are warranted, keep the 5 most
+significant and close the section with a single `…and N more` bullet.
+
+### Approval gate
+
+Then use `AskUserQuestion` offering exactly three routes:
+
+- **Approve** — generate the docs as summarised.
+- **Approve with notes** — generate the docs immediately, applying the notes
+  given. Do not re-show the summary and do not ask a second time.
+- **Amend** — revise the summary against the feedback and show it again,
+  looping until Approve or Approve with notes is chosen.
+
+Do not generate any doc until one of the two approving routes is chosen.
+
+**Persist it — only once approved.** While the summary is still being amended it
+stays in chat only, so no unapproved or superseded version ever reaches a doc.
+On Approve or Approve with notes, fold in any notes given and then append the
+resulting summary to a doc for this feature, if one already exists. If none
+exists yet, leave it in chat — never create a doc just to house it — and carry
+the approved summary into the phase doc when the workflow generates it.
 
 ---
 
