@@ -261,6 +261,41 @@ test.skip(!(await edit.isVisible().catch(() => false)), "no document");  // stil
 Unblocking a guard just moves the spec to the next one. Expect a cluster to pay
 out over two passes, not one.
 
+### What the skips were hiding (run #688)
+
+The composer cluster recovered twelve tests and broke two, which is the first
+time un-skipping produced a failure. Both were worth having:
+
+`chat.spec.ts › sending a message shows AI response` waited on
+`[data-testid="message"], [class*="message"], [class*="chat-message"],
+[role="log"] > *`. **None of those exist.** `message-feed.tsx` has no
+`data-testid`, no `[role="log"]`, and its Tailwind classes contain no
+"message" — the only hooks were `data-participant-message` and
+`data-message-time`. The test reported "AI response did not appear" for a reply
+that was on screen the whole time.
+
+`multi-turn conversation works`, in the same file, waited on the same dead
+selectors — and then `.catch(() => {})` the timeout. It burned 8s per turn and
+passed regardless. That is the failure mode this whole exercise is named for: a
+green test asserting nothing.
+
+`code-quality-hot-paths › a committed turn keeps its user message and assistant
+reply after reload` was worse than rotted. It is a *persistence* test, and the
+browser mock intercepts `/api/chat/[sessionId]/stream` — the route that
+executes the turn and commits it. Under that mock the server never runs, nothing
+is written, and a reload could only ever show an empty thread. It also never
+asserted the assistant reply its own name promises. It now drives the
+server-side stub (`scriptAiFor`) and checks both halves survive the reload.
+
+The feed now carries `data-chat-message="user" | "assistant"`, matching the
+`data-*` convention the rest of the app already uses for E2E hooks. Prefer it
+over class or role guesses; the typing indicator deliberately does not carry it,
+so waiting for an assistant bubble cannot match the dots.
+
+**A skipping test is not a neutral cost.** These three rotted silently for as
+long as the guard kept them disarmed, and two of them would have kept reporting
+success.
+
 ### Approvals specs act on `.first()` — they can consume each other
 
 Now that the approvals-list guards actually pass, specs that previously never

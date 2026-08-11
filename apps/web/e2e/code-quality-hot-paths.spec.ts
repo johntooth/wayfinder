@@ -8,6 +8,7 @@
  */
 
 import { test, expect } from './helpers/base';
+import { clearAiScript, completeTurn, scriptAiFor } from './helpers/ai-script';
 import { requireSeedFixtures } from './helpers/seed';
 import { openAllSettingsSections } from './helpers/settings';
 import { NO_COMPOSER } from './helpers/skip-reasons';
@@ -92,17 +93,26 @@ test.describe('Code quality Group A: session-list hot-path aggregation', () => {
  * sent turn's user message and its assistant reply both persist across a reload.
  */
 test.describe('Code quality Group C: transactional turn persistence', () => {
+  const ASSISTANT_REPLY = 'Recorded — this turn is committed to the thread.';
+
+  test.afterEach(async ({ page }) => {
+    await clearAiScript(page, requireSeedFixtures().sessionId);
+  });
+
   test('a committed turn keeps its user message and assistant reply after reload', async ({
     page,
   }) => {
-    const sessionId = requireSeedFixtures().sessionId;
-    if (!sessionId) {
-      test.skip(true, 'Seed fixtures unavailable — seed to enable this test');
-      return;
-    }
+    const { sessionId } = requireSeedFixtures();
+
+    // Persistence is the whole assertion, so the turn has to reach the server.
+    // The browser-level mock in helpers/base.ts intercepts
+    // /api/chat/[sessionId]/stream — the route that executes the turn and
+    // commits it — so under that mock nothing is ever written and a reload
+    // could only ever show an empty thread. scriptAiFor unroutes it and drives
+    // the server-side model instead.
+    await scriptAiFor(page, sessionId, [completeTurn(ASSISTANT_REPLY)]);
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
 
     const input = page
       .locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]')
@@ -116,20 +126,20 @@ test.describe('Code quality Group C: transactional turn persistence', () => {
     await input.fill(userMessage);
     await input.press('Enter');
 
-    // The user turn renders immediately, and the assistant reply follows once the
-    // (mocked) model call and the transactional persist complete.
-    await expect(page.getByText(userMessage)).toBeVisible({ timeout: 10_000 });
-    await page.waitForSelector(
-      ['[data-testid="message"]', '[class*="message"]', '[role="log"] > *'].join(', '),
-      { timeout: 8_000 },
-    );
+    // A real turn now: the server call, then the transactional persist.
+    await expect(page.getByText(userMessage)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(ASSISTANT_REPLY)).toBeVisible({ timeout: 30_000 });
 
-    // Reload: only committed rows come back. The turn's user message must still be
-    // there, proving the transaction committed rather than leaving a half-applied
-    // (or rolled-back) turn.
+    // Reload: only committed rows come back. Both halves of the turn must
+    // return, proving the transaction committed rather than leaving a
+    // half-applied (or rolled-back) turn. Asserting the reply as well as the
+    // message is the point of the test's name, and it was never checked —
+    // the old middle step waited on selectors that match nothing in
+    // message-feed.tsx, and the reload only ever re-checked the user message.
     await page.reload();
     await page.waitForLoadState('networkidle');
     await expect(page.getByText(userMessage)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(ASSISTANT_REPLY)).toBeVisible({ timeout: 10_000 });
   });
 });
 

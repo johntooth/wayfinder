@@ -142,19 +142,13 @@ test.describe('Chat: Session', () => {
     // Wait for AI response (mocked = fast, real = up to 30s)
     const timeout = process.env.USE_REAL_AI === 'true' ? 30_000 : 8_000;
 
-    try {
-      await page.waitForSelector([
-        '[data-testid="message"]',
-        '[class*="message"]',
-        '[class*="chat-message"]',
-        '[role="log"] > *',
-      ].join(', '), { timeout });
-
-      await page.screenshot({ path: 'screenshots/chat-ai-responded.png', fullPage: true });
-    } catch {
-      await page.screenshot({ path: 'screenshots/chat-after-send-timeout.png', fullPage: true });
-      throw new Error(`AI response did not appear within ${timeout}ms — see screenshot`);
-    }
+    // None of the four selectors this used to wait for exist in the feed:
+    // message-feed.tsx has no data-testid, no [role="log"], and its Tailwind
+    // classes contain no "message". It reported "AI response did not appear"
+    // for a reply that was on screen the whole time, and only surfaced at all
+    // once the composer guard stopped skipping the test.
+    await expect(page.locator('[data-chat-message="assistant"]').first()).toBeVisible({ timeout });
+    await page.screenshot({ path: 'screenshots/chat-ai-responded.png', fullPage: true });
 
     const errors = consoleLogs.filter(l => l.type === 'error');
     expect(errors, `Errors during chat:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
@@ -201,8 +195,13 @@ test.describe('Chat: Session', () => {
         { timeout }
       ).catch(() => {});
 
-      // Wait for the response to appear before the next turn
-      await page.waitForSelector('[class*="message"], [data-testid="message"]', { timeout }).catch(() => {});
+      // Wait for the response to appear before the next turn.
+      //
+      // This used to wait on the same dead selectors and then `.catch(() => {})`
+      // the timeout, so the test spent 8s per turn proving nothing and passed
+      // regardless. Each turn must add an assistant bubble, so assert the count
+      // instead of swallowing the wait.
+      await expect(page.locator('[data-chat-message="assistant"]')).toHaveCount(i + 1, { timeout });
 
       await page.screenshot({
         path: `screenshots/chat-turn-${i + 1}.png`,
