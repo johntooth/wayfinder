@@ -29,10 +29,14 @@ export interface FlowSnapshotNode {
   config: Record<string, unknown>;
 }
 
+// `config` is optional: snapshots published before edges carried any config
+// have no such key, and must read back as an edge with empty config rather than
+// as a malformed one.
 export interface FlowSnapshotEdge {
   id: string;
   fromNodeId: string;
   toNodeId: string;
+  config?: Record<string, unknown>;
 }
 
 // Self-contained, frozen copy of a flow's full definition. Stored as jsonb so a
@@ -109,6 +113,7 @@ export const buildFlowSnapshot = (
     id: edge.id,
     fromNodeId: edge.fromNodeId,
     toNodeId: edge.toNodeId,
+    config: edge.config,
   })),
 });
 
@@ -163,6 +168,7 @@ export const flowEdgesFromSnapshot = (
     flowId,
     fromNodeId: edge.fromNodeId,
     toNodeId: edge.toNodeId,
+    config: edge.config ?? {},
     createdAt: at,
     updatedAt: at,
   }));

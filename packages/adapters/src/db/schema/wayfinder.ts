@@ -95,6 +95,10 @@ export const app_flow_edges = pgTable(
     to_node_id: uuid("to_node_id")
       .notNull()
       .references(() => app_flow_nodes.id, { onDelete: "cascade" }),
+    // Per-edge authoring data — today the branch rule stating when a fork should
+    // take this edge. jsonb rather than a column per property so the next edge
+    // property needs no migration.
+    config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

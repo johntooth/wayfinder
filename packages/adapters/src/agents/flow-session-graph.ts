@@ -124,14 +124,23 @@ export class FlowSessionGraph implements ISessionAgent {
   buildBranchChoicePrompt(input: BuildBranchChoicePromptInput): Result<string> {
     const branchList = input.branchNodes
       .map((node) => {
+        const rule = node.rule?.trim();
+        // A rule is the author's own statement of when to take the branch, so it
+        // is labelled as a condition. A purpose is only the step describing
+        // itself — labelling the two the same way would invite the model to read
+        // a job description as a routing condition.
+        if (rule) return `- ${node.id} (${node.name})\n  Take this branch when: ${rule}`;
+
         const purpose = node.purpose?.trim();
-        return purpose ? `- ${node.id} (${node.name}): ${purpose}` : `- ${node.id} (${node.name})`;
+        if (purpose) return `- ${node.id} (${node.name})\n  This step's own description: ${purpose}`;
+
+        return `- ${node.id} (${node.name})`;
       })
       .join("\n");
 
     const prompt = `Based on the conversation below, select the most appropriate next step.
 
-Each branch lists its node id, name, and (where available) the purpose describing when it applies. Compare the conversation against each branch's purpose and choose the one that fits best.
+Each branch lists its node id and name. A branch may also carry a stated condition ("Take this branch when: …") written by the workflow's author — where one is given, it is the authority on when that branch applies, so match the conversation against it directly. A branch with only "This step's own description" has no stated condition; infer from that description whether the conversation calls for it, and prefer a branch whose stated condition clearly matches over one you had to infer.
 
 Available branches:
 ${branchList}

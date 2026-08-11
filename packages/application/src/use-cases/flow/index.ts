@@ -9,6 +9,7 @@ export * from "./update-flow-node-position";
 export * from "./delete-flow-node";
 export * from "./create-flow-edge";
 export * from "./delete-flow-edge";
+export * from "./set-flow-edge-branch-rule";
 export * from "./add-context-doc";
 export * from "./remove-context-doc";
 export * from "./grant-flow-owner";

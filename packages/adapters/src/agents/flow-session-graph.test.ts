@@ -411,4 +411,42 @@ describe("FlowSessionGraph.buildBranchChoicePrompt", () => {
     expect(result.data).toContain("The request exceeds the approval limit");
     expect(result.data).not.toContain("undefined");
   });
+
+  it("states a branch's rule as the condition for taking it", () => {
+    const result = agent.buildBranchChoicePrompt({
+      branchNodes: [
+        { id: "node-a", name: "Fast track", rule: "spend is under £1,000" },
+        { id: "node-b", name: "Full review", rule: "spend is £1,000 or over" },
+      ],
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toContain("Take this branch when: spend is under £1,000");
+    expect(result.data).toContain("Take this branch when: spend is £1,000 or over");
+  });
+
+  it("distinguishes a stated rule from a step's own description", () => {
+    const result = agent.buildBranchChoicePrompt({
+      branchNodes: [
+        { id: "node-a", name: "Fast track", rule: "spend is under £1,000" },
+        { id: "node-b", name: "Full review", purpose: "the review is signed off" },
+      ],
+    });
+
+    expect(result.data).toContain("Take this branch when: spend is under £1,000");
+    expect(result.data).toContain("This step's own description: the review is signed off");
+  });
+
+  it("remains well-formed when a branch carries neither a rule nor a purpose", () => {
+    const result = agent.buildBranchChoicePrompt({
+      branchNodes: [
+        { id: "node-a", name: "Fast track", rule: "spend is under £1,000" },
+        { id: "node-b", name: "Full review" },
+      ],
+    });
+
+    expect(result.data).toContain("node-b");
+    expect(result.data).toContain("Full review");
+    expect(result.data).not.toContain("undefined");
+  });
 });

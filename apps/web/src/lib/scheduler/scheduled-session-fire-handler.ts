@@ -1,9 +1,11 @@
 import { generateObject } from "ai";
 import { recordTokenUsage, resolveModel } from "@rbrasier/adapters";
 import {
+  buildBranchDescriptors,
   domainError,
   err,
   ok,
+  type FlowEdge,
   type FlowNode,
   type IScheduleFireHandler,
   type PromptUserProfile,
@@ -119,22 +121,12 @@ export class ScheduledSessionFireHandler implements IScheduleFireHandler {
   private async pickBranch(
     schedule: SessionSchedule,
     nodes: FlowNode[],
-    outgoing: { toNodeId: string }[],
+    outgoing: FlowEdge[],
     messages: SessionMessage[],
     model: ReturnType<typeof resolveModel>,
     usage: { provider: string; modelName: string; userId: string },
   ): Promise<Result<string>> {
-    const branchNodes = outgoing.map((edge) => {
-      const node = nodes.find((candidate) => candidate.id === edge.toNodeId);
-      const config = node?.config as { doneWhen?: string; aiInstruction?: string; instruction?: string };
-      const doneWhenPurpose =
-        config?.doneWhen && config.doneWhen !== "__TEMPLATE_COMPLETE__" ? config.doneWhen : undefined;
-      return {
-        id: edge.toNodeId,
-        name: node?.name ?? edge.toNodeId,
-        purpose: doneWhenPurpose ?? config?.aiInstruction ?? config?.instruction,
-      };
-    });
+    const branchNodes = buildBranchDescriptors(nodes, outgoing);
 
     const promptResult = this.container.services.sessionAgent.buildBranchChoicePrompt({ branchNodes });
     if (promptResult.error) return err(promptResult.error);
