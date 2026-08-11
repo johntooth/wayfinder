@@ -261,6 +261,27 @@ test.skip(!(await edit.isVisible().catch(() => false)), "no document");  // stil
 Unblocking a guard just moves the spec to the next one. Expect a cluster to pay
 out over two passes, not one.
 
+### The purpose map (read this before scripting a turn)
+
+`ScriptedLanguageModel` matches on `purpose`, and a script whose purpose the
+code never asks for yields an empty result with **no error anywhere**. Verified
+call sites:
+
+| Purpose | Call site | What it drives |
+|---|---|---|
+| `chat-turn` | `apps/web/.../stream/execute-turn.ts:151` | the conversational turn (reply + confidence) |
+| `chat-branch-choice` | `apps/web/.../stream/execute-turn.ts:199` | picking a fork branch |
+| `chat-gap-followup` | `apps/web/.../stream/turn-helpers.ts:183` | the follow-up that asks for an outstanding gap |
+| `chat-title` | `apps/web/.../stream/session-title.ts:50` | naming the session |
+| `chat` | `packages/application/.../document/generate-document.ts:111` | document generation, including the pre-generation cross-check |
+
+Note the last row. A document-generating step needs **both** `chat-turn` and
+`chat` scripted; scripting only the turn leaves the doc-gen call unscripted and
+the step silently produces nothing. `"chat"` was once put in a script where the
+call site used `"chat-turn"` and the symptom was an empty reply with no failure
+— check `requestedPurposes` from `/api/test/ai-script` first when a scripted
+spec produces nothing.
+
 ### The parked specs are gated on environment variables, not on data
 
 Ten spec families skip on `!process.env.SOMETHING_PATH` while their message
