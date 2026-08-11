@@ -22,23 +22,10 @@
 
 import { test, expect } from './helpers/base';
 import type { Page } from '@playwright/test';
+import { createFlowAndOpenCanvas } from './helpers/flow-builder';
 
 const ADVANCED = '[data-advanced-section="section"]';
 
-async function createFlowAndOpenCanvas(page: Page, name: string): Promise<void> {
-  await page.goto('/admin/flows');
-  await page.waitForLoadState('networkidle');
-
-  await page.getByRole('button', { name: /new flow/i }).first().click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.locator('#flow-name').fill(name);
-  await page.locator('#flow-expert-role').fill('E2E Advanced Section Expert');
-  await page.getByRole('button', { name: /create flow/i }).click();
-  // Creating a flow lands on the canvas editor directly (v0.21.0).
-  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 }).catch(() => undefined);
-  await page.waitForLoadState('networkidle');
-  await page.waitForTimeout(1_200);
-}
 
 async function addConversationalStep(page: Page): Promise<void> {
   await page.getByRole('button', { name: '+ Add step' }).first().click();
@@ -53,7 +40,7 @@ test.describe('node config: Advanced section', () => {
   test('a new conversational step opens with the secondary controls collapsed', async ({
     page,
   }) => {
-    await createFlowAndOpenCanvas(page, `Advanced Section ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Advanced Section ${Date.now()}`, { expertRole: 'E2E Advanced Section Expert' });
     await addConversationalStep(page);
 
     // What defines the step stays in the primary body.
@@ -76,7 +63,7 @@ test.describe('node config: Advanced section', () => {
   test('opening Advanced reveals the controls, with confirmation on by default', async ({
     page,
   }) => {
-    await createFlowAndOpenCanvas(page, `Advanced Reveal ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Advanced Reveal ${Date.now()}`, { expertRole: 'E2E Advanced Section Expert' });
     await addConversationalStep(page);
 
     await page.locator(`${ADVANCED} summary`).click();
@@ -94,7 +81,7 @@ test.describe('node config: Advanced section', () => {
   });
 
   test('switching to an unstructured conversation expands the section', async ({ page }) => {
-    await createFlowAndOpenCanvas(page, `Advanced Unstructured ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Advanced Unstructured ${Date.now()}`, { expertRole: 'E2E Advanced Section Expert' });
     await addConversationalStep(page);
 
     expect(await isOpen(page)).toBe(false);
@@ -112,7 +99,7 @@ test.describe('node config: Advanced section', () => {
   });
 
   test('a control moved into Advanced still round-trips through save', async ({ page }) => {
-    await createFlowAndOpenCanvas(page, `Advanced Roundtrip ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Advanced Roundtrip ${Date.now()}`, { expertRole: 'E2E Advanced Section Expert' });
     await addConversationalStep(page);
 
     await page.locator('#node-name').fill('Gather requirements');

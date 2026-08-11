@@ -20,27 +20,11 @@
  * as the signed-in admin.
  */
 
-import type { Page } from '@playwright/test';
 import { test, expect } from './helpers/base';
+import { createFlow } from './helpers/flow-builder';
 
 // Comfortably larger than the removed CONTEXT_DOCS_TOTAL_BUDGET_CHARS (65 536).
 const OVER_OLD_BUDGET_CHARS = 80_000;
-
-async function createFlowAndResolveId(page: Page, name: string): Promise<string | null> {
-  await page.goto('/admin/flows');
-  await page.waitForLoadState('networkidle');
-
-  await page.getByRole('button', { name: /new flow/i }).first().click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-
-  await page.locator('#flow-name').fill(name);
-  await page.locator('#flow-expert-role').fill('E2E RAG Expert');
-  await page.getByRole('button', { name: /create flow/i }).click();
-  // Creating a flow lands on the canvas editor directly (v0.21.0).
-  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 }).catch(() => undefined);
-  const match = page.url().match(/\/flows\/([^/?]+)\/config/);
-  return match?.[1] ?? null;
-}
 
 test.describe('Phase: RAG with pgvector', () => {
   test('a context document larger than the old 65 KB budget uploads and is indexed', async ({
@@ -54,11 +38,7 @@ test.describe('Phase: RAG with pgvector', () => {
       'Requires an object-storage backend (MinIO/s3rver); set E2E_OBJECT_STORAGE=1.',
     );
 
-    const flowId = await createFlowAndResolveId(page, `RAG Budget ${Date.now()}`);
-    if (!flowId) {
-      test.skip(true, 'Could not create / resolve a flow to upload into');
-      return;
-    }
+    const flowId = await createFlow(page, `RAG Budget ${Date.now()}`, { expertRole: 'E2E RAG Expert' });
 
     const bigText = 'Procurement policy paragraph. '.repeat(
       Math.ceil(OVER_OLD_BUDGET_CHARS / 'Procurement policy paragraph. '.length),
@@ -95,11 +75,7 @@ test.describe('Phase: RAG with pgvector', () => {
   });
 
   test('an unsupported file type is rejected with a client error', async ({ page }) => {
-    const flowId = await createFlowAndResolveId(page, `RAG Reject ${Date.now()}`);
-    if (!flowId) {
-      test.skip(true, 'Could not create / resolve a flow to upload into');
-      return;
-    }
+    const flowId = await createFlow(page, `RAG Reject ${Date.now()}`, { expertRole: 'E2E RAG Expert' });
 
     const response = await page.request.post(`/api/flows/${flowId}/context-docs`, {
       multipart: {

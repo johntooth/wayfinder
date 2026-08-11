@@ -20,27 +20,14 @@
  */
 
 import { test, expect } from './helpers/base';
-import type { Page, Route } from '@playwright/test';
+import type { Route } from '@playwright/test';
+import { createFlowAndOpenCanvas } from './helpers/flow-builder';
 
-async function createFlowAndOpenCanvas(page: Page, name: string): Promise<void> {
-  await page.goto('/admin/flows');
-  await page.waitForLoadState('networkidle');
-
-  await page.getByRole('button', { name: /new flow/i }).first().click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.locator('#flow-name').fill(name);
-  await page.locator('#flow-expert-role').fill('E2E Fix Expert');
-  await page.getByRole('button', { name: /create flow/i }).click();
-  // Creating a flow lands on the canvas editor directly (v0.21.0).
-  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 }).catch(() => undefined);
-  await page.waitForLoadState('networkidle');
-  await page.waitForTimeout(1_200);
-}
 
 test.describe('fix: template upload preserves output type and pre-filled fields', () => {
   test('empty canvas overlay adds a step; output type and fields survive template upload', async ({ page }) => {
     const flowName = `Fix Output Type ${Date.now()}`;
-    await createFlowAndOpenCanvas(page, flowName);
+    await createFlowAndOpenCanvas(page, flowName, { expertRole: 'E2E Fix Expert' });
 
     // 1. Empty canvas shows the large first-step overlay button alongside the
     //    toolbar's "+ Add step" (v0.21.2 renamed the overlay to name the goal

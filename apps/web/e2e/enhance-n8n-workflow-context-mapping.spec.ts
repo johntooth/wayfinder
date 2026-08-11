@@ -21,6 +21,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './helpers/base';
 import { openSettingsSection } from './helpers/settings';
+import { createFlow } from './helpers/flow-builder';
 
 const FLAG_KEY = 'auto_node';
 
@@ -50,21 +51,6 @@ async function enableAutoNodeFlag(page: Page): Promise<boolean> {
   return true;
 }
 
-async function createFlowReturningId(page: Page, name: string): Promise<string | null> {
-  await page.goto('/admin/flows');
-  await page.waitForLoadState('networkidle');
-
-  await page.getByRole('button', { name: /new flow/i }).first().click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.locator('#flow-name').fill(name);
-  await page.locator('#flow-expert-role').fill('E2E n8n Expert');
-  await page.getByRole('button', { name: /create flow/i }).click();
-  // Creating a flow lands on the canvas editor directly (v0.21.0).
-  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 }).catch(() => undefined);
-
-  const match = /\/flows\/([0-9a-f-]{36})/.exec(page.url());
-  return match?.[1] ?? null;
-}
 
 test.describe('n8n workflow directory + step-context field values', () => {
   test('admin settings exposes an n8n Integration card', async ({ page, consoleLogs }) => {
@@ -101,8 +87,7 @@ test.describe('n8n workflow directory + step-context field values', () => {
     const enabled = await enableAutoNodeFlag(page);
     test.skip(!enabled, 'Cannot enable auto_node flag in this environment');
 
-    const flowId = await createFlowReturningId(page, `n8n E2E ${Date.now()}`);
-    test.skip(!flowId, 'Could not create a flow / resolve its id');
+    const flowId = await createFlow(page, `n8n E2E ${Date.now()}`, { expertRole: 'E2E n8n Expert' });
 
     await page.goto(`/flows/${flowId}/config`);
     await page.waitForLoadState('networkidle');

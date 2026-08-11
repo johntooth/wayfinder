@@ -15,39 +15,15 @@
  */
 
 import { test, expect } from './helpers/base';
+import { createFlow } from './helpers/flow-builder';
 
 // Creates a flow via the admin UI and returns its id (read from the canvas URL),
 // or null when the create dialog/UI is unavailable.
-async function createFlow(page: import('@playwright/test').Page, label: string): Promise<string | null> {
-  await page.goto('/admin/flows');
-  await page.waitForLoadState('networkidle');
-
-  await page.getByRole('button', { name: /new flow/i }).click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-
-  const nameInput = page.locator('#flow-name');
-  if (!(await nameInput.isVisible().catch(() => false))) return null;
-
-  await nameInput.fill(`${label} ${Date.now()}`);
-  const expertRoleInput = page.locator('#flow-expert-role');
-  if (await expertRoleInput.isVisible().catch(() => false)) {
-    await expertRoleInput.fill('E2E Versioning Expert');
-  }
-  await page.getByRole('button', { name: /create flow/i }).click();
-  // Creating a flow lands on the canvas editor directly (v0.21.0).
-  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 }).catch(() => undefined);
-
-  const match = page.url().match(/\/flows\/([^/?#]+)\/config/);
-  return match?.[1] ?? null;
-}
-
 test.describe('Phase: Flow Versioning', () => {
   test('publishing a flow records a version shown in Version history', async ({ page, consoleLogs }) => {
-    const flowId = await createFlow(page, 'E2E Versioned Flow');
-    if (!flowId) {
-      test.skip(true, 'Flow create UI unavailable');
-      return;
-    }
+    const flowId = await createFlow(page, `E2E Versioned Flow ${Date.now()}`, {
+      expertRole: 'E2E Versioning Expert',
+    });
 
     // The owner config canvas exposes the publish control and the history panel.
     await page.goto(`/flows/${flowId}/config`);
@@ -83,11 +59,9 @@ test.describe('Phase: Flow Versioning', () => {
   });
 
   test('a never-published flow shows the empty history state', async ({ page }) => {
-    const flowId = await createFlow(page, 'E2E Draft Flow');
-    if (!flowId) {
-      test.skip(true, 'Flow create UI unavailable');
-      return;
-    }
+    const flowId = await createFlow(page, `E2E Draft Flow ${Date.now()}`, {
+      expertRole: 'E2E Versioning Expert',
+    });
 
     await page.goto(`/flows/${flowId}/config`);
     await page.waitForLoadState('networkidle');

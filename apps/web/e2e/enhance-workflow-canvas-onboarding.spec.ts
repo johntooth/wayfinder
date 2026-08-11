@@ -15,23 +15,11 @@
 
 import { test, expect } from './helpers/base';
 import type { Page } from '@playwright/test';
+import { createFlowAndOpenCanvas } from './helpers/flow-builder';
 
 const FIRST_STEP_BUTTON = '+ Create your first step in your workflow';
 const NEXT_STEP_BUTTON = '+ Create the next step in your workflow';
 
-async function createFlowAndOpenCanvas(page: Page, name: string): Promise<void> {
-  await page.goto('/admin/flows');
-  await page.waitForLoadState('networkidle');
-
-  await page.getByRole('button', { name: /new flow/i }).first().click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.locator('#flow-name').fill(name);
-  await page.locator('#flow-expert-role').fill('E2E Onboarding Expert');
-  await page.getByRole('button', { name: /create flow/i }).click();
-  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 }).catch(() => undefined);
-  await page.waitForLoadState('networkidle');
-  await page.waitForTimeout(1_200);
-}
 
 // Resolves the node-type picker and the step config modal that follow every
 // create action, leaving a saved step on the canvas.
@@ -46,7 +34,7 @@ async function configureStep(page: Page, name: string): Promise<void> {
 
 test.describe('canvas onboarding guidance', () => {
   test('an empty canvas asks for the first step, and no next-step prompt yet', async ({ page }) => {
-    await createFlowAndOpenCanvas(page, `Onboarding Empty ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Onboarding Empty ${Date.now()}`, { expertRole: 'E2E Onboarding Expert' });
 
     await expect(page.getByRole('button', { name: FIRST_STEP_BUTTON })).toBeVisible({
       timeout: 15_000,
@@ -65,7 +53,7 @@ test.describe('canvas onboarding guidance', () => {
   test('the next-step prompt appears after the first step and joins what it creates', async ({
     page,
   }) => {
-    await createFlowAndOpenCanvas(page, `Onboarding Next ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Onboarding Next ${Date.now()}`, { expertRole: 'E2E Onboarding Expert' });
 
     await page.getByRole('button', { name: FIRST_STEP_BUTTON }).click();
     await configureStep(page, 'Gather requirements');
@@ -95,7 +83,7 @@ test.describe('canvas onboarding guidance', () => {
   test('a step joined to nothing raises the yellow warning with the drag diagram', async ({
     page,
   }) => {
-    await createFlowAndOpenCanvas(page, `Onboarding Warning ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Onboarding Warning ${Date.now()}`, { expertRole: 'E2E Onboarding Expert' });
 
     await page.getByRole('button', { name: FIRST_STEP_BUTTON }).click();
     await configureStep(page, 'Gather requirements');

@@ -20,26 +20,8 @@
 
 import type { Page } from '@playwright/test';
 import { test, expect } from './helpers/base';
+import { createFlowAndOpenCanvas } from './helpers/flow-builder';
 
-async function createFlowAndOpenCanvas(page: Page, name: string): Promise<void> {
-  await page.goto('/admin/flows');
-  await page.waitForLoadState('networkidle');
-
-  await page.getByRole('button', { name: /new flow/i }).first().click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-
-  await page.locator('#flow-name').fill(name);
-  await page.locator('#flow-expert-role').fill('E2E Test Expert');
-  await page.getByRole('button', { name: /create flow/i }).click();
-
-  // Creating a flow lands on the canvas editor directly (v0.21.0) — there is no
-  // longer a trip back to the list to click "Configure Flow". The canvas route
-  // is heavy (ReactFlow) and in dev mode the first navigation also triggers
-  // on-demand compilation, so allow the full navigation timeout.
-  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 });
-  await page.waitForLoadState('networkidle');
-  await page.waitForTimeout(1_200);
-}
 
 // Publishing lives in the "⋯" Flow actions menu as a flat item:
 // Flow actions → Publish globally (everyone).
@@ -152,7 +134,7 @@ async function connectNodesDetour(
 test.describe('Admin: Two-Step Linear Flow', () => {
   test('admin creates a two-step linear flow', async ({ page, consoleLogs }) => {
     const flowName = `E2E Two-Step ${Date.now()}`;
-    await createFlowAndOpenCanvas(page, flowName);
+    await createFlowAndOpenCanvas(page, flowName, { expertRole: 'E2E Test Expert' });
     await page.screenshot({ path: 'screenshots/two-step-01-empty-canvas.png', fullPage: true });
 
     await addAndConfigureStep(page, {
@@ -186,7 +168,7 @@ test.describe('Admin: Two-Step Linear Flow', () => {
 test.describe('Admin: Branching Flow', () => {
   test('admin creates a branching flow with document step then two paths', async ({ page, consoleLogs }) => {
     const flowName = `E2E Branch ${Date.now()}`;
-    await createFlowAndOpenCanvas(page, flowName);
+    await createFlowAndOpenCanvas(page, flowName, { expertRole: 'E2E Test Expert' });
     await page.screenshot({ path: 'screenshots/branch-01-empty-canvas.png', fullPage: true });
 
     await addAndConfigureStep(page, {

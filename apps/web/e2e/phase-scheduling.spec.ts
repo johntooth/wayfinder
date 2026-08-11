@@ -19,6 +19,7 @@
 
 import type { Page } from '@playwright/test';
 import { test, expect } from './helpers/base';
+import { createFlow } from './helpers/flow-builder';
 
 const FLAG_KEY = 'scheduled_node';
 
@@ -49,21 +50,6 @@ async function enableScheduledFlag(page: Page): Promise<boolean> {
   return true;
 }
 
-async function createFlowReturningId(page: Page, name: string): Promise<string | null> {
-  await page.goto('/admin/flows');
-  await page.waitForLoadState('networkidle');
-
-  await page.getByRole('button', { name: /new flow/i }).first().click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.locator('#flow-name').fill(name);
-  await page.locator('#flow-expert-role').fill('E2E Scheduling Expert');
-  await page.getByRole('button', { name: /create flow/i }).click();
-  // Creating a flow lands on the canvas editor directly (v0.21.0).
-  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 }).catch(() => undefined);
-
-  const match = /\/flows\/([0-9a-f-]{36})/.exec(page.url());
-  return match?.[1] ?? null;
-}
 
 test.describe('Scheduling: scheduled node behind the scheduled_node flag', () => {
   test('admin can enable the scheduled_node feature flag', async ({ page, consoleLogs }) => {
@@ -80,8 +66,7 @@ test.describe('Scheduling: scheduled node behind the scheduled_node flag', () =>
     const enabled = await enableScheduledFlag(page);
     test.skip(!enabled, 'Cannot enable scheduled_node flag in this environment');
 
-    const flowId = await createFlowReturningId(page, `Scheduling E2E ${Date.now()}`);
-    test.skip(!flowId, 'Could not create a flow / resolve its id');
+    const flowId = await createFlow(page, `Scheduling E2E ${Date.now()}`, { expertRole: 'E2E Scheduling Expert' });
 
     await page.goto(`/flows/${flowId}/config`);
     await page.waitForLoadState('networkidle');
@@ -118,8 +103,7 @@ test.describe('Scheduling: scheduled node behind the scheduled_node flag', () =>
     const enabled = await enableScheduledFlag(page);
     test.skip(!enabled, 'Cannot enable scheduled_node flag in this environment');
 
-    const flowId = await createFlowReturningId(page, `Scheduling Validation ${Date.now()}`);
-    test.skip(!flowId, 'Could not create a flow / resolve its id');
+    const flowId = await createFlow(page, `Scheduling Validation ${Date.now()}`, { expertRole: 'E2E Scheduling Expert' });
 
     await page.goto(`/flows/${flowId}/config`);
     await page.waitForLoadState('networkidle');

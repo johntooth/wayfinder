@@ -17,23 +17,8 @@
 
 import type { Page } from '@playwright/test';
 import { test, expect } from './helpers/base';
+import { createFlow } from './helpers/flow-builder';
 
-async function createFlowReturningId(page: Page, name: string): Promise<string | null> {
-  await page.goto('/admin/flows');
-  await page.waitForLoadState('networkidle');
-
-  await page.getByRole('button', { name: /new flow/i }).first().click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.locator('#flow-name').fill(name);
-  await page.locator('#flow-expert-role').fill('E2E RAG Config Expert');
-  await page.getByRole('button', { name: /create flow/i }).click();
-
-  // Creating a flow lands on the canvas editor directly (v0.21.0).
-  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 }).catch(() => undefined);
-
-  const match = /\/flows\/([0-9a-f-]{36})/.exec(page.url());
-  return match?.[1] ?? null;
-}
 
 // Secondary step controls sit behind a collapsed "Advanced" disclosure
 // (v0.27.5). It expands itself for some step types, so only click when closed.
@@ -46,8 +31,7 @@ async function openAdvanced(page: Page): Promise<void> {
 
 test.describe('RAG node config & chat UI improvements', () => {
   test('Add step opens a type picker, then a blank config with a notify toggle', async ({ page }) => {
-    const flowId = await createFlowReturningId(page, `RAG Config ${Date.now()}`);
-    test.skip(!flowId, 'Could not create a flow / resolve its id');
+    const flowId = await createFlow(page, `RAG Config ${Date.now()}`, { expertRole: 'E2E RAG Config Expert' });
 
     await page.goto(`/flows/${flowId}/config`);
     await page.waitForLoadState('networkidle');
@@ -79,8 +63,7 @@ test.describe('RAG node config & chat UI improvements', () => {
   });
 
   test('the chat 3-dot menu offers Abandon and Show data', async ({ page }) => {
-    const flowId = await createFlowReturningId(page, `RAG Chat ${Date.now()}`);
-    test.skip(!flowId, 'Could not create a flow / resolve its id');
+    const flowId = await createFlow(page, `RAG Chat ${Date.now()}`, { expertRole: 'E2E RAG Config Expert' });
 
     // Add and configure one conversational step so the flow can be started.
     await page.goto(`/flows/${flowId}/config`);
