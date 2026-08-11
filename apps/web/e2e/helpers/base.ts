@@ -17,6 +17,17 @@ import {
   MOCK_RESPONSES,
 } from '../fixtures/ai-responses';
 
+/**
+ * The browser-level intercept that stands in for a chat turn.
+ *
+ * Exported so `helpers/ai-script.ts` can lift it: a spec driving the
+ * *server-side* stub needs the request to actually reach the server, and this
+ * handler would otherwise answer it in the browser first. Must NOT match
+ * /api/chat/[id]/uploads, which ChatComposer calls on mount to list existing
+ * context files and which expects JSON rather than a stream.
+ */
+export const CHAT_STREAM_ROUTE = /\/api\/chat\/[^/]+\/stream(\?.*)?$/;
+
 export type ConsoleMessage = {
   type: 'log' | 'info' | 'warning' | 'error' | 'debug';
   text: string;
@@ -79,7 +90,7 @@ export const test = base.extend<WayfinderFixtures>({
       // Intercept Wayfinder's internal streaming endpoint only.
       // Must NOT match /api/chat/[id]/uploads (called by ChatComposer on mount
       // to list existing context files — expects JSON, not a stream).
-      await page.route(/\/api\/chat\/[^/]+\/stream(\?.*)?$/, mockInternalChatRoute);
+      await page.route(CHAT_STREAM_ROUTE, mockInternalChatRoute);
       await page.route('**/api/ai/**', mockInternalChatRoute);
     }
 

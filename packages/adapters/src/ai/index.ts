@@ -1,4 +1,5 @@
 export * from "./language-model-adapter";
+export * from "./scripted-language-model";
 export * from "./providers";
 export * from "./embeddings-adapter";
 export * from "./keyword-column-mapping-detector";

@@ -8,9 +8,17 @@ End-to-end tests using Playwright. Lives **inside the Wayfinder repo** at `apps/
 
 ### AI mock vs real — the core toggle
 
-Every push runs tests with **mocked AI**. The test fixture intercepts HTTP calls to
-`api.anthropic.com`, `api.openai.com`, and Wayfinder's internal `/api/chat` route,
-returning fixture responses instantly. No API key needed, no cost, fast.
+Every push runs tests with **mocked AI**, at two levels:
+
+- **In the browser** — the test fixture intercepts calls to `api.anthropic.com`,
+  `api.openai.com`, and Wayfinder's internal `/api/chat/[id]/stream`.
+- **On the server** — `TEST_AUTH_BYPASS=true` swaps the AI provider for
+  `ScriptedLanguageModel` (see *Scripting the server-side AI*), so calls the
+  Next.js server makes never leave the box either.
+
+No API key needed, no cost, fast. The browser layer alone used not to be enough:
+CI sets `ANTHROPIC_API_KEY` on every run, and any server-side call went straight
+to the real provider.
 
 When you want a **real integration test** (i.e. actual AI responses flowing through),
 trigger the workflow manually from the GitHub Actions UI and select `use_real_ai: true`.
@@ -179,18 +187,57 @@ by extending `apps/web/src/lib/e2e-fixtures.ts`.
 | `phase-knowledge-base-curation` | indexed knowledge-base chunks |
 | `phase-manual-document-editing` | a session whose document card is on an editable step |
 
-**2. No server-side AI stub** — not a seed gap at all. The mock in
-`helpers/base.ts` is a *browser* route intercept (`page.route`), but the app
-calls the AI provider from the Next.js server, where that intercept cannot
-reach. `/api/chat/[id]/stream` is mocked wholesale, which replaces the very
-server logic these specs assert on. They need a provider stub injected into the
-container under `TEST_AUTH_BYPASS`, keyed per session. Nothing like that exists
-today.
+**2. Server-side AI** — not a seed gap at all. The mock in `helpers/base.ts` is
+a *browser* route intercept (`page.route`), but the app calls the AI provider
+from the Next.js server, where that intercept cannot reach. `/api/chat/[id]/stream`
+is mocked wholesale, which replaces the very server logic these specs assert on.
 
-`enhance-pre-generation-evaluation`, `fix-confidence-threshold-scale`,
-`fix-cross-check-chat-feedback`, `fix-document-generation-gate-livelock`,
-`fix-document-generation-step-flow`, `fix-fork-advance-threshold`,
-`fix-pre-generation-gate-phantom-doc-badge`.
+There is now a stub for this — see **Scripting the server-side AI** below. These
+specs are being moved onto it one at a time; each move turns a spec that
+asserted "nothing bad is visible" into one that names the confidence, verdict or
+failure it expects.
+
+Moved: `fix-confidence-threshold-scale`.
+
+Still parked: `enhance-pre-generation-evaluation`, `fix-cross-check-chat-feedback`,
+`fix-document-generation-gate-livelock`, `fix-document-generation-step-flow`,
+`fix-fork-advance-threshold`, `fix-pre-generation-gate-phantom-doc-badge`.
+
+## Scripting the server-side AI
+
+`helpers/ai-script.ts` registers canned responses the *server* will return for a
+session, via the test-only `/api/test/ai-script` route. Use it whenever the
+behaviour under test is a judgement the model makes — a confidence, a branch
+choice, a document-generation verdict — rather than something the browser
+renders.
+
+```typescript
+import { scriptAiFor, completeTurn, incompleteTurn, clearAiScript } from './helpers/ai-script';
+
+await scriptAiFor(page, sessionId, [
+  incompleteTurn('What is the budget envelope?', 20),
+  completeTurn('That covers the step.', 95),
+]);
+// … drive the chat …
+await clearAiScript(page, sessionId);
+```
+
+- Entries are consumed in order and **the last one repeats**, so an incidental
+  extra call cannot fall back to a default that contradicts the script.
+- `object` is merged over a schema-shaped default, so set only the fields under
+  test.
+- `purpose` scopes an entry to one kind of call (`"chat"`, `"branching"`,
+  `"chat-title"`, …). Omit it to match any.
+- `failWith` fails the call, for the error paths.
+- `scriptAiFor` lifts the browser-level stream intercept itself, so using the
+  script and taking the server path cannot come apart.
+
+The stub is `ScriptedLanguageModel` in `packages/adapters`, swapped for the real
+adapter in `apps/web/src/lib/scripted-llm.ts` when `TEST_AUTH_BYPASS=true` and
+`USE_REAL_AI` is not `true`. It sits *inside* the quota/usage/tracing decorator
+chain, so governance stays under test rather than being bypassed along with the
+provider. Clear a session's script in `afterEach` — the stub is process-wide and
+outlives the test that set it.
 
 ## Known: `networkidle` cannot fire on a session page
 

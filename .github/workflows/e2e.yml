@@ -332,9 +332,21 @@ jobs:
         if: failure()
         run: tail -n 300 /tmp/app.log || true
 
+      # Blob, like the shards, so these results merge into the same report. Run
+      # under its own job they were passing or failing entirely outside the
+      # published run: the summary counted only what the six shards saw, and the
+      # chromium project ignores this spec, so nothing represented it at all.
       - name: Run PKI certificate specs
-        run: npx playwright test --config=playwright.config.ts --project=pki
+        run: npx playwright test --config=playwright.config.ts --project=pki --reporter=blob
         working-directory: apps/web/e2e
+
+      - name: Upload blob report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blob-report-pki
+          path: apps/web/e2e/blob-report/
+          retention-days: 1
 
       - name: Dump app and mocks logs on test failure
         if: failure()
@@ -355,7 +367,7 @@ jobs:
   report:
     name: Merge reports & publish
     if: always()
-    needs: [e2e]
+    needs: [e2e, e2e-pki]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
