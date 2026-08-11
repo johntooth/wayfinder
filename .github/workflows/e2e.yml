@@ -559,11 +559,18 @@ jobs:
       # count only moves when someone changes what the environment can do, which
       # is exactly when a human should look.
       #
-      # This is a ratchet pinned to what the suite actually skips today, not a
-      # target. The first run measured 98 of 390 — a quarter of the suite — so
-      # the number below records that rather than endorsing it. Most of it is
-      # feature-flag gates the CI environment cannot turn on, the twelve parked
-      # specs (see apps/web/e2e/README.md), and PKI/storage capability gates.
+      # The count is NOT deterministic. Consecutive runs of the same commit
+      # measured 98 and then 101 of 390 — roughly a quarter of the suite —
+      # because several gates depend on runtime state (whether a feature flag
+      # could be enabled, whether seeded data was in the expected shape) rather
+      # than on a fixed property of the environment. Pinning to an exact
+      # observed value fails on the variance alone, which was tried twice.
+      #
+      # So the ceiling carries deliberate headroom over that 98–101 band. It is
+      # sized to catch the failure this exists for — the seed breaking, or a
+      # batch of specs quietly disarming themselves, which move the count by
+      # tens — while tolerating the handful of tests that legitimately drift
+      # run to run. It is not an endorsement of a quarter of the suite skipping.
       #
       # Lower it whenever a gate is retired; that is the point of it. Raising it
       # is sometimes legitimate, but it must be a decision someone makes with
@@ -571,7 +578,7 @@ jobs:
       - name: Fail if too many tests skipped
         if: always() && steps.summary.outputs.skipped != ''
         env:
-          MAX_SKIPPED: "98"
+          MAX_SKIPPED: "115"
         run: |
           SKIPPED='${{ steps.summary.outputs.skipped }}'
           echo "Skipped: $SKIPPED (ceiling: $MAX_SKIPPED)"

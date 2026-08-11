@@ -146,6 +146,12 @@ skipped count crosses a ceiling (`MAX_SKIPPED` in `.github/workflows/e2e.yml`).
 Raising it is a legitimate fix; it just has to be a decision rather than a side
 effect.
 
+The count is not deterministic — consecutive runs of the same commit measured 98
+and 101 of 390, because some gates depend on runtime state rather than on a fixed
+property of the environment. The ceiling therefore carries headroom: it is sized
+to catch the seed breaking or a batch of specs disarming themselves, which move
+the count by tens, not to police single-test drift.
+
 **Never skip because a fixture is missing.** The `chromium` project declares
 `seed` as a dependency, so a spec body only runs once the seed has passed. Use
 `requireSeedFixtures()` from `helpers/seed.ts` — it throws, naming the fixture,
