@@ -1,4 +1,5 @@
 import { test, expect } from "./helpers/base";
+import { selectFlowInSelector } from "./helpers/flow-selector";
 
 // E2E for the v0.27.6 enhancement
 // (docs/development/implemented/alpha-2/v0.27.6/enhance-flow-insights-menu-ui.phase.md).
@@ -19,10 +20,10 @@ const openSubjectFlow = async (page: import("@playwright/test").Page): Promise<b
   await page.goto(INSIGHTS_PATH);
   await page.waitForLoadState("networkidle");
 
-  const selector = page.getByRole("button", { name: SUBJECT_FLOW_NAME });
-  if (!(await selector.isVisible().catch(() => false))) return false;
+  // Was `getByRole("button", { name })`, which only ever matched while the
+  // seeded flow was among the first five cards. See helpers/flow-selector.ts.
+  if (!(await selectFlowInSelector(page, SUBJECT_FLOW_NAME))) return false;
 
-  await selector.click();
   await expect(page.getByRole("columnheader", { name: /outcome/i }).first()).toBeVisible();
   return true;
 };

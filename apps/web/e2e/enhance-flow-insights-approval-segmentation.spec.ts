@@ -1,4 +1,5 @@
 import { test, expect } from "./helpers/base";
+import { selectFlowInSelector } from "./helpers/flow-selector";
 
 // E2E for approval segmentation in the Flow Insights field report
 // (phase: flow-insights-approval-segmentation).
@@ -28,10 +29,10 @@ const openSubjectFlow = async (page: import("@playwright/test").Page): Promise<b
   await page.goto(INSIGHTS_PATH);
   await page.waitForLoadState("networkidle");
 
-  const selector = page.getByRole("button", { name: SUBJECT_FLOW_NAME });
-  if (!(await selector.isVisible().catch(() => false))) return false;
+  // Was `getByRole("button", { name })`, which only ever matched while the
+  // seeded flow was among the first five cards. See helpers/flow-selector.ts.
+  if (!(await selectFlowInSelector(page, SUBJECT_FLOW_NAME))) return false;
 
-  await selector.click();
   await expect(page.getByRole("columnheader", { name: /outcome/i }).first()).toBeVisible();
   return true;
 };
