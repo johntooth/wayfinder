@@ -149,11 +149,29 @@ export class ScriptedLanguageModel implements ILanguageModel {
 
   private readonly scripts = new Map<string, ScriptedResponse[]>();
   private readonly consumed = new Map<string, number>();
+  private readonly requested = new Map<string, string[]>();
 
   /** Replaces any script already held for the session. */
   script(sessionId: string, responses: ScriptedResponse[]): void {
     this.scripts.set(sessionId, responses);
     this.consumed.set(sessionId, 0);
+    this.requested.set(sessionId, []);
+  }
+
+  /**
+   * Every purpose this session has actually been called with.
+   *
+   * A `purpose` that matches nothing fails silently — the stub falls back to a
+   * schema-shaped default and the reply comes back empty, with no error
+   * anywhere. Comparing what a spec scripted against what the app asked for is
+   * the quickest way to see that, so the route exposes it.
+   */
+  requestedPurposes(sessionId: string): string[] {
+    return this.requested.get(sessionId) ?? [];
+  }
+
+  scriptedPurposes(sessionId: string): (string | null)[] {
+    return (this.scripts.get(sessionId) ?? []).map((entry) => entry.purpose ?? null);
   }
 
   /** Clears one session's script, or every session's when called with no id. */
@@ -161,10 +179,12 @@ export class ScriptedLanguageModel implements ILanguageModel {
     if (!sessionId) {
       this.scripts.clear();
       this.consumed.clear();
+      this.requested.clear();
       return;
     }
     this.scripts.delete(sessionId);
     this.consumed.delete(sessionId);
+    this.requested.delete(sessionId);
   }
 
   async generateObject<T>(
@@ -244,6 +264,8 @@ export class ScriptedLanguageModel implements ILanguageModel {
 
   private next(call: ScriptCall): ScriptedResponse | null {
     if (!call.sessionId) return null;
+    this.requested.get(call.sessionId)?.push(call.purpose);
+
     const entries = this.scripts.get(call.sessionId);
     if (!entries?.length) return null;
 

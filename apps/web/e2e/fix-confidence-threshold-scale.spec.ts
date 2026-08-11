@@ -1,5 +1,11 @@
 import { test, expect } from "./helpers/base";
-import { clearAiScript, completeTurn, incompleteTurn, scriptAiFor } from "./helpers/ai-script";
+import {
+  aiScriptDiagnostics,
+  clearAiScript,
+  completeTurn,
+  incompleteTurn,
+  scriptAiFor,
+} from "./helpers/ai-script";
 import { requireSeedFixtures } from "./helpers/seed";
 
 // E2E for bug #1: a node whose advanceConfidenceThreshold was authored as a
@@ -18,8 +24,17 @@ import { requireSeedFixtures } from "./helpers/seed";
 // by the test rather than by whatever the provider happened to say.
 
 test.describe("confidence is read on the 0-100 scale, not as a fraction", () => {
-  test.afterEach(async ({ page }) => {
-    await clearAiScript(page, requireSeedFixtures().sessionId);
+  test.afterEach(async ({ page }, testInfo) => {
+    const { sessionId } = requireSeedFixtures();
+    if (testInfo.status !== testInfo.expectedStatus) {
+      // Attached before the script is cleared, so a failure carries the one
+      // piece of state that explains an empty reply.
+      await testInfo.attach("ai-script-purposes.json", {
+        contentType: "application/json",
+        body: Buffer.from(JSON.stringify(await aiScriptDiagnostics(page, sessionId), null, 2)),
+      });
+    }
+    await clearAiScript(page, sessionId);
   });
 
   test("a low-confidence turn stays on its step instead of racing ahead", async ({ page }) => {
@@ -37,6 +52,10 @@ test.describe("confidence is read on the 0-100 scale, not as a fraction", () => 
 
     // The scripted reply is the server's, so seeing it proves the stub drove the
     // turn rather than the browser-level mock answering for it.
+    //
+    // If this is what fails, read the attached purposes first: a script whose
+    // purpose matches no call yields an empty response and no error anywhere.
+    // That is exactly how "chat" vs "chat-turn" got through review once.
     await expect(page.getByText(/what is the budget envelope/i)).toBeVisible({ timeout: 30_000 });
 
     // 20 is below every sane threshold. Read as the fraction 0.20 it would still

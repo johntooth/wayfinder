@@ -53,19 +53,52 @@ export async function scriptAiFor(
   );
 }
 
+/**
+ * What the app asked for against what the spec scripted.
+ *
+ * Reach for this when a scripted reply does not appear: a `purpose` that
+ * matches nothing is not an error, it just yields a schema-shaped default with
+ * an empty `response`.
+ */
+export async function aiScriptDiagnostics(
+  page: Page,
+  sessionId: string,
+): Promise<{ scriptedPurposes: (string | null)[]; requestedPurposes: string[] }> {
+  const response = await page.request.get(
+    `/api/test/ai-script?sessionId=${encodeURIComponent(sessionId)}`,
+  );
+  return response.json();
+}
+
 export async function clearAiScript(page: Page, sessionId?: string): Promise<void> {
   const query = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : "";
   await page.request.delete(`/api/test/ai-script${query}`);
 }
 
+/**
+ * Purposes, as the call sites spell them — not as the port's `AiPurpose` union
+ * does. `resolvePurpose()` in language-model-adapter.ts maps these down to
+ * chat/documentGeneration/branching for model selection, but the stub matches
+ * on the raw string the caller passed. Get one wrong and nothing fails: no
+ * entry matches, the stub returns a schema-shaped default, and the reply comes
+ * back empty.
+ *
+ *   CHAT_TURN     apps/web/src/app/api/chat/[sessionId]/stream/execute-turn.ts:151
+ *   BRANCH_CHOICE apps/web/src/app/api/chat/[sessionId]/stream/execute-turn.ts:199
+ *   CHAT_TITLE    apps/web/src/app/api/chat/[sessionId]/stream/session-title.ts
+ */
+export const CHAT_TURN = "chat-turn";
+export const BRANCH_CHOICE = "chat-branch-choice";
+export const CHAT_TITLE = "chat-title";
+
 /** A turn that leaves the step short of its completion threshold. */
 export const incompleteTurn = (response: string, confidence = 20): ScriptedResponse => ({
-  purpose: "chat",
+  purpose: CHAT_TURN,
   object: { response, rationale: "Still gathering information.", stepCompleteConfidence: confidence },
 });
 
 /** A turn that reports the step's completion criteria as met. */
 export const completeTurn = (response: string, confidence = 95): ScriptedResponse => ({
-  purpose: "chat",
+  purpose: CHAT_TURN,
   object: { response, rationale: "Completion criteria are met.", stepCompleteConfidence: confidence },
 });
