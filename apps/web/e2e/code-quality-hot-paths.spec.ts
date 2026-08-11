@@ -8,7 +8,7 @@
  */
 
 import { test, expect } from './helpers/base';
-import { clearAiScript, completeTurn, scriptAiFor } from './helpers/ai-script';
+import { aiScriptDiagnostics, clearAiScript, completeTurn, scriptAiFor } from './helpers/ai-script';
 import { requireSeedFixtures } from './helpers/seed';
 import { openAllSettingsSections } from './helpers/settings';
 import { NO_COMPOSER } from './helpers/skip-reasons';
@@ -95,8 +95,19 @@ test.describe('Code quality Group A: session-list hot-path aggregation', () => {
 test.describe('Code quality Group C: transactional turn persistence', () => {
   const ASSISTANT_REPLY = 'Recorded — this turn is committed to the thread.';
 
-  test.afterEach(async ({ page }) => {
-    await clearAiScript(page, requireSeedFixtures().sessionId);
+  test.afterEach(async ({ page }, testInfo) => {
+    const { sessionId } = requireSeedFixtures();
+    if (testInfo.status !== testInfo.expectedStatus) {
+      // Attached before the script is cleared. A purpose the turn never asks
+      // for yields an empty reply and no error anywhere, which is how "chat"
+      // vs "chat-turn" survived review once — requestedPurposes is the only
+      // thing that tells those apart from the outside.
+      await testInfo.attach('ai-script-purposes.json', {
+        contentType: 'application/json',
+        body: Buffer.from(JSON.stringify(await aiScriptDiagnostics(page, sessionId), null, 2)),
+      });
+    }
+    await clearAiScript(page, sessionId);
   });
 
   test('a committed turn keeps its user message and assistant reply after reload', async ({
@@ -127,8 +138,18 @@ test.describe('Code quality Group C: transactional turn persistence', () => {
     await input.press('Enter');
 
     // A real turn now: the server call, then the transactional persist.
-    await expect(page.getByText(userMessage)).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(ASSISTANT_REPLY)).toBeVisible({ timeout: 30_000 });
+    //
+    // Each assertion names itself, because "expect(locator).toBeVisible()
+    // failed" in the run summary cannot say which of the four fired, and the
+    // four mean entirely different things: the send not working, the stub not
+    // driving the turn, or the commit not surviving a reload.
+    await expect(page.getByText(userMessage), 'user message before reload').toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(
+      page.getByText(ASSISTANT_REPLY),
+      'scripted assistant reply before reload — if only this fails, the turn ran but the stub did not supply the reply (check the attached purposes)',
+    ).toBeVisible({ timeout: 30_000 });
 
     // Reload: only committed rows come back. Both halves of the turn must
     // return, proving the transaction committed rather than leaving a
@@ -138,8 +159,12 @@ test.describe('Code quality Group C: transactional turn persistence', () => {
     // message-feed.tsx, and the reload only ever re-checked the user message.
     await page.reload();
     await page.waitForLoadState('networkidle');
-    await expect(page.getByText(userMessage)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(ASSISTANT_REPLY)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(userMessage), 'user message after reload').toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByText(ASSISTANT_REPLY), 'assistant reply after reload').toBeVisible({
+      timeout: 10_000,
+    });
   });
 });
 
