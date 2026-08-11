@@ -133,6 +133,19 @@ test.describe('Chat: Session', () => {
       return;
     }
 
+    // None of the four selectors this used to wait for exist in the feed:
+    // message-feed.tsx has no data-testid, no [role="log"], and its Tailwind
+    // classes contain no "message". It reported "AI response did not appear"
+    // for a reply that was on screen the whole time, and only surfaced at all
+    // once the composer guard stopped skipping the test.
+    //
+    // The reply has to be counted from a baseline, not merely found: the seed
+    // gives every session a thread that already contains assistant messages, so
+    // "an assistant bubble is visible" is true before a single word is sent.
+    // Counting from before the send is what makes this about *this* turn.
+    const assistantBubbles = page.locator('[data-chat-message="assistant"]');
+    const bubblesBefore = await assistantBubbles.count();
+
     await input.fill('Hello');
 
     // The Next.js dev overlay portal covers the send button in headless mode.
@@ -142,12 +155,13 @@ test.describe('Chat: Session', () => {
     // Wait for AI response (mocked = fast, real = up to 30s)
     const timeout = process.env.USE_REAL_AI === 'true' ? 30_000 : 8_000;
 
-    // None of the four selectors this used to wait for exist in the feed:
-    // message-feed.tsx has no data-testid, no [role="log"], and its Tailwind
-    // classes contain no "message". It reported "AI response did not appear"
-    // for a reply that was on screen the whole time, and only surfaced at all
-    // once the composer guard stopped skipping the test.
-    await expect(page.locator('[data-chat-message="assistant"]').first()).toBeVisible({ timeout });
+    // Greater-than rather than exactly one more: a single streamed response can
+    // split into several bubbles at finish_step boundaries (message-feed.tsx),
+    // so an exact count would be asserting the shape of the reply, not that one
+    // arrived.
+    await expect
+      .poll(() => assistantBubbles.count(), { timeout })
+      .toBeGreaterThan(bubblesBefore);
     await page.screenshot({ path: 'screenshots/chat-ai-responded.png', fullPage: true });
 
     const errors = consoleLogs.filter(l => l.type === 'error');
@@ -179,7 +193,13 @@ test.describe('Chat: Session', () => {
       'My name is Test User and I work at Example Corp',
     ];
 
+    const assistantBubbles = page.locator('[data-chat-message="assistant"]');
+
     for (let i = 0; i < messages.length; i++) {
+      // Per-turn baseline: the seeded thread already carries assistant
+      // messages, so only the growth across this turn says a reply arrived.
+      const bubblesBefore = await assistantBubbles.count();
+
       await input.fill(messages[i]);
 
       // Same headless-mode portal issue — use Enter consistently.
@@ -199,9 +219,10 @@ test.describe('Chat: Session', () => {
       //
       // This used to wait on the same dead selectors and then `.catch(() => {})`
       // the timeout, so the test spent 8s per turn proving nothing and passed
-      // regardless. Each turn must add an assistant bubble, so assert the count
-      // instead of swallowing the wait.
-      await expect(page.locator('[data-chat-message="assistant"]')).toHaveCount(i + 1, { timeout });
+      // regardless. Each turn must add at least one assistant bubble.
+      await expect
+        .poll(() => assistantBubbles.count(), { timeout })
+        .toBeGreaterThan(bubblesBefore);
 
       await page.screenshot({
         path: `screenshots/chat-turn-${i + 1}.png`,
