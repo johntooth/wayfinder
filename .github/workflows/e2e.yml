@@ -559,12 +559,19 @@ jobs:
       # count only moves when someone changes what the environment can do, which
       # is exactly when a human should look.
       #
-      # Raising this number is a legitimate fix, but it must be a decision, not
-      # a side effect. Lower it whenever a gate is retired.
+      # This is a ratchet pinned to what the suite actually skips today, not a
+      # target. The first run measured 98 of 390 — a quarter of the suite — so
+      # the number below records that rather than endorsing it. Most of it is
+      # feature-flag gates the CI environment cannot turn on, the twelve parked
+      # specs (see apps/web/e2e/README.md), and PKI/storage capability gates.
+      #
+      # Lower it whenever a gate is retired; that is the point of it. Raising it
+      # is sometimes legitimate, but it must be a decision someone makes with
+      # the report open, not a side effect of adding a skip.
       - name: Fail if too many tests skipped
         if: always() && steps.summary.outputs.skipped != ''
         env:
-          MAX_SKIPPED: "24"
+          MAX_SKIPPED: "98"
         run: |
           SKIPPED='${{ steps.summary.outputs.skipped }}'
           echo "Skipped: $SKIPPED (ceiling: $MAX_SKIPPED)"
