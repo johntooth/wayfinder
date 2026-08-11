@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 /**
  * Selects a flow in the shared `FlowSelector` (Flow Insights, Flow Usage).
@@ -23,17 +23,58 @@ export async function selectFlowInSelector(page: Page, flowName: string): Promis
   }
 
   const searchButton = page.getByRole("button", { name: /search for more/i });
-  if (!(await searchButton.isVisible().catch(() => false))) return false;
+  if (!(await searchButton.isVisible().catch(() => false))) {
+    // Neither the card nor the overflow control. Attach what the selector was
+    // actually showing: with no cards at all the query had not resolved, and
+    // with cards but no overflow the flow is genuinely absent from
+    // GetFlowDeepDive — two different problems that look identical from here.
+    await attachSelectorState(page, flowName, "no card and no overflow control");
+    return false;
+  }
+
 
   await searchButton.click();
   await page.getByPlaceholder(/search flows/i).fill(flowName);
 
   const option = page.getByTestId("flow-search-option").filter({ hasText: flowName }).first();
-  if (!(await option.isVisible().catch(() => false))) return false;
+  if (!(await option.isVisible().catch(() => false))) {
+    await attachSelectorState(page, flowName, "searched, but the flow was not among the results");
+    return false;
+  }
 
   // The option commits on mousedown — it preempts the input's blur, which would
   // otherwise tear the list down before a click landed.
   await option.click();
   await expect(page.getByPlaceholder(/search flows/i)).toHaveCount(0);
   return true;
+}
+
+/**
+ * Records what the selector was showing when a flow could not be found.
+ *
+ * Three runs reported "Seeded approval-subject flow not in insights" exactly 9
+ * times, which is too stable for a state race — but the flow is created by the
+ * seed and `GetFlowDeepDive` lists every non-deleted guided flow, so it should
+ * be there. The distinguishing evidence is whether any cards rendered at all.
+ */
+async function attachSelectorState(page: Page, flowName: string, reason: string): Promise<void> {
+  const heading = await page
+    .getByText(/loading…|no flows yet/i)
+    .first()
+    .textContent()
+    .catch(() => null);
+  const cardNames = await page
+    .locator("button")
+    .allInnerTexts()
+    .catch(() => [] as string[]);
+
+  await test
+    .info()
+    .attach("flow-selector-state.json", {
+      contentType: "application/json",
+      body: Buffer.from(
+        JSON.stringify({ lookingFor: flowName, reason, pageState: heading, cardNames }, null, 2),
+      ),
+    })
+    .catch(() => undefined);
 }
