@@ -186,6 +186,35 @@ today.
 `fix-document-generation-step-flow`, `fix-fork-advance-threshold`,
 `fix-pre-generation-gate-phantom-doc-badge`.
 
+## Known: `networkidle` cannot fire on a session page
+
+The chat view holds one EventSource open for its lifetime — it replaced the 2s
+typing poll and the 3s session poll (see `_content.tsx`). That connection never
+closes, so a `/chats/<id>` page never reaches `networkidle`, and the 26
+`waitForLoadState('networkidle')` calls that follow a session navigation can
+only ever burn their full timeout.
+
+Measured against a seeded session on a live stack:
+
+```
+networkidle        never fired (20s timeout)
+composer visible   52ms
+```
+
+**Do not "fix" this with a blanket find-and-replace.** That was tried and
+reverted. Swapping all 26 for a `[data-composer-stack]` wait made the eight
+worst-affected files go from 13 failures to 4 locally — and turned two CI shards
+red, because specs downstream of those waits had come to rely on the accidental
+30-second settle for their own state to arrive. Removing it exposed races that
+had been papered over.
+
+The 30 `/chats` **list**-page `networkidle` waits are fine; that page holds no
+stream and settles normally.
+
+Doing this properly means giving each affected spec a deterministic wait for the
+thing it actually needs, one spec at a time, verified against CI's sharding —
+not one sweep. The 30s-per-call cost is worth reclaiming, but only that way.
+
 ## Adding new tests
 
 Import from `./helpers/base` instead of `@playwright/test` to get console capture and AI mocking automatically:
