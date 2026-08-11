@@ -1,5 +1,6 @@
 import { test, expect } from "./helpers/base";
 import { NO_ATTACH_CONTROL } from './helpers/skip-reasons';
+import { isVisibleWithin } from './helpers/visible';
 
 // E2E for the bug fix: a deliberately-attached session upload must reach the AI
 // even when the user's message is only loosely related to the document body.
@@ -39,7 +40,7 @@ test.describe("session upload reaches the AI", () => {
 
     const attachButton = page.getByRole("button", { name: /attach a file for context/i });
     test.skip(
-      !(await attachButton.isVisible().catch(() => false)),
+      !(await isVisibleWithin(attachButton)),
       NO_ATTACH_CONTROL,
     );
 

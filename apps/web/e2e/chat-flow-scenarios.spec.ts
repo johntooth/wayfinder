@@ -24,6 +24,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './helpers/base';
 import { NO_COMPOSER } from './helpers/skip-reasons';
+import { isVisibleWithin } from './helpers/visible';
 
 const AI_TIMEOUT = process.env.USE_REAL_AI === 'true' ? 30_000 : 8_000;
 
@@ -138,7 +139,7 @@ test.describe('Chat: Two-Step Flow Session', () => {
       .locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]')
       .first();
 
-    if (!await input.isVisible().catch(() => false)) {
+    if (!await isVisibleWithin(input)) {
       await page.screenshot({ path: 'screenshots/two-step-chat-no-input.png', fullPage: true });
       test.skip(true, NO_COMPOSER);
       return;
@@ -176,7 +177,7 @@ test.describe('Chat: Branching Flow Session', () => {
       .locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]')
       .first();
 
-    if (!await input.isVisible().catch(() => false)) {
+    if (!await isVisibleWithin(input)) {
       await page.screenshot({ path: 'screenshots/branch-chat-no-input.png', fullPage: true });
       test.skip(true, NO_COMPOSER);
       return;

@@ -178,7 +178,20 @@ per-spec comments claimed:
 | Seeded approval-first flow did not render | 4 | the seed **does** create this flow |
 | No seeded approval awaiting this user | 3 | ditto |
 | No seeded chat available — chats list is empty | 3 | the seed **does** create a session |
-| Search button not present — requires > 5 flows | 3 | a real seed gap |
+| Search button not present — requires > 5 flows | 3 | **not** a seed gap — see below |
+
+That last row was wrong, and it is left here because the wrong call is the
+instructive part: it was recorded as the one honest fixture gap in the table,
+on the strength of the skip message alone. The seed creates **nine** flows, and
+#687 proved it — all four `> 5 flows` skips cleared once the guards stopped
+racing, leaving one honest `More than 5 flows present — search button already
+visible` from the inverse test. Nothing was seeded to achieve that.
+
+One of those four could never have passed on any data: it counted flow cards
+and skipped on `count <= 5`, but `FLOW_CARD_THRESHOLD` slices the list to five,
+so more than five flows still renders exactly five cards. The guard rejected the
+only value it could ever observe. A skip message is a claim by the spec author,
+not a measurement — check it against the component before believing it.
 
 ### The cause: `isVisible()` does not wait
 
@@ -224,6 +237,7 @@ Two clusters have been converted so far, each measured on its own run:
 | #684 | insights + governance guards | 313 | 87 | 7 |
 | #685 | 7 approvals-list guards | 311 | 84 | 12 |
 | #686 | **no spec changes at all** | 315 | 81 | 11 |
+| #687 | flow-selector guards + skip-message grouping | 320 | 78 | 9 |
 
 **Read reason counts, not the total.** #686 changed only the report generator
 and this file, yet passed moved +4 and skipped moved −3 — the same −3 that had

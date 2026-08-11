@@ -1,6 +1,7 @@
 import { test, expect } from "./helpers/base";
 import { requireSeedFixtures } from './helpers/seed';
 import { NO_COMPOSER } from './helpers/skip-reasons';
+import { isVisibleWithin } from './helpers/visible';
 
 // E2E regression for the `temperature` failure on the Claude 5 family.
 // (docs/development/implemented/alpha-2/v0.22.1/approval-config-and-temperature.phase.md)
@@ -31,7 +32,7 @@ test.describe("LLM calls carry no temperature", () => {
 
     const composer = page.getByRole("textbox").first();
     test.skip(
-      !(await composer.isVisible().catch(() => false)),
+      !(await isVisibleWithin(composer)),
       NO_COMPOSER,
     );
 

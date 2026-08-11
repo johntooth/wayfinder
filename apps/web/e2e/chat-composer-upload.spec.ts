@@ -13,6 +13,7 @@
 import { test, expect } from './helpers/base';
 import { requireSeedFixtures } from './helpers/seed';
 import { NO_ATTACH_CONTROL } from './helpers/skip-reasons';
+import { isVisibleWithin } from './helpers/visible';
 
 async function resolveExistingSessionId(page: import('@playwright/test').Page): Promise<string | null> {
   const seeded = requireSeedFixtures().sessionId;
@@ -42,7 +43,7 @@ test.describe('Chat: Composer file upload', () => {
     await page.screenshot({ path: 'screenshots/chat-composer-upload.png', fullPage: true });
 
     const attachButton = page.getByRole('button', { name: /attach a file for context/i });
-    if (!(await attachButton.isVisible().catch(() => false))) {
+    if (!(await isVisibleWithin(attachButton))) {
       await page.screenshot({ path: 'screenshots/chat-composer-no-attach.png', fullPage: true });
       test.skip(true, NO_ATTACH_CONTROL);
       return;
@@ -95,7 +96,7 @@ test.describe('Chat: Composer file upload', () => {
     await page.waitForLoadState('networkidle');
 
     const attachButton = page.getByRole('button', { name: /attach a file for context/i });
-    if (!(await attachButton.isVisible().catch(() => false))) {
+    if (!(await isVisibleWithin(attachButton))) {
       test.skip(true, NO_ATTACH_CONTROL);
       return;
     }

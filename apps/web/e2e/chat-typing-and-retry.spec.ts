@@ -20,6 +20,7 @@ import { test, expect } from './helpers/base';
 import { delayChatStream, failChatStream } from './helpers/chat-mock';
 import { requireSeedFixtures } from './helpers/seed';
 import { NO_COMPOSER } from './helpers/skip-reasons';
+import { isVisibleWithin } from './helpers/visible';
 
 async function openSessionWithComposer(
   page: import('@playwright/test').Page,
@@ -34,7 +35,7 @@ async function openSessionWithComposer(
   await page.waitForLoadState('networkidle');
 
   const composer = page.getByRole('textbox').first();
-  if (!(await composer.isVisible().catch(() => false))) return null;
+  if (!(await isVisibleWithin(composer))) return null;
   return composer;
 }
 

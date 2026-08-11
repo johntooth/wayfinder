@@ -11,6 +11,7 @@ import { test, expect } from './helpers/base';
 import { requireSeedFixtures } from './helpers/seed';
 import { openAllSettingsSections } from './helpers/settings';
 import { NO_COMPOSER } from './helpers/skip-reasons';
+import { isVisibleWithin } from './helpers/visible';
 
 /**
  * phase-code-quality-hot-paths-group-a.spec.ts
@@ -106,7 +107,7 @@ test.describe('Code quality Group C: transactional turn persistence', () => {
     const input = page
       .locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]')
       .first();
-    if (!(await input.isVisible().catch(() => false))) {
+    if (!(await isVisibleWithin(input))) {
       test.skip(true, NO_COMPOSER);
       return;
     }

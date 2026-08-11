@@ -16,6 +16,7 @@
 import { test, expect } from './helpers/base';
 import { requireSeedFixtures } from './helpers/seed';
 import { NO_COMPOSER } from './helpers/skip-reasons';
+import { isVisibleWithin } from './helpers/visible';
 
 async function resolveActiveSessionId(page: import('@playwright/test').Page): Promise<string | null> {
   const seeded = requireSeedFixtures().sessionId;
@@ -95,7 +96,7 @@ test.describe('Chat: Confidence', () => {
     await page.waitForLoadState('networkidle');
 
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
-    const hasInput = await input.isVisible().catch(() => false);
+    const hasInput = await isVisibleWithin(input);
 
     if (!hasInput) {
       test.skip(true, NO_COMPOSER);
@@ -132,7 +133,7 @@ test.describe('Chat: Confidence', () => {
     await page.waitForLoadState('networkidle');
 
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
-    const hasInput = await input.isVisible().catch(() => false);
+    const hasInput = await isVisibleWithin(input);
 
     if (!hasInput) {
       test.skip(true, NO_COMPOSER);

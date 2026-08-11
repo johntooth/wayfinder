@@ -16,6 +16,7 @@
 import { test, expect } from './helpers/base';
 import { requireSeedFixtures } from './helpers/seed';
 import { NO_COMPOSER } from './helpers/skip-reasons';
+import { isVisibleWithin } from './helpers/visible';
 
 const AI_MODE = process.env.USE_REAL_AI === 'true' ? 'REAL AI' : 'MOCKED AI';
 
@@ -100,7 +101,7 @@ test.describe('Chat: Session', () => {
 
     // ChatComposer renders a <textarea> with placeholder "Message Wayfinder…"
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
-    const visible = await input.isVisible().catch(() => false);
+    const visible = await isVisibleWithin(input);
 
     if (!visible) {
       await page.screenshot({ path: 'screenshots/chat-no-input-found.png', fullPage: true });
@@ -125,7 +126,7 @@ test.describe('Chat: Session', () => {
     await page.waitForLoadState('networkidle');
 
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
-    const visible = await input.isVisible().catch(() => false);
+    const visible = await isVisibleWithin(input);
 
     if (!visible) {
       test.skip(true, NO_COMPOSER);
@@ -171,7 +172,7 @@ test.describe('Chat: Session', () => {
     await page.waitForLoadState('networkidle');
 
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
-    const visible = await input.isVisible().catch(() => false);
+    const visible = await isVisibleWithin(input);
 
     if (!visible) {
       test.skip(true, NO_COMPOSER);
