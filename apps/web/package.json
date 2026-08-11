@@ -11,7 +11,8 @@
     "lint": "eslint src",
     "lint:a11y": "eslint src -c eslint.config.a11y.js",
     "test": "vitest run --passWithNoTests",
-    "seed:redline": "tsx scripts/seed-redline-evaluation.ts"
+    "seed:redline": "tsx scripts/seed-redline-evaluation.ts",
+    "seed:redline-mcp": "tsx scripts/seed-redline-mcp-server.ts"
   },
   "dependencies": {
     "@ai-sdk/react": "^1.0.0",
