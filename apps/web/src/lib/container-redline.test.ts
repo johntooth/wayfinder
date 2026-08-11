@@ -163,6 +163,12 @@ const lensWriter: IClassificationLensWriter = {
   },
 };
 
+const reportChunkVerifier = {
+  async fetchChunkText() {
+    return ok(null);
+  },
+};
+
 const dependencies = (overrides: Partial<RedlineModuleDependencies> = {}): RedlineModuleDependencies => ({
   repository: new InMemoryRepository(),
   classifier,
@@ -171,6 +177,7 @@ const dependencies = (overrides: Partial<RedlineModuleDependencies> = {}): Redli
   languageModel,
   stagedCorpusReader,
   lensWriter,
+  reportChunkVerifier,
   productName: "Platform",
   ...overrides,
 });

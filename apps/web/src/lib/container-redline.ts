@@ -31,7 +31,9 @@ import {
   makeExtractionHardRuleCandidateDeriver,
 } from "@redline/redline-adapters";
 import type { ILanguageModel as WayfinderLanguageModel } from "@rbrasier/domain";
+import type { ReportChunkVerifier } from "@rbrasier/adapters";
 import { RedlineLanguageModelBridge } from "./redline-language-model";
+import { ChunkStoreReportVerifier } from "./redline-report-verifier";
 
 // redline's UI mount (ADR-0019, delivery-plan item 3 step 3), factored out of
 // container.ts the way container-extraction.ts is: it wires redline's
@@ -58,11 +60,17 @@ export interface RedlineModuleDependencies {
   // write capability until an evaluation could be started from the browser.
   readonly stagedCorpusReader: IStagedCorpusReader;
   readonly lensWriter: IClassificationLensWriter;
+  // The report assembler's store re-fetch, backed by redline's IChunkStore.
+  readonly reportChunkVerifier: ReportChunkVerifier;
   readonly productName: string;
 }
 
 export interface RedlineModule {
   readonly workflowController: WorkflowController;
+  // The store-backed re-fetch the fork's report assembly loop asserts byte-identity
+  // against (architecture §5.1). Carried on the served module because the assembler
+  // runs in a served request, not the seeder.
+  readonly reportChunkVerifier: ReportChunkVerifier;
 }
 
 // Returns a Result because buildContainer validates the container parts (a blank
@@ -84,7 +92,10 @@ export const buildRedlineModule = (
   });
   if (container.error) return container;
 
-  return ok({ workflowController: new WorkflowController(container.data) });
+  return ok({
+    workflowController: new WorkflowController(container.data),
+    reportChunkVerifier: dependencies.reportChunkVerifier,
+  });
 };
 
 // The live resolution: every port above bound to its production adapter
@@ -143,11 +154,16 @@ const resolveRedlineAdapters = (input: ResolveRedlineModuleInput) => {
     httpClient: fetchJson,
   });
 
+  // One chunk store, shared by the classifier's exact fetch and the report
+  // assembler's byte-identity re-fetch — both read the same redline_chunks rows,
+  // so they must not diverge onto two handles.
+  const chunkStore = new DrizzleChunkStore(database);
+
   // The cold-start path (ADR-0008 first pass): hard rules + adjudication over the
   // store's exact fetch, against the lens the reader resolves per call — which is
   // what makes one classifier instance safe at a process-wide memoised container.
   const classifier = new ColdStartClassifier({
-    chunkStore: new DrizzleChunkStore(database),
+    chunkStore,
     adjudicator: new HttpAdjudicator({
       baseUrl: env.REDLINE_ADJUDICATOR_BASE_URL ?? "https://api.openai.com/v1",
       apiKey: env.REDLINE_ADJUDICATOR_API_KEY ?? "",
@@ -171,6 +187,7 @@ const resolveRedlineAdapters = (input: ResolveRedlineModuleInput) => {
     languageModel: new RedlineLanguageModelBridge(input.wayfinderLanguageModel),
     stagedCorpusReader: new DrizzleStagedCorpusReader(database),
     lensWriter: new DrizzleClassificationLensWriter(database),
+    reportChunkVerifier: new ChunkStoreReportVerifier(chunkStore),
     productName: env.REDLINE_PRODUCT_NAME ?? "the product",
   };
 };
@@ -189,6 +206,7 @@ export const resolveRedlineModule = (
     languageModel: adapters.languageModel,
     stagedCorpusReader: adapters.stagedCorpusReader,
     lensWriter: adapters.lensWriter,
+    reportChunkVerifier: adapters.reportChunkVerifier,
     productName: adapters.productName,
   });
 };
@@ -218,6 +236,7 @@ export const resolveRedlineSeedDependencies = (
     languageModel: adapters.languageModel,
     stagedCorpusReader: adapters.stagedCorpusReader,
     lensWriter: adapters.lensWriter,
+    reportChunkVerifier: adapters.reportChunkVerifier,
     productName: adapters.productName,
   });
   if (module.error) return module;
