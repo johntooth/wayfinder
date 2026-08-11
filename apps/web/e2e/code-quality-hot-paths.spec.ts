@@ -135,6 +135,13 @@ test.describe('Code quality Group C: transactional turn persistence', () => {
 
     const userMessage = `Group C durability check ${Date.now()}`;
     await input.fill(userMessage);
+
+    // Armed before the send, because the response can arrive before the next
+    // statement runs.
+    const turnRequest = page.waitForResponse(
+      (response) => response.url().includes(`/api/chat/${sessionId}/stream`),
+      { timeout: 60_000 },
+    );
     await input.press('Enter');
 
     // A real turn now: the server call, then the transactional persist.
@@ -151,16 +158,20 @@ test.describe('Code quality Group C: transactional turn persistence', () => {
       'scripted assistant reply before reload — if only this fails, the turn ran but the stub did not supply the reply (check the attached purposes)',
     ).toBeVisible({ timeout: 30_000 });
 
-    // Wait for the turn to actually finish before reloading. ConfidenceBar
-    // shows "Evaluating…" until the score arrives and only then renders a
-    // label, so this is the first point at which the server has returned its
-    // final object rather than a stream of deltas. Reloading on the streamed
-    // text alone races the commit, and #690 could not tell that race apart
-    // from a genuinely lost row — both look like "the reply is gone".
-    await expect(
-      page.getByText(/high confidence/i).last(),
-      'turn finished (confidence resolved) before reloading',
-    ).toBeVisible({ timeout: 30_000 });
+    // Wait for the turn to actually finish before reloading — and the rendered
+    // confidence score is NOT that signal. execute-turn.ts streams the score at
+    // :170 but only reaches persistAssistantTurn at :333, two LLM round-trips
+    // later (branch choice, then the pre-generation readiness gate). Reloading
+    // on the score therefore aborts the streaming request before the row is
+    // written, and the reply is then legitimately absent — which is what #690,
+    // #692 and #694 all reported, and what #693 showed as a plain timeout when
+    // those extra calls ran long.
+    //
+    // The stream body closing is the only client-visible proof the handler ran
+    // to completion. If the reply is still missing after this, the row genuinely
+    // did not commit.
+    const turnResponse = await turnRequest;
+    await turnResponse.finished();
 
     // Reload: only committed rows come back. Both halves of the turn must
     // return, proving the transaction committed rather than leaving a
@@ -172,8 +183,11 @@ test.describe('Code quality Group C: transactional turn persistence', () => {
     // If "assistant reply after reload" still fails once the turn has
     // demonstrably finished, that is a real persistence defect: the user
     // message committed and the assistant reply did not.
+    // No networkidle wait here: a session page holds an SSE connection open, so
+    // the network is never idle and the wait can only burn the test's timeout
+    // (see README, "networkidle cannot fire on a session page"). The assertions
+    // below retry on their own.
     await page.reload();
-    await page.waitForLoadState('networkidle');
     await expect(page.getByText(userMessage), 'user message after reload').toBeVisible({
       timeout: 10_000,
     });
