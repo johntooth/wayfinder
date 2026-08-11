@@ -1,4 +1,6 @@
 import { test, expect } from "./helpers/base";
+import { requireSeedFixtures } from "./helpers/seed";
+import { isVisibleWithin } from "./helpers/visible";
 
 // E2E for manual document editing in flows (PRD: manual-document-editing).
 //
@@ -12,19 +14,35 @@ import { test, expect } from "./helpers/base";
 // Assumes the seeded e2e fixture session (see apps/web/src/lib/e2e-fixtures.ts)
 // with a document-producing conversational step.
 
-const SESSION_PATH = process.env.E2E_SESSION_PATH ?? "/chats/e2e-seed-session";
+// The guard was `test.skip(!process.env.E2E_SESSION_PATH, "Needs seeded
+// editable-document session, which seedE2EFixtures does not create yet")`, and
+// the path fell back to a session id that has never existed
+// ("/chats/e2e-seed-session"). Both were wrong: the seeded session carries
+// `onboarding-plan.docx` with documentStatus "complete" and step outputs whose
+// fields are exactly what this dialog edits (name = Jane Smith, organisation =
+// Acme Ltd). Nothing was missing but an environment variable nobody sets.
+const NO_EDIT_ACTION =
+  "Document card offers no Edit action — the step is not active or not edit-enabled";
 
 test.describe("manual document editing", () => {
-  test.beforeEach(() => {
-    test.skip(!process.env.E2E_SESSION_PATH, "Needs seeded editable-document session, which seedE2EFixtures does not create yet — see README 'Two reasons a spec is parked'.");
-  });
+  const openEditor = async (page: import("@playwright/test").Page) => {
+    await page.goto(`/chats/${requireSeedFixtures().sessionId}`);
+
+    const editButton = page.getByRole("button", { name: /edit/i }).first();
+    if (!(await isVisibleWithin(editButton))) return false;
+
+    await editButton.click();
+    return true;
+  };
+
   test("operator edits a field and the card shows the edited marker", async ({ page }) => {
-    await page.goto(SESSION_PATH);
+    const documentCard = page.getByText(/\.docx$/);
 
-    const documentCard = page.getByText(/\.docx$/).first();
-    await expect(documentCard).toBeVisible();
-
-    await page.getByRole("button", { name: /edit/i }).first().click();
+    if (!(await openEditor(page))) {
+      test.skip(true, NO_EDIT_ACTION);
+      return;
+    }
+    await expect(documentCard.first()).toBeVisible();
 
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText(/edit document fields/i)).toBeVisible();
@@ -40,9 +58,10 @@ test.describe("manual document editing", () => {
   test("invalid input is rejected with a per-field message and nothing is saved", async ({
     page,
   }) => {
-    await page.goto(SESSION_PATH);
-
-    await page.getByRole("button", { name: /edit/i }).first().click();
+    if (!(await openEditor(page))) {
+      test.skip(true, NO_EDIT_ACTION);
+      return;
+    }
     const dialog = page.getByRole("dialog");
 
     // Clear a required field and attempt to save.

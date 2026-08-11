@@ -261,6 +261,34 @@ test.skip(!(await edit.isVisible().catch(() => false)), "no document");  // stil
 Unblocking a guard just moves the spec to the next one. Expect a cluster to pay
 out over two passes, not one.
 
+### The parked specs are gated on environment variables, not on data
+
+Ten spec families skip on `!process.env.SOMETHING_PATH` while their message
+blames the seed:
+
+```typescript
+test.skip(!process.env.E2E_FLOWS_DASHBOARD_PATH,
+  "Needs seeded fork-flow dashboard data, which seedE2EFixtures does not create yet");
+```
+
+The condition is an unset variable. The reason is a claim about fixtures. They
+are not the same statement, and for at least four skips the claim is false:
+
+| Parked as | Actually |
+|---|---|
+| fork-flow dashboard data | `seedForkFlow` builds the flow **and two sessions each capturing `amount`** ($1,500 / $2,750) — exactly what the spec's own preamble describes |
+| editable-document session | the seeded session carries `onboarding-plan.docx` (`documentStatus: "complete"`) with `name` / `organisation` step outputs, which is what the dialog edits |
+| knowledge-base session and chunks | genuinely absent — `kb_document_chunks` appears only in the cleanup path |
+| quota-blocked session | genuinely absent — nothing seeds a cap or a blocked session |
+
+So verify before building. Two of these fixtures already existed and only needed
+the spec pointed at `requireSeedFixtures()`; building them again would have been
+a day spent duplicating the seed.
+
+The eight specs waiting on the server-side AI stub are gated the same way, each
+on its own `*_SESSION_PATH`, which is what "each needs a purpose-built session"
+concretely means.
+
 ### What the skips were hiding (run #688)
 
 The composer cluster recovered twelve tests and broke two, which is the first
