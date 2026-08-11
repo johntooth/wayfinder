@@ -119,6 +119,11 @@ export const test = base.extend<WayfinderFixtures>({
 
 export { expect };
 
+// Specs import their fixtures from here rather than from @playwright/test, so
+// the types that go with them belong here too — otherwise a spec needing `Page`
+// has to reach past this module for it.
+export type { Locator, Page } from '@playwright/test';
+
 /**
  * True when a console.error is React's dev-mode hydration warning caused purely
  * by the browser injecting caret-color / fdprocessedid onto inputs after SSR.

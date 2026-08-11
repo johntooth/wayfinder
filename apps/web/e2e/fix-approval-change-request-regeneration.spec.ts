@@ -1,5 +1,5 @@
 import { test, expect } from "./helpers/base";
-import { loadSeedFixtures } from "./helpers/seed";
+import { requireSeedFixtures } from './helpers/seed';
 
 // E2E for the change-request regeneration fix.
 // (docs/development/implemented/alpha-2/v0.23.1/approval-edit-visibility-and-change-requests.phase.md)
@@ -28,15 +28,13 @@ import { loadSeedFixtures } from "./helpers/seed";
 // Both fail on the unfixed code. This spec proves the surfaces those values
 // travel between are wired and reachable by a real user.
 
-const seed = loadSeedFixtures();
 const CHANGE_REQUEST = "The delegate must be Northwind Ltd, not Acme Ltd.";
 
 test.describe("a rejected approval routes back with its request intact", () => {
   test("rejecting with changes returns the work and keeps the request in the thread", async ({
     page,
   }) => {
-    const sessionId = seed?.approvalSubjectSessionId;
-    test.skip(!sessionId, "No seeded approval session — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalSubjectSessionId;
 
     await page.goto("/approvals");
 
@@ -60,8 +58,7 @@ test.describe("a rejected approval routes back with its request intact", () => {
   });
 
   test("the returned step offers a regeneration that completes", async ({ page }) => {
-    const sessionId = seed?.approvalSubjectSessionId;
-    test.skip(!sessionId, "No seeded approval session — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalSubjectSessionId;
 
     await page.goto(`/chats/${sessionId}`);
 

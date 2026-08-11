@@ -17,7 +17,7 @@
  */
 
 import { test, expect } from './helpers/base';
-import { loadSeedFixtures } from './helpers/seed';
+import { requireSeedFixtures } from './helpers/seed';
 import type { Page } from '@playwright/test';
 
 interface NotificationRow {
@@ -50,7 +50,7 @@ async function fetchNotifications(page: Page, resourceId: string): Promise<Notif
 
 test.describe('Email notifications: flow shared', () => {
   test('granting flow ownership writes one outbox row and a repeat grant does not duplicate it', async ({ page }) => {
-    const flowId = loadSeedFixtures()?.flowId;
+    const flowId = requireSeedFixtures().flowId;
     if (!flowId) {
       test.skip(true, 'No seeded flow available — run the seed setup project first');
       return;

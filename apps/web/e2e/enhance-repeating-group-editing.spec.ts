@@ -18,12 +18,11 @@
  */
 
 import { test, expect } from './helpers/base';
-import { loadSeedFixtures } from './helpers/seed';
+import { requireSeedFixtures } from './helpers/seed';
 
 test.describe('enhance: repeating group items in Show Data', () => {
   test('a group renders as a table with humanised headers and per-item rows', async ({ page }) => {
-    const sessionId = loadSeedFixtures()?.sessionId;
-    test.skip(!sessionId, 'no seeded session available');
+    const sessionId = requireSeedFixtures().sessionId;
 
     await page.goto(`/chats/${sessionId}`, { waitUntil: 'domcontentloaded' });
 

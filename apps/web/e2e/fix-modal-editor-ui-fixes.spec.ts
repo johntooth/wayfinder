@@ -1,5 +1,5 @@
 import { test, expect } from "./helpers/base";
-import { loadSeedFixtures } from "./helpers/seed";
+import { requireSeedFixtures } from './helpers/seed';
 
 // E2E regression guards for the v2.11.1 modal-editor UI fixes.
 //
@@ -46,7 +46,7 @@ test.describe("flow modal — icon picker", () => {
 
 test.describe("node config — structured fields", () => {
   test("keeps Single-select selected with no options entered", async ({ page }) => {
-    const structuredFlowId = loadSeedFixtures()?.structuredFlowId;
+    const structuredFlowId = requireSeedFixtures().structuredFlowId;
     if (!structuredFlowId) {
       test.skip(true, "No seeded structured flow — run the seed setup to enable this test");
       return;

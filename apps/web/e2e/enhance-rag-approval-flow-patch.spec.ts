@@ -1,5 +1,5 @@
 import { test, expect } from "./helpers/base";
-import { loadSeedFixtures } from "./helpers/seed";
+import { requireSeedFixtures } from './helpers/seed';
 
 // E2E for the per-turn RAG / approval-history patch.
 // (docs/development/implemented/alpha-2/v0.23.2/rag-turn-context-and-approval-history.phase.md)
@@ -30,7 +30,6 @@ import { loadSeedFixtures } from "./helpers/seed";
 // Assertions are about what an approver can see and reach — never about a
 // specific person being suggested — so they stay deterministic.
 
-const seed = loadSeedFixtures();
 
 const firstPendingRow = (page: import("@playwright/test").Page) =>
   page.locator('[data-approval-status="pending"]').first();
@@ -86,8 +85,7 @@ test.describe("a discarded chat clears the approval it raised", () => {
   test("the approver's Active tab drops the request once the chat is discarded", async ({
     page,
   }) => {
-    const sessionId = seed?.approvalSubjectSessionId;
-    test.skip(!sessionId, "No seeded approval session — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalSubjectSessionId;
 
     await page.goto("/approvals");
     const row = page.locator('[data-approval-status="pending"]').first();
@@ -154,8 +152,7 @@ test.describe("deciding tells the approver who actually needs to know", () => {
 
 test.describe("the approver search offers people who already have accounts", () => {
   test("typing a colleague's name returns an account-backed candidate", async ({ page }) => {
-    const sessionId = seed?.approvalSubjectSessionId;
-    test.skip(!sessionId, "No seeded approval session — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalSubjectSessionId;
 
     await page.goto(`/chats/${sessionId}`);
     const picker = page.locator("[data-approver-picker]");

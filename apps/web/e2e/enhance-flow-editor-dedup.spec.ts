@@ -9,12 +9,11 @@
  */
 
 import { test, expect } from './helpers/base';
-import { loadSeedFixtures } from './helpers/seed';
+import { requireSeedFixtures } from './helpers/seed';
 
 test.describe('Flow editor consolidation', () => {
   test('the retired /admin/flows/[id] path redirects to the canonical editor', async ({ page }) => {
-    const flowId = loadSeedFixtures()?.flowId;
-    test.skip(!flowId, 'No seeded flow available');
+    const flowId = requireSeedFixtures().flowId;
 
     await page.goto(`/admin/flows/${flowId}`);
 

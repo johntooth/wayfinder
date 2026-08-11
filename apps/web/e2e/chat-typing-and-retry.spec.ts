@@ -18,23 +18,16 @@
 
 import { test, expect } from './helpers/base';
 import { delayChatStream, failChatStream } from './helpers/chat-mock';
-import { loadSeedFixtures } from './helpers/seed';
+import { requireSeedFixtures } from './helpers/seed';
 
 async function openSessionWithComposer(
   page: import('@playwright/test').Page,
 ): Promise<import('@playwright/test').Locator | null> {
-  let sessionId = loadSeedFixtures()?.sessionId;
-  if (!sessionId) {
-    await page.goto('/chats');
-    await page.waitForLoadState('networkidle');
-
-    const sessionLink = page.locator('a[href^="/chats/"]').first();
-    const href = await sessionLink.getAttribute('href').catch(() => null);
-    if (!href) return null;
-
-    sessionId = href.match(/\/chats\/([^/?]+)/)?.[1];
-  }
-  if (!sessionId) return null;
+  // Scraping the first link out of /chats used to be the fallback here. It
+  // picked whichever session the run happened to have created by then, so the
+  // composer it returned was not always the seeded one — and when the list was
+  // empty it returned null and the tests skipped themselves.
+  const { sessionId } = requireSeedFixtures();
 
   await page.goto(`/chats/${sessionId}`);
   await page.waitForLoadState('networkidle');

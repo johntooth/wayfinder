@@ -21,10 +21,10 @@
  */
 
 import { test, expect } from './helpers/base';
-import { loadSeedFixtures } from './helpers/seed';
+import { requireSeedFixtures } from './helpers/seed';
 
 async function resolveSessionId(page: import('@playwright/test').Page): Promise<string | null> {
-  const seeded = loadSeedFixtures()?.sessionId;
+  const seeded = requireSeedFixtures().sessionId;
   if (seeded) return seeded;
 
   await page.goto('/chats');

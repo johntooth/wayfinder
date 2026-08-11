@@ -440,6 +440,7 @@ jobs:
           fs.writeFileSync('summary.md', md);
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
           fs.appendFileSync(process.env.GITHUB_OUTPUT, 'ok=' + ok + '\n');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'skipped=' + (s.skipped||0) + '\n');
           "
 
       # ── Netlify deploy (optional) ──────────────────────────────────────────
@@ -546,3 +547,36 @@ jobs:
         run: |
           echo "One or more E2E tests failed — see the summary above." >&2
           exit 1
+
+      # ── Skip ceiling ───────────────────────────────────────────────────────
+      # A skipped spec is green in every report while asserting nothing, so the
+      # suite can quietly stop testing things without any run turning red. That
+      # is how the withdrawable-approval spec sat dormant for several releases.
+      #
+      # Seed-backed gates now throw (helpers/seed.ts → requireSeedFixtures), so
+      # what remains should only be genuine capability gates: no object storage,
+      # PKI off, real-AI-only paths. Those are a small, countable set — and the
+      # count only moves when someone changes what the environment can do, which
+      # is exactly when a human should look.
+      #
+      # Raising this number is a legitimate fix, but it must be a decision, not
+      # a side effect. Lower it whenever a gate is retired.
+      - name: Fail if too many tests skipped
+        if: always() && steps.summary.outputs.skipped != ''
+        env:
+          MAX_SKIPPED: "24"
+        run: |
+          SKIPPED='${{ steps.summary.outputs.skipped }}'
+          echo "Skipped: $SKIPPED (ceiling: $MAX_SKIPPED)"
+          if [ "$SKIPPED" -gt "$MAX_SKIPPED" ]; then
+            {
+              echo ""
+              echo "### ⏭️ Skip ceiling exceeded"
+              echo ""
+              echo "\`$SKIPPED\` tests skipped, ceiling is \`$MAX_SKIPPED\`."
+              echo "Open the report and check each skip is a real capability gate."
+            } >> $GITHUB_STEP_SUMMARY
+            echo "Skip ceiling exceeded: $SKIPPED > $MAX_SKIPPED." >&2
+            echo "Every skip must be a capability gate the environment genuinely cannot meet." >&2
+            exit 1
+          fi

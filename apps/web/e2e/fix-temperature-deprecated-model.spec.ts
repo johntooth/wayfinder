@@ -1,5 +1,5 @@
 import { test, expect } from "./helpers/base";
-import { loadSeedFixtures } from "./helpers/seed";
+import { requireSeedFixtures } from './helpers/seed';
 
 // E2E regression for the `temperature` failure on the Claude 5 family.
 // (docs/development/implemented/alpha-2/v0.22.1/approval-config-and-temperature.phase.md)
@@ -21,12 +21,10 @@ import { loadSeedFixtures } from "./helpers/seed";
 // after it, there are none. That is what this asserts — not that a particular
 // document was produced, which depends on the configured provider.
 
-const seed = loadSeedFixtures();
 
 test.describe("LLM calls carry no temperature", () => {
   test("driving a chat turn logs no deprecated-parameter failure", async ({ page }) => {
-    const sessionId = seed?.sessionId;
-    test.skip(!sessionId, "No seeded session — run the seed setup project");
+    const sessionId = requireSeedFixtures().sessionId;
 
     await page.goto(`/chats/${sessionId}`);
 
@@ -49,8 +47,7 @@ test.describe("LLM calls carry no temperature", () => {
   });
 
   test("the document endpoint does not reject the request outright", async ({ page }) => {
-    const sessionId = seed?.sessionId;
-    test.skip(!sessionId, "No seeded session — run the seed setup project");
+    const sessionId = requireSeedFixtures().sessionId;
 
     await page.goto(`/chats/${sessionId}`);
 

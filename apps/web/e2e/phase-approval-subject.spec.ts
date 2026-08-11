@@ -1,5 +1,5 @@
 import { test, expect } from "./helpers/base";
-import { loadSeedFixtures } from "./helpers/seed";
+import { requireSeedFixtures } from './helpers/seed';
 
 // E2E for the approval subject / signature / routing phase.
 // (docs/development/implemented/alpha-2/v0.22.0/approval-subject.phase.md)
@@ -31,7 +31,6 @@ import { loadSeedFixtures } from "./helpers/seed";
 // about a specific email being delivered, so they stay deterministic.
 
 const APPROVALS_PATH = process.env.E2E_APPROVALS_PATH ?? "/approvals";
-const seed = loadSeedFixtures();
 const SUBJECT_CHAT_NAME = "E2E SEED Approval Subject Session";
 const SUBJECT_DOCUMENT = "delegation-instrument.docx";
 const SUBJECT_STEP_NAME = "Prepare instrument";
@@ -100,8 +99,7 @@ test.describe("approval subject, signature and routing", () => {
   test("configuring an approval with nothing editable before it warns the author", async ({
     page,
   }) => {
-    const flowId = seed?.approvalFirstFlowId;
-    test.skip(!flowId, "No seeded approval-first flow — run the seed setup project");
+    const flowId = requireSeedFixtures().approvalFirstFlowId;
 
     await page.goto(`/flows/${flowId}/config`);
 
@@ -122,8 +120,7 @@ test.describe("approval subject, signature and routing", () => {
   test("the approval config offers a subject and defaults to the last completed step", async ({
     page,
   }) => {
-    const flowId = seed?.approvalFirstFlowId;
-    test.skip(!flowId, "No seeded approval-first flow — run the seed setup project");
+    const flowId = requireSeedFixtures().approvalFirstFlowId;
 
     await page.goto(`/flows/${flowId}/config`);
 

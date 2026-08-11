@@ -1,5 +1,5 @@
 import { test, expect } from "./helpers/base";
-import { loadSeedFixtures } from "./helpers/seed";
+import { requireSeedFixtures } from './helpers/seed';
 
 // E2E for changing who an open approval request is with.
 // (docs/development/implemented/alpha-2/v0.26.0/approval-documents-and-reassignment.phase.md)
@@ -26,14 +26,12 @@ import { loadSeedFixtures } from "./helpers/seed";
 // Reassignment is destructive to the seeded row's assignee, so the move itself
 // runs last.
 
-const seed = loadSeedFixtures();
 
 test.describe.configure({ mode: "serial" });
 
 test.describe("changing who an open request is with", () => {
   test("names the assigned approver on the sent card", async ({ page }) => {
-    const sessionId = seed?.approvalSubjectSessionId;
-    test.skip(!sessionId, "No seeded approval session — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalSubjectSessionId;
 
     await page.goto(`/chats/${sessionId}`);
 
@@ -49,8 +47,7 @@ test.describe("changing who an open request is with", () => {
   });
 
   test("offers Email approver on a sent request", async ({ page }) => {
-    const sessionId = seed?.approvalSubjectSessionId;
-    test.skip(!sessionId, "No seeded approval session — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalSubjectSessionId;
 
     await page.goto(`/chats/${sessionId}`);
     await expect(page.locator("[data-approval-gate]")).toBeVisible();
@@ -59,8 +56,7 @@ test.describe("changing who an open request is with", () => {
   });
 
   test("opens a picker that keeps the existing message for revision", async ({ page }) => {
-    const sessionId = seed?.approvalSubjectSessionId;
-    test.skip(!sessionId, "No seeded approval session — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalSubjectSessionId;
 
     await page.goto(`/chats/${sessionId}`);
     await expect(page.locator("[data-approval-gate]")).toBeVisible();
@@ -87,8 +83,7 @@ test.describe("changing who an open request is with", () => {
   });
 
   test("moves the request without pulling the chat back a step", async ({ page }) => {
-    const sessionId = seed?.approvalSubjectSessionId;
-    test.skip(!sessionId, "No seeded approval session — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalSubjectSessionId;
 
     await page.goto(`/chats/${sessionId}`);
     await expect(page.locator("[data-approval-gate]")).toBeVisible();

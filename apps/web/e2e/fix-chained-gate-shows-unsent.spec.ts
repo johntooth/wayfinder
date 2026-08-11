@@ -1,5 +1,5 @@
 import { test, expect } from "./helpers/base";
-import { loadSeedFixtures } from "./helpers/seed";
+import { requireSeedFixtures } from './helpers/seed';
 
 // E2E for the chained approval gate showing an unsent card for a request the
 // previous approver had already sent.
@@ -19,12 +19,10 @@ import { loadSeedFixtures } from "./helpers/seed";
 // and must offer neither the approver search nor a Confirm button, because a
 // Confirm from a stale card would overwrite the approver someone else set.
 
-const seed = loadSeedFixtures();
 
 test.describe("a chained approval that has already been sent", () => {
   test("renders the sent card, not an invitation to choose", async ({ page }) => {
-    const sessionId = seed?.approvalSubjectSessionId;
-    test.skip(!sessionId, "No seeded approval session — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalSubjectSessionId;
 
     await page.goto(`/chats/${sessionId}`);
 
@@ -38,8 +36,7 @@ test.describe("a chained approval that has already been sent", () => {
   });
 
   test("names the approver rather than saying 'the approver'", async ({ page }) => {
-    const sessionId = seed?.approvalSubjectSessionId;
-    test.skip(!sessionId, "No seeded approval session — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalSubjectSessionId;
 
     await page.goto(`/chats/${sessionId}`);
     const gate = page.locator("[data-approval-gate]");
@@ -56,8 +53,7 @@ test.describe("a chained approval that has already been sent", () => {
   // `approverUserId` unconditionally, silently replacing the approver the
   // previous approver had already sent to.
   test("offers no approver search or Confirm on an assigned request", async ({ page }) => {
-    const sessionId = seed?.approvalSubjectSessionId;
-    test.skip(!sessionId, "No seeded approval session — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalSubjectSessionId;
 
     await page.goto(`/chats/${sessionId}`);
     const gate = page.locator("[data-approval-gate]");
@@ -68,8 +64,7 @@ test.describe("a chained approval that has already been sent", () => {
   });
 
   test("offers the manage actions instead", async ({ page }) => {
-    const sessionId = seed?.approvalSubjectSessionId;
-    test.skip(!sessionId, "No seeded approval session — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalSubjectSessionId;
 
     await page.goto(`/chats/${sessionId}`);
     await expect(page.locator("[data-approval-gate]")).toBeVisible();

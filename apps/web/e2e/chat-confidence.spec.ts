@@ -14,10 +14,10 @@
  */
 
 import { test, expect } from './helpers/base';
-import { loadSeedFixtures } from './helpers/seed';
+import { requireSeedFixtures } from './helpers/seed';
 
 async function resolveActiveSessionId(page: import('@playwright/test').Page): Promise<string | null> {
-  const seeded = loadSeedFixtures()?.sessionId;
+  const seeded = requireSeedFixtures().sessionId;
   if (seeded) return seeded;
 
   await page.goto('/chats');
@@ -177,7 +177,7 @@ test.describe('Chat: Confidence', () => {
 test.describe('Chat: Document Generation', () => {
   test('document card shows download button', async ({ page, consoleLogs }) => {
     // Prefer the seeded session, which has a completed document-generation step.
-    const seededSessionId = loadSeedFixtures()?.sessionId;
+    const seededSessionId = requireSeedFixtures().sessionId;
     const candidateIds: string[] = [];
     if (seededSessionId) {
       candidateIds.push(seededSessionId);

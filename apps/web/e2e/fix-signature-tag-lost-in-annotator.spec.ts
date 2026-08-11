@@ -22,7 +22,7 @@
 
 import { test, expect } from './helpers/base';
 import type { Page, Route } from '@playwright/test';
-import { loadSeedFixtures } from './helpers/seed';
+import { requireSeedFixtures } from './helpers/seed';
 
 const fakeDocx = () => Buffer.from('PK\x03\x04 fake docx content');
 
@@ -168,9 +168,7 @@ test.describe('fix: the signature tag survives the annotation editor', () => {
 
 test.describe('fix: a lone signature slot is bound rather than assumed', () => {
   test('shows the slot dropdown when the subject step declares a signature', async ({ page }) => {
-    const seed = loadSeedFixtures();
-    const flowId = seed?.approvalSubjectFlowId;
-    test.skip(!flowId, 'No seeded approval flow — run the seed setup project');
+    const flowId = requireSeedFixtures().approvalSubjectFlowId;
 
     await page.goto(`/flows/${flowId}/config`);
     await page.waitForLoadState('networkidle');

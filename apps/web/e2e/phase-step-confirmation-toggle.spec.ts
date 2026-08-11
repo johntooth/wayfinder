@@ -1,5 +1,5 @@
 import { test, expect } from "./helpers/base";
-import { loadSeedFixtures } from "./helpers/seed";
+import { requireSeedFixtures } from './helpers/seed';
 
 // E2E for the require-confirmation-before-completing-a-step toggle
 // (PRD: step-confirmation-toggle, ADR-026).
@@ -20,7 +20,7 @@ import { loadSeedFixtures } from "./helpers/seed";
 // to drive against.
 function confirmationSessionPath(): string | null {
   if (process.env.E2E_CONFIRM_SESSION_PATH) return process.env.E2E_CONFIRM_SESSION_PATH;
-  const confirmationSessionId = loadSeedFixtures()?.confirmationSessionId;
+  const confirmationSessionId = requireSeedFixtures().confirmationSessionId;
   return confirmationSessionId ? `/chats/${confirmationSessionId}` : null;
 }
 

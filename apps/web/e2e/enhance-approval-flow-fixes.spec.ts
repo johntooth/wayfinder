@@ -1,5 +1,5 @@
 import { test, expect } from "./helpers/base";
-import { loadSeedFixtures } from "./helpers/seed";
+import { requireSeedFixtures } from './helpers/seed';
 
 // E2E for the approval-flow fixes.
 // (docs/development/implemented/alpha-2/v0.22.2/approval-flow-fixes.phase.md)
@@ -28,12 +28,10 @@ import { loadSeedFixtures } from "./helpers/seed";
 // Assertions are about what an operator and an approver can see — never about a
 // specific person being suggested — so they stay deterministic.
 
-const seed = loadSeedFixtures();
 
 test.describe("the approval selector always names the approver", () => {
   test("the chat gate names the stage even with no role hint configured", async ({ page }) => {
-    const sessionId = seed?.approvalSubjectSessionId;
-    test.skip(!sessionId, "No seeded approval session — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalSubjectSessionId;
 
     await page.goto(`/chats/${sessionId}`);
 

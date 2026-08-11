@@ -1,5 +1,5 @@
 import { test, expect } from "./helpers/base";
-import { loadSeedFixtures } from "./helpers/seed";
+import { requireSeedFixtures } from './helpers/seed';
 
 // E2E for the approval configuration and approver-picker enhancements.
 // (docs/development/implemented/alpha-2/v0.22.1/approval-config-and-temperature.phase.md)
@@ -25,15 +25,13 @@ import { loadSeedFixtures } from "./helpers/seed";
 // Assertions are about what the author and operator can see, never about a
 // specific person being suggested, so they stay deterministic in the sandbox.
 
-const seed = loadSeedFixtures();
 const CUSTOM_SUBJECT_OPTION = "__describe__";
 
 test.describe("approval node — one question for the subject", () => {
   test("the subject select carries the default, the steps and the described case", async ({
     page,
   }) => {
-    const flowId = seed?.approvalFirstFlowId;
-    test.skip(!flowId, "No seeded approval-first flow — run the seed setup project");
+    const flowId = requireSeedFixtures().approvalFirstFlowId;
 
     await page.goto(`/flows/${flowId}/config`);
 
@@ -60,8 +58,7 @@ test.describe("approval node — one question for the subject", () => {
   test("choosing the described case reveals the instruction, and going back hides it", async ({
     page,
   }) => {
-    const flowId = seed?.approvalFirstFlowId;
-    test.skip(!flowId, "No seeded approval-first flow — run the seed setup project");
+    const flowId = requireSeedFixtures().approvalFirstFlowId;
 
     await page.goto(`/flows/${flowId}/config`);
 
@@ -86,8 +83,7 @@ test.describe("approval node — one question for the subject", () => {
 
 test.describe("approver picker — no dead end when nothing is configured", () => {
   test("the picker is open when there is no suggestion to confirm", async ({ page }) => {
-    const sessionId = seed?.approvalSubjectSessionId;
-    test.skip(!sessionId, "No seeded approval session — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalSubjectSessionId;
 
     await page.goto(`/chats/${sessionId}`);
 
@@ -117,8 +113,7 @@ test.describe("approver picker — no dead end when nothing is configured", () =
   test("what is not configured is an info affordance, not a warning in the panel", async ({
     page,
   }) => {
-    const sessionId = seed?.approvalSubjectSessionId;
-    test.skip(!sessionId, "No seeded approval session — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalSubjectSessionId;
 
     await page.goto(`/chats/${sessionId}`);
 

@@ -1,16 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDefaultSiteBannerConfig } from "@rbrasier/domain";
-import { SiteBanner, buildSiteBannerStyle } from "./site-banner";
-
-describe("SiteBanner", () => {
-  it("exports a function component", () => {
-    expect(typeof SiteBanner).toBe("function");
-  });
-
-  it("component name is SiteBanner", () => {
-    expect(SiteBanner.name).toBe("SiteBanner");
-  });
-});
+import { buildSiteBannerStyle } from "./site-banner";
 
 describe("buildSiteBannerStyle", () => {
   it("maps the configured colours and point size onto inline style properties", () => {

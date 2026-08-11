@@ -1,5 +1,5 @@
 import { test, expect } from "./helpers/base";
-import { loadSeedFixtures } from "./helpers/seed";
+import { requireSeedFixtures } from './helpers/seed';
 
 // E2E for the document edit-history modal.
 // (docs/development/implemented/alpha-2/v0.23.1/approval-edit-visibility-and-change-requests.phase.md)
@@ -20,7 +20,6 @@ import { loadSeedFixtures } from "./helpers/seed";
 // the summary is read straight back out of the recorded history, so no model
 // call stands between the edit and the assertion.
 
-const seed = loadSeedFixtures();
 const EDITED_NAME = "Northwind Ltd";
 
 test.describe("what an approver changed is visible on the document", () => {
@@ -77,8 +76,7 @@ test.describe("what an approver changed is visible on the document", () => {
   });
 
   test("the originator sees the same history in the session thread", async ({ page }) => {
-    const sessionId = seed?.approvalSubjectSessionId;
-    test.skip(!sessionId, "No seeded approval session — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalSubjectSessionId;
 
     await page.goto(`/chats/${sessionId}`);
 

@@ -12,11 +12,11 @@
  */
 
 import { test, expect } from './helpers/base';
-import { loadSeedFixtures } from './helpers/seed';
+import { requireSeedFixtures } from './helpers/seed';
 
 test.describe('Code quality Group E: stream body validation', () => {
   test('a malformed stream body is rejected with 400', async ({ page }) => {
-    const sessionId = loadSeedFixtures()?.sessionId;
+    const sessionId = requireSeedFixtures().sessionId;
     if (!sessionId) {
       test.skip(true, 'Seed fixtures unavailable — seed to enable this test');
       return;

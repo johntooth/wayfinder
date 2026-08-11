@@ -13,7 +13,7 @@
  */
 
 import { test, expect } from './helpers/base';
-import { loadSeedFixtures } from './helpers/seed';
+import { requireSeedFixtures } from './helpers/seed';
 import type { Page } from '@playwright/test';
 import { openSettingsSection } from './helpers/settings';
 
@@ -49,7 +49,7 @@ test.describe('Step approvals: UI', () => {
 
 test.describe('Step approvals: API', () => {
   test('an approval node can be created with an approverSource and persists', async ({ page }) => {
-    const flowId = loadSeedFixtures()?.flowId;
+    const flowId = requireSeedFixtures().flowId;
     if (!flowId) {
       test.skip(true, 'No seeded flow available — run the seed setup project first');
       return;
@@ -95,7 +95,7 @@ test.describe('Step approvals: API', () => {
   test('a dynamic approval node persists its roleHint (v1.39 RAG suggestion source)', async ({
     page,
   }) => {
-    const flowId = loadSeedFixtures()?.flowId;
+    const flowId = requireSeedFixtures().flowId;
     if (!flowId) {
       test.skip(true, 'No seeded flow available — run the seed setup project first');
       return;

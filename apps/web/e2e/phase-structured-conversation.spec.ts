@@ -1,5 +1,5 @@
 import { test, expect } from "./helpers/base";
-import { loadSeedFixtures } from "./helpers/seed";
+import { requireSeedFixtures } from './helpers/seed';
 
 // E2E for the Structured Conversation output type
 // (PRD: structured-conversation, ADR-038).
@@ -24,14 +24,14 @@ import { loadSeedFixtures } from "./helpers/seed";
 // Resolve the seeded structured session path, or null when nothing is seeded.
 function structuredSessionPath(): string | null {
   if (process.env.E2E_STRUCTURED_SESSION_PATH) return process.env.E2E_STRUCTURED_SESSION_PATH;
-  const structuredSessionId = loadSeedFixtures()?.structuredSessionId;
+  const structuredSessionId = requireSeedFixtures().structuredSessionId;
   return structuredSessionId ? `/chats/${structuredSessionId}` : null;
 }
 
 // Resolve the seeded structured flow's config-canvas path, or null when unseeded.
 function structuredFlowConfigPath(): string | null {
   if (process.env.E2E_FLOW_CONFIG_PATH) return process.env.E2E_FLOW_CONFIG_PATH;
-  const structuredFlowId = loadSeedFixtures()?.structuredFlowId;
+  const structuredFlowId = requireSeedFixtures().structuredFlowId;
   return structuredFlowId ? `/flows/${structuredFlowId}/config` : null;
 }
 

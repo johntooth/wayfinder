@@ -16,9 +16,8 @@
 
 import { test, expect } from './helpers/base';
 import type { Page } from '@playwright/test';
-import { loadSeedFixtures } from './helpers/seed';
+import { requireSeedFixtures } from './helpers/seed';
 
-const seed = loadSeedFixtures();
 
 async function openApprovalConfig(page: Page, flowId: string, stepName: string): Promise<void> {
   await page.goto(`/flows/${flowId}/config`);
@@ -30,8 +29,7 @@ async function openApprovalConfig(page: Page, flowId: string, stepName: string):
 
 test.describe('a signature is never asked for in the conversation', () => {
   test('the step gathers its fields without naming the signature slots', async ({ page }) => {
-    const sessionId = seed?.approvalSubjectSessionId;
-    test.skip(!sessionId, 'No seeded approval session — run the seed setup project');
+    const sessionId = requireSeedFixtures().approvalSubjectSessionId;
 
     await page.goto(`/chats/${sessionId}`);
     await page.waitForLoadState('networkidle');
@@ -47,8 +45,7 @@ test.describe('a signature is never asked for in the conversation', () => {
 
 test.describe('the canvas warns about a signature nobody signs', () => {
   test('stays silent on a flow whose signatures are all bound', async ({ page }) => {
-    const flowId = seed?.approvalSubjectFlowId;
-    test.skip(!flowId, 'No seeded approval flow — run the seed setup project');
+    const flowId = requireSeedFixtures().approvalSubjectFlowId;
 
     await page.goto(`/flows/${flowId}/config`);
     await page.waitForLoadState('networkidle');
@@ -70,8 +67,7 @@ test.describe('the canvas warns about a signature nobody signs', () => {
   // approval on the default subject, which stores no `approvalSubject` — so the
   // claim was scoped to nothing and the advisory fired on a bound flow.
   test('stays quiet about a slot bound by an approval on the default subject', async ({ page }) => {
-    const flowId = seed?.signatureWarningFlowId;
-    test.skip(!flowId, 'No seeded signature-warning flow — run the seed setup project');
+    const flowId = requireSeedFixtures().signatureWarningFlowId;
 
     await page.goto(`/flows/${flowId}/config`);
     await page.waitForLoadState('networkidle');
@@ -87,8 +83,7 @@ test.describe('the canvas warns about a signature nobody signs', () => {
   });
 
   test('names the unsigned slot, its step, and how to bind it', async ({ page }) => {
-    const flowId = seed?.signatureWarningFlowId;
-    test.skip(!flowId, 'No seeded signature-warning flow — run the seed setup project');
+    const flowId = requireSeedFixtures().signatureWarningFlowId;
 
     await page.goto(`/flows/${flowId}/config`);
     await page.waitForLoadState('networkidle');
@@ -104,8 +99,7 @@ test.describe('the canvas warns about a signature nobody signs', () => {
   });
 
   test('the warning band stacks advisories rather than overlapping them', async ({ page }) => {
-    const flowId = seed?.approvalSubjectFlowId;
-    test.skip(!flowId, 'No seeded approval flow — run the seed setup project');
+    const flowId = requireSeedFixtures().approvalSubjectFlowId;
 
     await page.goto(`/flows/${flowId}/config`);
     await page.waitForLoadState('networkidle');
@@ -120,8 +114,7 @@ test.describe('the canvas warns about a signature nobody signs', () => {
 
 test.describe('the default subject offers its signature slots', () => {
   test('shows the slot dropdown without the author naming a step', async ({ page }) => {
-    const flowId = seed?.approvalSubjectFlowId;
-    test.skip(!flowId, 'No seeded approval flow — run the seed setup project');
+    const flowId = requireSeedFixtures().approvalSubjectFlowId;
 
     await openApprovalConfig(page, flowId, 'Delegate sign-off');
 

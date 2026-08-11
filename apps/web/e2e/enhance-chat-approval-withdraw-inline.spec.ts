@@ -1,5 +1,5 @@
 import { test, expect } from "./helpers/base";
-import { loadSeedFixtures } from "./helpers/seed";
+import { requireSeedFixtures } from './helpers/seed';
 
 // E2E for withdrawing an approval and moving the gate into the chat.
 // (docs/development/implemented/alpha-2/v0.25.0/chat-approval-withdraw-and-inline-gate.phase.md)
@@ -27,7 +27,6 @@ import { loadSeedFixtures } from "./helpers/seed";
 // The withdrawal test is destructive by design — it is the behaviour under
 // test — and runs last against a session no other spec reads.
 
-const seed = loadSeedFixtures();
 const APPROVALS_PATH = process.env.E2E_APPROVALS_PATH ?? "/approvals";
 
 test.describe.configure({ mode: "serial" });
@@ -36,8 +35,7 @@ test.describe("the approval gate sits in the chat, above the composer", () => {
   test("renders inside the composer stack rather than as a band over the chat", async ({
     page,
   }) => {
-    const sessionId = seed?.approvalWithdrawSessionId;
-    test.skip(!sessionId, "No seeded withdrawable approval — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalWithdrawSessionId;
 
     await page.goto(`/chats/${sessionId}`);
 
@@ -62,8 +60,7 @@ test.describe("the approval gate sits in the chat, above the composer", () => {
   });
 
   test("hides the chat input entirely while the approval is pending", async ({ page }) => {
-    const sessionId = seed?.approvalWithdrawSessionId;
-    test.skip(!sessionId, "No seeded withdrawable approval — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalWithdrawSessionId;
 
     await page.goto(`/chats/${sessionId}`);
     await expect(page.locator("[data-approval-gate]")).toBeVisible();
@@ -80,8 +77,7 @@ test.describe("the approval gate sits in the chat, above the composer", () => {
   test("keeps the document downloadable, and hides Edit while the request is out", async ({
     page,
   }) => {
-    const sessionId = seed?.approvalWithdrawSessionId;
-    test.skip(!sessionId, "No seeded withdrawable approval — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalWithdrawSessionId;
 
     await page.goto(`/chats/${sessionId}`);
     await expect(page.locator("[data-approval-gate]")).toBeVisible();
@@ -100,7 +96,6 @@ test.describe("the approval gate sits in the chat, above the composer", () => {
 
 test.describe("the originator's message reaches the approver", () => {
   test("the seeded request message shows on the approver's card", async ({ page }) => {
-    test.skip(!seed?.approvalWithdrawSessionId, "No seeded withdrawable approval");
 
     await page.goto(APPROVALS_PATH);
 
@@ -116,8 +111,7 @@ test.describe("the originator's message reaches the approver", () => {
 
 test.describe("withdrawing a sent approval", () => {
   test("asks for confirmation before pulling the request", async ({ page }) => {
-    const sessionId = seed?.approvalWithdrawSessionId;
-    test.skip(!sessionId, "No seeded withdrawable approval — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalWithdrawSessionId;
 
     await page.goto(`/chats/${sessionId}`);
     await expect(page.locator("[data-approval-gate]")).toBeVisible();
@@ -137,9 +131,8 @@ test.describe("withdrawing a sent approval", () => {
   });
 
   test("returns the chat to the previous conversational step", async ({ page }) => {
-    const sessionId = seed?.approvalWithdrawSessionId;
-    const draftStepName = seed?.approvalWithdrawDraftStepName;
-    test.skip(!sessionId, "No seeded withdrawable approval — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalWithdrawSessionId;
+    const draftStepName = requireSeedFixtures().approvalWithdrawDraftStepName;
 
     await page.goto(`/chats/${sessionId}`);
     await expect(page.locator("[data-approval-gate]")).toBeVisible();
@@ -171,8 +164,7 @@ test.describe("withdrawing a sent approval", () => {
   // chat." Both halves of that come back together: the card is still there, and
   // Edit returns with it now the session is off the approval node.
   test("returns the document and its Edit affordance after withdrawal", async ({ page }) => {
-    const sessionId = seed?.approvalWithdrawSessionId;
-    test.skip(!sessionId, "No seeded withdrawable approval — run the seed setup project");
+    const sessionId = requireSeedFixtures().approvalWithdrawSessionId;
 
     await page.goto(`/chats/${sessionId}`);
     // Runs after the withdrawal above (serial mode), so the gate is gone.
@@ -188,7 +180,6 @@ test.describe("withdrawing a sent approval", () => {
   });
 
   test("clears the request from the approver's queue", async ({ page }) => {
-    test.skip(!seed?.approvalWithdrawSessionId, "No seeded withdrawable approval");
 
     await page.goto(APPROVALS_PATH);
 

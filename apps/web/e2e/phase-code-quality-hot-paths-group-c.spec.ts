@@ -13,13 +13,13 @@
  */
 
 import { test, expect } from './helpers/base';
-import { loadSeedFixtures } from './helpers/seed';
+import { requireSeedFixtures } from './helpers/seed';
 
 test.describe('Code quality Group C: transactional turn persistence', () => {
   test('a committed turn keeps its user message and assistant reply after reload', async ({
     page,
   }) => {
-    const sessionId = loadSeedFixtures()?.sessionId;
+    const sessionId = requireSeedFixtures().sessionId;
     if (!sessionId) {
       test.skip(true, 'Seed fixtures unavailable — seed to enable this test');
       return;
