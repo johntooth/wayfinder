@@ -12,7 +12,6 @@
 
 import { test, expect } from './helpers/base';
 import { requireSeedFixtures } from './helpers/seed';
-import { waitForChatReady } from './helpers/chat-nav';
 
 async function resolveExistingSessionId(page: import('@playwright/test').Page): Promise<string | null> {
   const seeded = requireSeedFixtures().sessionId;
@@ -38,7 +37,7 @@ test.describe('Chat: Composer file upload', () => {
     }
 
     await page.goto(`/chats/${sessionId}`);
-    await waitForChatReady(page);
+    await page.waitForLoadState('networkidle');
     await page.screenshot({ path: 'screenshots/chat-composer-upload.png', fullPage: true });
 
     const attachButton = page.getByRole('button', { name: /attach a file for context/i });
@@ -92,7 +91,7 @@ test.describe('Chat: Composer file upload', () => {
     });
 
     await page.goto(`/chats/${sessionId}`);
-    await waitForChatReady(page);
+    await page.waitForLoadState('networkidle');
 
     const attachButton = page.getByRole('button', { name: /attach a file for context/i });
     if (!(await attachButton.isVisible().catch(() => false))) {

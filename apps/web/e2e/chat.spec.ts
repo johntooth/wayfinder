@@ -15,7 +15,6 @@
 
 import { test, expect } from './helpers/base';
 import { requireSeedFixtures } from './helpers/seed';
-import { waitForChatReady } from './helpers/chat-nav';
 
 const AI_MODE = process.env.USE_REAL_AI === 'true' ? 'REAL AI' : 'MOCKED AI';
 
@@ -80,7 +79,7 @@ test.describe('Chat: Session', () => {
     }
 
     await page.goto(`/chats/${sessionId}`);
-    await waitForChatReady(page);
+    await page.waitForLoadState('networkidle');
     await page.screenshot({ path: 'screenshots/chat-session-initial.png', fullPage: true });
 
     const errors = consoleLogs.filter(l => l.type === 'error');
@@ -96,7 +95,7 @@ test.describe('Chat: Session', () => {
     }
 
     await page.goto(`/chats/${sessionId}`);
-    await waitForChatReady(page);
+    await page.waitForLoadState('networkidle');
 
     // ChatComposer renders a <textarea> with placeholder "Message Wayfinder…"
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
@@ -122,7 +121,7 @@ test.describe('Chat: Session', () => {
     }
 
     await page.goto(`/chats/${sessionId}`);
-    await waitForChatReady(page);
+    await page.waitForLoadState('networkidle');
 
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
     const visible = await input.isVisible().catch(() => false);
@@ -168,7 +167,7 @@ test.describe('Chat: Session', () => {
     }
 
     await page.goto(`/chats/${sessionId}`);
-    await waitForChatReady(page);
+    await page.waitForLoadState('networkidle');
 
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
     const visible = await input.isVisible().catch(() => false);

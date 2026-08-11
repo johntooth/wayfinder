@@ -9,7 +9,6 @@
 
 import { test, expect } from './helpers/base';
 import { requireSeedFixtures } from './helpers/seed';
-import { waitForChatReady } from './helpers/chat-nav';
 
 /**
  * The seeded session id, plus the composer selector every group drives.
@@ -99,7 +98,7 @@ test.describe('Scaling current stack — Group B', () => {
   }) => {
     const sessionId = resolveSessionId();
     await page.goto(`/chats/${sessionId}`);
-    await waitForChatReady(page);
+    await page.waitForLoadState('networkidle');
 
     // Server-computed role = owner → not read-only → the composer is present.
     const composer = page.locator(composerSelector);
@@ -117,7 +116,7 @@ test.describe('Scaling current stack — Group B', () => {
     // even for the owner. Now the server-computed role decides, so the owner
     // still sees the composer on the collaborate URL.
     await page.goto(`/chats/${sessionId}`);
-    await waitForChatReady(page);
+    await page.waitForLoadState('networkidle');
     const activeComposer = page.locator(composerSelector);
     if (!(await activeComposer.isVisible().catch(() => false))) {
       test.skip(true, 'Seeded session is not active');
@@ -125,7 +124,7 @@ test.describe('Scaling current stack — Group B', () => {
     }
 
     await page.goto(`/chats/${sessionId}?shared=true`);
-    await waitForChatReady(page);
+    await page.waitForLoadState('networkidle');
     await expect(page.locator(composerSelector)).toBeVisible();
   });
 
@@ -226,7 +225,7 @@ test.describe('Scaling current stack — Group C', () => {
   }) => {
     const sessionId = resolveSessionId();
     await page.goto(`/chats/${sessionId}`);
-    await waitForChatReady(page);
+    await page.waitForLoadState('networkidle');
 
     const status = await page
       .getByText(/complete|abandoned|cancelled/i)
@@ -277,7 +276,7 @@ test.describe('Scaling current stack — Group D', () => {
   }) => {
     const sessionId = resolveSessionId();
     await page.goto(`/chats/${sessionId}`);
-    await waitForChatReady(page);
+    await page.waitForLoadState('networkidle');
 
     const terminal = await page
       .getByText(/complete|abandoned|cancelled/i)
