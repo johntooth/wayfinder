@@ -1,5 +1,6 @@
 import { test, expect } from "./helpers/base";
 import { requireSeedFixtures } from './helpers/seed';
+import { isVisibleWithin } from "./helpers/visible";
 
 // E2E for the approval-flow fixes.
 // (docs/development/implemented/alpha-2/v0.22.2/approval-flow-fixes.phase.md)
@@ -56,7 +57,7 @@ test.describe("the approval selector always names the approver", () => {
 
     const row = page.locator("[data-approval-id]").first();
     test.skip(
-      !(await row.isVisible().catch(() => false)),
+      !(await isVisibleWithin(row)),
       "No pending approvals for this user in the seeded stack",
     );
 
@@ -70,7 +71,7 @@ test.describe("the decision modal carries what the approver needs", () => {
 
     const row = page.locator("[data-approval-id]").first();
     test.skip(
-      !(await row.isVisible().catch(() => false)),
+      !(await isVisibleWithin(row)),
       "No pending approvals for this user in the seeded stack",
     );
 
@@ -91,7 +92,7 @@ test.describe("an approver may edit the step they are about to sign", () => {
 
     const row = page.locator("[data-approval-id]").first();
     test.skip(
-      !(await row.isVisible().catch(() => false)),
+      !(await isVisibleWithin(row)),
       "No pending approvals for this user in the seeded stack",
     );
 

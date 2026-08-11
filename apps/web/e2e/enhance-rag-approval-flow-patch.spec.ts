@@ -1,5 +1,6 @@
 import { test, expect } from "./helpers/base";
 import { requireSeedFixtures } from './helpers/seed';
+import { isVisibleWithin } from "./helpers/visible";
 
 // E2E for the per-turn RAG / approval-history patch.
 // (docs/development/implemented/alpha-2/v0.23.2/rag-turn-context-and-approval-history.phase.md)
@@ -90,7 +91,7 @@ test.describe("a discarded chat clears the approval it raised", () => {
     await page.goto("/approvals");
     const row = page.locator('[data-approval-status="pending"]').first();
     test.skip(
-      !(await row.isVisible().catch(() => false)),
+      !(await isVisibleWithin(row)),
       "No pending approvals for this user in the seeded stack",
     );
     const approvalId = await row.getAttribute("data-approval-id");
@@ -129,7 +130,7 @@ test.describe("deciding tells the approver who actually needs to know", () => {
 
     const row = firstPendingRow(page);
     test.skip(
-      !(await row.isVisible().catch(() => false)),
+      !(await isVisibleWithin(row)),
       "No pending approvals for this user in the seeded stack",
     );
 

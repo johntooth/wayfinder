@@ -1,5 +1,6 @@
 import { test, expect } from "./helpers/base";
 import { requireSeedFixtures } from './helpers/seed';
+import { isVisibleWithin } from "./helpers/visible";
 
 // E2E for the document edit-history modal.
 // (docs/development/implemented/alpha-2/v0.23.1/approval-edit-visibility-and-change-requests.phase.md)
@@ -30,7 +31,7 @@ test.describe("what an approver changed is visible on the document", () => {
 
     const row = page.locator("[data-approval-id]").first();
     test.skip(
-      !(await row.isVisible().catch(() => false)),
+      !(await isVisibleWithin(row)),
       "No pending approvals for this user in the seeded stack",
     );
 
