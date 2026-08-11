@@ -9,6 +9,17 @@
  */
 
 import { test, expect } from './helpers/base';
+import { describeSelectorState, waitForFlowSelector } from './helpers/flow-selector';
+import { isVisibleWithin } from './helpers/visible';
+
+/**
+ * Every guard below reports what the selector was showing, because a bare
+ * "requires > 5 flows" cannot be acted on: the seed creates nine flows, so if
+ * the overflow button is missing either they are not all reaching
+ * `GetFlowDeepDive` or nothing had rendered when the spec looked.
+ */
+const noOverflowReason = async (page: Parameters<typeof describeSelectorState>[0]) =>
+  `No "Search for more" — ${await describeSelectorState(page)}`;
 
 test.describe('Flow selector: search-for-more', () => {
   test('page loads without JS errors', async ({ page, consoleLogs }) => {
@@ -25,43 +36,45 @@ test.describe('Flow selector: search-for-more', () => {
 
   test('search button is absent when five or fewer flows exist', async ({ page }) => {
     await page.goto('/admin/dashboards/flows');
-    await page.waitForLoadState('networkidle');
+    // Asserting an absence: the wait is load-bearing, or this passes against a
+    // page that has simply not rendered the button yet.
+    await waitForFlowSelector(page);
 
     if (await page.getByText(/no flows yet/i).isVisible().catch(() => false)) {
       test.skip(true, 'No flows — empty state shown');
       return;
     }
 
-    const hasSearchButton = await page
-      .getByRole('button', { name: /search for more/i })
-      .isVisible()
-      .catch(() => false);
-    if (hasSearchButton) {
+    const searchButton = page.getByRole('button', { name: /search for more/i });
+    if (await isVisibleWithin(searchButton, 2_000)) {
       test.skip(true, 'More than 5 flows present — search button already visible');
       return;
     }
 
-    await expect(page.getByRole('button', { name: /search for more/i })).not.toBeVisible();
+    await expect(searchButton).not.toBeVisible();
   });
 
   test('search button appears when more than five flows are shown', async ({ page }) => {
     await page.goto('/admin/dashboards/flows');
-    await page.waitForLoadState('networkidle');
+    await waitForFlowSelector(page);
 
     if (await page.getByText(/no flows yet/i).isVisible().catch(() => false)) {
       test.skip(true, 'No flows — empty state shown');
       return;
     }
 
-    const flowButtons = page.getByRole('button').filter({ hasText: /\bsessions?\b/i });
-    const count = await flowButtons.count();
-
-    if (count <= 5) {
-      test.skip(true, 'Five or fewer flows present — search button does not appear');
+    // The old guard counted flow cards and skipped on `count <= 5`, which no
+    // seed could ever satisfy: `FLOW_CARD_THRESHOLD` slices the list to five, so
+    // more than five flows still renders exactly five cards. The question that
+    // actually distinguishes the two states is whether the overflow control is
+    // there.
+    const searchButton = page.getByRole('button', { name: /search for more/i });
+    if (!(await isVisibleWithin(searchButton))) {
+      test.skip(true, await noOverflowReason(page));
       return;
     }
 
-    await expect(page.getByRole('button', { name: /search for more/i })).toBeVisible();
+    const flowButtons = page.getByRole('button').filter({ hasText: /\bsessions?\b/i });
     await expect(flowButtons).toHaveCount(5);
 
     await page.screenshot({ path: 'screenshots/enhance-flow-selector-search-button.png', fullPage: true });
@@ -69,11 +82,11 @@ test.describe('Flow selector: search-for-more', () => {
 
   test('clicking search button opens the auto-suggest input', async ({ page }) => {
     await page.goto('/admin/dashboards/flows');
-    await page.waitForLoadState('networkidle');
+    await waitForFlowSelector(page);
 
     const searchButton = page.getByRole('button', { name: /search for more/i });
-    if (!(await searchButton.isVisible().catch(() => false))) {
-      test.skip(true, 'Search button not present — requires > 5 flows');
+    if (!(await isVisibleWithin(searchButton))) {
+      test.skip(true, await noOverflowReason(page));
       return;
     }
 
@@ -88,11 +101,11 @@ test.describe('Flow selector: search-for-more', () => {
 
   test('typing in the search input filters the dropdown', async ({ page }) => {
     await page.goto('/admin/dashboards/flows');
-    await page.waitForLoadState('networkidle');
+    await waitForFlowSelector(page);
 
     const searchButton = page.getByRole('button', { name: /search for more/i });
-    if (!(await searchButton.isVisible().catch(() => false))) {
-      test.skip(true, 'Search button not present — requires > 5 flows');
+    if (!(await isVisibleWithin(searchButton))) {
+      test.skip(true, await noOverflowReason(page));
       return;
     }
 
@@ -110,11 +123,11 @@ test.describe('Flow selector: search-for-more', () => {
 
   test('pressing Escape closes the input and restores the search button', async ({ page }) => {
     await page.goto('/admin/dashboards/flows');
-    await page.waitForLoadState('networkidle');
+    await waitForFlowSelector(page);
 
     const searchButton = page.getByRole('button', { name: /search for more/i });
-    if (!(await searchButton.isVisible().catch(() => false))) {
-      test.skip(true, 'Search button not present — requires > 5 flows');
+    if (!(await isVisibleWithin(searchButton))) {
+      test.skip(true, await noOverflowReason(page));
       return;
     }
 

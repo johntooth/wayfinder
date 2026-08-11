@@ -20,20 +20,30 @@ import { expect, type Page } from "@playwright/test";
  */
 export type FlowSelectionResult = { selected: true } | { selected: false; reason: string };
 
-export async function selectFlowInSelector(
-  page: Page,
-  flowName: string,
-): Promise<FlowSelectionResult> {
-  // This is what was actually wrong. `waitForLoadState('networkidle')` returns
-  // while the page still shows "Loading…": the deep-dive tRPC query resolves
-  // after it, and _content.tsx renders nothing but that word until it does. The
-  // specs looked straight away, found no cards, and skipped — reporting a
-  // missing flow for a query that simply had not come back.
+/**
+ * Waits for the selector to stop saying "Loading…".
+ *
+ * This is what was actually wrong with the insights specs.
+ * `waitForLoadState('networkidle')` returns while the page still shows that
+ * word: the deep-dive tRPC query resolves after it, and `_content.tsx` renders
+ * nothing else until it does. The specs looked straight away, found no cards,
+ * and skipped — reporting a missing flow for a query that simply had not come
+ * back. Anything that asserts on the *absence* of a control here must wait for
+ * this first, or it is asserting about a page that has not rendered.
+ */
+export async function waitForFlowSelector(page: Page): Promise<void> {
   await page
     .getByText(/loading…/i)
     .first()
     .waitFor({ state: "hidden", timeout: 30_000 })
     .catch(() => undefined);
+}
+
+export async function selectFlowInSelector(
+  page: Page,
+  flowName: string,
+): Promise<FlowSelectionResult> {
+  await waitForFlowSelector(page);
 
   const card = page.getByRole("button", { name: flowName });
   if (await card.isVisible().catch(() => false)) {
@@ -43,7 +53,7 @@ export async function selectFlowInSelector(
 
   const searchButton = page.getByRole("button", { name: /search for more/i });
   if (!(await searchButton.isVisible().catch(() => false))) {
-    return { selected: false, reason: await describeSelectorState(page) };
+    return { selected: false, reason: `no overflow box either — ${await describeSelectorState(page)}` };
   }
 
   await searchButton.click();
@@ -62,14 +72,21 @@ export async function selectFlowInSelector(
 }
 
 /**
- * Distinguishes the three ways the selector can show neither the flow nor an
- * overflow control, which are three different bugs:
+ * Distinguishes the three states the selector can be in when it is not showing
+ * what a spec expected, which are three different bugs:
  *
  *   still loading  — the deep-dive query had not resolved when the spec looked
  *   no flows yet   — the query resolved empty
- *   N cards, none matching — the flow is genuinely absent from GetFlowDeepDive
+ *   N cards        — the flows listed are genuinely not the expected ones
+ *
+ * Exported because the same question — "what was actually on screen?" — is what
+ * the flow-selector *search* specs need in their skip messages. They disarm on
+ * a missing "Search for more" button, which can mean the seed has five or fewer
+ * flows (`FLOW_CARD_THRESHOLD`), or simply that nothing had rendered yet. A
+ * bare skip cannot tell those apart, and that ambiguity is what kept the
+ * insights skips misdiagnosed for several runs.
  */
-async function describeSelectorState(page: Page): Promise<string> {
+export async function describeSelectorState(page: Page): Promise<string> {
   if (await page.getByText(/loading…/i).first().isVisible().catch(() => false)) {
     return "the deep-dive query had not resolved yet";
   }
@@ -82,5 +99,5 @@ async function describeSelectorState(page: Page): Promise<string> {
     .map((text) => text.split("\n")[0]?.trim())
     .filter((name): name is string => Boolean(name))
     .slice(0, 8);
-  return `${names.length} control(s) present, none matching: ${names.join(" | ")}`;
+  return `${names.length} control(s) present: ${names.join(" | ")}`;
 }
