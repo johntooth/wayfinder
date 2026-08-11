@@ -434,6 +434,11 @@ jobs:
           // that disarms itself is invisible in a green report. Group the skips
           // by the reason Playwright recorded so the report names the blocker.
           const skipReasons = new Map();
+          // A flaky count on its own is not actionable: it says some test passed
+          // only on retry without saying which, so nobody can tell a known-racy
+          // spec from a newly-unblocked one that is fighting another spec for the
+          // same fixture. Name them.
+          const flaky = [];
           function walk(suite, parents) {
             for (const spec of suite.specs || []) {
               if (!spec.ok) {
@@ -441,6 +446,15 @@ jobs:
                 failures.push({ title: [...parents, spec.title].join(' › '), error: err.split('\n')[0].replace(/\x1b\[[0-9;]*m/g, '') });
               }
               for (const t of spec.tests || []) {
+                if (t.status === 'flaky') {
+                  const attempts = (t.results || []).length;
+                  const firstError = (t.results || []).find(res => res.error)?.error?.message || '';
+                  flaky.push({
+                    title: spec.file + ' › ' + spec.title,
+                    attempts,
+                    error: firstError.split('\n')[0].replace(/\x1b\[[0-9;]*m/g, '').slice(0, 140),
+                  });
+                }
                 if (t.status !== 'skipped') continue;
                 const annotation = (t.annotations || []).find(a => a.type === 'skip');
                 const reason = (annotation && annotation.description) || 'no reason given';
@@ -459,6 +473,16 @@ jobs:
             }
             if (failures.length > 40) md += '\n_…and ' + (failures.length - 40) + ' more._\n';
             md += '\n';
+          }
+
+          if (flaky.length) {
+            md += '<details><summary>🔁 ' + flaky.length + ' flaky — passed only on retry</summary>\n\n';
+            md += '| Attempts | Test | First error |\n|---------:|------|-------------|\n';
+            for (const f of flaky.slice(0, 30)) {
+              md += '| ' + f.attempts + ' | ' + f.title.replace(/\|/g, '\\\\|') + ' | ' + (f.error ? '\`' + f.error.replace(/\|/g, '\\\\|') + '\`' : '—') + ' |\n';
+            }
+            if (flaky.length > 30) md += '\n_…and ' + (flaky.length - 30) + ' more._\n';
+            md += '\n</details>\n\n';
           }
 
           if (skipReasons.size) {

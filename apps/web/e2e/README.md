@@ -214,6 +214,50 @@ sweep all 148: the same instinct applied to `networkidle` turned two shards red,
 because waits that look wasteful had become load-bearing for the specs
 downstream of them.
 
+### What converting one cluster actually bought
+
+Two clusters have been converted so far, each measured on its own run:
+
+| Run | Change | Passed | Skipped | Flaky |
+|---|---|---:|---:|---:|
+| #683 | baseline | 303 | 97 | 7 |
+| #684 | insights + governance guards | 313 | 87 | 7 |
+| #685 | 7 approvals-list guards | 311 | 84 | 12 |
+
+#684 recovered ten tests and the nine insights skips vanished. #685 removed the
+`No pending approvals for this user in the seeded stack` reason entirely — the
+guard is fixed — but netted only **−3**, because behind that guard sit *more*
+instant probes:
+
+```typescript
+test.skip(!(await isVisibleWithin(row)), "no pending approvals");        // fixed
+const edit = row.getByRole("button", { name: "Edit before deciding" });
+test.skip(!(await edit.isVisible().catch(() => false)), "no document");  // still a race
+```
+
+Unblocking a guard just moves the spec to the next one. Expect a cluster to pay
+out over two passes, not one.
+
+### Approvals specs act on `.first()` — they can consume each other
+
+Now that the approvals-list guards actually pass, specs that previously never
+reached their bodies do. Several of them **act destructively on whichever
+approval happens to be first**:
+
+- `fix-approval-change-request-regeneration.spec.ts` — rejects it
+- `enhance-document-edit-history.spec.ts` — edits it
+- `enhance-approval-flow-fixes.spec.ts` — decides on it
+
+All three take `page.locator("[data-approval-id]").first()` against one seeded
+stack, with `workers: 1` inside a shard. Whichever runs first changes what the
+others find.
+
+This is a structural hazard readable in the source, **not** a diagnosis of any
+particular run — the flaky jump at #685 has not been attributed. The report now
+names flaky tests (`.github/workflows/e2e.yml`) so the next run can settle it
+rather than invite another plausible story. If you scope one of these specs to
+its own approval, scope it via `requireSeedFixtures()` rather than `.first()`.
+
 ### Two explanations that were wrong
 
 Recorded so nobody re-derives them:
@@ -221,9 +265,11 @@ Recorded so nobody re-derives them:
 - *The flow is past the fifth card in `FlowSelector`.* The threshold is real
   (`FLOW_CARD_THRESHOLD`, overflow behind "Search for more"), but routing the
   specs through the search box left the count at exactly 9.
-- *An earlier spec in the same worker consumed the shared approval.* Plausible
-  given `workers: 1` and one seed, but a consumption race would make the count
-  vary, and it never did.
+- *An earlier spec in the same worker consumed the shared approval.* Offered
+  twice as the explanation for the **insights** skips, with no evidence; a
+  consumption race would make that count vary, and it never did. Note this was
+  wrong about *those* skips, not about the mechanism — see the `.first()`
+  hazard above, which became reachable only once the guards stopped racing.
 
 The lesson both times: a mechanism consistent with the code is a hypothesis.
 Put the diagnosis in the skip message — the run summary groups it — and let a
