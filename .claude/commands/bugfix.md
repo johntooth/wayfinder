@@ -37,7 +37,7 @@ so the user can approve on the headline alone without reading the sections.
 | Data & types | Domain entities, value objects and TypeScript types created or changed, with the shape of each change |
 | Files & packages touched | Paths to create, modify or delete, grouped under `domain` / `application` / `adapters` / `apps`, so architecture-boundary violations are visible before any code exists |
 | Database & migration impact | Tables and their group prefix, whether a generated migration is required, and the `-- data-impact:` line it will have to carry |
-| Tests | The failing regression test that comes first, and the named Playwright e2e spec that will be written but not run |
+| Tests | The failing regression test that comes first, and either the named Playwright e2e spec that will be extended (with the `e2e-test-policy.md` group it falls under) or an explicit "no e2e — the regression test is the guard" |
 | Version, branch & PR target | The PATCH bump and resulting version, the `fix/<slug>` branch name, the base branch, and the branch the PR opens against |
 | Risks | What could break, and anything destructive or irreversible |
 | Out of scope | What is deliberately not being done |
@@ -99,11 +99,13 @@ breaking existing tests. Do not refactor unrelated code in the same commit.
 
 Run `./validate.sh` and fix all failures.
 
-### Step 5 — Playwright e2e test (write it, don't run it)
+### Step 5 — Playwright e2e test (only if it qualifies; write it, don't run it)
 
-Write at least one Playwright e2e test that exercises the fixed behaviour through the UI or API surface:
-- Place tests under `apps/web/e2e/` in a file named after the bug (e.g. `fix-<slug>.spec.ts`)
-- Cover the exact reproduction steps from the bug report, plus any related edge cases the fix touches
+Most bug fixes need **no** e2e test. The Step 2 regression test is the guard that proves the fix, and it runs on every `./validate.sh`.
+
+- Read [`docs/guides/e2e-test-policy.md`](../../docs/guides/e2e-test-policy.md). Write a spec **only** if the fixed behaviour falls into one of its six groups (auth session lifecycle, streaming into the DOM, file upload/download, navigation state across a page load, accessibility, smoke).
+- If it does not, stop here — the regression test from Step 2 is the coverage. **Say so explicitly in the summary** rather than adding a spec to be safe.
+- If it does qualify: extend the existing spec for that capability rather than adding a file, cover the reproduction steps from the bug report, and obey the policy's non-negotiable rules — no `test.skip()` on a self-probed condition, no `isVisible()` for control flow, no environment-variable gates.
 - **Do not run the e2e suite.** CI runs it — `.github/workflows/e2e.yml` fires on every pull request and push to `main` and `release/**`, sharded, against a full stack. The fail-then-pass proof lives in the Step 2 regression test, which is the guard that runs on every `./validate.sh`. Run `/e2e` or `/e2e-cc-web` only if the user explicitly asks for a local run.
 
 ### Step 6 — On completion

@@ -28,12 +28,16 @@ jobs:
   # MinIO + app, so there is no cross-shard data contention. Playwright reruns
   # the setup/seed/cleanup project dependencies inside every shard.
   #
-  # Six shards. Playwright balances a `--shard=i/n` split by test count (not
-  # file count), so the specs land roughly evenly across the six without any
+  # Three shards. Playwright balances a `--shard=i/n` split by test count (not
+  # file count), so the specs land roughly evenly across the three without any
   # manual grouping here. Every extra shard also re-pays the same fixed setup —
   # install, migrate, browser download, embedding warm-up, app boot — so shards
-  # buy less wall-clock the further you push them; six is where the remaining
-  # per-shard test time still dominates that fixed cost.
+  # buy less wall-clock the further you push them.
+  #
+  # This was six while the suite carried 380 tests. The triage in
+  # `docs/guides/e2e-triage-ledger.md` cut it to 116, at which point six shards
+  # were mostly paying setup cost to run ~19 tests each. Revisit if the suite
+  # grows again — but per `docs/guides/e2e-test-policy.md`, it should not.
   e2e:
     name: Playwright E2E (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
@@ -41,7 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3]
 
     services:
       postgres:

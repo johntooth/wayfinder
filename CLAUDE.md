@@ -64,6 +64,7 @@ These apply whenever any skill writes code:
 - **No comments explaining WHAT** — only WHY (hidden constraints, workarounds, non-obvious invariants)
 - **Result pattern at all boundaries** — never throw across package boundaries
 - **Write the test file before the implementation file** — tests are the spec
+- **Test at the layer that owns the logic.** A Playwright e2e spec is written *only* when the behaviour falls into one of the six groups in [`docs/guides/e2e-test-policy.md`](docs/guides/e2e-test-policy.md); everything else is a unit, adapter, or component test. Never guard a test with `test.skip()` on a condition the test itself probes, and never use `isVisible()` for control flow — it does not wait.
 - **Verify third-party APIs in `node_modules`** — do not rely on training data for exact API shapes; libraries change
 - **No dead code** — if something is unused, delete it entirely
 
