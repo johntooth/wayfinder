@@ -30,7 +30,7 @@ const LIVELOCK_SESSION_PATH =
 
 test.describe("pre-generation gate — livelock, messaging & badge", () => {
   test.beforeEach(() => {
-    test.skip(!process.env.E2E_PREGEN_LIVELOCK_SESSION_PATH, "Needs a doc-gen livelock session the CI seed does not create yet — runs via the /e2e skill with E2E_PREGEN_LIVELOCK_SESSION_PATH set; skipped in CI (tracked in the e2e seed backlog).");
+    test.skip(!process.env.E2E_PREGEN_LIVELOCK_SESSION_PATH, "Needs a server-side AI stub, which does not exist yet: the mock in helpers/base.ts intercepts browser requests, but this asserts on server-side turn logic (confidence gating / doc-gen). Not a seed gap — see README 'Two reasons a spec is parked'.");
   });
   test("asks once, advances on the correction, generates the document, and never lingers the badge", async ({
     page,

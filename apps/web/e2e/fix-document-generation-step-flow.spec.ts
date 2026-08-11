@@ -26,7 +26,7 @@ const STEP_FLOW_SESSION_PATH =
 
 test.describe("document generation — step flow", () => {
   test.beforeEach(() => {
-    test.skip(!process.env.E2E_STEP_FLOW_SESSION_PATH, "Needs a doc-gen step-flow session the CI seed does not create yet — runs via the /e2e skill with E2E_STEP_FLOW_SESSION_PATH set; skipped in CI (tracked in the e2e seed backlog).");
+    test.skip(!process.env.E2E_STEP_FLOW_SESSION_PATH, "Needs a server-side AI stub, which does not exist yet: the mock in helpers/base.ts intercepts browser requests, but this asserts on server-side turn logic (confidence gating / doc-gen). Not a seed gap — see README 'Two reasons a spec is parked'.");
   });
   test("waits for the document before opening the next step, and renders the terminal document", async ({
     page,

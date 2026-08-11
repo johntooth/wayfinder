@@ -17,7 +17,7 @@ const SESSION_PATH = process.env.E2E_SESSION_PATH ?? "/chats/e2e-seed-session";
 
 test.describe("frontline fix this answer", () => {
   test.beforeEach(() => {
-    test.skip(!process.env.E2E_SESSION_PATH, "Needs a knowledge-base session the CI seed does not create yet — runs via the /e2e skill with E2E_SESSION_PATH set; skipped in CI (tracked in the e2e seed backlog).");
+    test.skip(!process.env.E2E_SESSION_PATH, "Needs seeded knowledge-base session, which seedE2EFixtures does not create yet — see README 'Two reasons a spec is parked'.");
   });
   test("an operator submits a correction and is thanked", async ({ page }) => {
     await page.goto(SESSION_PATH);
@@ -50,7 +50,7 @@ test.describe("frontline fix this answer", () => {
 
 test.describe("SME curation grid", () => {
   test.beforeEach(() => {
-    test.skip(!process.env.E2E_SESSION_PATH, "Needs seeded knowledge-base chunks the CI seed does not create yet — runs via the /e2e skill with E2E_SESSION_PATH set; skipped in CI (tracked in the e2e seed backlog).");
+    test.skip(!process.env.E2E_SESSION_PATH, "Needs seeded knowledge-base chunks, which seedE2EFixtures does not create yet — see README 'Two reasons a spec is parked'.");
   });
   test("an SME edits a chunk and the prior text appears in version history", async ({ page }) => {
     await page.goto("/knowledge");

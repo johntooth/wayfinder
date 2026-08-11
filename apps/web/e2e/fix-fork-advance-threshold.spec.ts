@@ -19,7 +19,7 @@ const SESSION_PATH = process.env.E2E_FORK_SESSION_PATH ?? "/chats/e2e-seed-fork-
 
 test.describe("fork advances at a sub-90 configured threshold", () => {
   test.beforeEach(() => {
-    test.skip(!process.env.E2E_FORK_SESSION_PATH, "Needs a fork-threshold session the CI seed does not create yet — runs via the /e2e skill with E2E_FORK_SESSION_PATH set; skipped in CI (tracked in the e2e seed backlog).");
+    test.skip(!process.env.E2E_FORK_SESSION_PATH, "Needs a server-side AI stub, which does not exist yet: the mock in helpers/base.ts intercepts browser requests, but this asserts on server-side turn logic (confidence gating / doc-gen). Not a seed gap — see README 'Two reasons a spec is parked'.");
   });
   test("a mid-confidence turn on a low-threshold fork advances instead of stalling", async ({
     page,

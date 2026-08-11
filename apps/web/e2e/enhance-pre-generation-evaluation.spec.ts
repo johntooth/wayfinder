@@ -31,7 +31,7 @@ const KNOWN_GAP = process.env.E2E_PREGEN_KNOWN_GAP ?? "contract end date";
 
 test.describe("pre-generation evaluation gate", () => {
   test.beforeEach(() => {
-    test.skip(!process.env.E2E_PREGEN_PASS_SESSION_PATH, "Needs pre-generation-eval stubbed sessions the CI seed does not create yet — runs via the /e2e skill with E2E_PREGEN_PASS_SESSION_PATH set; skipped in CI (tracked in the e2e seed backlog).");
+    test.skip(!process.env.E2E_PREGEN_PASS_SESSION_PATH, "Needs a server-side AI stub, which does not exist yet: the mock in helpers/base.ts intercepts browser requests, but this asserts on server-side turn logic (confidence gating / doc-gen). Not a seed gap — see README 'Two reasons a spec is parked'.");
   });
   test("a passing cross-check advances the step and generates the document once", async ({
     page,

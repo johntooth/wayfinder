@@ -138,6 +138,54 @@ Go to **Settings → Secrets and variables → Actions**:
 
 ---
 
+## Skips, and the two reasons a spec is parked
+
+A skipped spec is green in every report while asserting nothing, so the suite can
+stop testing something without any run turning red. CI therefore fails when the
+skipped count crosses a ceiling (`MAX_SKIPPED` in `.github/workflows/e2e.yml`).
+Raising it is a legitimate fix; it just has to be a decision rather than a side
+effect.
+
+**Never skip because a fixture is missing.** The `chromium` project declares
+`seed` as a dependency, so a spec body only runs once the seed has passed. Use
+`requireSeedFixtures()` from `helpers/seed.ts` — it throws, naming the fixture,
+so a broken seed fails loudly instead of quietly disarming a spec file. That
+failure mode hid the whole of `enhance-chat-approval-withdraw-inline.spec.ts`
+for several releases.
+
+Skip only for a capability the environment genuinely lacks: no object storage
+(`E2E_OBJECT_STORAGE`), PKI off, real-AI-only paths.
+
+### Parked specs
+
+Twelve specs are gated on an `E2E_*_PATH` variable CI never sets, so they run
+only via the `/e2e` skill against a hand-prepared stack. They are parked for two
+different reasons, and the fixes are not the same piece of work:
+
+**1. Seed gap** — the spec needs rows `seedE2EFixtures` does not create. Fixable
+by extending `apps/web/src/lib/e2e-fixtures.ts`.
+
+| Spec | Needs |
+|---|---|
+| `enhance-fork-field-consolidation` | fork-branch step outputs on the seeded fork flow |
+| `enhance-usage-limits-admin-ui` | usage rows and spend caps |
+| `phase-cost-usage-governance` | governance spend data, a quota-blocked session |
+| `phase-knowledge-base-curation` | indexed knowledge-base chunks |
+| `phase-manual-document-editing` | a session whose document card is on an editable step |
+
+**2. No server-side AI stub** — not a seed gap at all. The mock in
+`helpers/base.ts` is a *browser* route intercept (`page.route`), but the app
+calls the AI provider from the Next.js server, where that intercept cannot
+reach. `/api/chat/[id]/stream` is mocked wholesale, which replaces the very
+server logic these specs assert on. They need a provider stub injected into the
+container under `TEST_AUTH_BYPASS`, keyed per session. Nothing like that exists
+today.
+
+`enhance-pre-generation-evaluation`, `fix-confidence-threshold-scale`,
+`fix-cross-check-chat-feedback`, `fix-document-generation-gate-livelock`,
+`fix-document-generation-step-flow`, `fix-fork-advance-threshold`,
+`fix-pre-generation-gate-phantom-doc-badge`.
+
 ## Adding new tests
 
 Import from `./helpers/base` instead of `@playwright/test` to get console capture and AI mocking automatically:
