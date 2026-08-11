@@ -180,17 +180,30 @@ per-spec comments claimed:
 | No seeded chat available — chats list is empty | 3 | the seed **does** create a session |
 | Search button not present — requires > 5 flows | 3 | a real seed gap |
 
-**The dominant cluster is consumed state, not missing state.** Roughly 29 skips
-are specs looking for seeded approvals and flows that the seed genuinely creates.
-The suite runs `workers: 1, fullyParallel: false` against one shared seed, so the
-first spec to decide, withdraw or reassign an approval leaves every later spec
-with nothing to find — and each one dutifully disarms itself.
+What is established: these specs look for seeded approvals and flows that the
+seed genuinely creates, with the names they search for. Why they do not find
+them is **not** established, and two confident explanations have already been
+wrong:
 
-That is not fixed by adding rows to `seedE2EFixtures`. It is fixed by giving each
-consuming spec its own subject, the way
-`seedWithdrawableApprovalSession` already does — it exists precisely because
-withdrawing moved the session off the approval node and broke the other approval
-specs. That pattern needs extending to the decide, reassign and subject specs.
+- *The flow is past the fifth card in `FlowSelector`.* The threshold is real,
+  but routing the specs through the overflow search box left the count at
+  exactly 9, unchanged. Disproved.
+- *An earlier spec in the same worker consumed the shared approval.* Plausible —
+  `workers: 1, fullyParallel: false` against one seed, and
+  `seedWithdrawableApprovalSession` exists precisely because withdrawing broke
+  the other approval specs. But a consumption race should make the count vary,
+  and it has been 9 in every run. Unconfirmed.
+
+The counts also drift on near-identical code — skipped 96 → 97 → 99 and flaky
+7 → 8 → 11 across four runs — so the suite has ordering sensitivity that no
+current explanation covers.
+
+**Get the evidence before building fixtures.** The way to do that is to put the
+diagnosis in the skip message, where the run summary groups it — see
+`helpers/flow-selector.ts`, which reports whether the query had not resolved,
+the deep dive was empty, or cards were present with none matching. An
+attachment does not work: `test-results/` is uploaded only `if: failure()`,
+and a skip is not a failure.
 
 **Never skip because a fixture is missing.** The `chromium` project declares
 `seed` as a dependency, so a spec body only runs once the seed has passed. Use
