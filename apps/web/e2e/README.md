@@ -180,30 +180,55 @@ per-spec comments claimed:
 | No seeded chat available — chats list is empty | 3 | the seed **does** create a session |
 | Search button not present — requires > 5 flows | 3 | a real seed gap |
 
-What is established: these specs look for seeded approvals and flows that the
-seed genuinely creates, with the names they search for. Why they do not find
-them is **not** established, and two confident explanations have already been
-wrong:
+### The cause: `isVisible()` does not wait
 
-- *The flow is past the fifth card in `FlowSelector`.* The threshold is real,
-  but routing the specs through the overflow search box left the count at
-  exactly 9, unchanged. Disproved.
-- *An earlier spec in the same worker consumed the shared approval.* Plausible —
-  `workers: 1, fullyParallel: false` against one seed, and
-  `seedWithdrawableApprovalSession` exists precisely because withdrawing broke
-  the other approval specs. But a consumption race should make the count vary,
-  and it has been 9 in every run. Unconfirmed.
+Putting the diagnosis into the skip message settled it in one run:
 
-The counts also drift on near-identical code — skipped 96 → 97 → 99 and flaky
-7 → 8 → 11 across four runs — so the suite has ordering sensitivity that no
-current explanation covers.
+```
+9 × Seeded approval-subject flow not in insights: the deep-dive query had not resolved yet
+```
 
-**Get the evidence before building fixtures.** The way to do that is to put the
-diagnosis in the skip message, where the run summary groups it — see
-`helpers/flow-selector.ts`, which reports whether the query had not resolved,
-the deep dive was empty, or cards were present with none matching. An
-attachment does not work: `test-results/` is uploaded only `if: failure()`,
-and a skip is not a failure.
+Not a seed gap, not consumed state, not the card threshold — the specs were
+looking before the data arrived. `waitForLoadState('networkidle')` returns while
+`_content.tsx` still renders nothing but "Loading…", and the guard below it
+probes instantly.
+
+**`locator.isVisible()` returns immediately.** Playwright's own types mark its
+`timeout` option deprecated and ignored. The suite has **148 of these probes
+across 55 files**, nearly all in skip guards:
+
+```typescript
+test.skip(!(await thing.isVisible().catch(() => false)), "no thing");   // a race
+test.skip(!(await isVisibleWithin(thing)), "no thing");                 // a question
+```
+
+So a large share of the ~97 skips are specs that disarmed themselves over data
+that turned up a moment later. It also explains the drift — skipped 96 → 97 → 99
+and flaky 7 → 8 → 11 across four runs of near-identical code. The insights page
+loses the race every time because its deep-dive query is reliably slow; faster
+pages win sometimes.
+
+`helpers/visible.ts` provides `isVisibleWithin()`. Adopt it in skip guards as
+you touch them, **one spec at a time, checking the count after each**. Do not
+sweep all 148: the same instinct applied to `networkidle` turned two shards red,
+because waits that look wasteful had become load-bearing for the specs
+downstream of them.
+
+### Two explanations that were wrong
+
+Recorded so nobody re-derives them:
+
+- *The flow is past the fifth card in `FlowSelector`.* The threshold is real
+  (`FLOW_CARD_THRESHOLD`, overflow behind "Search for more"), but routing the
+  specs through the search box left the count at exactly 9.
+- *An earlier spec in the same worker consumed the shared approval.* Plausible
+  given `workers: 1` and one seed, but a consumption race would make the count
+  vary, and it never did.
+
+The lesson both times: a mechanism consistent with the code is a hypothesis.
+Put the diagnosis in the skip message — the run summary groups it — and let a
+run answer. An attachment will not do: `test-results/` uploads only
+`if: failure()`, and a skip is not a failure.
 
 **Never skip because a fixture is missing.** The `chromium` project declares
 `seed` as a dependency, so a spec body only runs once the seed has passed. Use

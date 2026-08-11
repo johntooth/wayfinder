@@ -24,6 +24,17 @@ export async function selectFlowInSelector(
   page: Page,
   flowName: string,
 ): Promise<FlowSelectionResult> {
+  // This is what was actually wrong. `waitForLoadState('networkidle')` returns
+  // while the page still shows "Loading…": the deep-dive tRPC query resolves
+  // after it, and _content.tsx renders nothing but that word until it does. The
+  // specs looked straight away, found no cards, and skipped — reporting a
+  // missing flow for a query that simply had not come back.
+  await page
+    .getByText(/loading…/i)
+    .first()
+    .waitFor({ state: "hidden", timeout: 30_000 })
+    .catch(() => undefined);
+
   const card = page.getByRole("button", { name: flowName });
   if (await card.isVisible().catch(() => false)) {
     await card.click();

@@ -1,5 +1,6 @@
 import { test, expect } from "./helpers/base";
 import { requireSeedFixtures } from './helpers/seed';
+import { isVisibleWithin } from './helpers/visible';
 
 // E2E for the approval configuration and approver-picker enhancements.
 // (docs/development/implemented/alpha-2/v0.22.1/approval-config-and-temperature.phase.md)
@@ -37,7 +38,7 @@ test.describe("approval node — one question for the subject", () => {
 
     const node = page.getByText("Immediate sign-off").first();
     test.skip(
-      !(await node.isVisible().catch(() => false)),
+      !(await isVisibleWithin(node)),
       "Seeded approval-first flow did not render",
     );
     await node.dblclick();
@@ -64,7 +65,7 @@ test.describe("approval node — one question for the subject", () => {
 
     const node = page.getByText("Immediate sign-off").first();
     test.skip(
-      !(await node.isVisible().catch(() => false)),
+      !(await isVisibleWithin(node)),
       "Seeded approval-first flow did not render",
     );
     await node.dblclick();
