@@ -10,6 +10,7 @@
 import { test, expect } from './helpers/base';
 import { requireSeedFixtures } from './helpers/seed';
 import { openAllSettingsSections } from './helpers/settings';
+import { waitForChatReady } from './helpers/chat-nav';
 
 /**
  * phase-code-quality-hot-paths-group-a.spec.ts
@@ -100,7 +101,7 @@ test.describe('Code quality Group C: transactional turn persistence', () => {
     }
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    await waitForChatReady(page);
 
     const input = page
       .locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]')

@@ -17,6 +17,7 @@
 
 import { test, expect } from './helpers/base';
 import { requireSeedFixtures } from './helpers/seed';
+import { waitForChatReady } from './helpers/chat-nav';
 
 async function resolveExistingSessionId(page: import('@playwright/test').Page): Promise<string | null> {
   const seeded = requireSeedFixtures().sessionId;
@@ -42,7 +43,7 @@ test.describe('Chat: AI transparency modal', () => {
     }
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    await waitForChatReady(page);
 
     let infoButton = page.getByRole('button', { name: /show ai reasoning/i }).first();
 

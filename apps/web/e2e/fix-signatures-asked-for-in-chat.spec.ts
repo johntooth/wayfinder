@@ -17,6 +17,7 @@
 import { test, expect } from './helpers/base';
 import type { Page } from '@playwright/test';
 import { requireSeedFixtures } from './helpers/seed';
+import { waitForChatReady } from './helpers/chat-nav';
 
 
 async function openApprovalConfig(page: Page, flowId: string, stepName: string): Promise<void> {
@@ -32,7 +33,7 @@ test.describe('a signature is never asked for in the conversation', () => {
     const sessionId = requireSeedFixtures().approvalSubjectSessionId;
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    await waitForChatReady(page);
 
     // The seeded subject template declares delegate and finance signatures. The
     // readiness gate used to extract and grade the raw field set, so both were

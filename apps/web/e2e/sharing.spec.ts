@@ -12,6 +12,7 @@
 
 import { test, expect } from './helpers/base';
 import { requireSeedFixtures } from './helpers/seed';
+import { waitForChatReady } from './helpers/chat-nav';
 
 async function resolveSessionId(page: import('@playwright/test').Page): Promise<string | null> {
   const seeded = requireSeedFixtures().sessionId;
@@ -38,7 +39,7 @@ test.describe('Sharing: Share Button', () => {
     }
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    await waitForChatReady(page);
     await page.screenshot({ path: 'screenshots/sharing-session-loaded.png', fullPage: true });
 
     // ShareButton renders as a button with a "Share" label or icon
@@ -66,7 +67,7 @@ test.describe('Sharing: Share Button', () => {
     }
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    await waitForChatReady(page);
 
     const shareButton = page.getByRole('button', { name: /share/i }).first();
     const hasShare = await shareButton.isVisible().catch(() => false);
@@ -105,7 +106,7 @@ test.describe('Sharing: Read-only View', () => {
     }
 
     await page.goto(`/chats/${sessionId}?shared=true`);
-    await page.waitForLoadState('networkidle');
+    await waitForChatReady(page);
 
     await page.screenshot({ path: 'screenshots/sharing-read-only.png', fullPage: true });
 
@@ -129,7 +130,7 @@ test.describe('Sharing: Read-only View', () => {
 
     // First confirm the session actually has messages
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    await waitForChatReady(page);
 
     const messages = page.locator('[class*="message"], [data-testid="message"], [data-role]');
     const messageCount = await messages.count();
@@ -141,7 +142,7 @@ test.describe('Sharing: Read-only View', () => {
 
     // Now load the shared view and verify messages are still visible
     await page.goto(`/chats/${sessionId}?shared=true`);
-    await page.waitForLoadState('networkidle');
+    await waitForChatReady(page);
 
     const sharedMessages = page.locator('[class*="message"], [data-testid="message"], [data-role]');
     await expect(sharedMessages.first()).toBeVisible();
@@ -161,7 +162,7 @@ test.describe('Sharing: Read-only View', () => {
     }
 
     await page.goto(`/chats/${sessionId}?shared=true`);
-    await page.waitForLoadState('networkidle');
+    await waitForChatReady(page);
     await page.screenshot({ path: 'screenshots/sharing-smoke.png', fullPage: true });
 
     const errors = consoleLogs.filter(l => l.type === 'error');

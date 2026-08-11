@@ -15,6 +15,7 @@
 
 import { test, expect } from './helpers/base';
 import { requireSeedFixtures } from './helpers/seed';
+import { waitForChatReady } from './helpers/chat-nav';
 
 async function resolveActiveSessionId(page: import('@playwright/test').Page): Promise<string | null> {
   const seeded = requireSeedFixtures().sessionId;
@@ -41,7 +42,7 @@ test.describe('Chat: Step Rail', () => {
     }
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    await waitForChatReady(page);
 
     await page.screenshot({ path: 'screenshots/chat-step-rail.png', fullPage: true });
 
@@ -58,7 +59,7 @@ test.describe('Chat: Step Rail', () => {
     }
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    await waitForChatReady(page);
 
     // StepProgressRail renders a horizontal list of step indicators.
     // Each step has a number or check icon and a label below it.
@@ -91,7 +92,7 @@ test.describe('Chat: Confidence', () => {
     }
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    await waitForChatReady(page);
 
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
     const hasInput = await input.isVisible().catch(() => false);
@@ -128,7 +129,7 @@ test.describe('Chat: Confidence', () => {
     }
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    await waitForChatReady(page);
 
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
     const hasInput = await input.isVisible().catch(() => false);
@@ -202,7 +203,7 @@ test.describe('Chat: Document Generation', () => {
 
     for (const candidateId of candidateIds) {
       await page.goto(`/chats/${candidateId}`);
-      await page.waitForLoadState('networkidle');
+      await waitForChatReady(page);
 
       // DocumentCard renders with download/regenerate controls
       const documentCard = page.locator([

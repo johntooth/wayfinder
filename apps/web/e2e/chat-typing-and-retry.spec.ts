@@ -19,6 +19,7 @@
 import { test, expect } from './helpers/base';
 import { delayChatStream, failChatStream } from './helpers/chat-mock';
 import { requireSeedFixtures } from './helpers/seed';
+import { waitForChatReady } from './helpers/chat-nav';
 
 async function openSessionWithComposer(
   page: import('@playwright/test').Page,
@@ -30,7 +31,7 @@ async function openSessionWithComposer(
   const { sessionId } = requireSeedFixtures();
 
   await page.goto(`/chats/${sessionId}`);
-  await page.waitForLoadState('networkidle');
+  await waitForChatReady(page);
 
   const composer = page.getByRole('textbox').first();
   if (!(await composer.isVisible().catch(() => false))) return null;
