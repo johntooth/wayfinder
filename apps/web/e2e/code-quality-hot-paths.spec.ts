@@ -151,12 +151,27 @@ test.describe('Code quality Group C: transactional turn persistence', () => {
       'scripted assistant reply before reload — if only this fails, the turn ran but the stub did not supply the reply (check the attached purposes)',
     ).toBeVisible({ timeout: 30_000 });
 
+    // Wait for the turn to actually finish before reloading. ConfidenceBar
+    // shows "Evaluating…" until the score arrives and only then renders a
+    // label, so this is the first point at which the server has returned its
+    // final object rather than a stream of deltas. Reloading on the streamed
+    // text alone races the commit, and #690 could not tell that race apart
+    // from a genuinely lost row — both look like "the reply is gone".
+    await expect(
+      page.getByText(/high confidence/i).last(),
+      'turn finished (confidence resolved) before reloading',
+    ).toBeVisible({ timeout: 30_000 });
+
     // Reload: only committed rows come back. Both halves of the turn must
     // return, proving the transaction committed rather than leaving a
     // half-applied (or rolled-back) turn. Asserting the reply as well as the
     // message is the point of the test's name, and it was never checked —
     // the old middle step waited on selectors that match nothing in
     // message-feed.tsx, and the reload only ever re-checked the user message.
+    //
+    // If "assistant reply after reload" still fails once the turn has
+    // demonstrably finished, that is a real persistence defect: the user
+    // message committed and the assistant reply did not.
     await page.reload();
     await page.waitForLoadState('networkidle');
     await expect(page.getByText(userMessage), 'user message after reload').toBeVisible({
