@@ -160,6 +160,38 @@ property of the environment. The ceiling therefore carries headroom: it is sized
 to catch the seed breaking or a batch of specs disarming themselves, which move
 the count by tens, not to police single-test drift.
 
+The run summary groups every skip by reason, and the `skipped-tests` artifact
+lists them per test. Use those rather than reading the gates out of the specs —
+a spec's stated reason is a hypothesis until it runs, and several have turned out
+to be wrong.
+
+### What the 96 skips are actually made of (run #679)
+
+Measured, not inferred. 52 distinct reasons, and the shape is not what the
+per-spec comments claimed:
+
+| Reason | Count | What it really is |
+|---|---:|---|
+| Seeded approval-subject flow not in insights | 9 | the seed **does** create this flow |
+| Needs a server-side AI stub | 8 | now unblocked — see below |
+| No pending approvals for this user | 7 | the seed **does** raise approvals |
+| Seeded approval-first flow did not render | 4 | the seed **does** create this flow |
+| No seeded approval awaiting this user | 3 | ditto |
+| No seeded chat available — chats list is empty | 3 | the seed **does** create a session |
+| Search button not present — requires > 5 flows | 3 | a real seed gap |
+
+**The dominant cluster is consumed state, not missing state.** Roughly 29 skips
+are specs looking for seeded approvals and flows that the seed genuinely creates.
+The suite runs `workers: 1, fullyParallel: false` against one shared seed, so the
+first spec to decide, withdraw or reassign an approval leaves every later spec
+with nothing to find — and each one dutifully disarms itself.
+
+That is not fixed by adding rows to `seedE2EFixtures`. It is fixed by giving each
+consuming spec its own subject, the way
+`seedWithdrawableApprovalSession` already does — it exists precisely because
+withdrawing moved the session off the approval node and broke the other approval
+specs. That pattern needs extending to the decide, reassign and subject specs.
+
 **Never skip because a fixture is missing.** The `chromium` project declares
 `seed` as a dependency, so a spec body only runs once the seed has passed. Use
 `requireSeedFixtures()` from `helpers/seed.ts` — it throws, naming the fixture,

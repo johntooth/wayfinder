@@ -26,7 +26,11 @@ export interface ScriptedResponse {
   failWith?: string;
 }
 
-const endpoint = (page: Page, path: string): string => new URL(path, page.url()).toString();
+// Paths are passed to page.request as-is: the APIRequestContext resolves them
+// against the context's baseURL. Resolving them here against page.url() instead
+// looked equivalent and was not — a script registered before the first
+// navigation saw `about:blank`, and `new URL('/api/…', 'about:blank')` throws.
+// Scripting before navigating is the normal order, so that broke every caller.
 
 export async function scriptAiFor(
   page: Page,
@@ -39,7 +43,7 @@ export async function scriptAiFor(
   // the server path cannot come apart.
   await page.unroute(CHAT_STREAM_ROUTE);
 
-  const response = await page.request.post(endpoint(page, "/api/test/ai-script"), {
+  const response = await page.request.post("/api/test/ai-script", {
     data: { sessionId, responses },
   });
   if (response.ok()) return;
@@ -51,7 +55,7 @@ export async function scriptAiFor(
 
 export async function clearAiScript(page: Page, sessionId?: string): Promise<void> {
   const query = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : "";
-  await page.request.delete(endpoint(page, `/api/test/ai-script${query}`));
+  await page.request.delete(`/api/test/ai-script${query}`);
 }
 
 /** A turn that leaves the step short of its completion threshold. */
