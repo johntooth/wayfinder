@@ -182,10 +182,23 @@ by extending `apps/web/src/lib/e2e-fixtures.ts`.
 | Spec | Needs |
 |---|---|
 | `enhance-fork-field-consolidation` | fork-branch step outputs on the seeded fork flow |
-| `enhance-usage-limits-admin-ui` | usage rows and spend caps |
-| `phase-cost-usage-governance` | governance spend data, a quota-blocked session |
+| `phase-cost-usage-governance` (blocked-session test) | a session for a user over an enabled cap |
 | `phase-knowledge-base-curation` | indexed knowledge-base chunks |
 | `phase-manual-document-editing` | a session whose document card is on an editable step |
+
+**1b. Not a seed gap after all — spec drift.** Two of the specs above turned out
+not to need any data. Their pages render every card unconditionally, with empty
+states; what actually blocked them was assertions written against an older UI.
+Both were half-recovered: the render test now runs, the CRUD test still does not.
+
+| Spec | What was really wrong |
+|---|---|
+| `phase-cost-usage-governance` (dashboard) | asserted a "Spend caps" heading; the card is titled "Usage limits" |
+| `enhance-usage-limits-admin-ui` (render) | same stale heading |
+| both CRUD tests | `SpendCapsCard` defaults `scope` to `"everyone"`, so `#cap-user` is not in the DOM until the scope selector is switched — a step these specs predate |
+
+The lesson generalises: a parked spec's stated reason is a hypothesis until it
+runs. Check the page before extending the seed for it.
 
 **2. Server-side AI** — not a seed gap at all. The mock in `helpers/base.ts` is
 a *browser* route intercept (`page.route`), but the app calls the AI provider

@@ -18,9 +18,10 @@ const BLOCKED_SESSION_PATH =
   process.env.E2E_BLOCKED_SESSION_PATH ?? "/chats/e2e-seed-quota-blocked-session";
 
 test.describe("cost / usage governance dashboard", () => {
-  test.beforeEach(() => {
-    test.skip(!process.env.E2E_GOVERNANCE_PATH, "Needs seeded governance spend data, which seedE2EFixtures does not create yet — see README 'Two reasons a spec is parked'.");
-  });
+  // This was parked as needing seeded spend data. It does not: _content.tsx
+  // renders every card unconditionally and falls back to 0 / "No enabled caps."
+  // when there is none, so the empty stack is exactly what an admin sees on a
+  // fresh install — worth holding still on its own.
   test("renders spend breakdowns and cap utilisation for an admin", async ({ page }) => {
     await page.goto(GOVERNANCE_PATH);
 
@@ -28,10 +29,20 @@ test.describe("cost / usage governance dashboard", () => {
     await expect(page.getByText(/spend by user/i)).toBeVisible();
     await expect(page.getByText(/spend by flow/i)).toBeVisible();
     await expect(page.getByText(/cap utilisation/i)).toBeVisible();
-    await expect(page.getByText(/spend caps/i)).toBeVisible();
+    // The card is titled "Usage limits". The spec asserted /spend caps/i, which
+    // no longer appears on this page — a drift only visible once it ran.
+    await expect(page.getByText(/usage limits/i).first()).toBeVisible();
   });
 
   test("an admin can create and toggle a per-user spend cap", async ({ page }) => {
+    // Not a seed gap either. spend-caps-card.tsx defaults `scope` to "everyone",
+    // so #cap-user is not rendered until the scope selector is switched to
+    // "user" — a step this spec predates and does not perform. Un-parking it
+    // means writing that step, not seeding anything.
+    test.skip(
+      !process.env.E2E_GOVERNANCE_PATH,
+      "Spec predates the cap scope selector: #cap-user only renders once scope is set to 'user'.",
+    );
     await page.goto(GOVERNANCE_PATH);
 
     // Pick the first available user, set a monthly limit, and add the cap.

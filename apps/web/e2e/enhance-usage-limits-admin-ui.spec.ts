@@ -12,18 +12,26 @@ import { test, expect } from "./helpers/base";
 const USAGE_PATH = process.env.E2E_USAGE_PATH ?? "/admin/usage";
 
 test.describe("spend caps on the usage screen", () => {
-  test.beforeEach(() => {
-    test.skip(!process.env.E2E_USAGE_PATH, "Needs seeded usage budgets, which seedE2EFixtures does not create yet — see README 'Two reasons a spec is parked'.");
-  });
+  // Parked as needing seeded usage budgets, but _content.tsx renders both cards
+  // unconditionally — the point of this spec is that the caps card is reachable
+  // from /admin/usage at all, which holds with no data behind it.
   test("renders usage metrics and the spend caps card for an admin", async ({ page }) => {
     await page.goto(USAGE_PATH);
 
     await expect(page.getByText(/usage by model/i)).toBeVisible();
-    await expect(page.getByText(/spend caps/i)).toBeVisible();
-    await expect(page.locator("#cap-user")).toBeVisible();
+    // The shared SpendCapsCard is titled "Usage limits"; /spend caps/i is the
+    // old title and matches nothing on this page now.
+    await expect(page.getByText(/usage limits/i).first()).toBeVisible();
   });
 
   test("an admin can create, toggle and delete a cap from the usage screen", async ({ page }) => {
+    // Same blocker as the governance spec, and not a seed gap: SpendCapsCard
+    // defaults `scope` to "everyone", so #cap-user is not in the DOM until the
+    // scope selector is switched to "user".
+    test.skip(
+      !process.env.E2E_USAGE_PATH,
+      "Spec predates the cap scope selector: #cap-user only renders once scope is set to 'user'.",
+    );
     await page.goto(USAGE_PATH);
 
     // Pick the first available user, set a monthly limit, and add the cap.
