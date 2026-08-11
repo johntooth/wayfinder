@@ -15,6 +15,7 @@
 
 import { test, expect } from './helpers/base';
 import { requireSeedFixtures } from './helpers/seed';
+import { NO_COMPOSER } from './helpers/skip-reasons';
 
 async function resolveActiveSessionId(page: import('@playwright/test').Page): Promise<string | null> {
   const seeded = requireSeedFixtures().sessionId;
@@ -97,7 +98,7 @@ test.describe('Chat: Confidence', () => {
     const hasInput = await input.isVisible().catch(() => false);
 
     if (!hasInput) {
-      test.skip(true, 'Chat input not found — session may be complete or read-only');
+      test.skip(true, NO_COMPOSER);
       return;
     }
 
@@ -134,7 +135,7 @@ test.describe('Chat: Confidence', () => {
     const hasInput = await input.isVisible().catch(() => false);
 
     if (!hasInput) {
-      test.skip(true, 'Chat input not found');
+      test.skip(true, NO_COMPOSER);
       return;
     }
 

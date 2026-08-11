@@ -23,6 +23,7 @@
 
 import type { Page } from '@playwright/test';
 import { test, expect } from './helpers/base';
+import { NO_COMPOSER } from './helpers/skip-reasons';
 
 const AI_TIMEOUT = process.env.USE_REAL_AI === 'true' ? 30_000 : 8_000;
 
@@ -139,7 +140,7 @@ test.describe('Chat: Two-Step Flow Session', () => {
 
     if (!await input.isVisible().catch(() => false)) {
       await page.screenshot({ path: 'screenshots/two-step-chat-no-input.png', fullPage: true });
-      test.skip(true, 'Chat input not visible — session may already be complete');
+      test.skip(true, NO_COMPOSER);
       return;
     }
 
@@ -177,7 +178,7 @@ test.describe('Chat: Branching Flow Session', () => {
 
     if (!await input.isVisible().catch(() => false)) {
       await page.screenshot({ path: 'screenshots/branch-chat-no-input.png', fullPage: true });
-      test.skip(true, 'Chat input not visible');
+      test.skip(true, NO_COMPOSER);
       return;
     }
 

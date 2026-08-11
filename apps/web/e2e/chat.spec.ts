@@ -15,6 +15,7 @@
 
 import { test, expect } from './helpers/base';
 import { requireSeedFixtures } from './helpers/seed';
+import { NO_COMPOSER } from './helpers/skip-reasons';
 
 const AI_MODE = process.env.USE_REAL_AI === 'true' ? 'REAL AI' : 'MOCKED AI';
 
@@ -103,7 +104,7 @@ test.describe('Chat: Session', () => {
 
     if (!visible) {
       await page.screenshot({ path: 'screenshots/chat-no-input-found.png', fullPage: true });
-      test.skip(true, 'Chat input not found — session may be complete/read-only. See screenshot.');
+      test.skip(true, NO_COMPOSER);
       return;
     }
 
@@ -127,7 +128,7 @@ test.describe('Chat: Session', () => {
     const visible = await input.isVisible().catch(() => false);
 
     if (!visible) {
-      test.skip(true, 'Chat input not found — session may be complete/read-only');
+      test.skip(true, NO_COMPOSER);
       return;
     }
 
@@ -173,7 +174,7 @@ test.describe('Chat: Session', () => {
     const visible = await input.isVisible().catch(() => false);
 
     if (!visible) {
-      test.skip(true, 'Chat input not found — skipping multi-turn test');
+      test.skip(true, NO_COMPOSER);
       return;
     }
 

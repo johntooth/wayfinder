@@ -223,6 +223,15 @@ Two clusters have been converted so far, each measured on its own run:
 | #683 | baseline | 303 | 97 | 7 |
 | #684 | insights + governance guards | 313 | 87 | 7 |
 | #685 | 7 approvals-list guards | 311 | 84 | 12 |
+| #686 | **no spec changes at all** | 315 | 81 | 11 |
+
+**Read reason counts, not the total.** #686 changed only the report generator
+and this file, yet passed moved +4 and skipped moved −3 — the same −3 that had
+just been credited to #685's guard conversion. The net total has a run-to-run
+noise floor of ±3–4 tests, so it cannot settle a change of that size on its own.
+What is trustworthy is a *named reason* going to zero and staying there:
+`No pending approvals for this user in the seeded stack` was 7 in #684, 0 in
+#685, and 0 in #686. That is a fix. A three-point drop in the total is weather.
 
 #684 recovered ten tests and the nine insights skips vanished. #685 removed the
 `No pending approvals for this user in the seeded stack` reason entirely — the
@@ -252,11 +261,24 @@ All three take `page.locator("[data-approval-id]").first()` against one seeded
 stack, with `workers: 1` inside a shard. Whichever runs first changes what the
 others find.
 
-This is a structural hazard readable in the source, **not** a diagnosis of any
-particular run — the flaky jump at #685 has not been attributed. The report now
-names flaky tests (`.github/workflows/e2e.yml`) so the next run can settle it
-rather than invite another plausible story. If you scope one of these specs to
-its own approval, scope it via `requireSeedFixtures()` rather than `.first()`.
+This is a structural hazard readable in the source. It is **not** what the flaky
+tests are, and that is now measured rather than assumed: #686 named all eleven,
+and not one is an approvals spec. They are `auth-username-password`,
+`enhance-flow-editor-dedup`, `enhance-pki-admin-config`,
+`enhance-repeating-group-editing`, `enhance-synthesis-flow-ui-fixes`,
+`enhance-synthesise-enhancements`, `fix-entra-account-linking`,
+`fix-sticky-link-navigation`, `phase-email-notifications`,
+`phase-extraction-flows-author-sample` and `scaling` — failing on
+`expect(page).toHaveURL` (×5), `apiRequestContext` timeouts (×3),
+`page.waitForURL`, `locator.click` and one 45s test timeout. Navigation and API
+timing, a different class of problem from anything in this section.
+
+Fixture consumption has now been offered three times as an explanation and has
+never once been supported by evidence. Treat the `.first()` overlap above as a
+latent hazard in the code, not as a diagnosis of anything observed.
+
+If you do scope one of these specs to its own approval, scope it via
+`requireSeedFixtures()` rather than `.first()`.
 
 ### Two explanations that were wrong
 

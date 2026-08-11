@@ -12,6 +12,7 @@
 
 import { test, expect } from './helpers/base';
 import { requireSeedFixtures } from './helpers/seed';
+import { NO_ATTACH_CONTROL } from './helpers/skip-reasons';
 
 async function resolveExistingSessionId(page: import('@playwright/test').Page): Promise<string | null> {
   const seeded = requireSeedFixtures().sessionId;
@@ -43,7 +44,7 @@ test.describe('Chat: Composer file upload', () => {
     const attachButton = page.getByRole('button', { name: /attach a file for context/i });
     if (!(await attachButton.isVisible().catch(() => false))) {
       await page.screenshot({ path: 'screenshots/chat-composer-no-attach.png', fullPage: true });
-      test.skip(true, 'Attach button not found — composer may be read-only on this session');
+      test.skip(true, NO_ATTACH_CONTROL);
       return;
     }
 
@@ -95,7 +96,7 @@ test.describe('Chat: Composer file upload', () => {
 
     const attachButton = page.getByRole('button', { name: /attach a file for context/i });
     if (!(await attachButton.isVisible().catch(() => false))) {
-      test.skip(true, 'Attach button not found — composer may be read-only on this session');
+      test.skip(true, NO_ATTACH_CONTROL);
       return;
     }
 

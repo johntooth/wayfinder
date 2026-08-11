@@ -439,6 +439,10 @@ jobs:
           // spec from a newly-unblocked one that is fighting another spec for the
           // same fixture. Name them.
           const flaky = [];
+          // Grouped by reason, the table says which capability is missing;
+          // grouped by file with line numbers, it says where to go and fixes
+          // cluster — one file's guards are usually one mechanism.
+          const skipped = [];
           function walk(suite, parents) {
             for (const spec of suite.specs || []) {
               if (!spec.ok) {
@@ -460,6 +464,10 @@ jobs:
                 const reason = (annotation && annotation.description) || 'no reason given';
                 if (!skipReasons.has(reason)) skipReasons.set(reason, []);
                 skipReasons.get(reason).push(spec.file + ' › ' + spec.title);
+                // spec.line is the test() declaration, not the guard that fired
+                // — the annotation carries no location. It is still what you
+                // want to open.
+                skipped.push({ file: spec.file, line: spec.line, title: spec.title, reason });
               }
             }
             for (const child of suite.suites || []) walk(child, [...parents, child.title]);
@@ -492,10 +500,31 @@ jobs:
             for (const [reason, tests] of grouped) {
               md += '| ' + tests.length + ' | ' + reason.replace(/\|/g, '\\\\|').slice(0, 160) + ' |\n';
             }
-            md += '\n_Full per-test list in the \`skipped-tests\` artifact._\n\n</details>\n\n';
+            md += '\n</details>\n\n';
             fs.writeFileSync('skipped-tests.md', grouped
               .map(([reason, tests]) => '## ' + tests.length + ' × ' + reason + '\n\n' + tests.map(t => '- ' + t).join('\n'))
               .join('\n\n'));
+          }
+
+          if (skipped.length) {
+            const byFile = new Map();
+            for (const entry of skipped) {
+              if (!byFile.has(entry.file)) byFile.set(entry.file, []);
+              byFile.get(entry.file).push(entry);
+            }
+            const files = [...byFile.entries()].sort((a, b) => b[1].length - a[1].length);
+            md += '<details><summary>📍 ' + skipped.length + ' skipped — by file, with line numbers</summary>\n\n';
+            let written = 0;
+            for (const [file, entries] of files) {
+              if (written >= 120) { md += '\n_…and ' + (skipped.length - written) + ' more — see the \`skipped-tests\` artifact._\n'; break; }
+              md += '**apps/web/e2e/' + file + '** — ' + entries.length + '\n';
+              for (const entry of entries.sort((a, b) => a.line - b.line)) {
+                md += '- \`:' + entry.line + '\` ' + entry.title.replace(/\|/g, '\\\\|') + ' — ' + entry.reason.slice(0, 90) + '\n';
+                written++;
+              }
+              md += '\n';
+            }
+            md += '</details>\n\n';
           }
 
           fs.writeFileSync('summary.md', md);

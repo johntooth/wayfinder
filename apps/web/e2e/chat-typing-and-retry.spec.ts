@@ -19,6 +19,7 @@
 import { test, expect } from './helpers/base';
 import { delayChatStream, failChatStream } from './helpers/chat-mock';
 import { requireSeedFixtures } from './helpers/seed';
+import { NO_COMPOSER } from './helpers/skip-reasons';
 
 async function openSessionWithComposer(
   page: import('@playwright/test').Page,
@@ -44,7 +45,7 @@ test.describe('Chat: Typing indicator', () => {
 
     const composer = await openSessionWithComposer(page);
     if (!composer) {
-      test.skip(true, 'No active session with a usable composer found');
+      test.skip(true, NO_COMPOSER);
       return;
     }
 
@@ -66,7 +67,7 @@ test.describe('Chat: Retry on failure', () => {
 
     const composer = await openSessionWithComposer(page);
     if (!composer) {
-      test.skip(true, 'No active session with a usable composer found');
+      test.skip(true, NO_COMPOSER);
       return;
     }
 
