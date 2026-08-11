@@ -46,17 +46,29 @@ test.describe("the approval gate sits in the chat, above the composer", () => {
     // moves with the composer instead of being a separate full-width band.
     await expect(page.locator("[data-composer-stack] [data-approval-gate]")).toBeVisible();
 
-    // And the visual one: it is no wider than the composer it sits above.
+    // And the visual one: it is held to the composer's width rather than laid
+    // full-bleed across the chat.
+    //
+    // This measured the composer's textarea until it was first run. It could
+    // never have passed: the test below asserts the composer is not rendered at
+    // all while an approval is pending, which is what _content.tsx does
+    // (`!isReadOnly && !isApprovalGate`). The two tests contradicted each other
+    // and nobody saw it, because the seed never wrote
+    // approvalWithdrawSessionId and the whole file skipped itself.
+    //
+    // The width claim does not need the composer present. Both stacks share one
+    // `mx-auto max-w-[760px]` shell, so the constraint is what to assert.
     const gateBox = await gate.locator("> div").boundingBox();
-    const composerBox = await page.getByPlaceholder(/message wayfinder/i).boundingBox();
+    const stackBox = await page.locator("[data-composer-stack]").boundingBox();
     expect(gateBox).not.toBeNull();
-    expect(composerBox).not.toBeNull();
-    // The composer's input sits inside padded chrome, so the gate is allowed to
-    // be a little wider than the textarea itself — but nowhere near full-bleed.
-    expect(gateBox!.width).toBeLessThanOrEqual(composerBox!.width + 120);
+    expect(stackBox).not.toBeNull();
 
-    // The gate is above the input, not overlaying the message feed.
-    expect(gateBox!.y).toBeLessThan(composerBox!.y);
+    const COMPOSER_MAX_WIDTH = 760;
+    expect(gateBox!.width).toBeLessThanOrEqual(COMPOSER_MAX_WIDTH);
+
+    // Centred inside the stack rather than filling it — the full-bleed band
+    // this replaced spanned the whole column.
+    expect(gateBox!.width).toBeLessThan(stackBox!.width);
   });
 
   test("hides the chat input entirely while the approval is pending", async ({ page }) => {
