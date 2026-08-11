@@ -25,21 +25,25 @@ import { selectFlowInSelector } from "./helpers/flow-selector";
 const INSIGHTS_PATH = "/admin/dashboards/insights";
 const SUBJECT_FLOW_NAME = "E2E SEED Approval Subject Flow";
 
-const openSubjectFlow = async (page: import("@playwright/test").Page): Promise<boolean> => {
+// Returns null when the flow opened, or the reason it could not be found —
+// which goes straight into the skip message, and so into the run summary.
+const openSubjectFlow = async (page: import("@playwright/test").Page): Promise<string | null> => {
   await page.goto(INSIGHTS_PATH);
   await page.waitForLoadState("networkidle");
 
   // Was `getByRole("button", { name })`, which only ever matched while the
   // seeded flow was among the first five cards. See helpers/flow-selector.ts.
-  if (!(await selectFlowInSelector(page, SUBJECT_FLOW_NAME))) return false;
+  const selection = await selectFlowInSelector(page, SUBJECT_FLOW_NAME);
+  if (!selection.selected) return selection.reason;
 
   await expect(page.getByRole("columnheader", { name: /outcome/i }).first()).toBeVisible();
-  return true;
+  return null;
 };
 
 test.describe("Flow Insights: approval steps segmented by step", () => {
   test("each approval step gets its own Outcome column, named by step", async ({ page }) => {
-    test.skip(!(await openSubjectFlow(page)), "Seeded approval-subject flow not in insights");
+    const blocked = await openSubjectFlow(page);
+    test.skip(blocked !== null, `Seeded approval-subject flow not in insights: ${blocked}`);
 
     // Two decided approval steps → two Outcome columns. One would mean the
     // collapse rules merged two different sign-offs.
@@ -53,7 +57,8 @@ test.describe("Flow Insights: approval steps segmented by step", () => {
   });
 
   test("combining forked steps or versions never merges two approval steps", async ({ page }) => {
-    test.skip(!(await openSubjectFlow(page)), "Seeded approval-subject flow not in insights");
+    const blocked = await openSubjectFlow(page);
+    test.skip(blocked !== null, `Seeded approval-subject flow not in insights: ${blocked}`);
 
     // Both toggles default ON where they are offered at all; flipping whatever
     // is present must not reduce the two sign-offs to one column.
@@ -66,7 +71,8 @@ test.describe("Flow Insights: approval steps segmented by step", () => {
   });
 
   test("the report names the approver", async ({ page }) => {
-    test.skip(!(await openSubjectFlow(page)), "Seeded approval-subject flow not in insights");
+    const blocked = await openSubjectFlow(page);
+    test.skip(blocked !== null, `Seeded approval-subject flow not in insights: ${blocked}`);
 
     // The approver as a person, not the raw user id the projection used to hold.
     await expect(page.getByRole("cell", { name: "Jane Doe" }).first()).toBeVisible();
@@ -74,7 +80,8 @@ test.describe("Flow Insights: approval steps segmented by step", () => {
   });
 
   test("a step decided twice shows its latest decision, noting the revision", async ({ page }) => {
-    test.skip(!(await openSubjectFlow(page)), "Seeded approval-subject flow not in insights");
+    const blocked = await openSubjectFlow(page);
+    test.skip(blocked !== null, `Seeded approval-subject flow not in insights: ${blocked}`);
 
     // Records sign-off was sent back for changes, then approved. The report
     // must read as the step now stands, not as it stood on the first pass.
@@ -89,13 +96,15 @@ test.describe("Flow Insights: approval steps segmented by step", () => {
   });
 
   test("the revision count is its own column, so a report can filter on it", async ({ page }) => {
-    test.skip(!(await openSubjectFlow(page)), "Seeded approval-subject flow not in insights");
+    const blocked = await openSubjectFlow(page);
+    test.skip(blocked !== null, `Seeded approval-subject flow not in insights: ${blocked}`);
 
     await expect(page.getByRole("columnheader", { name: /revision/i }).first()).toBeVisible();
   });
 
   test("the Columns dialog groups the approval fields under their own step", async ({ page }) => {
-    test.skip(!(await openSubjectFlow(page)), "Seeded approval-subject flow not in insights");
+    const blocked = await openSubjectFlow(page);
+    test.skip(blocked !== null, `Seeded approval-subject flow not in insights: ${blocked}`);
 
     await page.getByRole("button", { name: "Columns" }).click();
 

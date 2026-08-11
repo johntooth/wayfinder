@@ -1,80 +1,75 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
 /**
  * Selects a flow in the shared `FlowSelector` (Flow Insights, Flow Usage).
  *
  * The selector renders only the first five flows as cards
  * (`FLOW_CARD_THRESHOLD` in components/admin/flow-selector.tsx); everything
- * beyond that is reachable only through the "Search for more" box. Specs that
- * looked for their flow with `getByRole("button", { name })` therefore found
- * nothing as soon as the run had created a sixth flow, and skipped themselves
- * with "Seeded … flow not in insights" — reporting a seed gap for a flow the
- * seed had created correctly.
+ * beyond that is reachable only through the "Search for more" box, which specs
+ * matching with `getByRole("button", { name })` never used.
  *
- * How many flows exist varies by shard, because specs create them as they go.
- * That is why the same run can show both "flow not in insights" (too many
- * flows) and "requires > 5 flows" (too few) from different specs.
+ * That threshold is real but it is *not* what makes the insights specs skip:
+ * routing them through here left the count at exactly 9, unchanged across
+ * runs. `GetFlowDeepDive` lists every non-deleted guided flow with no
+ * filtering, so the seeded flow should be in the data whatever else exists.
+ *
+ * So this returns *why* it failed rather than a bare false, and the caller
+ * puts that in the skip message — where the run summary groups it, instead of
+ * an attachment that never leaves the runner because `test-results/` is
+ * uploaded only on failure and a skip is not one.
  */
-export async function selectFlowInSelector(page: Page, flowName: string): Promise<boolean> {
+export type FlowSelectionResult = { selected: true } | { selected: false; reason: string };
+
+export async function selectFlowInSelector(
+  page: Page,
+  flowName: string,
+): Promise<FlowSelectionResult> {
   const card = page.getByRole("button", { name: flowName });
   if (await card.isVisible().catch(() => false)) {
     await card.click();
-    return true;
+    return { selected: true };
   }
 
   const searchButton = page.getByRole("button", { name: /search for more/i });
   if (!(await searchButton.isVisible().catch(() => false))) {
-    // Neither the card nor the overflow control. Attach what the selector was
-    // actually showing: with no cards at all the query had not resolved, and
-    // with cards but no overflow the flow is genuinely absent from
-    // GetFlowDeepDive — two different problems that look identical from here.
-    await attachSelectorState(page, flowName, "no card and no overflow control");
-    return false;
+    return { selected: false, reason: await describeSelectorState(page) };
   }
-
 
   await searchButton.click();
   await page.getByPlaceholder(/search flows/i).fill(flowName);
 
   const option = page.getByTestId("flow-search-option").filter({ hasText: flowName }).first();
   if (!(await option.isVisible().catch(() => false))) {
-    await attachSelectorState(page, flowName, "searched, but the flow was not among the results");
-    return false;
+    return { selected: false, reason: "searched the overflow box; the flow was not among results" };
   }
 
   // The option commits on mousedown — it preempts the input's blur, which would
   // otherwise tear the list down before a click landed.
   await option.click();
   await expect(page.getByPlaceholder(/search flows/i)).toHaveCount(0);
-  return true;
+  return { selected: true };
 }
 
 /**
- * Records what the selector was showing when a flow could not be found.
+ * Distinguishes the three ways the selector can show neither the flow nor an
+ * overflow control, which are three different bugs:
  *
- * Three runs reported "Seeded approval-subject flow not in insights" exactly 9
- * times, which is too stable for a state race — but the flow is created by the
- * seed and `GetFlowDeepDive` lists every non-deleted guided flow, so it should
- * be there. The distinguishing evidence is whether any cards rendered at all.
+ *   still loading  — the deep-dive query had not resolved when the spec looked
+ *   no flows yet   — the query resolved empty
+ *   N cards, none matching — the flow is genuinely absent from GetFlowDeepDive
  */
-async function attachSelectorState(page: Page, flowName: string, reason: string): Promise<void> {
-  const heading = await page
-    .getByText(/loading…|no flows yet/i)
-    .first()
-    .textContent()
-    .catch(() => null);
-  const cardNames = await page
-    .locator("button")
-    .allInnerTexts()
-    .catch(() => [] as string[]);
+async function describeSelectorState(page: Page): Promise<string> {
+  if (await page.getByText(/loading…/i).first().isVisible().catch(() => false)) {
+    return "the deep-dive query had not resolved yet";
+  }
+  if (await page.getByText(/no flows yet/i).first().isVisible().catch(() => false)) {
+    return "the deep dive reported no flows at all";
+  }
 
-  await test
-    .info()
-    .attach("flow-selector-state.json", {
-      contentType: "application/json",
-      body: Buffer.from(
-        JSON.stringify({ lookingFor: flowName, reason, pageState: heading, cardNames }, null, 2),
-      ),
-    })
-    .catch(() => undefined);
+  const cards = await page.getByRole("button").allInnerTexts().catch(() => [] as string[]);
+  const names = cards
+    .map((text) => text.split("\n")[0]?.trim())
+    .filter((name): name is string => Boolean(name))
+    .slice(0, 8);
+  return `${names.length} control(s) present, none matching: ${names.join(" | ")}`;
 }

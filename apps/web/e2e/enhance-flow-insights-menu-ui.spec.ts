@@ -16,23 +16,27 @@ import { selectFlowInSelector } from "./helpers/flow-selector";
 const INSIGHTS_PATH = "/admin/dashboards/insights";
 const SUBJECT_FLOW_NAME = "E2E SEED Approval Subject Flow";
 
-const openSubjectFlow = async (page: import("@playwright/test").Page): Promise<boolean> => {
+// Returns null when the flow opened, or the reason it could not be found —
+// which goes straight into the skip message, and so into the run summary.
+const openSubjectFlow = async (page: import("@playwright/test").Page): Promise<string | null> => {
   await page.goto(INSIGHTS_PATH);
   await page.waitForLoadState("networkidle");
 
   // Was `getByRole("button", { name })`, which only ever matched while the
   // seeded flow was among the first five cards. See helpers/flow-selector.ts.
-  if (!(await selectFlowInSelector(page, SUBJECT_FLOW_NAME))) return false;
+  const selection = await selectFlowInSelector(page, SUBJECT_FLOW_NAME);
+  if (!selection.selected) return selection.reason;
 
   await expect(page.getByRole("columnheader", { name: /outcome/i }).first()).toBeVisible();
-  return true;
+  return null;
 };
 
 test.describe("Flow Insights: the approval subject is no longer a report column", () => {
   test("no Applies to column, even for an approval decided before it was retired", async ({
     page,
   }) => {
-    test.skip(!(await openSubjectFlow(page)), "Seeded approval-subject flow not in insights");
+    const blocked = await openSubjectFlow(page);
+    test.skip(blocked !== null, `Seeded approval-subject flow not in insights: ${blocked}`);
 
     await expect(page.getByRole("columnheader", { name: /applies to/i })).toHaveCount(0);
 
@@ -44,7 +48,8 @@ test.describe("Flow Insights: the approval subject is no longer a report column"
   });
 
   test("the rest of the approval metadata is untouched", async ({ page }) => {
-    test.skip(!(await openSubjectFlow(page)), "Seeded approval-subject flow not in insights");
+    const blocked = await openSubjectFlow(page);
+    test.skip(blocked !== null, `Seeded approval-subject flow not in insights: ${blocked}`);
 
     // Only one column was retired. If the skip were reaching too far, these are
     // what it would take with it.
@@ -55,7 +60,8 @@ test.describe("Flow Insights: the approval subject is no longer a report column"
   });
 
   test("the Columns dialog does not offer it either", async ({ page }) => {
-    test.skip(!(await openSubjectFlow(page)), "Seeded approval-subject flow not in insights");
+    const blocked = await openSubjectFlow(page);
+    test.skip(blocked !== null, `Seeded approval-subject flow not in insights: ${blocked}`);
 
     await page.getByRole("button", { name: "Columns" }).click();
 
