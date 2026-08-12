@@ -12,6 +12,8 @@ import type {
   IProcurementClassifier,
   IProcurementExtractionReader,
   IStagedCorpusReader,
+  IStagedCorpusWriter,
+  IWomblexRunTrigger,
 } from "@redline/redline-domain";
 import {
   ColdStartClassifier,
@@ -26,8 +28,10 @@ import {
   DrizzleMoneySpanStore,
   DrizzleStagedCorpusReader,
   HttpAdjudicator,
+  HttpWomblexRunTrigger,
   WomblexExtractionReader,
   createRedlinePostgres,
+  createStagedCorpusWriter,
   makeExtractionHardRuleCandidateDeriver,
 } from "@redline/redline-adapters";
 import type { ILanguageModel as WayfinderLanguageModel } from "@rbrasier/domain";
@@ -60,6 +64,12 @@ export interface RedlineModuleDependencies {
   // write capability until an evaluation could be started from the browser.
   readonly stagedCorpusReader: IStagedCorpusReader;
   readonly lensWriter: IClassificationLensWriter;
+  // The run half (delivery-plan §2 item 1). The two write seams that turn a
+  // composed evaluation into a review grid without a terminal: the object-store
+  // writer stages a specialist's chosen bytes under the evaluation's input
+  // prefix, and the run trigger fires ingest → lens → grouping → build.
+  readonly stagedCorpusWriter: IStagedCorpusWriter;
+  readonly runTrigger: IWomblexRunTrigger;
   // The report assembler's store re-fetch, backed by redline's IChunkStore.
   readonly reportChunkVerifier: ReportChunkVerifier;
   readonly productName: string;
@@ -88,6 +98,8 @@ export const buildRedlineModule = (
     languageModel: dependencies.languageModel,
     stagedCorpusReader: dependencies.stagedCorpusReader,
     lensWriter: dependencies.lensWriter,
+    stagedCorpusWriter: dependencies.stagedCorpusWriter,
+    runTrigger: dependencies.runTrigger,
     productName: dependencies.productName,
   });
   if (container.error) return container;
@@ -114,6 +126,14 @@ export interface RedlineRuntimeEnv {
   readonly REDLINE_ADJUDICATOR_API_KEY?: string | undefined;
   readonly REDLINE_ADJUDICATOR_MODEL?: string | undefined;
   readonly REDLINE_PRODUCT_NAME?: string | undefined;
+  // The object-store coordinates the staged-corpus writer stages bytes into —
+  // the same S3_* / REDLINE_BUCKET values the sidecar and compose profiles use,
+  // so redline never restates its bucket coordinates.
+  readonly S3_ENDPOINT?: string | undefined;
+  readonly S3_ACCESS_KEY?: string | undefined;
+  readonly S3_SECRET_KEY?: string | undefined;
+  readonly S3_REGION?: string | undefined;
+  readonly REDLINE_BUCKET?: string | undefined;
 }
 
 export interface ResolveRedlineModuleInput {
@@ -140,6 +160,35 @@ const postJson = async (request: {
   return { ok: response.ok, status: response.status, json: () => response.json() };
 };
 
+// The run trigger's `fetch`-shaped seam: method + optional body, so the adapter
+// POSTs a run and GETs its status without assuming a global fetch is bound at
+// construction.
+const runTriggerFetch = async (request: {
+  readonly url: string;
+  readonly method: "GET" | "POST";
+  readonly body?: unknown;
+}) => {
+  const response = await fetch(request.url, {
+    method: request.method,
+    ...(request.body === undefined
+      ? {}
+      : { headers: { "content-type": "application/json" }, body: JSON.stringify(request.body) }),
+  });
+  return { ok: response.ok, status: response.status, json: () => response.json() };
+};
+
+// Split the S3 endpoint URL into the host/port/scheme the minio Client takes
+// separately (it does not parse a URL). An `http://` endpoint yields useSSL
+// false; an explicit port wins, else 80/443 by scheme.
+const parseS3Endpoint = (
+  endpoint: string,
+): { readonly host: string; readonly port: number; readonly useSSL: boolean } => {
+  const url = new URL(endpoint);
+  const useSSL = url.protocol === "https:";
+  const port = url.port === "" ? (useSSL ? 443 : 80) : Number(url.port);
+  return { host: url.hostname, port, useSSL };
+};
+
 // The env-driven adapter construction, shared by the served module and the
 // corpus seeder so the two can never drift onto different adapters.
 const resolveRedlineAdapters = (input: ResolveRedlineModuleInput) => {
@@ -152,6 +201,25 @@ const resolveRedlineAdapters = (input: ResolveRedlineModuleInput) => {
   const extractionReader = new WomblexExtractionReader({
     baseUrl: env.REDLINE_WOMBLEX_INGEST_URL ?? "http://womblex-ingest:8000",
     httpClient: fetchJson,
+  });
+
+  // The run half's two write seams (delivery-plan §2 item 1). The writer stages
+  // bytes into redline's own bucket at the endpoint the sidecar reads its input
+  // from; the trigger fires the run over the same womblex-ingest sidecar the
+  // extraction reader reads through, so both ends of a run share one base URL.
+  const s3 = parseS3Endpoint(env.S3_ENDPOINT ?? "http://minio:9000");
+  const stagedCorpusWriter = createStagedCorpusWriter({
+    endpoint: s3.host,
+    port: s3.port,
+    useSSL: s3.useSSL,
+    accessKey: env.S3_ACCESS_KEY ?? "minioadmin",
+    secretKey: env.S3_SECRET_KEY ?? "minioadmin",
+    bucket: env.REDLINE_BUCKET ?? "redline",
+    ...(env.S3_REGION ? { region: env.S3_REGION } : {}),
+  });
+  const runTrigger = new HttpWomblexRunTrigger({
+    baseUrl: env.REDLINE_WOMBLEX_INGEST_URL ?? "http://womblex-ingest:8000",
+    httpClient: runTriggerFetch,
   });
 
   // One chunk store, shared by the classifier's exact fetch and the report
@@ -187,6 +255,8 @@ const resolveRedlineAdapters = (input: ResolveRedlineModuleInput) => {
     languageModel: new RedlineLanguageModelBridge(input.wayfinderLanguageModel),
     stagedCorpusReader: new DrizzleStagedCorpusReader(database),
     lensWriter: new DrizzleClassificationLensWriter(database),
+    stagedCorpusWriter,
+    runTrigger,
     reportChunkVerifier: new ChunkStoreReportVerifier(chunkStore),
     productName: env.REDLINE_PRODUCT_NAME ?? "the product",
   };
@@ -206,6 +276,8 @@ export const resolveRedlineModule = (
     languageModel: adapters.languageModel,
     stagedCorpusReader: adapters.stagedCorpusReader,
     lensWriter: adapters.lensWriter,
+    stagedCorpusWriter: adapters.stagedCorpusWriter,
+    runTrigger: adapters.runTrigger,
     reportChunkVerifier: adapters.reportChunkVerifier,
     productName: adapters.productName,
   });
@@ -236,6 +308,8 @@ export const resolveRedlineSeedDependencies = (
     languageModel: adapters.languageModel,
     stagedCorpusReader: adapters.stagedCorpusReader,
     lensWriter: adapters.lensWriter,
+    stagedCorpusWriter: adapters.stagedCorpusWriter,
+    runTrigger: adapters.runTrigger,
     reportChunkVerifier: adapters.reportChunkVerifier,
     productName: adapters.productName,
   });

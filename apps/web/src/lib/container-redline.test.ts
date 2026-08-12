@@ -15,11 +15,16 @@ import type {
   IProcurementClassifier,
   IProcurementExtractionReader,
   IStagedCorpusReader,
+  IStagedCorpusWriter,
+  IWomblexRunTrigger,
   ProcurementResponse,
   Result,
   ResponseGroup,
+  RunStatusView,
   ScoredChunkRef,
+  StagedUpload,
   Topic,
+  TriggerRunRequest,
   Vendor,
 } from "@redline/redline-domain";
 import { buildColdStartClassifier } from "@redline/redline-web";
@@ -163,6 +168,27 @@ const lensWriter: IClassificationLensWriter = {
   },
 };
 
+// The run half's two write seams. The wiring test only needs them to satisfy the
+// container's shape so the read-side procedures still compose; their behaviour is
+// proven in create-corpus-controller.test.ts and the two adapter suites.
+const stagedCorpusWriter: IStagedCorpusWriter = {
+  async stage(evaluationId: string, upload: StagedUpload) {
+    return ok({ key: `proc/${evaluationId}/inputs/${upload.fileName}` });
+  },
+};
+
+const runTrigger: IWomblexRunTrigger = {
+  async start(request: TriggerRunRequest) {
+    return ok({ runId: `run-${request.evaluationId}` });
+  },
+  async status(): Promise<Result<RunStatusView>> {
+    return err(domainError("NOT_FOUND", "unused in wiring tests"));
+  },
+  async resume(runId: string) {
+    return ok({ runId });
+  },
+};
+
 const reportChunkVerifier = {
   async fetchChunkText() {
     return ok(null);
@@ -177,6 +203,8 @@ const dependencies = (overrides: Partial<RedlineModuleDependencies> = {}): Redli
   languageModel,
   stagedCorpusReader,
   lensWriter,
+  stagedCorpusWriter,
+  runTrigger,
   reportChunkVerifier,
   productName: "Platform",
   ...overrides,

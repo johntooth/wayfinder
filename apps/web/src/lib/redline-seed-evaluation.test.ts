@@ -10,8 +10,14 @@ import type {
   IProcurementClassifier,
   IProcurementExtractionReader,
   IStagedCorpusReader,
+  IStagedCorpusWriter,
+  IWomblexRunTrigger,
   ProcurementResponse,
   ResponseGroup,
+  Result,
+  RunStatusView,
+  StagedUpload,
+  TriggerRunRequest,
   Vendor,
 } from "@redline/redline-domain";
 import { IngestDocuments } from "@redline/redline-application";
@@ -164,6 +170,27 @@ const stagedCorpusReader: IStagedCorpusReader = {
   },
 };
 
+// The run half's two write seams. The seeder drives its own ingest/grouping/build
+// path and never fires a browser run, so these only need to satisfy the
+// container's shape.
+const stagedCorpusWriter: IStagedCorpusWriter = {
+  async stage(evaluationId: string, upload: StagedUpload) {
+    return ok({ key: `proc/${evaluationId}/inputs/${upload.fileName}` });
+  },
+};
+
+const runTrigger: IWomblexRunTrigger = {
+  async start(request: TriggerRunRequest) {
+    return ok({ runId: `run-${request.evaluationId}` });
+  },
+  async status(): Promise<Result<RunStatusView>> {
+    return err(domainError("NOT_FOUND", "unused in the seeder"));
+  },
+  async resume(runId: string) {
+    return ok({ runId });
+  },
+};
+
 const dependencies = () => {
   const repository = new InMemoryRepository();
   const lensWriter = new RecordingLensWriter();
@@ -179,6 +206,8 @@ const dependencies = () => {
       languageModel,
       stagedCorpusReader,
       lensWriter,
+      stagedCorpusWriter,
+      runTrigger,
       productName: "Light fleet",
     }),
   };
