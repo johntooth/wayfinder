@@ -97,14 +97,22 @@ class FakeChunkStore implements IChunkStore {
 
 const adjudicator: IAdjudicator = {
   async adjudicate(request: AdjudicationRequest): Promise<Result<Adjudication>> {
-    // Adjudication returns one chosen topic and its reasoning. This fixture was
-    // written against an earlier shape carrying a topics[] with per-topic
-    // evidence, which is why it stopped typechecking against the domain the fork
-    // now resolves.
+    // Adjudication is set-valued: every topic the document addresses, each with
+    // the chunks that placed it. The wiring test only needs a well-typed verdict
+    // for the container to compose; the classifier's own behaviour is proven in
+    // cold-start-classifier.test.ts.
+    const topicId = request.candidates[0]?.topicId ?? "req-1";
     return ok({
       documentId: request.documentId,
-      chosenTopicId: request.candidates[0]?.topicId ?? "req-1",
-      rationale: `chose from ${request.passages.length} passages`,
+      topics: [
+        {
+          topicId,
+          evidenceChunkIds: request.passages.map((passage) => passage.chunkId),
+          rationale: `chose from ${request.passages.length} passages`,
+        },
+      ],
+      exception: null,
+      cost: null,
     });
   },
 };

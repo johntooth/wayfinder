@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ClipboardCheck,
   Clock,
+  FilePlus2,
   FlaskConical,
   Flag,
   GitBranch,
@@ -54,18 +55,23 @@ interface NavGroup {
 interface UserNavContext {
   readonly extractionEnabled: boolean;
   readonly canReviewEvaluations: boolean;
+  readonly canCreateEvaluations: boolean;
   readonly pendingApprovals: number;
 }
 
 // Synthesise Information sits directly under Approvals when the extraction_flows
 // flag resolves (ADR-033 §7) — inline in the main group, no separate rule.
-// Evaluations follows it when the caller holds evaluation:review (ADR-0006,
-// redline delivery-plan item 2): this is the only chrome that links to redline,
-// and the /evaluations route enforces the same key server-side, so hiding the
-// entry and refusing the route move together.
+// Create Corpus and Evaluations follow it when the caller holds the matching
+// redline key (ADR-0006; redline delivery-plan §2 item 1 / item 2): these are
+// the only chrome that links to redline, and the routes enforce the same keys
+// server-side, so hiding an entry and refusing its route move together. Create
+// Corpus is gated on evaluation:create (starting an evaluation), Evaluations on
+// evaluation:review (opening one) — ingest and evaluation are different users, so
+// a reviewer sees the index without the start surface, and vice versa.
 const buildUserNav = ({
   extractionEnabled,
   canReviewEvaluations,
+  canCreateEvaluations,
   pendingApprovals,
 }: UserNavContext): NavGroup[] => [
   {
@@ -75,6 +81,9 @@ const buildUserNav = ({
       { href: "/approvals", icon: Stamp, label: "Approvals", badgeCount: pendingApprovals },
       ...(extractionEnabled
         ? [{ href: "/synthesise", icon: FlaskConical, label: "Synthesise Information" }]
+        : []),
+      ...(canCreateEvaluations
+        ? [{ href: "/create-corpus", icon: FilePlus2, label: "Create Corpus" }]
         : []),
       ...(canReviewEvaluations
         ? [{ href: "/evaluations", icon: ClipboardCheck, label: "Evaluations" }]
@@ -298,6 +307,12 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   const canReviewEvaluations =
     (userQuery.data?.isAdmin ?? false) ||
     (userQuery.data?.permissions ?? []).includes("evaluation:review");
+  // Create Corpus is the start surface, gated on evaluation:create — the same
+  // key its route and procedures enforce, so a reviewer without it sees the
+  // Evaluations index but not the way to start one.
+  const canCreateEvaluations =
+    (userQuery.data?.isAdmin ?? false) ||
+    (userQuery.data?.permissions ?? []).includes("evaluation:create");
   const adminNav = buildAdminNav({
     skillsEnabled: skillsFlagQuery.data ?? false,
     mcpEnabled: mcpFlagQuery.data ?? false,
@@ -310,6 +325,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     : buildUserNav({
         extractionEnabled,
         canReviewEvaluations,
+        canCreateEvaluations,
         pendingApprovals: pendingApprovalsQuery.data?.length ?? 0,
       });
   const homeHref = isAdmin ? "/admin/flows" : "/chats";

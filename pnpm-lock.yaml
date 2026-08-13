@@ -91,7 +91,7 @@ importers:
         version: 6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0)
       vitest:
         specifier: ^4.1.0
-        version: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@25.9.0)(@vitest/coverage-v8@4.1.8)(vite@6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0))
+        version: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@25.9.0)(@vitest/coverage-v8@4.1.8)(jsdom@30.0.1(@noble/hashes@2.2.0))(vite@6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0))
 
   ../../apps/redline-web:
     dependencies:
@@ -119,7 +119,7 @@ importers:
         version: 6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0)
       vitest:
         specifier: ^4.1.0
-        version: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@25.9.0)(@vitest/coverage-v8@4.1.8)(vite@6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0))
+        version: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@25.9.0)(@vitest/coverage-v8@4.1.8)(jsdom@30.0.1(@noble/hashes@2.2.0))(vite@6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0))
 
   ../../packages/redline-adapters:
     dependencies:
@@ -135,6 +135,9 @@ importers:
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.2.17)(@opentelemetry/api@1.9.0)(@types/pg@8.20.0)(kysely@0.28.17)(postgres@3.4.9)
+      minio:
+        specifier: ^8.0.7
+        version: 8.0.7
       postgres:
         specifier: ^3.4.5
         version: 3.4.9
@@ -160,7 +163,7 @@ importers:
         version: 6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0)
       vitest:
         specifier: ^4.1.0
-        version: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@25.9.0)(@vitest/coverage-v8@4.1.8)(vite@6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0))
+        version: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@25.9.0)(@vitest/coverage-v8@4.1.8)(jsdom@30.0.1(@noble/hashes@2.2.0))(vite@6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0))
 
   ../../packages/redline-application:
     dependencies:
@@ -179,7 +182,7 @@ importers:
         version: 6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0)
       vitest:
         specifier: ^4.1.0
-        version: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@25.9.0)(@vitest/coverage-v8@4.1.8)(vite@6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0))
+        version: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@25.9.0)(@vitest/coverage-v8@4.1.8)(jsdom@30.0.1(@noble/hashes@2.2.0))(vite@6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0))
 
   ../../packages/redline-domain:
     devDependencies:
@@ -191,7 +194,7 @@ importers:
         version: 6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0)
       vitest:
         specifier: ^4.1.0
-        version: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@25.9.0)(@vitest/coverage-v8@4.1.8)(vite@6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0))
+        version: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@25.9.0)(@vitest/coverage-v8@4.1.8)(jsdom@30.0.1(@noble/hashes@2.2.0))(vite@6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0))
 
   ../../packages/redline-shared:
     devDependencies:
@@ -203,7 +206,7 @@ importers:
         version: 6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0)
       vitest:
         specifier: ^4.1.0
-        version: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@25.9.0)(@vitest/coverage-v8@4.1.8)(vite@6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0))
+        version: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@25.9.0)(@vitest/coverage-v8@4.1.8)(jsdom@30.0.1(@noble/hashes@2.2.0))(vite@6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0))
 
   apps/api:
     dependencies:
@@ -8169,7 +8172,7 @@ snapshots:
       obug: 2.1.1
       std-env: 4.1.0
       tinyrainbow: 3.1.0
-      vitest: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@20.19.39)(@vitest/coverage-v8@4.1.8)(jsdom@30.0.1(@noble/hashes@2.2.0))(vite@6.4.3(@types/node@20.19.39)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0))
+      vitest: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@25.9.0)(@vitest/coverage-v8@4.1.8)(jsdom@30.0.1(@noble/hashes@2.2.0))(vite@6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0))
 
   '@vitest/expect@4.1.8':
     dependencies:
@@ -11545,35 +11548,6 @@ snapshots:
       '@types/node': 25.9.0
       '@vitest/coverage-v8': 4.1.8(vitest@4.1.8)
       jsdom: 30.0.1(@noble/hashes@2.2.0)
-    transitivePeerDependencies:
-      - msw
-
-  vitest@4.1.8(@opentelemetry/api@1.9.0)(@types/node@25.9.0)(@vitest/coverage-v8@4.1.8)(vite@6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0)):
-    dependencies:
-      '@vitest/expect': 4.1.8
-      '@vitest/mocker': 4.1.8(vite@6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0))
-      '@vitest/pretty-format': 4.1.8
-      '@vitest/runner': 4.1.8
-      '@vitest/snapshot': 4.1.8
-      '@vitest/spy': 4.1.8
-      '@vitest/utils': 4.1.8
-      es-module-lexer: 2.1.0
-      expect-type: 1.3.0
-      magic-string: 0.30.21
-      obug: 2.1.1
-      pathe: 2.0.3
-      picomatch: 4.0.4
-      std-env: 4.1.0
-      tinybench: 2.9.0
-      tinyexec: 1.2.4
-      tinyglobby: 0.2.16
-      tinyrainbow: 3.1.0
-      vite: 6.4.3(@types/node@25.9.0)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0)
-      why-is-node-running: 2.3.0
-    optionalDependencies:
-      '@opentelemetry/api': 1.9.0
-      '@types/node': 25.9.0
-      '@vitest/coverage-v8': 4.1.8(vitest@4.1.8)
     transitivePeerDependencies:
       - msw
 

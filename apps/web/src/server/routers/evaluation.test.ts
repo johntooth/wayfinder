@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { err, ok, domainError } from "@redline/redline-domain";
+import type { AuthorableStage } from "@redline/redline-domain";
 import type { PermissionKey } from "@rbrasier/domain";
 import type { Container } from "@/lib/container";
 import { createCallerFactory, router, type TrpcContext } from "../trpc";
@@ -19,9 +20,44 @@ const makeController = (
     listStagedCorpora?: ReturnType<typeof vi.fn>;
     listStagedDocuments?: ReturnType<typeof vi.fn>;
     createEvaluation?: ReturnType<typeof vi.fn>;
+    // The run half's two sub-controllers, reached through corpus() / runStatus().
+    // Stubbed as bare methods here; the router calls corpus().startRun and
+    // runStatus().poll / .resume through the same workflow controller.
+    startRun?: ReturnType<typeof vi.fn>;
+    pollRun?: ReturnType<typeof vi.fn>;
+    resumeRun?: ReturnType<typeof vi.fn>;
   } = {},
 ) => {
+  const startRun =
+    overrides.startRun ?? vi.fn().mockResolvedValue(ok({ runId: "run-1" }));
+  const pollRun =
+    overrides.pollRun ??
+    vi.fn().mockResolvedValue(
+      ok({
+        runId: "run-1",
+        evaluationId: "tender-2026",
+        statusLabel: "Extracting documents",
+        isRunning: true,
+        isSettled: false,
+        isComplete: false,
+        isErrored: false,
+        completedStages: [],
+        failedStage: null,
+        errorMessage: null,
+        canResume: false,
+        shouldKeepPolling: true,
+      }),
+    );
+  const resumeRun =
+    overrides.resumeRun ?? vi.fn().mockResolvedValue(ok({ runId: "run-1" }));
   return {
+    // The run half is reached through two accessor methods that hand back the
+    // sub-controllers, mirroring WorkflowController.corpus() / runStatus().
+    corpus: () => ({ startRun }),
+    runStatus: () => ({ poll: pollRun, resume: resumeRun }),
+    startRun,
+    pollRun,
+    resumeRun,
     openDocument:
       overrides.openDocument ??
       vi
@@ -578,5 +614,228 @@ describe("evaluation.create", () => {
       }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(controller.createEvaluation).not.toHaveBeenCalled();
+  });
+});
+
+// The run half (delivery-plan §2 item 1, fork mount). The Create Corpus tab
+// stages its bytes and creates the evaluation over the create procedures above,
+// then fires and tracks the womblex run over these three. The staging and the
+// four-state polling brain are proven in redline-web (create-corpus-controller,
+// run-status-controller/view); these prove the served procedures that drive them
+// — the gate, the seam call, and that the authored stage sequence and override
+// reach the trigger. All three are gated on evaluation:create: starting a run is
+// starting an evaluation, not reviewing one.
+
+const startRunInput = {
+  evaluationId: "tender-2026",
+  stageSequence: ["chunk", "embed", "enrich", "money"] as AuthorableStage[],
+};
+
+describe("evaluation.startRun", () => {
+  it("fires the authored stage sequence and returns the run id the tab polls by", async () => {
+    const controller = makeController();
+
+    const result = await createCaller(
+      contextWith(makeContainer(controller)),
+    ).evaluation.startRun(startRunInput);
+
+    expect(controller.startRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evaluationId: "tender-2026",
+        stageSequence: ["chunk", "embed", "enrich", "money"],
+      }),
+    );
+    expect(result.runId).toBe("run-1");
+  });
+
+  it("carries an authored config override through to the trigger", async () => {
+    const controller = makeController();
+
+    await createCaller(contextWith(makeContainer(controller))).evaluation.startRun({
+      ...startRunInput,
+      configOverride: {
+        chunkMode: { chunkingModel: null, chunkSize: 480, chunkTables: true },
+        moneyVocabulary: {
+          extraHeaderTerms: ["lump sum"],
+          extraVetoTerms: [],
+          defaultCurrency: "AUD",
+        },
+      },
+    });
+
+    expect(controller.startRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        configOverride: expect.objectContaining({
+          chunkMode: { chunkingModel: null, chunkSize: 480, chunkTables: true },
+        }),
+      }),
+    );
+  });
+
+  it("admits a non-admin caller holding evaluation:create", async () => {
+    const controller = makeController();
+    const context = {
+      ...contextWith(makeContainer(controller)),
+      isAdmin: false,
+      permissions: new Set<PermissionKey>(["evaluation:create"]),
+    };
+
+    await expect(createCaller(context).evaluation.startRun(startRunInput)).resolves.toBeDefined();
+  });
+
+  it("refuses a reviewer: firing a run is starting an evaluation, not reviewing one", async () => {
+    const controller = makeController();
+
+    await expect(
+      createCaller(reviewerContext(makeContainer(controller))).evaluation.startRun(startRunInput),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(controller.startRun).not.toHaveBeenCalled();
+  });
+
+  it("refuses an off-list stage rather than passing it below the seam", async () => {
+    const controller = makeController();
+
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.startRun({
+        ...startRunInput,
+        stageSequence: ["link"],
+      } as never),
+    ).rejects.toThrow();
+    expect(controller.startRun).not.toHaveBeenCalled();
+  });
+
+  it("still refuses an empty stage sequence — a run runs at least one stage", async () => {
+    const controller = makeController();
+
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.startRun({
+        ...startRunInput,
+        stageSequence: [],
+      }),
+    ).rejects.toThrow();
+    expect(controller.startRun).not.toHaveBeenCalled();
+  });
+
+  it("maps a rejected override to a tRPC error, message intact", async () => {
+    const controller = makeController({
+      startRun: vi
+        .fn()
+        .mockResolvedValue(
+          err(domainError("VALIDATION_FAILED", "chunk size must be a positive number of tokens")),
+        ),
+    });
+
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.startRun(startRunInput),
+    ).rejects.toThrow(/positive number of tokens/i);
+  });
+});
+
+describe("evaluation.runStatus", () => {
+  it("polls a run into the four-state view model the tab renders", async () => {
+    const controller = makeController();
+
+    const result = await createCaller(
+      contextWith(makeContainer(controller)),
+    ).evaluation.runStatus({ runId: "run-1" });
+
+    expect(controller.pollRun).toHaveBeenCalledWith({ runId: "run-1" });
+    expect(result.shouldKeepPolling).toBe(true);
+    expect(result.isRunning).toBe(true);
+  });
+
+  it("surfaces an errored run's failed stage and resume affordance", async () => {
+    const controller = makeController({
+      pollRun: vi.fn().mockResolvedValue(
+        ok({
+          runId: "run-1",
+          evaluationId: "tender-2026",
+          statusLabel: "Embed stage failed",
+          isRunning: false,
+          isSettled: true,
+          isComplete: false,
+          isErrored: true,
+          completedStages: ["chunk"],
+          failedStage: "embed",
+          errorMessage: "embed pass exhausted retries",
+          canResume: true,
+          shouldKeepPolling: false,
+        }),
+      ),
+    });
+
+    const result = await createCaller(
+      contextWith(makeContainer(controller)),
+    ).evaluation.runStatus({ runId: "run-1" });
+
+    expect(result.failedStage).toBe("embed");
+    expect(result.canResume).toBe(true);
+    expect(result.shouldKeepPolling).toBe(false);
+  });
+
+  it("surfaces an unknown run as NOT_FOUND rather than a stuck spinner", async () => {
+    const controller = makeController({
+      pollRun: vi.fn().mockResolvedValue(err(domainError("NOT_FOUND", "no run ghost"))),
+    });
+
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.runStatus({ runId: "ghost" }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("refuses a reviewer", async () => {
+    const controller = makeController();
+
+    await expect(
+      createCaller(reviewerContext(makeContainer(controller))).evaluation.runStatus({
+        runId: "run-1",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(controller.pollRun).not.toHaveBeenCalled();
+  });
+
+  it("still refuses a blank run id", async () => {
+    const controller = makeController();
+
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.runStatus({ runId: "" }),
+    ).rejects.toThrow();
+    expect(controller.pollRun).not.toHaveBeenCalled();
+  });
+});
+
+describe("evaluation.resumeRun", () => {
+  it("re-fires the same run and returns its id — not a new run", async () => {
+    const controller = makeController();
+
+    const result = await createCaller(
+      contextWith(makeContainer(controller)),
+    ).evaluation.resumeRun({ runId: "run-1" });
+
+    expect(controller.resumeRun).toHaveBeenCalledWith({ runId: "run-1" });
+    expect(result.runId).toBe("run-1");
+  });
+
+  it("refuses a reviewer", async () => {
+    const controller = makeController();
+
+    await expect(
+      createCaller(reviewerContext(makeContainer(controller))).evaluation.resumeRun({
+        runId: "run-1",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(controller.resumeRun).not.toHaveBeenCalled();
+  });
+
+  it("maps a sidecar failure to a tRPC error, message intact", async () => {
+    const controller = makeController({
+      resumeRun: vi
+        .fn()
+        .mockResolvedValue(err(domainError("INFRA_FAILURE", "sidecar unreachable"))),
+    });
+
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.resumeRun({ runId: "run-1" }),
+    ).rejects.toThrow(/sidecar unreachable/i);
   });
 });

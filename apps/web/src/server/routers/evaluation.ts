@@ -1,4 +1,5 @@
 import {
+  AUTHORABLE_STAGES,
   PIVOT_AXES,
   REVIEW_COLUMNS,
   renderDocumentView,
@@ -9,13 +10,16 @@ import {
   type PricingPivot,
   type ReviewColumnKey,
   type ReviewGrid,
+  type RunStatusViewModel,
   type SortDirection,
 } from "@redline/redline-web";
 import type {
+  AuthorableStage,
   DomainError,
   Evaluation,
   ExtractionElement,
   Result,
+  RunConfigOverrideInput,
   StagedCorpus,
   StagedDocument,
 } from "@redline/redline-domain";
@@ -36,6 +40,23 @@ import { permissionProcedure, router } from "../trpc";
 // stays typed before `container-redline.ts` wires the concrete
 // WorkflowController onto ctx.container.redline; that module replaces this cast
 // with a real container field.
+// The run half's two sub-controllers, reached through the same WorkflowController
+// the read side uses (redline-web container.ts: corpus() drives staging + create
+// + trigger, runStatus() polls and resumes). Declared here as the slice this
+// router calls so it stays typed against the seam, not the concrete class.
+interface RunTriggerController {
+  startRun(input: {
+    evaluationId: string;
+    stageSequence: readonly AuthorableStage[];
+    configOverride?: RunConfigOverrideInput;
+  }): Promise<Result<{ readonly runId: string }>>;
+}
+
+interface RunStatusPollController {
+  poll(input: { runId: string }): Promise<Result<RunStatusViewModel>>;
+  resume(input: { runId: string }): Promise<Result<{ readonly runId: string }>>;
+}
+
 interface EvaluationController {
   listEvaluations(): Promise<Result<readonly Evaluation[]>>;
   listStagedCorpora(): Promise<Result<readonly StagedCorpus[]>>;
@@ -48,6 +69,8 @@ interface EvaluationController {
     evaluationId: string;
     documentId: string;
   }): Promise<Result<readonly ExtractionElement[]>>;
+  corpus(): RunTriggerController;
+  runStatus(): RunStatusPollController;
 }
 
 // container.ts sets `redline` to null when REDLINE_* is unset, so this fork
@@ -151,6 +174,51 @@ const createInput = z.object({
     .min(1),
 });
 
+// A run id is the sidecar's own handle, not a uuid the browser authors, so it is
+// a non-blank string — the same reasoning as evaluationId above.
+const runIdInput = z.object({ runId: z.string().min(1) });
+
+// The four downstream passes a form may author, taken from redline-web's own
+// allow-list so the wire never drifts from what the surface offers or the sidecar
+// accepts. An off-list stage (`link`, `pii`, …) is refused here rather than below
+// the seam.
+const authorableStageEnum = z.enum(
+  AUTHORABLE_STAGES as unknown as [AuthorableStage, ...AuthorableStage[]],
+);
+
+// The allow-listed config override a form authored (design-principles.md "a
+// defined allow-list"). Every group is optional — an absent group means the field
+// was left blank and the run inherits the redline.yaml default below the seam.
+// The controller re-validates through makeRunConfigOverride before firing, so a
+// malformed one (a non-positive chunk size, a non-ISO currency) is refused there;
+// this schema only keeps a malformed shape off the wire.
+const configOverrideInput = z
+  .object({
+    chunkMode: z
+      .object({
+        chunkingModel: z.string().nullable(),
+        chunkSize: z.number(),
+        chunkTables: z.boolean(),
+      })
+      .optional(),
+    moneyVocabulary: z
+      .object({
+        extraHeaderTerms: z.array(z.string()),
+        extraVetoTerms: z.array(z.string()),
+        defaultCurrency: z.string(),
+      })
+      .optional(),
+  })
+  .optional() satisfies z.ZodType<RunConfigOverrideInput | undefined>;
+
+// The stage sequence names at least one pass — the surface's trigger.enabled
+// rule already refuses an empty one, and a run with no stage is not a run.
+const startRunInput = z.object({
+  evaluationId: z.string().min(1),
+  stageSequence: z.array(authorableStageEnum).min(1),
+  configOverride: configOverrideInput,
+});
+
 export const evaluationRouter = router({
   // The evaluations index (delivery-plan item 2): the way in for a specialist who
   // has neither the URL shape nor an evaluation id. Unlike its siblings this
@@ -242,5 +310,41 @@ export const evaluationRouter = router({
     const workbook = await controllerOf(ctx).buildWorkbook({ evaluationId: input.evaluationId });
     if (isErr(workbook)) throw toTrpcError(workbook.error);
     return workbook.data;
+  }),
+
+  // The run half (delivery-plan §2 item 1, fork mount). Once the Create Corpus
+  // tab has staged its bytes and created the evaluation, it fires the authored
+  // stage sequence over this and returns the run id it then polls by. The
+  // controller re-validates the override through the domain before the sidecar
+  // sees it; gated on create because starting a run is starting an evaluation.
+  startRun: createProcedure.input(startRunInput).mutation(async ({ ctx, input }) => {
+    const started = await controllerOf(ctx)
+      .corpus()
+      .startRun({
+        evaluationId: input.evaluationId,
+        stageSequence: input.stageSequence,
+        ...(input.configOverride ? { configOverride: input.configOverride } : {}),
+      });
+    if (isErr(started)) throw toTrpcError(started.error);
+    return started.data;
+  }),
+
+  // Poll a run into the four-state view model the tab renders — started, errored
+  // (which stage, why), resumable, done. A seam error (an unknown run, an
+  // unreachable sidecar) surfaces as a tRPC error the tab shows, never a stuck
+  // spinner; renderRunStatusView owns shouldKeepPolling below the seam.
+  runStatus: createProcedure.input(runIdInput).query(async ({ ctx, input }) => {
+    const status = await controllerOf(ctx).runStatus().poll({ runId: input.runId });
+    if (isErr(status)) throw toTrpcError(status.error);
+    return status.data;
+  }),
+
+  // Re-fire a failed run. Not a new run: the engine's idempotent enqueue and
+  // skip-on-output mean re-firing picks up where it stopped, so this is the
+  // resumable state's only action.
+  resumeRun: createProcedure.input(runIdInput).mutation(async ({ ctx, input }) => {
+    const resumed = await controllerOf(ctx).runStatus().resume({ runId: input.runId });
+    if (isErr(resumed)) throw toTrpcError(resumed.error);
+    return resumed.data;
   }),
 });
