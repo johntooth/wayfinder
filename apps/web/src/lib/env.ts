@@ -178,6 +178,18 @@ const serverEnvSchema = z.object({
   REDLINE_ADJUDICATOR_API_KEY: z.string().optional(),
   REDLINE_ADJUDICATOR_MODEL: z.string().optional(),
   REDLINE_PRODUCT_NAME: z.string().optional(),
+  // The object-store coordinates the staged-corpus writer puts a run's documents
+  // into. Declared here because serverEnv() parses process.env through this
+  // schema and Zod drops what it does not name: without these, resolveRedlineModule
+  // read undefined for every one of them and the writer silently fell back to the
+  // compose defaults (http://minio:9000, minioadmin), so a deployment whose object
+  // store is anywhere else could not stage a document at all. ADR-0002 makes the
+  // S3 target config-driven, which it only is if the config survives the parse.
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_ACCESS_KEY: z.string().optional(),
+  S3_SECRET_KEY: z.string().optional(),
+  S3_REGION: z.string().optional(),
+  REDLINE_BUCKET: z.string().optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
