@@ -706,6 +706,25 @@ describe("evaluation.createCorpus", () => {
     );
   });
 
+  it("carries the first-run extraction/OCR override through to the controller", async () => {
+    const controller = makeController();
+
+    await createCaller(contextWith(makeContainer(controller))).evaluation.createCorpus({
+      ...createCorpusInput,
+      configOverride: {
+        extraction: { ocrEngine: "mistral-ocr", ocrDpi: 400 },
+      },
+    });
+
+    expect(controller.createCorpus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        configOverride: expect.objectContaining({
+          extraction: { ocrEngine: "mistral-ocr", ocrDpi: 400 },
+        }),
+      }),
+    );
+  });
+
   it("admits a non-admin caller holding evaluation:create", async () => {
     const controller = makeController();
     const context = {

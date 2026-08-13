@@ -29,12 +29,24 @@
  * that: it is asserted directly, because refusing a paid stage loudly is the
  * behaviour a keyless deployment has.
  *
+ * The live run stages a *real corpus*, not a fabricated one-page PDF: the
+ * redistributable fixture (services/womblex-ingest/tests/corpus — a synthetic
+ * tender CSV, three respondents across seven capability domains, AUD/USD-typed
+ * amounts) by default, or a richer real set via E2E_REDLINE_CORPUS. The engine
+ * and its keys come from the stack the run gates on — the sidecar reads
+ * ISAACUS_API_KEY from redline's own .env (infra/.env), and E2E_REDLINE_ISAACUS
+ * only tells this spec which half to assert, it is not the key itself. A cloud
+ * runner without that .env stays on the client-side half; the live half runs
+ * where the stack and its keys are.
+ *
  * Runs with the shared admin session, who holds evaluation:create via the admin
  * wildcard. The non-admin halves of the gate are proven where a browser cannot
  * reach them: src/app/(user)/create-corpus/page.tsx's notFound() and
  * src/server/routers/evaluation.test.ts for the procedures.
  */
 
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import path from 'node:path';
 import { test, expect } from './helpers/base';
 
 // A live run needs the sidecar and object storage, not a pre-staged corpus:
@@ -47,52 +59,81 @@ const RUN_STACK = process.env.E2E_REDLINE_RUN_STACK;
 // carry the corpus through to the evaluation screen.
 const ISAACUS = process.env.E2E_REDLINE_ISAACUS;
 
-// A real run extracts a real document, so the fixture has to be a file PyMuPDF
-// can open — a `%PDF-1.4` banner in front of prose is not one, and the engine
-// rejects it before any stage runs. Written out rather than committed as a
-// binary so the bytes the money pass is asserted against stay readable: mupdf
-// repairs the absent xref table, and both amounts below are recovered from the
-// narrative locus as exact AUD decimals.
-const tenderResponsePdf = (): Buffer =>
-  Buffer.from(
-    `%PDF-1.4
-1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
-2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
-3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Resources<</Font<</F1 4 0 R>>>>/Contents 5 0 R>>endobj
-4 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj
-5 0 obj<</Length 260>>stream
-BT /F1 12 Tf 72 720 Td (Acme Pty Ltd tender response) Tj ET
-BT /F1 12 Tf 72 700 Td (We offer a 24 month warranty on all equipment.) Tj ET
-BT /F1 12 Tf 72 680 Td (Total contract price: $1,250,000 excluding GST.) Tj ET
-BT /F1 12 Tf 72 660 Td (Annual maintenance fee of $48,000 per annum.) Tj ET
-endstream
-endobj
-trailer<</Root 1 0 R>>
-%%EOF
-`,
-    'latin1',
-  );
+// The real corpus the live run stages, rather than a fabricated one-page PDF.
+// Defaults to redline's redistributable fixture corpus
+// (services/womblex-ingest/tests/corpus) reached from the fork checked out under
+// it; E2E_REDLINE_CORPUS points at a richer, non-redistributable set (the
+// git-ignored corpus-local, or any real tender). The same WOMBLEX_CORPUS
+// convention scripts/womblex-engine-smoke.sh uses, so a run driven from either
+// entry point stages identical bytes.
+const DEFAULT_CORPUS_DIR = path.resolve(
+  __dirname,
+  '../../../../../services/womblex-ingest/tests/corpus',
+);
+const CORPUS_DIR = process.env.E2E_REDLINE_CORPUS ?? DEFAULT_CORPUS_DIR;
+
+// womblex routes by extension; the redistributable corpus is a CSV that takes
+// the pandas cell-grained ingest path (three respondents, seven capability
+// domains, AUD/USD-typed amounts), and a real set adds PDFs and DOCX. READMEs are
+// not documents to extract, so they are left on disk.
+const EXTRACTABLE = new Set(['.csv', '.pdf', '.docx', '.txt', '.xlsx', '.pptx']);
+const MIME_BY_EXTENSION: Record<string, string> = {
+  '.csv': 'text/csv',
+  '.pdf': 'application/pdf',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.txt': 'text/plain',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+};
+
+interface CorpusFile {
+  readonly name: string;
+  readonly mimeType: string;
+  readonly buffer: Buffer;
+}
+
+// Read every extractable document in the corpus directory into the shape
+// setInputFiles takes. A real run stages the whole corpus rather than one
+// document, so the money pass and (with a key) the chunk/enrich passes have the
+// breadth the fixture was built to give them.
+const loadCorpus = (): readonly CorpusFile[] =>
+  readdirSync(CORPUS_DIR)
+    .filter((name) => EXTRACTABLE.has(path.extname(name).toLowerCase()))
+    .filter((name) => statSync(path.join(CORPUS_DIR, name)).isFile())
+    .sort()
+    .map((name) => ({
+      name,
+      mimeType: MIME_BY_EXTENSION[path.extname(name).toLowerCase()] ?? 'application/octet-stream',
+      buffer: readFileSync(path.join(CORPUS_DIR, name)),
+    }));
 
 // An extraction pass plus a downstream stage is minutes of real engine work on a
 // cold container, and the file-level timeout is 45s. A run test that does not
 // raise it fails on the clock rather than on the run.
 const RUN_TIMEOUT_MS = 300_000;
 
-// Name, upload and fire, leaving only the stages the caller asked for armed.
+// Name, upload the whole corpus and fire, leaving only the stages the caller
+// asked for armed.
 const fireRun = async (
   page: import('@playwright/test').Page,
   runName: string,
   stages: readonly string[],
 ) => {
+  const corpus = loadCorpus();
+  expect(
+    corpus.length,
+    `No extractable documents under ${CORPUS_DIR} — set E2E_REDLINE_CORPUS at a real corpus.`,
+  ).toBeGreaterThan(0);
+
   await page.goto('/create-corpus');
   await page.getByTestId('run-name').fill(runName);
-  await page.getByTestId('document-upload').setInputFiles([
-    {
-      name: 'acme-response.pdf',
-      mimeType: 'application/pdf',
-      buffer: tenderResponsePdf(),
-    },
-  ]);
+  await page.getByTestId('document-upload').setInputFiles(
+    corpus.map((file) => ({
+      name: file.name,
+      mimeType: file.mimeType,
+      buffer: file.buffer,
+    })),
+  );
 
   for (const stage of ['Chunk', 'Embed', 'Enrich', 'Money']) {
     const box = page.getByLabel(`Run ${stage} stage`);
@@ -142,8 +183,8 @@ test.describe('redline create corpus', () => {
     await anonymous.close();
   });
 
-  // A half-filled form must not fire a run: the run needs a corpus, a document, a
-  // name and at least one field, and a rejected create is a worse first
+  // A half-filled form must not fire a run: the run needs a name, at least one
+  // document and at least one stage, and a rejected create is a worse first
   // experience than a button that has not lit up yet. renderCreateCorpusView owns
   // trigger.enabled — this proves the DOM honours it.
   test('keeps the start button disabled until the form can fire a run', async ({ page }) => {
@@ -213,7 +254,8 @@ test.describe('redline create corpus', () => {
 
   // The allow-listed config is inherit-when-blank: the override editors only
   // appear when a group is switched on, so a specialist who touches nothing runs
-  // the corpus profile as it ships.
+  // the corpus profile as it ships. All three authorable groups behave this way —
+  // chunk mode, money vocabulary and the first-run extraction/OCR settings.
   test('reveals the run-config overrides only when a group is switched on', async ({ page }) => {
     await page.goto('/create-corpus');
 
@@ -224,15 +266,24 @@ test.describe('redline create corpus', () => {
     await expect(page.getByLabel('Default currency')).toBeHidden();
     await page.getByLabel('Override money vocabulary').check();
     await expect(page.getByLabel('Default currency')).toBeVisible();
+
+    // The load-bearing first-run group: paddleocr is the region-based default
+    // that keeps a scanned tender's table cells (and the pricing in them) alive.
+    await expect(page.getByLabel('OCR engine')).toBeHidden();
+    await page.getByLabel('Override extraction and OCR').check();
+    await expect(page.getByLabel('OCR engine')).toBeVisible();
+    await expect(page.getByLabel('OCR engine')).toHaveValue('paddleocr');
+    await expect(page.getByLabel('OCR dpi')).toBeVisible();
   });
 
-  // The offline exit test: a run named and uploaded from the browser, fired
-  // against the real engine, and drained to completion — with no terminal in the
-  // loop and no API key anywhere. Every hop is the shipping one: the browser
-  // base64s the file to createCorpus, the staged-corpus writer puts it under
-  // proc/{runName}/inputs/, the sidecar enqueues it, the engine's own worker
-  // extracts it, the money pass annotates the shards, and the tracker polls
-  // runStatus until it settles. Only the two paid stages are left off.
+  // The offline exit test: a whole corpus named and uploaded from the browser,
+  // fired against the real engine, and drained to completion — with no terminal
+  // in the loop and no API key anywhere. Every hop is the shipping one: the
+  // browser base64s each file to createCorpus, the staged-corpus writer puts them
+  // under proc/{runName}/inputs/, the sidecar enqueues the corpus, the engine's
+  // own worker extracts it, the money pass annotates the shards over the fixture's
+  // AUD/USD-typed amounts, and the tracker polls runStatus until it settles. Only
+  // the two paid stages are left off.
   test('fires a real run over the offline stages and drains it to complete', async ({
     page,
   }) => {

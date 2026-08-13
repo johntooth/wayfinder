@@ -213,6 +213,12 @@ const configOverrideInput = z
         defaultCurrency: z.string(),
       })
       .optional(),
+    extraction: z
+      .object({
+        ocrEngine: z.string(),
+        ocrDpi: z.number(),
+      })
+      .optional(),
   })
   .optional() satisfies z.ZodType<RunConfigOverrideInput | undefined>;
 

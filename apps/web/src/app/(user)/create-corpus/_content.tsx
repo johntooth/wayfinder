@@ -11,6 +11,7 @@ import {
 import type {
   AuthorableStage,
   ChunkModeOverride,
+  ExtractionOverride,
   MoneyVocabularyOverride,
 } from "@redline/redline-domain";
 import { trpc } from "@/trpc/client";
@@ -61,6 +62,7 @@ export function CreateCorpusContent() {
     useState<readonly AuthorableStage[]>(DEFAULT_STAGE_SEQUENCE);
   const [chunkMode, setChunkMode] = useState<ChunkModeOverride | null>(null);
   const [moneyVocabulary, setMoneyVocabulary] = useState<MoneyVocabularyOverride | null>(null);
+  const [extraction, setExtraction] = useState<ExtractionOverride | null>(null);
   // Set once the run is fired, so the tracker begins polling. Kept separate from
   // the mutation's own state because a resume replaces neither the run id nor the
   // corpus id — it re-fires the same run.
@@ -81,6 +83,7 @@ export function CreateCorpusContent() {
     stageSequence,
     chunkMode,
     moneyVocabulary,
+    extraction,
   };
   const view = useMemo(() => renderCreateCorpusView(draft), [draft]);
 
@@ -131,6 +134,17 @@ export function CreateCorpusContent() {
       .split(",")
       .map((term) => term.trim())
       .filter((term) => term !== "");
+  // The extraction group, same inherit-when-blank rule. Authorable on a first
+  // run: the OCR engine decides what a scanned tender's pages become before any
+  // other pass reads them, and paddleocr is the region-based default that keeps
+  // table cells (and the pricing in them) alive. The domain re-validates the
+  // engine name and the 72–600 dpi bound below the seam.
+  const setExtractionField = (patch: Partial<ExtractionOverride>) =>
+    setExtraction((current) => ({
+      ocrEngine: current?.ocrEngine ?? "paddleocr",
+      ocrDpi: current?.ocrDpi ?? 200,
+      ...patch,
+    }));
 
   // One call stages every document and fires the run. The ordering is a rule the
   // controller owns and tests — nothing is staged unless the whole request is
@@ -166,12 +180,15 @@ export function CreateCorpusContent() {
               },
             }
           : {}),
+        ...(extraction
+          ? { extraction: { ocrEngine: extraction.ocrEngine, ocrDpi: extraction.ocrDpi } }
+          : {}),
       };
       createCorpusMutation.mutate({
         runName: runName.trim(),
         files: wireFiles,
         stageSequence: [...stageSequence],
-        ...(chunkMode || moneyVocabulary ? { configOverride } : {}),
+        ...(chunkMode || moneyVocabulary || extraction ? { configOverride } : {}),
       });
     } catch (error) {
       // A file the browser cannot read (removed from disk mid-flow, permission
@@ -339,33 +356,38 @@ export function CreateCorpusContent() {
               />
               Override money vocabulary
             </label>
-            {!view.config.moneyVocabulary.inheritsDefault && (
-              <div className="flex flex-col gap-[8px] pl-[22px]">
+            <label className="flex items-center gap-[6px] text-[13px]">
+              <input
+                type="checkbox"
+                aria-label="Override extraction and OCR"
+                checked={!view.config.extraction.inheritsDefault}
+                onChange={(event) =>
+                  setExtraction(
+                    event.target.checked ? { ocrEngine: "paddleocr", ocrDpi: 200 } : null,
+                  )
+                }
+              />
+              Override extraction and OCR
+            </label>
+            {!view.config.extraction.inheritsDefault && (
+              <div className="flex flex-wrap items-center gap-[10px] pl-[22px]">
                 <label className="flex flex-col gap-[4px]">
-                  <span className="text-[12px] text-[#5a5650]">Default currency (ISO 4217)</span>
+                  <span className="text-[12px] text-[#5a5650]">OCR engine</span>
                   <input
-                    aria-label="Default currency"
+                    aria-label="OCR engine"
+                    className={`${inputClass} w-[180px]`}
+                    value={view.config.extraction.ocrEngine ?? "paddleocr"}
+                    onChange={(event) => setExtractionField({ ocrEngine: event.target.value })}
+                  />
+                </label>
+                <label className="flex flex-col gap-[4px]">
+                  <span className="text-[12px] text-[#5a5650]">OCR dpi (72–600)</span>
+                  <input
+                    type="number"
+                    aria-label="OCR dpi"
                     className={`${inputClass} w-[140px]`}
-                    value={view.config.moneyVocabulary.defaultCurrency ?? "AUD"}
-                    onChange={(event) => setMoneyField({ defaultCurrency: event.target.value })}
-                  />
-                </label>
-                <label className="flex flex-col gap-[4px]">
-                  <span className="text-[12px] text-[#5a5650]">Extra header terms (comma-separated)</span>
-                  <input
-                    aria-label="Extra header terms"
-                    className={inputClass}
-                    defaultValue={view.config.moneyVocabulary.extraHeaderTerms.join(", ")}
-                    onChange={(event) => setMoneyField({ extraHeaderTerms: splitTerms(event.target.value) })}
-                  />
-                </label>
-                <label className="flex flex-col gap-[4px]">
-                  <span className="text-[12px] text-[#5a5650]">Extra veto terms (comma-separated)</span>
-                  <input
-                    aria-label="Extra veto terms"
-                    className={inputClass}
-                    defaultValue={view.config.moneyVocabulary.extraVetoTerms.join(", ")}
-                    onChange={(event) => setMoneyField({ extraVetoTerms: splitTerms(event.target.value) })}
+                    value={view.config.extraction.ocrDpi ?? 200}
+                    onChange={(event) => setExtractionField({ ocrDpi: Number(event.target.value) })}
                   />
                 </label>
               </div>
