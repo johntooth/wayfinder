@@ -15,23 +15,36 @@ import type {
 } from "@redline/redline-domain";
 import { trpc } from "@/trpc/client";
 
-interface FieldDraft {
-  readonly name: string;
-  readonly definition: string;
-}
-
-const BLANK_FIELD: FieldDraft = { name: "", definition: "" };
-
-// The Create Corpus tab (redline delivery-plan §2 item 1, fork mount). It picks
-// an already-staged corpus and its documents (raw-bucket upload is deferred),
-// names the evaluation, authors the allow-listed run config, then creates the
-// evaluation and fires the womblex run — ingest → lens → grouping → build.
+// The Create Corpus tab (fork mount): the *ingest* surface. It names the run,
+// takes the raw documents, authors the allow-listed run config, and fires the
+// womblex run — then the tracker hands over to /evaluations/new, which composes
+// the evaluation over the extracted corpus.
 //
-// The readiness rule (a run needs a corpus, a document, a name, at least one
-// stage) and the four-state run tracker (started / errored / resumable / done)
-// are not re-implemented here: renderCreateCorpusView owns trigger.enabled, and
+// It does not name brands or fields. womblex is a cold-start engine and mints
+// each document's source_hash on extract, so there is nothing to describe until
+// the run has drained; the fork's own route comment already said ingest and
+// evaluation were two users, and this is the tab catching up with it.
+//
+// The readiness rule (a run needs a name, a document, at least one stage) and
+// the four-state run tracker (started / errored / resumable / done) are not
+// re-implemented here: renderCreateCorpusView owns trigger.enabled, and
 // evaluation.runStatus returns the already-shaped RunStatusViewModel. This
-// component holds the draft, drives the procedures, and binds the DOM.
+// component holds the draft, drives the procedure, and binds the DOM.
+
+// Same shape as the extraction editor's own uploader (editor-cards.tsx), kept
+// local rather than shared: the two flows post to different procedures and
+// coupling this tab to the extraction editor buys nothing.
+const readFileAsBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Strip the "data:<mime>;base64," prefix.
+      resolve(result.slice(result.indexOf(",") + 1));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 
 const inputClass =
   "rounded-[6px] border border-[#dedad2] bg-white px-[10px] py-[7px] text-[13px] text-[#1a1814] outline-none focus:border-[#3a5fd9]";
@@ -40,49 +53,46 @@ const sectionClass =
 const legendClass = "text-[13px] font-semibold text-[#1a1814]";
 
 export function CreateCorpusContent() {
-  const [selectedCorpusId, setSelectedCorpusId] = useState<string | null>(null);
-  const [selectedDocumentIds, setSelectedDocumentIds] = useState<readonly string[]>([]);
-  const [evaluationName, setEvaluationName] = useState("");
+  const [runName, setRunName] = useState("");
+  // The browser File objects, held as chosen. They are read to base64 only at
+  // submit time, so re-picking or removing one costs nothing.
+  const [files, setFiles] = useState<readonly File[]>([]);
   const [stageSequence, setStageSequence] =
     useState<readonly AuthorableStage[]>(DEFAULT_STAGE_SEQUENCE);
   const [chunkMode, setChunkMode] = useState<ChunkModeOverride | null>(null);
   const [moneyVocabulary, setMoneyVocabulary] = useState<MoneyVocabularyOverride | null>(null);
   // Set once the run is fired, so the tracker begins polling. Kept separate from
-  // the mutations' own state because a resume replaces neither the run id nor the
-  // evaluation id — it re-fires the same run.
+  // the mutation's own state because a resume replaces neither the run id nor the
+  // corpus id — it re-fires the same run.
   const [runId, setRunId] = useState<string | null>(null);
-
-  const corporaQuery = trpc.evaluation.stagedCorpora.useQuery();
-  const documentsQuery = trpc.evaluation.stagedDocuments.useQuery(
-    { corpusId: selectedCorpusId ?? "" },
-    { enabled: selectedCorpusId !== null },
-  );
+  // Reading files to base64 happens before the mutation is called, so the button
+  // needs its own in-flight flag to cover that window too.
+  const [isReading, setIsReading] = useState(false);
 
   const draft: CreateCorpusDraft = {
-    corpora: corporaQuery.data ?? [],
-    selectedCorpusId,
-    documents: documentsQuery.data ?? [],
-    selectedDocumentIds,
-    evaluationName,
+    runName,
+    uploads: files.map((file) => ({
+      fileName: file.name,
+      sizeBytes: file.size,
+      // A browser leaves `type` empty for an extension it does not know; the
+      // object store needs something, and the engine sniffs the bytes anyway.
+      contentType: file.type === "" ? "application/octet-stream" : file.type,
+    })),
     stageSequence,
     chunkMode,
     moneyVocabulary,
   };
   const view = useMemo(() => renderCreateCorpusView(draft), [draft]);
 
-  // Switching corpus abandons the document choices made against the previous one
-  // — a document id is only meaningful within its own corpus.
-  const chooseCorpus = (nextCorpusId: string) => {
-    setSelectedCorpusId(nextCorpusId === "" ? null : nextCorpusId);
-    setSelectedDocumentIds([]);
+  // Re-picking appends rather than replaces, so a specialist can add documents
+  // from more than one folder without losing the earlier choice.
+  const chooseFiles = (chosen: FileList | null) => {
+    if (chosen === null) return;
+    setFiles((current) => [...current, ...Array.from(chosen)]);
   };
 
-  const toggleDocument = (documentId: string) => {
-    setSelectedDocumentIds((chosen) =>
-      chosen.includes(documentId)
-        ? chosen.filter((id) => id !== documentId)
-        : [...chosen, documentId],
-    );
+  const removeFile = (index: number) => {
+    setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
   };
 
   const toggleStage = (stage: AuthorableStage) => {
@@ -122,11 +132,27 @@ export function CreateCorpusContent() {
       .map((term) => term.trim())
       .filter((term) => term !== "");
 
-  const startRunMutation = trpc.evaluation.startRun.useMutation({
-    onSuccess: (run) => setRunId(run.runId),
+  // One call stages every document and fires the run. The ordering is a rule the
+  // controller owns and tests — nothing is staged unless the whole request is
+  // valid, and the run never fires over a half-staged prefix — so this tab hands
+  // over the whole request rather than sequencing two mutations itself.
+  const createCorpusMutation = trpc.evaluation.createCorpus.useMutation({
+    onSuccess: (created) => setRunId(created.runId),
   });
-  const createMutation = trpc.evaluation.create.useMutation({
-    onSuccess: (evaluation) => {
+
+  const [readError, setReadError] = useState<string | null>(null);
+
+  const start = async () => {
+    setReadError(null);
+    setIsReading(true);
+    try {
+      const wireFiles = await Promise.all(
+        files.map(async (file) => ({
+          filename: file.name,
+          mimeType: file.type === "" ? "application/octet-stream" : file.type,
+          contentBase64: await readFileAsBase64(file),
+        })),
+      );
       // Shape the override for the wire: the zod input takes mutable arrays, and
       // the state holds the domain's readonly ones, so copy them across.
       const configOverride = {
@@ -141,212 +167,100 @@ export function CreateCorpusContent() {
             }
           : {}),
       };
-      startRunMutation.mutate({
-        evaluationId: evaluation.id,
+      createCorpusMutation.mutate({
+        runName: runName.trim(),
+        files: wireFiles,
         stageSequence: [...stageSequence],
         ...(chunkMode || moneyVocabulary ? { configOverride } : {}),
       });
-    },
-  });
-
-  // The corpus id is the evaluation id, and each chosen document carries a brand.
-  // The picker chooses hashes, so the brand is typed against each; the create
-  // procedure re-validates a blank one.
-  const [brandByDocument, setBrandByDocument] = useState<Record<string, string>>({});
-
-  // The fields the responses are read against become the comprehension lens's
-  // topics — CreateEvaluation needs at least one, so this is not optional even on
-  // an ingest-led surface. Same shape as /evaluations/new.
-  const [fields, setFields] = useState<readonly FieldDraft[]>([BLANK_FIELD]);
-
-  const setField = (index: number, patch: Partial<FieldDraft>) => {
-    setFields((current) =>
-      current.map((field, fieldIndex) =>
-        fieldIndex === index ? { ...field, ...patch } : field,
-      ),
-    );
+    } catch (error) {
+      // A file the browser cannot read (removed from disk mid-flow, permission
+      // withdrawn) must not present as a run failure — nothing was staged.
+      setReadError(error instanceof Error ? error.message : "A chosen file could not be read.");
+    } finally {
+      setIsReading(false);
+    }
   };
 
-  const readyFields = fields.filter(
-    (field) => field.name.trim() !== "" && field.definition.trim() !== "",
-  );
-
-  const start = () => {
-    if (selectedCorpusId === null) return;
-    createMutation.mutate({
-      corpusId: selectedCorpusId,
-      name: evaluationName.trim(),
-      documents: selectedDocumentIds.map((documentId) => ({
-        documentId,
-        brand: brandByDocument[documentId]?.trim() ?? "",
-      })),
-      fields: readyFields.map((field) => ({
-        name: field.name.trim(),
-        definition: field.definition.trim(),
-      })),
-    });
-  };
-
-  const isFiring = createMutation.isPending || startRunMutation.isPending;
-  const brandsReady = selectedDocumentIds.every(
-    (documentId) => (brandByDocument[documentId]?.trim() ?? "") !== "",
-  );
-  const submittable =
-    view.trigger.enabled &&
-    brandsReady &&
-    readyFields.length > 0 &&
-    !isFiring &&
-    runId === null;
+  const isFiring = isReading || createCorpusMutation.isPending;
+  const submittable = view.trigger.enabled && !isFiring && runId === null;
 
   return (
     <div className="mx-auto flex max-w-[900px] flex-col gap-[16px] px-[20px] py-[24px]">
       <header className="flex flex-col gap-[4px]">
         <h1 className="text-[20px] font-bold text-[#1a1814]">Create corpus</h1>
         <p className="max-w-[640px] text-[13px] text-[#5a5650]">
-          Choose a staged corpus, name the evaluation, and fire the run. The
-          engine extracts, chunks, embeds and reads the documents; the evaluation
-          lands ready to group and review.
+          Name the run, add the documents, and fire it. The engine extracts,
+          chunks, embeds and reads them; once it settles you compose the
+          evaluation over the corpus it produced.
         </p>
       </header>
 
       {runId === null ? (
         <>
           <fieldset className={sectionClass}>
-            <legend className={legendClass}>Corpus</legend>
-
-            {corporaQuery.isPending && (
-              <p className="text-[13px] text-[#6d6a65]">Loading corpora…</p>
-            )}
-
-            {corporaQuery.isError && (
-              <p className="text-[13px] text-[#b4413c]" role="alert">
-                {corporaQuery.error.message}
-              </p>
-            )}
-
-            {corporaQuery.data?.length === 0 && (
-              <p className="text-[13px] text-[#6d6a65]" data-testid="corpora-empty">
-                No corpus has been staged yet. An operator stages one over object
-                storage before a run can be fired over it.
-              </p>
-            )}
-
-            {view.picker.corpora.length > 0 && (
-              <select
-                aria-label="Staged corpus"
-                data-testid="corpus-select"
-                className={inputClass}
-                value={selectedCorpusId ?? ""}
-                onChange={(event) => chooseCorpus(event.target.value)}
-              >
-                <option value="">Select a corpus…</option>
-                {view.picker.corpora.map((corpus) => (
-                  <option key={corpus.corpusId} value={corpus.corpusId}>
-                    {corpus.label}
-                  </option>
-                ))}
-              </select>
-            )}
+            <legend className={legendClass}>Run</legend>
+            <p className="text-[12px] text-[#6d6a65]">
+              The name is the corpus: it names the womblex run, the object-store
+              prefix its documents are staged under, and the corpus you compose
+              the evaluation over afterwards.
+            </p>
 
             <label className="flex flex-col gap-[4px]">
-              <span className="text-[12px] text-[#5a5650]">Evaluation name</span>
+              <span className="text-[12px] text-[#5a5650]">Run name</span>
               <input
-                data-testid="evaluation-name"
+                data-testid="run-name"
                 className={inputClass}
-                value={evaluationName}
-                placeholder="Water treatment panel 2026"
-                onChange={(event) => setEvaluationName(event.target.value)}
+                value={runName}
+                placeholder="tender-2026-water"
+                onChange={(event) => setRunName(event.target.value)}
               />
             </label>
           </fieldset>
 
-          {selectedCorpusId !== null && (
-            <fieldset className={sectionClass}>
-              <legend className={legendClass}>Documents and brands</legend>
-
-              {documentsQuery.isPending && (
-                <p className="text-[13px] text-[#6d6a65]">Loading documents…</p>
-              )}
-
-              {documentsQuery.isError && (
-                <p className="text-[13px] text-[#b4413c]" role="alert">
-                  {documentsQuery.error.message}
-                </p>
-              )}
-
-              {view.picker.documents.map((document) => (
-                <div
-                  key={document.documentId}
-                  data-testid="staged-document"
-                  className="flex items-center gap-[10px] border-b border-[#f0ede8] pb-[8px] last:border-b-0"
-                >
-                  <input
-                    type="checkbox"
-                    aria-label={`Include ${document.documentId}`}
-                    checked={document.selected}
-                    onChange={() => toggleDocument(document.documentId)}
-                  />
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-[13px] text-[#1a1814]">
-                      {document.preview || document.documentId}
-                    </span>
-                    <span className="truncate text-[11px] text-[#6d6a65]">
-                      {document.documentId} · {document.chunkCount} chunks
-                    </span>
-                  </span>
-                  <input
-                    aria-label={`Brand for ${document.documentId}`}
-                    className={`${inputClass} w-[200px]`}
-                    placeholder="Brand"
-                    disabled={!document.selected}
-                    value={brandByDocument[document.documentId] ?? ""}
-                    onChange={(event) =>
-                      setBrandByDocument((brands) => ({
-                        ...brands,
-                        [document.documentId]: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-              ))}
-            </fieldset>
-          )}
-
           <fieldset className={sectionClass}>
-            <legend className={legendClass}>Fields</legend>
+            <legend className={legendClass}>Documents</legend>
             <p className="text-[12px] text-[#6d6a65]">
-              Each field becomes a column the responses are read against. The
-              definition is what the adjudicator reasons from, so write it as you
-              would explain it to a colleague.
+              The raw documents to extract. Nothing needs to have been processed
+              first — the engine extracts, chunks and reads them from here.
             </p>
 
-            {fields.map((field, index) => (
-              <div key={index} data-testid="field-row" className="flex gap-[8px]">
-                <input
-                  aria-label={`Field ${index + 1} name`}
-                  className={`${inputClass} w-[200px]`}
-                  placeholder="Warranty"
-                  value={field.name}
-                  onChange={(event) => setField(index, { name: event.target.value })}
-                />
-                <input
-                  aria-label={`Field ${index + 1} definition`}
-                  className={`${inputClass} flex-1`}
-                  placeholder="The warranty period offered and what it covers."
-                  value={field.definition}
-                  onChange={(event) => setField(index, { definition: event.target.value })}
-                />
-              </div>
-            ))}
+            <input
+              type="file"
+              multiple
+              aria-label="Documents to upload"
+              data-testid="document-upload"
+              className="text-[13px]"
+              onChange={(event) => chooseFiles(event.target.files)}
+            />
 
-            <button
-              type="button"
-              data-testid="add-field"
-              className="self-start rounded-[6px] border border-[#dedad2] px-[10px] py-[6px] text-[12px] text-[#3a5fd9] hover:border-[#c5d0f7]"
-              onClick={() => setFields((current) => [...current, BLANK_FIELD])}
-            >
-              Add another field
-            </button>
+            <p className="text-[12px] text-[#6d6a65]" data-testid="upload-summary">
+              {view.uploads.summary}
+            </p>
+
+            {view.uploads.rows.length > 0 && (
+              <ul className="flex flex-col gap-[6px]" data-testid="upload-list">
+                {view.uploads.rows.map((row, index) => (
+                  <li
+                    key={`${row.fileName}-${index}`}
+                    className="flex items-center justify-between gap-[10px] text-[13px] text-[#1a1814]"
+                  >
+                    <span>
+                      {row.fileName}{" "}
+                      <span className="text-[12px] text-[#6d6a65]">{row.sizeLabel}</span>
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${row.fileName}`}
+                      onClick={() => removeFile(index)}
+                      className="text-[12px] text-[#6d6a65] hover:text-[#b4413c]"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </fieldset>
 
           <fieldset className={sectionClass}>
@@ -458,9 +372,9 @@ export function CreateCorpusContent() {
             )}
           </fieldset>
 
-          {(startRunMutation.isError || createMutation.isError) && (
+          {(createCorpusMutation.isError || readError !== null) && (
             <p className="text-[13px] text-[#b4413c]" role="alert" data-testid="start-error">
-              {(startRunMutation.error ?? createMutation.error)?.message}
+              {readError ?? createCorpusMutation.error?.message}
             </p>
           )}
 
@@ -469,7 +383,7 @@ export function CreateCorpusContent() {
               type="button"
               data-testid="start-run"
               disabled={!submittable}
-              onClick={start}
+              onClick={() => void start()}
               className="rounded-[6px] bg-[#3a5fd9] px-[14px] py-[8px] text-[13px] font-medium text-white disabled:bg-[#b9bfd4]"
             >
               {isFiring ? "Starting…" : view.trigger.label}
@@ -552,13 +466,20 @@ function RunTracker({ runId }: { runId: string }) {
       )}
 
       {status.isComplete && (
-        <Link
-          href={`/evaluations/${status.evaluationId}/grouping`}
-          data-testid="open-evaluation"
-          className="self-start rounded-[6px] bg-[#3a5fd9] px-[12px] py-[7px] text-[13px] font-medium text-white"
-        >
-          Open the evaluation
-        </Link>
+        <>
+          <p className="text-[12px] text-[#6d6a65]">
+            The corpus <strong>{status.evaluationId}</strong> is extracted and
+            loaded. Compose the evaluation over it to name the brands and the
+            fields its documents are read against.
+          </p>
+          <Link
+            href="/evaluations/new"
+            data-testid="open-evaluation"
+            className="self-start rounded-[6px] bg-[#3a5fd9] px-[12px] py-[7px] text-[13px] font-medium text-white"
+          >
+            Compose the evaluation
+          </Link>
+        </>
       )}
     </div>
   );

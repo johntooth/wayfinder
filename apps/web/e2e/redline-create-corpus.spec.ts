@@ -1,20 +1,23 @@
 /**
  * redline-create-corpus.spec.ts
  *
- * The standalone Create Corpus tab (redline delivery-plan §2 item 1, fork
- * mount). Deliberately not a change to /evaluations/new — ingest and evaluation
- * are different users, so the create flow's "corpus already staged" assumption
- * stays untouched. This surface picks a staged corpus, names the evaluation,
- * authors the allow-listed run config, then creates the evaluation and fires the
- * womblex run — ingest → lens → grouping → build — tracking it through the four
- * states (started / errored / resumable / done).
+ * The standalone Create Corpus tab (fork mount): redline's *ingest* surface.
+ * Deliberately not a change to /evaluations/new — ingest and evaluation are
+ * different users, and they are different steps. This surface names the run,
+ * uploads the raw documents into its input prefix, authors the allow-listed run
+ * config and fires the womblex run, tracking it through the four states
+ * (started / errored / resumable / done). Composing the evaluation over the
+ * corpus the run produced is /evaluations/new's job, which the tracker links to.
+ *
+ * It does not name brands or fields: womblex mints each document's source_hash
+ * on extract, so there is nothing to describe until the run has drained.
  *
  * Split the way the create-evaluation spec is. The tab, its gate, the readiness
  * rule and the run-config surface are client-side and need nothing staged, so
- * those tests always run. Firing an actual run needs a staged, unclaimed corpus
- * *and* a live womblex-ingest sidecar to enqueue against, so that half gates on
- * its own env and lands with the live corpus run (§2 item 3), skipping until
- * then — matching the fork's other seed-gated specs.
+ * those tests always run. Firing an actual run needs a live womblex-ingest
+ * sidecar to enqueue against and object storage to stage into, so that half
+ * gates on its own env and lands with the live corpus run, skipping until then
+ * — matching the fork's other seed-gated specs.
  *
  * Runs with the shared admin session, who holds evaluation:create via the admin
  * wildcard. The non-admin halves of the gate are proven where a browser cannot
@@ -24,7 +27,9 @@
 
 import { test, expect } from './helpers/base';
 
-const STAGED_CORPUS_ID = process.env.E2E_REDLINE_STAGED_CORPUS_ID;
+// A live run needs the sidecar and object storage, not a pre-staged corpus:
+// this surface stages its own documents, which is the whole point of it.
+const RUN_STACK = process.env.E2E_REDLINE_RUN_STACK;
 
 test.describe('redline create corpus', () => {
   test('reaches the tab from the sidebar without knowing the URL', async ({
@@ -69,12 +74,63 @@ test.describe('redline create corpus', () => {
 
     await expect(page.getByTestId('start-run')).toBeDisabled();
 
-    await page.getByTestId('evaluation-name').fill('Water treatment panel 2026');
-    await page.getByLabel('Field 1 name').fill('Warranty');
-    await page.getByLabel('Field 1 definition').fill('The warranty period offered.');
+    await page.getByTestId('run-name').fill('tender-2026-water');
 
-    // Still no corpus and so no documents, which is the one thing a specialist
-    // cannot type their way past.
+    // Named but with nothing to extract. The engine refuses an empty input
+    // prefix anyway, so lighting the button here would only buy a failed run.
+    await expect(page.getByTestId('start-run')).toBeDisabled();
+    await expect(page.getByTestId('upload-summary')).toHaveText('No documents chosen yet');
+  });
+
+  // The surface has no brand or field inputs at all. This is the half of the
+  // build that was deletion: naming a brand against a document womblex has not
+  // yet read is not something a specialist can do, and asking them to was what
+  // made the tab only able to re-run an already-extracted corpus.
+  test('asks for no brands and no fields — the run has not read anything yet', async ({
+    page,
+  }) => {
+    await page.goto('/create-corpus');
+
+    await expect(page.getByTestId('run-name')).toBeVisible();
+    await expect(page.getByTestId('document-upload')).toBeVisible();
+    await expect(page.getByLabel('Field 1 name')).toBeHidden();
+    await expect(page.getByTestId('corpus-select')).toBeHidden();
+  });
+
+  // Chosen files are listed before anything is uploaded, so a specialist can see
+  // — and correct — what is about to cost them a run.
+  test('lists the chosen documents, and lets one be removed before firing', async ({ page }) => {
+    await page.goto('/create-corpus');
+
+    await page.getByTestId('document-upload').setInputFiles([
+      { name: 'acme-response.pdf', mimeType: 'application/pdf', buffer: Buffer.from('acme') },
+      { name: 'beta-response.pdf', mimeType: 'application/pdf', buffer: Buffer.from('beta') },
+    ]);
+
+    await expect(page.getByTestId('upload-summary')).toHaveText('2 documents to upload');
+
+    await page.getByRole('button', { name: 'Remove beta-response.pdf' }).click();
+
+    await expect(page.getByTestId('upload-summary')).toHaveText('1 document to upload');
+    await expect(page.getByTestId('upload-list')).toContainText('acme-response.pdf');
+    await expect(page.getByTestId('upload-list')).not.toContainText('beta-response.pdf');
+  });
+
+  // Name plus a document plus a stage is the whole readiness rule.
+  test('arms the start button once the run has a name and a document', async ({ page }) => {
+    await page.goto('/create-corpus');
+
+    await page.getByTestId('run-name').fill('tender-2026-water');
+    await page.getByTestId('document-upload').setInputFiles([
+      { name: 'acme-response.pdf', mimeType: 'application/pdf', buffer: Buffer.from('acme') },
+    ]);
+
+    await expect(page.getByTestId('start-run')).toBeEnabled();
+
+    // Turning every stage off disarms it again — a run with no pass is not a run.
+    for (const stage of ['Chunk', 'Embed', 'Enrich', 'Money']) {
+      await page.getByLabel(`Run ${stage} stage`).uncheck();
+    }
     await expect(page.getByTestId('start-run')).toBeDisabled();
   });
 
@@ -93,38 +149,53 @@ test.describe('redline create corpus', () => {
     await expect(page.getByLabel('Default currency')).toBeVisible();
   });
 
-  test('fires a run over a staged corpus and tracks it to completion', async ({ page }) => {
+  // The exit test: a run named and uploaded from the browser, fired, drained,
+  // and its corpus visible to /evaluations/new — with no terminal in the loop.
+  test('names a run, uploads a document, fires it, and hands the corpus over', async ({
+    page,
+  }) => {
     test.skip(
-      !STAGED_CORPUS_ID,
-      'Needs a staged, unclaimed corpus and a live womblex-ingest sidecar — runs with E2E_REDLINE_STAGED_CORPUS_ID set.',
+      !RUN_STACK,
+      'Needs a live womblex-ingest sidecar and object storage — runs with E2E_REDLINE_RUN_STACK set.',
     );
 
-    const name = `E2E corpus ${Date.now()}`;
+    const runName = `e2e-corpus-${Date.now()}`;
 
     await page.goto('/create-corpus');
 
-    await page.getByTestId('corpus-select').selectOption(STAGED_CORPUS_ID as string);
-    await page.getByTestId('evaluation-name').fill(name);
-
-    const firstDocument = page.getByTestId('staged-document').first();
-    await expect(firstDocument).toBeVisible();
-    await firstDocument.getByRole('checkbox').check();
-    await firstDocument.getByRole('textbox').fill('Acme');
-
-    await page.getByLabel('Field 1 name').fill('Warranty');
-    await page
-      .getByLabel('Field 1 definition')
-      .fill('The warranty period offered and what it covers.');
+    await page.getByTestId('run-name').fill(runName);
+    await page.getByTestId('document-upload').setInputFiles([
+      {
+        name: 'acme-response.pdf',
+        mimeType: 'application/pdf',
+        buffer: Buffer.from('%PDF-1.4\nAcme response: 24 month warranty. Total $1,250,000.\n'),
+      },
+    ]);
 
     await page.getByTestId('start-run').click();
 
     // The tracker replaces the form once the run is fired.
     await expect(page.getByTestId('run-tracker')).toBeVisible();
 
-    // A settled run either offers the evaluation or a resume affordance — never an
+    // A settled run either hands the corpus over or offers a resume — never an
     // endless spinner. Give the minutes-long run generous headroom.
     await expect(
       page.getByTestId('open-evaluation').or(page.getByTestId('resume-run')),
     ).toBeVisible({ timeout: 300_000 });
+
+    // The run must have finished, not merely stopped: a resumable run has not
+    // produced a corpus for the next screen.
+    await expect(page.getByTestId('open-evaluation')).toBeVisible();
+
+    // The hand-over: the corpus this run produced is loaded and pickable on
+    // /evaluations/new. Without the run's own shard load this is exactly where
+    // the two-screen flow used to break — a run that published shards no screen
+    // could see.
+    await page.getByTestId('open-evaluation').click();
+
+    await expect(page).toHaveURL(/\/evaluations\/new$/);
+    await expect(page.getByTestId('corpus-select')).toContainText(runName, {
+      timeout: 30_000,
+    });
   });
 });

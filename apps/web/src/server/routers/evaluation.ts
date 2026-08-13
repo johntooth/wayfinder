@@ -45,11 +45,16 @@ import { permissionProcedure, router } from "../trpc";
 // + trigger, runStatus() polls and resumes). Declared here as the slice this
 // router calls so it stays typed against the seam, not the concrete class.
 interface RunTriggerController {
-  startRun(input: {
-    evaluationId: string;
+  createCorpus(input: {
+    runName: string;
+    uploads: readonly {
+      fileName: string;
+      bytes: Uint8Array;
+      contentType: string;
+    }[];
     stageSequence: readonly AuthorableStage[];
     configOverride?: RunConfigOverrideInput;
-  }): Promise<Result<{ readonly runId: string }>>;
+  }): Promise<Result<{ readonly corpusId: string; readonly runId: string }>>;
 }
 
 interface RunStatusPollController {
@@ -211,10 +216,24 @@ const configOverrideInput = z
   })
   .optional() satisfies z.ZodType<RunConfigOverrideInput | undefined>;
 
+// One document on its way to the run's input prefix. Base64 through tRPC into a
+// Buffer, following the fork's own upload procedure
+// (extraction.uploadDraftDocuments) rather than inventing a second transport.
+// There is no treePath: these bytes land flat under proc/{run}/inputs/, which is
+// the prefix womblex's runner lists.
+const stagedFileSchema = z.object({
+  filename: z.string().min(1),
+  mimeType: z.string().min(1),
+  contentBase64: z.string(),
+});
+
 // The stage sequence names at least one pass — the surface's trigger.enabled
-// rule already refuses an empty one, and a run with no stage is not a run.
-const startRunInput = z.object({
-  evaluationId: z.string().min(1),
+// rule already refuses an empty one, and a run with no stage is not a run. The
+// run name is passed through as typed (the controller trims it): a corpus is a
+// womblex run and its id is the engine's to mint, not this router's to curate.
+const createCorpusInput = z.object({
+  runName: z.string().min(1),
+  files: z.array(stagedFileSchema).min(1),
   stageSequence: z.array(authorableStageEnum).min(1),
   configOverride: configOverrideInput,
 });
@@ -312,21 +331,32 @@ export const evaluationRouter = router({
     return workbook.data;
   }),
 
-  // The run half (delivery-plan §2 item 1, fork mount). Once the Create Corpus
-  // tab has staged its bytes and created the evaluation, it fires the authored
-  // stage sequence over this and returns the run id it then polls by. The
-  // controller re-validates the override through the domain before the sidecar
-  // sees it; gated on create because starting a run is starting an evaluation.
-  startRun: createProcedure.input(startRunInput).mutation(async ({ ctx, input }) => {
-    const started = await controllerOf(ctx)
+  // The ingest half (fork mount): the Create Corpus tab hands over the run name,
+  // the raw documents and the authored config, and gets back the corpus id and
+  // the run id it then polls by. Staging and firing are one call because their
+  // ordering is a rule, not a preference — the controller refuses a nameless or
+  // empty run before staging anything and never fires over a half-staged prefix,
+  // which a React sequence of two mutations could not guarantee.
+  //
+  // No evaluation is created here. womblex mints each document's source_hash on
+  // extract, so brands and fields cannot be named until the run has drained;
+  // /evaluations/new composes the evaluation over the finished corpus. Gated on
+  // create because starting a run is starting an evaluation.
+  createCorpus: createProcedure.input(createCorpusInput).mutation(async ({ ctx, input }) => {
+    const created = await controllerOf(ctx)
       .corpus()
-      .startRun({
-        evaluationId: input.evaluationId,
+      .createCorpus({
+        runName: input.runName,
+        uploads: input.files.map((file) => ({
+          fileName: file.filename,
+          bytes: new Uint8Array(Buffer.from(file.contentBase64, "base64")),
+          contentType: file.mimeType,
+        })),
         stageSequence: input.stageSequence,
         ...(input.configOverride ? { configOverride: input.configOverride } : {}),
       });
-    if (isErr(started)) throw toTrpcError(started.error);
-    return started.data;
+    if (isErr(created)) throw toTrpcError(created.error);
+    return created.data;
   }),
 
   // Poll a run into the four-state view model the tab renders — started, errored

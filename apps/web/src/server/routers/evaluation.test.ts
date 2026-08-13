@@ -21,15 +21,16 @@ const makeController = (
     listStagedDocuments?: ReturnType<typeof vi.fn>;
     createEvaluation?: ReturnType<typeof vi.fn>;
     // The run half's two sub-controllers, reached through corpus() / runStatus().
-    // Stubbed as bare methods here; the router calls corpus().startRun and
+    // Stubbed as bare methods here; the router calls corpus().createCorpus and
     // runStatus().poll / .resume through the same workflow controller.
-    startRun?: ReturnType<typeof vi.fn>;
+    createCorpus?: ReturnType<typeof vi.fn>;
     pollRun?: ReturnType<typeof vi.fn>;
     resumeRun?: ReturnType<typeof vi.fn>;
   } = {},
 ) => {
-  const startRun =
-    overrides.startRun ?? vi.fn().mockResolvedValue(ok({ runId: "run-1" }));
+  const createCorpus =
+    overrides.createCorpus ??
+    vi.fn().mockResolvedValue(ok({ corpusId: "tender-2026", runId: "run-1" }));
   const pollRun =
     overrides.pollRun ??
     vi.fn().mockResolvedValue(
@@ -53,9 +54,9 @@ const makeController = (
   return {
     // The run half is reached through two accessor methods that hand back the
     // sub-controllers, mirroring WorkflowController.corpus() / runStatus().
-    corpus: () => ({ startRun }),
+    corpus: () => ({ createCorpus }),
     runStatus: () => ({ poll: pollRun, resume: resumeRun }),
-    startRun,
+    createCorpus,
     pollRun,
     resumeRun,
     openDocument:
@@ -617,42 +618,75 @@ describe("evaluation.create", () => {
   });
 });
 
-// The run half (delivery-plan §2 item 1, fork mount). The Create Corpus tab
-// stages its bytes and creates the evaluation over the create procedures above,
-// then fires and tracks the womblex run over these three. The staging and the
-// four-state polling brain are proven in redline-web (create-corpus-controller,
-// run-status-controller/view); these prove the served procedures that drive them
-// — the gate, the seam call, and that the authored stage sequence and override
-// reach the trigger. All three are gated on evaluation:create: starting a run is
-// starting an evaluation, not reviewing one.
+// The run half (fork mount). The Create Corpus tab hands the whole ingest
+// request to one procedure — the run name, the raw documents and the authored
+// config — and then tracks the run over the two below. The staging sequence and
+// the four-state polling brain are proven in redline-web
+// (create-corpus-controller, run-status-controller/view); these prove the served
+// procedures that drive them — the gate, the seam call, and that the uploaded
+// bytes, stage sequence and override reach the controller intact. All three are
+// gated on evaluation:create: starting a run is starting an evaluation, not
+// reviewing one.
 
-const startRunInput = {
-  evaluationId: "tender-2026",
+const createCorpusInput = {
+  runName: "tender-2026",
+  files: [
+    {
+      filename: "acme-response.pdf",
+      mimeType: "application/pdf",
+      contentBase64: Buffer.from("acme response").toString("base64"),
+    },
+  ],
   stageSequence: ["chunk", "embed", "enrich", "money"] as AuthorableStage[],
 };
 
-describe("evaluation.startRun", () => {
-  it("fires the authored stage sequence and returns the run id the tab polls by", async () => {
+describe("evaluation.createCorpus", () => {
+  it("stages the uploaded documents and fires the authored stage sequence", async () => {
     const controller = makeController();
 
     const result = await createCaller(
       contextWith(makeContainer(controller)),
-    ).evaluation.startRun(startRunInput);
+    ).evaluation.createCorpus(createCorpusInput);
 
-    expect(controller.startRun).toHaveBeenCalledWith(
+    expect(controller.createCorpus).toHaveBeenCalledWith(
       expect.objectContaining({
-        evaluationId: "tender-2026",
+        runName: "tender-2026",
         stageSequence: ["chunk", "embed", "enrich", "money"],
       }),
     );
     expect(result.runId).toBe("run-1");
+    expect(result.corpusId).toBe("tender-2026");
   });
 
-  it("carries an authored config override through to the trigger", async () => {
+  it("decodes each document's base64 into the bytes the object store receives", async () => {
     const controller = makeController();
 
-    await createCaller(contextWith(makeContainer(controller))).evaluation.startRun({
-      ...startRunInput,
+    await createCaller(contextWith(makeContainer(controller))).evaluation.createCorpus(
+      createCorpusInput,
+    );
+
+    const uploads = controller.createCorpus.mock.calls[0]?.[0].uploads;
+    expect(uploads).toHaveLength(1);
+    expect(uploads[0].fileName).toBe("acme-response.pdf");
+    expect(uploads[0].contentType).toBe("application/pdf");
+    expect(new TextDecoder().decode(uploads[0].bytes)).toBe("acme response");
+  });
+
+  it("creates no evaluation — the documents have no identities until the run drains", async () => {
+    const controller = makeController();
+
+    await createCaller(contextWith(makeContainer(controller))).evaluation.createCorpus(
+      createCorpusInput,
+    );
+
+    expect(controller.createEvaluation).not.toHaveBeenCalled();
+  });
+
+  it("carries an authored config override through to the controller", async () => {
+    const controller = makeController();
+
+    await createCaller(contextWith(makeContainer(controller))).evaluation.createCorpus({
+      ...createCorpusInput,
       configOverride: {
         chunkMode: { chunkingModel: null, chunkSize: 480, chunkTables: true },
         moneyVocabulary: {
@@ -663,7 +697,7 @@ describe("evaluation.startRun", () => {
       },
     });
 
-    expect(controller.startRun).toHaveBeenCalledWith(
+    expect(controller.createCorpus).toHaveBeenCalledWith(
       expect.objectContaining({
         configOverride: expect.objectContaining({
           chunkMode: { chunkingModel: null, chunkSize: 480, chunkTables: true },
@@ -680,45 +714,73 @@ describe("evaluation.startRun", () => {
       permissions: new Set<PermissionKey>(["evaluation:create"]),
     };
 
-    await expect(createCaller(context).evaluation.startRun(startRunInput)).resolves.toBeDefined();
+    await expect(
+      createCaller(context).evaluation.createCorpus(createCorpusInput),
+    ).resolves.toBeDefined();
   });
 
   it("refuses a reviewer: firing a run is starting an evaluation, not reviewing one", async () => {
     const controller = makeController();
 
     await expect(
-      createCaller(reviewerContext(makeContainer(controller))).evaluation.startRun(startRunInput),
+      createCaller(reviewerContext(makeContainer(controller))).evaluation.createCorpus(
+        createCorpusInput,
+      ),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
-    expect(controller.startRun).not.toHaveBeenCalled();
+    expect(controller.createCorpus).not.toHaveBeenCalled();
+  });
+
+  it("refuses a run with no documents — the engine refuses an empty prefix", async () => {
+    const controller = makeController();
+
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.createCorpus({
+        ...createCorpusInput,
+        files: [],
+      }),
+    ).rejects.toThrow();
+    expect(controller.createCorpus).not.toHaveBeenCalled();
+  });
+
+  it("refuses a blank run name rather than staging under an empty prefix", async () => {
+    const controller = makeController();
+
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.createCorpus({
+        ...createCorpusInput,
+        runName: "",
+      }),
+    ).rejects.toThrow();
+    expect(controller.createCorpus).not.toHaveBeenCalled();
   });
 
   it("refuses an off-list stage rather than passing it below the seam", async () => {
     const controller = makeController();
 
     await expect(
-      createCaller(contextWith(makeContainer(controller))).evaluation.startRun({
-        ...startRunInput,
+      createCaller(contextWith(makeContainer(controller))).evaluation.createCorpus({
+        ...createCorpusInput,
         stageSequence: ["link"],
       } as never),
     ).rejects.toThrow();
-    expect(controller.startRun).not.toHaveBeenCalled();
+    expect(controller.createCorpus).not.toHaveBeenCalled();
   });
 
   it("still refuses an empty stage sequence — a run runs at least one stage", async () => {
     const controller = makeController();
 
     await expect(
-      createCaller(contextWith(makeContainer(controller))).evaluation.startRun({
-        ...startRunInput,
+      createCaller(contextWith(makeContainer(controller))).evaluation.createCorpus({
+        ...createCorpusInput,
         stageSequence: [],
       }),
     ).rejects.toThrow();
-    expect(controller.startRun).not.toHaveBeenCalled();
+    expect(controller.createCorpus).not.toHaveBeenCalled();
   });
 
   it("maps a rejected override to a tRPC error, message intact", async () => {
     const controller = makeController({
-      startRun: vi
+      createCorpus: vi
         .fn()
         .mockResolvedValue(
           err(domainError("VALIDATION_FAILED", "chunk size must be a positive number of tokens")),
@@ -726,8 +788,24 @@ describe("evaluation.startRun", () => {
     });
 
     await expect(
-      createCaller(contextWith(makeContainer(controller))).evaluation.startRun(startRunInput),
+      createCaller(contextWith(makeContainer(controller))).evaluation.createCorpus(
+        createCorpusInput,
+      ),
     ).rejects.toThrow(/positive number of tokens/i);
+  });
+
+  it("maps a bucket failure to a tRPC error rather than a silent success", async () => {
+    const controller = makeController({
+      createCorpus: vi
+        .fn()
+        .mockResolvedValue(err(domainError("INFRA_FAILURE", "object storage is unreachable"))),
+    });
+
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.createCorpus(
+        createCorpusInput,
+      ),
+    ).rejects.toThrow(/object storage is unreachable/i);
   });
 });
 
