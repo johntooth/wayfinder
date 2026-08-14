@@ -356,6 +356,38 @@ export function CreateCorpusContent() {
               />
               Override money vocabulary
             </label>
+            {!view.config.moneyVocabulary.inheritsDefault && (
+              <div className="flex flex-col gap-[8px] pl-[22px]">
+                <label className="flex flex-col gap-[4px]">
+                  <span className="text-[12px] text-[#5a5650]">Default currency (ISO 4217)</span>
+                  <input
+                    aria-label="Default currency"
+                    className={`${inputClass} w-[140px]`}
+                    value={view.config.moneyVocabulary.defaultCurrency ?? "AUD"}
+                    onChange={(event) => setMoneyField({ defaultCurrency: event.target.value })}
+                  />
+                </label>
+                <label className="flex flex-col gap-[4px]">
+                  <span className="text-[12px] text-[#5a5650]">Extra header terms (comma-separated)</span>
+                  <input
+                    aria-label="Extra header terms"
+                    className={inputClass}
+                    defaultValue={view.config.moneyVocabulary.extraHeaderTerms.join(", ")}
+                    onChange={(event) => setMoneyField({ extraHeaderTerms: splitTerms(event.target.value) })}
+                  />
+                </label>
+                <label className="flex flex-col gap-[4px]">
+                  <span className="text-[12px] text-[#5a5650]">Extra veto terms (comma-separated)</span>
+                  <input
+                    aria-label="Extra veto terms"
+                    className={inputClass}
+                    defaultValue={view.config.moneyVocabulary.extraVetoTerms.join(", ")}
+                    onChange={(event) => setMoneyField({ extraVetoTerms: splitTerms(event.target.value) })}
+                  />
+                </label>
+              </div>
+            )}
+
             <label className="flex items-center gap-[6px] text-[13px]">
               <input
                 type="checkbox"
