@@ -34,13 +34,28 @@ as a non-negotiable.
 
 ---
 
-## 2. The one red test — read this before touching it
+## 2. The formerly-red test — status: GREEN in CI, watch for recurrence
+
+> **Update (PR #244, run #700 on `1ed0202`): this test PASSED — the whole e2e
+> job was 85 passed · 0 failed.** The reload-race fix `918a4f2` (wait for the
+> stream body to close before reloading, hypothesis 3 below) is in this branch,
+> and with it the turn has demonstrably committed before the reload asserts. The
+> handover called that fix "changed nothing" on the strength of #695, but the
+> runs since — with the guard converted from a skip to an assertion so the test
+> actually runs — are green.
+>
+> It was historically **intermittent** ("one reproduction is not proof", §6), so
+> one green run is not proof of a fix either. Treatment: keep watching CI. If it
+> reddens again, the next step is still the one below — get the row — and that
+> needs a docker-capable stack (this triage's sandbox has no Postgres), so it is
+> a CI-or-devbox job, not a static-reading one. The diagnostic history is kept
+> below because it is the map for that day.
 
 **`code-quality-hot-paths.spec.ts` › Group C: transactional turn persistence ›
 `a committed turn keeps its user message and assistant reply after reload`**
 
-Fails with `Error: assistant reply after reload`. The **user** message survives
-the reload; the **assistant** reply does not.
+Historically failed with `Error: assistant reply after reload`. The **user**
+message survives the reload; the **assistant** reply did not.
 
 Seen in runs #690, #692, #694, #695. Run #693 failed differently (45s timeout) —
 that variant is explained by the `networkidle` wait, now removed.
