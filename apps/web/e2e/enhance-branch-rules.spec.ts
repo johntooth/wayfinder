@@ -19,6 +19,8 @@ import { loadSeedFixtures } from "./helpers/seed";
 //      connector's state and persists.
 //   4. Ruling every branch of the fork clears the advisory.
 //   5. Removing a rule puts the connector, and the advisory, back.
+//   6. A rule reaches the manual branch picker, so an operator choosing by hand
+//      reads the same condition the AI was given.
 //
 // Assertions read the data attributes the edge and advisory expose rather than
 // SVG geometry, so they stay stable against canvas layout.

@@ -51,6 +51,48 @@ does not show would be worse than none.
 row. Without carrying `config`, restoring a version would have stripped every
 branch rule with no error surfaced. Found during `/doc-review`, covered by test.
 
+## Bug found in testing — branch choice never reached the model
+
+Confirming a forked step asked the operator to pick a branch by hand every time.
+The logs showed the call failing before it reached the routing question:
+
+```
+AI_APICallError: This model does not support assistant message prefill.
+The conversation must end with a user message.
+  at recomputeBranchChoice (src/lib/chat/confirm-step.ts)
+```
+
+**Cause.** `confirm-step.ts` and the scheduler each mapped the stored transcript
+straight to model messages. Two faults in that mapping:
+
+1. The branch choice is made *after* the assistant has spoken, so the transcript
+   ends on an assistant turn. Anthropic reads a trailing assistant message as a
+   prefill to continue and rejects the call.
+2. Stored `system` rows kept their role, which the SDK rejects separately as
+   "multiple system messages separated by user/assistant messages".
+
+The streaming turn had neither problem because it appends the operator's new
+message before choosing, and folds system rows through `toModelMessages` — so
+the fault only ever showed on the confirmation and scheduled paths. Pre-existing
+(ADR-026), not introduced here, but squarely on the branch-choice path this
+change refactors, so it is fixed with it.
+
+**Fix.** `lib/chat/branch-choice-messages.ts` — `toBranchChoiceMessages` folds
+system rows through the existing `toModelMessages` and closes the transcript with
+the routing request itself, so the conversation always ends on a user turn.
+Both non-streaming call sites use it. Covered by `branch-choice-messages.test.ts`,
+which asserts the last turn is always `user` whatever the transcript looks like.
+
+## The rule reaches the manual picker
+
+When the AI still cannot route — or an admin overrides — `BranchOverrideModal`
+now shows each branch's rule under the step name (`Use when: …`). The operator
+picks on the same stated condition the model was given rather than inferring it
+from a step name. The option list moved into `lib/chat/branch-options.ts` as a
+pure `toBranchOptions`, which is the testable seam: this repo has no DOM-render
+test setup, so the data path is covered rather than the markup
+(`branch-options.test.ts`, including a legacy edge with no `config`).
+
 ## Files
 
 | Layer | Files |
@@ -58,7 +100,7 @@ branch rule with no error surfaced. Found during `/doc-review`, covered by test.
 | domain | `entities/branch-rule.ts` (+ test), `entities/flow-edge.ts`, `entities/flow-version.ts` (+ test), `entities/index.ts`, `ports/flow-edge-repository.ts`, `ports/session-agent.ts` |
 | application | `use-cases/flow/set-flow-edge-branch-rule.ts` (+ test), `use-cases/flow/index.ts` |
 | adapters | `db/schema/wayfinder.ts`, `drizzle/0043_organic_vengeance.sql`, `repositories/drizzle-flow-edge-repository.ts`, `repositories/drizzle-flow-version-repository.ts`, `agents/flow-session-graph.ts` (+ test) |
-| apps/web | `components/canvas/branch-rule-edge.tsx`, `branch-rule-modal.tsx`, `branch-rule-icon.tsx`, `missing-branch-rules-warning.tsx`, `flow-canvas-viewport.tsx`, `lib/canvas/rf-adapters.ts`, `lib/canvas/canvas-guidance.ts` (+ test), `app/(user)/flows/[id]/config/_content.tsx`, `server/routers/flow.ts`, `lib/container.ts`, `lib/chat/confirm-step.ts`, `lib/scheduler/scheduled-session-fire-handler.ts`, `app/api/chat/[sessionId]/stream/route.ts`, `execute-turn.ts` |
+| apps/web | `components/canvas/branch-rule-edge.tsx`, `branch-rule-modal.tsx`, `branch-rule-icon.tsx`, `missing-branch-rules-warning.tsx`, `flow-canvas-viewport.tsx`, `lib/canvas/rf-adapters.ts`, `lib/canvas/canvas-guidance.ts` (+ test), `app/(user)/flows/[id]/config/_content.tsx`, `_use-branch-rules.ts`, `server/routers/flow.ts`, `lib/container.ts`, `lib/chat/confirm-step.ts`, `lib/chat/branch-choice-messages.ts` (+ test), `lib/chat/branch-options.ts` (+ test), `components/chat/branch-override-modal.tsx`, `app/(user)/chats/[sessionId]/_content.tsx`, `lib/scheduler/scheduled-session-fire-handler.ts`, `app/api/chat/[sessionId]/stream/route.ts`, `execute-turn.ts` |
 
 ## Migration
 
@@ -79,7 +121,11 @@ existing edges.)
 - `flow-session-graph.test.ts` — the prompt states a rule as a condition and a
   purpose as a description, and stays well-formed with neither.
 - `canvas-guidance.test.ts` — `isForkedEdge` and `findForksMissingBranchRule`.
-- Full suites green: domain 638, application 910, adapters 639, web 804.
+- `branch-choice-messages.test.ts` — the transcript always ends on a user turn,
+  and stored system rows are folded rather than passed through.
+- `branch-options.test.ts` — rules reach the manual picker; blank and missing
+  configs yield no caption.
+- Full suites green: domain 638, application 910, adapters 639, web 817.
 
 ## Deviations from the approved summary
 

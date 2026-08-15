@@ -14,6 +14,7 @@ import {
   applyAdvanceSideEffects,
   buildGatheredContext,
 } from "@/app/api/chat/[sessionId]/stream/turn-helpers";
+import { toBranchChoiceMessages } from "./branch-choice-messages";
 
 type Container = ReturnType<typeof getContainer>;
 
@@ -42,10 +43,7 @@ async function recomputeBranchChoice(
   const aiConfig = await container.runtimeConfig.getAiConfig();
   const branchingModelName = aiConfig.models.branching;
 
-  const coreMessages = messages.map((m) => ({
-    role: m.role as "user" | "assistant" | "system",
-    content: m.content,
-  }));
+  const coreMessages = toBranchChoiceMessages(messages);
 
   const branchResult = await container.services.llm.generateObject<{ branchChoice?: string }>({
     purpose: "chat-branch-choice",

@@ -15,6 +15,7 @@ import {
 } from "@rbrasier/domain";
 import { branchChoiceSchema } from "@rbrasier/shared";
 import type { getContainer } from "@/lib/container";
+import { toBranchChoiceMessages } from "@/lib/chat/branch-choice-messages";
 import {
   buildGatheredContext,
   dispatchAutoNode,
@@ -131,10 +132,7 @@ export class ScheduledSessionFireHandler implements IScheduleFireHandler {
     const promptResult = this.container.services.sessionAgent.buildBranchChoicePrompt({ branchNodes });
     if (promptResult.error) return err(promptResult.error);
 
-    const coreMessages = messages.map((message) => ({
-      role: message.role as "user" | "assistant" | "system",
-      content: message.content,
-    }));
+    const coreMessages = toBranchChoiceMessages(messages);
 
     const branchResult = await generateObject({
       model,
