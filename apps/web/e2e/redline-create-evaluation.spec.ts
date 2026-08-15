@@ -11,6 +11,18 @@
  * belongs to and which fields it is read against, and finds the result on
  * /evaluations without a terminal having been opened.
  *
+ * Composing the evaluation used to be the whole story, landing on a grouping
+ * stub with documents and no responses — WorkflowController.populate
+ * (redline-web) existed but nothing served called it. The fork mount closes
+ * that: `create` now drives populate itself, so the live test below lands on
+ * the review grid with responses that carry source anchors, not a stub. A
+ * population failure is not a create failure — it is carried on the response
+ * as its own state and still lands the specialist on the (unpopulated)
+ * evaluation, at /grouping with the reason shown, rather than a rejected
+ * mutation; that path has no live corpus fixture that reliably fails
+ * mid-read, so it stays proven at the procedure level
+ * (src/server/routers/evaluation.test.ts).
+ *
  * Split the way the index spec is. The route, its gate and the submit rules are
  * client-side and need nothing staged, so those tests always run. The create
  * itself needs a corpus the sidecar has already staged *and no evaluation over
@@ -83,7 +95,7 @@ test.describe('redline create evaluation', () => {
     await expect(page.getByTestId('create-evaluation')).toBeDisabled();
   });
 
-  test('creates a named evaluation over a staged corpus and finds it on the index', async ({
+  test('creates a named evaluation over a staged corpus and lands on responses with source anchors', async ({
     page,
   }) => {
     test.skip(
@@ -108,10 +120,19 @@ test.describe('redline create evaluation', () => {
 
     await page.getByTestId('create-evaluation').click();
 
-    // The create lands the evaluation at the grouping stage — it has documents
-    // and no classifications yet, so there is no review grid to send them to.
+    // The fork mount: create() drives WorkflowController.populate itself, so
+    // the specialist lands directly on the review grid rather than the
+    // grouping stub — the evaluation arrives with responses built, not with
+    // documents and none.
     await expect(page).toHaveURL(
-      new RegExp(`/evaluations/${STAGED_CORPUS_ID}/grouping$`),
+      new RegExp(`/evaluations/${STAGED_CORPUS_ID}/review$`),
+    );
+
+    const link = page.getByTestId('review-source-link').first();
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute(
+      'href',
+      new RegExp(`/evaluations/${STAGED_CORPUS_ID}/documents/.+element=`),
     );
 
     await page.goto('/evaluations');

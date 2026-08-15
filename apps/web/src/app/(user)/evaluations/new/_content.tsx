@@ -47,7 +47,21 @@ export function CreateEvaluationContent() {
       // a specialist who creates an evaluation and goes back to /evaluations
       // within that window is shown a list that does not contain it.
       void utils.evaluation.list.invalidate();
-      router.push(`/evaluations/${evaluation.id}/grouping`);
+
+      // Composition (this mutation) and population (the reading passes over
+      // the freshly-run corpus) are two things that can fail independently, so
+      // the server never throws for a population failure — it returns
+      // `populated: false` on an evaluation that was created successfully.
+      // Sending that case to the review grid would show an empty grid with no
+      // explanation; the grouping landing carries the reason instead.
+      if (evaluation.populated) {
+        router.push(`/evaluations/${evaluation.id}/review`);
+        return;
+      }
+      const query = evaluation.populationError
+        ? `?populationError=${encodeURIComponent(evaluation.populationError)}`
+        : "";
+      router.push(`/evaluations/${evaluation.id}/grouping${query}`);
     },
   });
 

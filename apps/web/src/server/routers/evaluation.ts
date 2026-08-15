@@ -18,6 +18,7 @@ import type {
   DomainError,
   Evaluation,
   ExtractionElement,
+  ProcurementResponse,
   Result,
   RunConfigOverrideInput,
   StagedCorpus,
@@ -67,6 +68,9 @@ interface EvaluationController {
   listStagedCorpora(): Promise<Result<readonly StagedCorpus[]>>;
   listStagedDocuments(input: { corpusId: string }): Promise<Result<readonly StagedDocument[]>>;
   createEvaluation(input: CreateEvaluationInput): Promise<Result<Evaluation>>;
+  populate(input: {
+    evaluationId: string;
+  }): Promise<Result<readonly ProcurementResponse[]>>;
   openReviewGrid(input: { evaluationId: string }): Promise<Result<ReviewGrid>>;
   openPricingPivot(input: { evaluationId: string }): Promise<Result<PricingPivot>>;
   buildWorkbook(input: { evaluationId: string }): Promise<Result<EvaluationWorkbook>>;
@@ -275,13 +279,31 @@ export const evaluationRouter = router({
       return documents.data;
     }),
 
-  // The router's first mutation. Until it existed an evaluation could only be
-  // created by a terminal script reading a hand-written manifest, so nothing in
-  // the browser could start one.
+  // The router's first mutation, and the fork mount (redline delivery-plan
+  // §2.1): composing an evaluation used to leave it with documents and no
+  // responses, because WorkflowController.populate existed but nothing served
+  // called it. Composition and population are still two calls, not one Result:
+  // the reading passes (ingest, grouping, classify, build) can fail
+  // independently of composition — a rejected adjudicator or an unreachable
+  // chunk store is not "the evaluation was never created", and throwing here
+  // would read as exactly that. The evaluation already exists and is reachable
+  // at whatever stage the reading passes reached, so population failure is its
+  // own state carried on the response, never a thrown error.
   create: createProcedure.input(createInput).mutation(async ({ ctx, input }) => {
-    const created = await controllerOf(ctx).createEvaluation(input);
+    const controller = controllerOf(ctx);
+    const created = await controller.createEvaluation(input);
     if (isErr(created)) throw toTrpcError(created.error);
-    return created.data;
+
+    const populated = await controller.populate({ evaluationId: created.data.id });
+    if (isErr(populated)) {
+      return { ...created.data, populated: false, populationError: populated.error.message };
+    }
+
+    // BuildEvaluationTable is the pass that lands the evaluation at `review`;
+    // populate() returns the built responses, not the evaluation, so the stage
+    // is stated here rather than re-read from a controller call this router
+    // does not otherwise need.
+    return { ...created.data, stage: "review" as const, populated: true, populationError: null };
   }),
 
   // The sortable/filterable review table for an evaluation at the review stage.
