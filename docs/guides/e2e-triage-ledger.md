@@ -85,10 +85,33 @@ of coverage.
 
 The other **23 were running clean, with zero skip guards — 51 tests in total.**
 Those were doing real work. They are marked **yes** in the table below. Their
-behaviour is application, adapter or component logic and belongs one layer down,
-but *this triage did not verify that equivalent coverage already exists there*.
-Treat that as open work, not as a completed migration. The specs are recoverable
-from git history if a gap turns up.
+behaviour is application, adapter or component logic and belongs one layer down.
+
+### Coverage audit of the 23 (now done)
+
+Each was recovered from `3522b5a~1` and its behaviour traced to the layer that
+owns it. **The result: 22 of 23 are covered one layer down, and the one real gap
+has been closed.** Details:
+
+| Deleted spec | Owning layer | Covered by |
+|---|---|---|
+| `fix-confidence-threshold-scale` | application | `evaluate-step-readiness.test.ts` — "normalises a fractional threshold so an authored 0.9 is treated as 90", "fails when a confidence is below the threshold" |
+| `fix-signatures-asked-for-in-chat` | application/domain | `evaluate-step-readiness.test.ts` — "never asks the extraction model for a signature slot" / "never grades a signature slot as missing"; `attestation-block.test.ts`, `signature-values.test.ts` |
+| `phase-audit-compliance-trail` | domain | `audit-hash.test.ts` — `verifyAuditChain` intact / altered row / broken prev-hash; `audit-query`, `audit-export` |
+| `enhance-mcp-internal-external`, `phase-mcp-integration`, `phase-mcp-flags-and-transport`, `phase-mcp-flow-consumption` | application/adapter | `mcp/mcp.test.ts` — register / "rejects a non-http url" / "excludes disabled servers" / "refuses an externally-communicating server"; `run-mcp-node.test.ts`, `ai-sdk-mcp-client.test.ts` |
+| `enhance-document-generation-settings` | apps/web router | `settings.test.ts` — "rejects a zero field batch size", context-budget range checks |
+| `phase-usage-limit-tiers` | application | `usage-limits.test.ts` — everyone limit vs. user override |
+| `phase-flow-skills` | application/adapter | `skill/skill.test.ts`, `skills/skill-parser.test.ts` |
+| `enhance-settings-connectivity` | adapter | `health/connectivity-probes.test.ts`, `health/composite-connectivity-tester.test.ts` |
+| `fix-better-auth-uuid-id` | adapter | `auth/__tests__/better-auth.test.ts` |
+| `fix-chained-gate-shows-unsent` | application + component | approvals `decide-approval` / `list-approvals-with-context`; `sent-approval-actions` component |
+| `fix-extraction-flows-flag`, `fix-seed-mcp-skills-flags` | application + UI | `get-feature-flag.test.ts`, `seeded-feature-flags.test.ts` (nav rendering is presentation) |
+| `admin-flow-editing`, `enhance-node-controls-advanced-section`, `enhance-repeating-group-editing`, `enhance-admin-orgs-ui-cleanup`, `enhance-skill-picker-and-flow-settings`, `enhance-workflow-canvas-onboarding` | component / presentation | Layout, collapse/expand, table rendering, nav grouping and canvas guidance are UI presentation — component-test territory, low correctness risk; the logic they touch (flow build, config round-trip, org create) is in the flow/org use-case tests |
+| **`phase-scheduler-resume`** | **route handler** | **GAP — now closed.** The tick endpoint's shared-secret guard (401 wrong/missing secret, 503 unconfigured) had no test; added `apps/web/src/app/api/internal/scheduler/tick/route.test.ts` |
+| `phase-container-distribution` | build stamp | Minor: "the version is never `unknown`" is a `process.env.NEXT_PUBLIC_APP_VERSION ?? "unknown"` one-liner in `about-modal.tsx` — a build-stamp/smoke concern with no unit logic. Belongs in the smoke spec if anywhere; not worth a unit test |
+
+The recovered specs stay in git history if any of the presentation-level losses
+later prove to matter.
 
 | Spec | Tests | Skip guards | Was running |
 |---|---|---|---|
