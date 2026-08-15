@@ -34,7 +34,7 @@ The skill instructions were changed in the same commit, so this does not recur.
 | **5. Accessibility** | `accessibility` |
 | **6. Smoke** | `smoke`, `fix-zero-env-first-run` |
 
-### Skip-guard cleanup (was 45, now 19)
+### Skip-guard cleanup (was 45, now 18)
 
 The kept specs no longer opt out silently. The 45 guards fell into three kinds,
 handled differently:
@@ -69,11 +69,21 @@ just above the genuine-gate band.
 persistence investigation and left as skips rather than converted to reds that
 could not be verified by reading — `chat-transparency` (assistant reasoning modal
 needs a persisted `aiPayload`, which none had in CI) and `chat-confidence`
-(document card did not render on the seeded session). A handful of secondary
-UI-probe fallbacks also remain — `accessibility` (no seeded flow to open) and the
-`#auth-entra` card fallbacks inside the Entra mock-reachability gates — worth
-converting once a live run confirms what renders. The ticket-shaped file names
-are still follow-up work.
+(document card did not render on the seeded session). The `accessibility`
+"no seeded flow" fallback was converted (the seeded flow appears as a
+"Configure Flow" link). The `#auth-entra` card fallbacks inside the Entra
+mock-reachability gates are left as-is: they already sit behind the genuine
+`mockEntraRunning()` capability gate, and converting them safely needs a live run
+to confirm the admin-enable flow renders the card.
+
+**Ticket-shaped file names** (`fix-*`, `enhance-*`, `phase-*`) are still follow-up.
+The structural cause is already fixed — `/build`, `/enhance` and `/bugfix` now
+tell authors to *extend the existing capability spec, not add a file* — so this is
+cosmetic. The remaining step is merging same-capability files (the five chat specs
+into one streaming spec, the file-upload specs into one) and dropping the ticket
+prefixes. That is deliberately **not** done blind: merging spec files without a
+runnable suite risks the exact silently-broken test this whole effort removes, so
+it should ride a pass with the stack up (`/e2e-cc-web` or the PR's CI).
 
 ## Removed (88 specs, 264 tests, 184 skip guards)
 

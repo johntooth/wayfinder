@@ -17,7 +17,7 @@ record of what was removed is in
 |---|---|---|
 | Spec files | 121 | **33** |
 | Tests reported by CI | 380 | **131** |
-| `test.skip` guards | 229 | **19** (down from 45; ~5–9 fire in CI, all capability gates) |
+| `test.skip` guards | 229 | **18** (down from 45; ~5–9 fire in CI, all capability gates) |
 | CI skip ceiling | — | **12** (was 115 — a stale pre-cut figure) |
 | Non-waiting `isVisible()` probes | 129 | a handful (converted to waiting assertions) |
 | CI shards | 6 | 3 |
@@ -98,7 +98,7 @@ the triage and should not hold the triage hostage.
 
 ## 3. Remaining tasks
 
-### #13 — Remove the skip guards from the kept specs — DONE (45 → 19)
+### #13 — Remove the skip guards from the kept specs — DONE (45 → 18)
 
 Closed on branch `claude/e2e-test-coverage-review-a0bjnz`. Dead-code guards
 (unreachable after `requireSeedFixtures()` throws) were deleted; UI-probe guards
@@ -109,7 +109,7 @@ ceiling was corrected from a meaningless **115** (a stale figure from the
 390-test pre-cut suite) to **12**. Per-guard rationale is in
 [`../guides/e2e-triage-ledger.md`](../guides/e2e-triage-ledger.md).
 
-The 19 that remain are genuine capability gates the CI environment does not
+The 18 that remain are genuine capability gates the CI environment does not
 satisfy (`extraction_flows` off → the synthesise specs; real embeddings →
 `fix-session-upload-not-reaching-ai`, which was also un-broken from a hardcoded
 non-existent session path; PKI/Entra mock reachability), plus **two deferred to
@@ -130,21 +130,27 @@ work include the `> 5 flows` guard (unsatisfiable by *any* data) and two
 "missing fixtures" that already existed. A skip message is a claim by whoever
 wrote the spec, not a measurement.
 
-### #14 — Verify coverage for the 23 deleted specs that were live
+### #14 — Verify coverage for the 23 deleted specs that were live — DONE
 
-Of 88 deleted specs, 65 were partly or wholly skip-guarded, so little was lost.
-**23 were running clean — 51 tests.** They are marked `was running: yes` in the
-ledger. Their behaviour belongs at the application/adapter/component layer, but
-*this was not verified before deletion*. Confirm coverage exists; write it where
-it does not. Recover a spec's text with
-`git show 3522b5a~1:apps/web/e2e/<name>.spec.ts`.
+Each of the 23 was recovered from `3522b5a~1` and traced to the layer that owns
+its behaviour. **22 of 23 are covered one layer down** (confidence scale, signature
+slots, audit hash chain, MCP register/validate/disable, usage tiers, SKILL.md
+validation, connectivity probes, batch-size validation — the mapping is in the
+ledger). The one real gap — `phase-scheduler-resume`'s tick shared-secret guard —
+now has a route handler test at
+`apps/web/src/app/api/internal/scheduler/tick/route.test.ts`. The only other
+un-migrated item, `phase-container-distribution`'s "version is never `unknown`",
+is a `?? "unknown"` one-liner with no unit logic (a smoke concern).
 
-### #15 — Rename kept specs to capability names
+### #15 — Rename kept specs to capability names — PARTIAL
 
-Most kept specs are still `fix-*`/`enhance-*`/`phase-*`. Merge them into
-capability files (`auth-session.spec.ts`, `chat-streaming.spec.ts`,
-`file-upload.spec.ts`). Ticket-shaped names are what make people add a file
-instead of extending one.
+The structural cause is fixed: `/build`, `/enhance` and `/bugfix` now tell authors
+to extend the existing capability spec, not add a file. The remaining work —
+merging same-capability files (the five chat specs into one streaming spec, the
+file-upload specs into one) and dropping the `fix-*`/`enhance-*`/`phase-*` prefixes
+— is cosmetic and deliberately deferred: merging spec files without a runnable
+suite risks the exact silently-broken test this effort removes, so it should ride
+a pass with the stack up (`/e2e-cc-web` or the PR's CI).
 
 ---
 
