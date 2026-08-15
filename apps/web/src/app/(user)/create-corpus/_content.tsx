@@ -106,10 +106,11 @@ export function CreateCorpusContent() {
     );
   };
 
-  // The chunk-mode override group. Null means the field is blank and the run
-  // inherits the redline.yaml default; enabling it seeds the offline token
-  // chunking the profile ships, which the specialist then adjusts. The domain
-  // re-validates a non-positive size below the seam.
+  // The chunk-mode override group. A null chunkingModel means the field is
+  // blank and the run inherits whatever redline.yaml names as the corpus
+  // default (semantically bounded chunking, currently); a named model pins
+  // this run to it regardless of the file. The domain re-validates a blank
+  // model string and a non-positive size below the seam.
   const setChunkModeField = (patch: Partial<ChunkModeOverride>) =>
     setChunkMode((current) => ({
       chunkingModel: current?.chunkingModel ?? null,
@@ -319,6 +320,22 @@ export function CreateCorpusContent() {
             </label>
             {!view.config.chunkMode.inheritsDefault && (
               <div className="flex flex-wrap items-center gap-[10px] pl-[22px]">
+                <label className="flex flex-col gap-[4px]">
+                  <span className="text-[12px] text-[#5a5650]">
+                    AI chunking model (blank inherits the corpus default)
+                  </span>
+                  <input
+                    aria-label="AI chunking model"
+                    className={`${inputClass} w-[220px]`}
+                    value={view.config.chunkMode.chunkingModel ?? ""}
+                    placeholder="corpus default"
+                    onChange={(event) =>
+                      setChunkModeField({
+                        chunkingModel: event.target.value === "" ? null : event.target.value,
+                      })
+                    }
+                  />
+                </label>
                 <label className="flex flex-col gap-[4px]">
                   <span className="text-[12px] text-[#5a5650]">Chunk size (tokens)</span>
                   <input
