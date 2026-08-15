@@ -34,9 +34,46 @@ The skill instructions were changed in the same commit, so this does not recur.
 | **5. Accessibility** | `accessibility` |
 | **6. Smoke** | `smoke`, `fix-zero-env-first-run` |
 
-The kept specs still carry **45 skip guards** and their ticket-shaped names.
-Both are follow-up work: the guards must go (a kept spec may not opt out), and
-the files should be merged into capability-named specs.
+### Skip-guard cleanup (was 45, now 19)
+
+The kept specs no longer opt out silently. The 45 guards fell into three kinds,
+handled differently:
+
+- **Dead code (removed).** After `requireSeedFixtures()` began throwing, every
+  `if (!sessionId) test.skip(…)` and the resolver helpers behind them were
+  unreachable — the id is always a non-empty string or the call throws. Deleted,
+  and the callers now read `const { sessionId } = requireSeedFixtures()`
+  directly.
+- **UI-probe skips (converted to assertions).** Guards that skipped when a
+  control the test is *about* was not visible — the composer, the attach button,
+  the register link, the seeded session card — now `await expect(x).toBeVisible()`.
+  A genuinely missing control fails the run instead of quietly disarming it. The
+  now-orphaned helpers `helpers/skip-reasons.ts` and `helpers/visible.ts` were
+  deleted.
+- **Genuine capability gates (kept).** A skip is legitimate only when the
+  environment cannot run the test — and the CI environment provides object
+  storage, the mocks server on :4001 (Entra + PKI), and mocked AI, so the gates
+  that actually fire are narrow:
+  - `extraction_flows` off → `enhance-synthesise-summary`, `fix-synthesise-live-results`
+  - real embeddings / real AI key → `fix-session-upload-not-reaching-ai` (was
+    mis-gated on a missing composer while pointing at a non-existent hardcoded
+    session path; now gated on `USE_REAL_AI` and pointed at the seeded session)
+  - PKI/Entra mock reachability → the `enhance-mock-pki-login`,
+    `enhance-pki-admin-config`, `fix-entra-*`, `phase-entra-login-auth-methods` gates
+
+The CI skip ceiling (`e2e.yml`) was corrected from **115** — a stale value from
+the 390-test pre-cut suite that let 98% of the suite skip green — to **12**,
+just above the genuine-gate band.
+
+**Still open (deferred to a live-stack pass):** two guards are entangled with the
+persistence investigation and left as skips rather than converted to reds that
+could not be verified by reading — `chat-transparency` (assistant reasoning modal
+needs a persisted `aiPayload`, which none had in CI) and `chat-confidence`
+(document card did not render on the seeded session). A handful of secondary
+UI-probe fallbacks also remain — `accessibility` (no seeded flow to open) and the
+`#auth-entra` card fallbacks inside the Entra mock-reachability gates — worth
+converting once a live run confirms what renders. The ticket-shaped file names
+are still follow-up work.
 
 ## Removed (88 specs, 264 tests, 184 skip guards)
 

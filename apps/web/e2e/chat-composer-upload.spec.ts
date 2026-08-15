@@ -12,43 +12,16 @@
 
 import { test, expect } from './helpers/base';
 import { requireSeedFixtures } from './helpers/seed';
-import { NO_ATTACH_CONTROL } from './helpers/skip-reasons';
-import { isVisibleWithin } from './helpers/visible';
-
-async function resolveExistingSessionId(page: import('@playwright/test').Page): Promise<string | null> {
-  const seeded = requireSeedFixtures().sessionId;
-  if (seeded) return seeded;
-
-  await page.goto('/chats');
-  await page.waitForLoadState('networkidle');
-
-  const sessionLink = page.locator('a[href^="/chats/"]').first();
-  const href = await sessionLink.getAttribute('href').catch(() => null);
-  if (!href) return null;
-
-  const match = href.match(/\/chats\/([^/?]+)/);
-  return match?.[1] ?? null;
-}
 
 test.describe('Chat: Composer file upload', () => {
   test('composer shows a paperclip attach control', async ({ page, consoleLogs }) => {
-    const sessionId = await resolveExistingSessionId(page);
-    if (!sessionId) {
-      test.skip(true, 'No sessions found — create a flow and session to enable this test');
-      return;
-    }
+    const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
     await page.waitForLoadState('networkidle');
     await page.screenshot({ path: 'screenshots/chat-composer-upload.png', fullPage: true });
 
     const attachButton = page.getByRole('button', { name: /attach a file for context/i });
-    if (!(await isVisibleWithin(attachButton))) {
-      await page.screenshot({ path: 'screenshots/chat-composer-no-attach.png', fullPage: true });
-      test.skip(true, NO_ATTACH_CONTROL);
-      return;
-    }
-
     await expect(attachButton).toBeVisible();
 
     // A hidden file input backs the paperclip. Its `accept` carries MIME
@@ -66,11 +39,7 @@ test.describe('Chat: Composer file upload', () => {
   });
 
   test('selecting a file shows a removable filename pill', async ({ page }) => {
-    const sessionId = await resolveExistingSessionId(page);
-    if (!sessionId) {
-      test.skip(true, 'No sessions found — create a flow and session to enable this test');
-      return;
-    }
+    const { sessionId } = requireSeedFixtures();
 
     // Mock the upload endpoints so the test is deterministic and independent of
     // MinIO / extraction infra. The composer POSTs FormData to this route and
@@ -96,10 +65,7 @@ test.describe('Chat: Composer file upload', () => {
     await page.waitForLoadState('networkidle');
 
     const attachButton = page.getByRole('button', { name: /attach a file for context/i });
-    if (!(await isVisibleWithin(attachButton))) {
-      test.skip(true, NO_ATTACH_CONTROL);
-      return;
-    }
+    await expect(attachButton).toBeVisible();
 
     await page.locator('input[type="file"]').setInputFiles({
       name: 'context-notes.txt',

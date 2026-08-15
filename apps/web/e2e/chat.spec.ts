@@ -15,10 +15,6 @@
 
 import { test, expect } from './helpers/base';
 import { requireSeedFixtures } from './helpers/seed';
-import { NO_COMPOSER } from './helpers/skip-reasons';
-import { isVisibleWithin } from './helpers/visible';
-
-const AI_MODE = process.env.USE_REAL_AI === 'true' ? 'REAL AI' : 'MOCKED AI';
 
 test.describe('Chat: List', () => {
   test('chats list loads', async ({ page, consoleLogs }) => {
@@ -50,35 +46,8 @@ test.describe('Chat: List', () => {
 });
 
 test.describe('Chat: Session', () => {
-  /**
-   * Resolve an existing session ID by checking the /chats list.
-   * If no sessions exist this returns null and the test skips.
-   */
-  async function resolveExistingSessionId(page: import('@playwright/test').Page): Promise<string | null> {
-    const seeded = requireSeedFixtures().sessionId;
-    if (seeded) return seeded;
-
-    await page.goto('/chats');
-    await page.waitForLoadState('networkidle');
-
-    // Session cards link to /chats/[sessionId]. Nav links use bare "/chats"
-    // (no trailing slash + UUID) so a[href^="/chats/"] skips them safely.
-    const sessionLink = page.locator('a[href^="/chats/"]').first();
-    const href = await sessionLink.getAttribute('href').catch(() => null);
-
-    if (!href) return null;
-
-    const match = href.match(/\/chats\/([^/?]+)/);
-    return match?.[1] ?? null;
-  }
-
   test('session page loads', async ({ page, consoleLogs }) => {
-    const sessionId = await resolveExistingSessionId(page);
-
-    if (!sessionId) {
-      test.skip(true, 'No existing sessions found — create a flow and session to enable this test');
-      return;
-    }
+    const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
     await page.waitForLoadState('networkidle');
@@ -89,25 +58,14 @@ test.describe('Chat: Session', () => {
   });
 
   test('message input accepts text', async ({ page }) => {
-    const sessionId = await resolveExistingSessionId(page);
-
-    if (!sessionId) {
-      test.skip(true, 'No existing sessions found — skipping input test');
-      return;
-    }
+    const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
     await page.waitForLoadState('networkidle');
 
     // ChatComposer renders a <textarea> with placeholder "Message Wayfinder…"
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
-    const visible = await isVisibleWithin(input);
-
-    if (!visible) {
-      await page.screenshot({ path: 'screenshots/chat-no-input-found.png', fullPage: true });
-      test.skip(true, NO_COMPOSER);
-      return;
-    }
+    await expect(input).toBeVisible();
 
     await input.fill('Hello, I need help with a workflow');
     await page.screenshot({ path: 'screenshots/chat-text-entered.png' });
@@ -115,23 +73,13 @@ test.describe('Chat: Session', () => {
   });
 
   test('sending a message shows AI response', async ({ page, consoleLogs }) => {
-    const sessionId = await resolveExistingSessionId(page);
-
-    if (!sessionId) {
-      test.skip(true, 'No existing sessions found — skipping send test');
-      return;
-    }
+    const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
     await page.waitForLoadState('networkidle');
 
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
-    const visible = await isVisibleWithin(input);
-
-    if (!visible) {
-      test.skip(true, NO_COMPOSER);
-      return;
-    }
+    await expect(input).toBeVisible();
 
     // None of the four selectors this used to wait for exist in the feed:
     // message-feed.tsx has no data-testid, no [role="log"], and its Tailwind
@@ -169,23 +117,13 @@ test.describe('Chat: Session', () => {
   });
 
   test('multi-turn conversation works', async ({ page, consoleLogs }) => {
-    const sessionId = await resolveExistingSessionId(page);
-
-    if (!sessionId) {
-      test.skip(true, 'No existing sessions found — skipping multi-turn test');
-      return;
-    }
+    const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
     await page.waitForLoadState('networkidle');
 
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
-    const visible = await isVisibleWithin(input);
-
-    if (!visible) {
-      test.skip(true, NO_COMPOSER);
-      return;
-    }
+    await expect(input).toBeVisible();
 
     const timeout = process.env.USE_REAL_AI === 'true' ? 30_000 : 8_000;
     const messages = [

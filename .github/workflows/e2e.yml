@@ -660,32 +660,36 @@ jobs:
       # suite can quietly stop testing things without any run turning red. That
       # is how the withdrawable-approval spec sat dormant for several releases.
       #
-      # Seed-backed gates now throw (helpers/seed.ts → requireSeedFixtures), so
-      # what remains should only be genuine capability gates: no object storage,
-      # PKI off, real-AI-only paths. Those are a small, countable set — and the
-      # count only moves when someone changes what the environment can do, which
-      # is exactly when a human should look.
+      # Seed-backed gates now throw (helpers/seed.ts → requireSeedFixtures) and
+      # UI-probe skips have been converted to waiting assertions, so a broken
+      # seed or a missing control now FAILS instead of skipping. What is left
+      # skipping should only be genuine capability gates the CI environment does
+      # not satisfy. This environment provides object storage (E2E_OBJECT_STORAGE),
+      # the mocks server on :4001 (Entra + PKI reachable) and mocked AI, so the
+      # gates that actually fire here are the narrow set that needs something
+      # this run does not have:
+      #   - extraction_flows feature flag off → the synthesise specs
+      #     (enhance-synthesise-summary, fix-synthesise-live-results)
+      #   - real embeddings / a real AI key → fix-session-upload-not-reaching-ai
+      #   - doc-generation seed state / persisted aiPayload → the two chat specs
+      #     still tied to the open persistence investigation (chat-confidence
+      #     document card, chat-transparency reasoning modal)
       #
-      # The count is NOT deterministic. Consecutive runs of the same commit
-      # measured 98 and then 101 of 390 — roughly a quarter of the suite —
-      # because several gates depend on runtime state (whether a feature flag
-      # could be enabled, whether seeded data was in the expected shape) rather
-      # than on a fixed property of the environment. Pinning to an exact
-      # observed value fails on the variance alone, which was tried twice.
+      # That is roughly 7–9 tests, and a couple drift run-to-run because the
+      # synthesise gates depend on runtime data shape. The ceiling sits just
+      # above that band: high enough to tolerate the drift, low enough that a
+      # batch of specs quietly disarming themselves — which moves the count by
+      # tens — turns the run red. A ceiling near the suite size (it was 115 of
+      # ~117) protects nothing.
       #
-      # So the ceiling carries deliberate headroom over that 98–101 band. It is
-      # sized to catch the failure this exists for — the seed breaking, or a
-      # batch of specs quietly disarming themselves, which move the count by
-      # tens — while tolerating the handful of tests that legitimately drift
-      # run to run. It is not an endorsement of a quarter of the suite skipping.
-      #
-      # Lower it whenever a gate is retired; that is the point of it. Raising it
-      # is sometimes legitimate, but it must be a decision someone makes with
-      # the report open, not a side effect of adding a skip.
+      # Lower it as the deferred persistence-tied specs are made to assert or the
+      # synthesise flag is enabled in CI; that is the point of it. Raising it is
+      # sometimes legitimate, but it must be a decision someone makes with the
+      # report open, not a side effect of adding a skip.
       - name: Fail if too many tests skipped
         if: always() && steps.summary.outputs.skipped != ''
         env:
-          MAX_SKIPPED: "115"
+          MAX_SKIPPED: "12"
         run: |
           SKIPPED='${{ steps.summary.outputs.skipped }}'
           echo "Skipped: $SKIPPED (ceiling: $MAX_SKIPPED)"

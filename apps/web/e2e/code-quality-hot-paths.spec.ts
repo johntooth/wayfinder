@@ -11,8 +11,6 @@ import { test, expect } from './helpers/base';
 import { aiScriptDiagnostics, clearAiScript, completeTurn, scriptAiFor } from './helpers/ai-script';
 import { requireSeedFixtures } from './helpers/seed';
 import { openAllSettingsSections } from './helpers/settings';
-import { NO_COMPOSER } from './helpers/skip-reasons';
-import { isVisibleWithin } from './helpers/visible';
 
 /**
  * phase-code-quality-hot-paths-group-a.spec.ts
@@ -42,10 +40,11 @@ test.describe('Code quality Group A: session-list hot-path aggregation', () => {
       .locator('a[href^="/chats/"]')
       .filter({ hasText: 'E2E SEED Session' })
       .first();
-    if (!(await seededCard.isVisible().catch(() => false))) {
-      test.skip(true, 'Seeded session not present — seed fixtures to enable this test');
-      return;
-    }
+    // The seed is a declared dependency of this project and creates the
+    // "E2E SEED Session" card, so it must render. isVisible() does not wait —
+    // a false here used to mean "the list had not finished loading", which is
+    // exactly the raced skip this suite is removing. Assert and wait instead.
+    await expect(seededCard).toBeVisible();
 
     // lastMessage is the newest *assistant* message (SQL DISTINCT ON … seq DESC),
     // not the last user turn.
@@ -69,10 +68,11 @@ test.describe('Code quality Group A: session-list hot-path aggregation', () => {
       .locator('a[href^="/chats/"]')
       .filter({ hasText: 'E2E SEED Session' })
       .first();
-    if (!(await seededCard.isVisible().catch(() => false))) {
-      test.skip(true, 'Seeded session not present — seed fixtures to enable this test');
-      return;
-    }
+    // The seed is a declared dependency of this project and creates the
+    // "E2E SEED Session" card, so it must render. isVisible() does not wait —
+    // a false here used to mean "the list had not finished loading", which is
+    // exactly the raced skip this suite is removing. Assert and wait instead.
+    await expect(seededCard).toBeVisible();
 
     await seededCard.click();
     await expect(page).toHaveURL(/\/chats\/[0-9a-f-]+$/, { timeout: 10_000 });
@@ -128,10 +128,7 @@ test.describe('Code quality Group C: transactional turn persistence', () => {
     const input = page
       .locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]')
       .first();
-    if (!(await isVisibleWithin(input))) {
-      test.skip(true, NO_COMPOSER);
-      return;
-    }
+    await expect(input).toBeVisible();
 
     const userMessage = `Group C durability check ${Date.now()}`;
     await input.fill(userMessage);
@@ -273,11 +270,7 @@ test.describe('Code quality Group D: settings page decomposition', () => {
  */
 test.describe('Code quality Group E: stream body validation', () => {
   test('a malformed stream body is rejected with 400', async ({ page }) => {
-    const sessionId = requireSeedFixtures().sessionId;
-    if (!sessionId) {
-      test.skip(true, 'Seed fixtures unavailable — seed to enable this test');
-      return;
-    }
+    const { sessionId } = requireSeedFixtures();
 
     // Authenticated (the base fixture carries the admin cookie) but the body's
     // `messages` is the wrong type, so schema validation must reject it.

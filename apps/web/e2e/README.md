@@ -56,8 +56,7 @@ wayfinder/
       base.ts                      ← extended fixture: console capture + AI mock
       seed.ts                      ← requireSeedFixtures(): throws if the seed failed
       ai-script.ts                 ← scriptAiFor(): drives a real server-side turn
-      account-menu.ts  chat-mock.ts  flow-builder.ts  settings.ts  visible.ts
-      skip-reasons.ts              ← shared strings; being retired with the guards
+      account-menu.ts  chat-mock.ts  flow-builder.ts  settings.ts
     playwright/.auth/              ← gitignored; session state
     playwright-report/             ← gitignored; HTML report
     test-results/                  ← gitignored; traces and videos

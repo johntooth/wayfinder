@@ -19,23 +19,22 @@
 import { test, expect } from './helpers/base';
 import { delayChatStream, failChatStream } from './helpers/chat-mock';
 import { requireSeedFixtures } from './helpers/seed';
-import { NO_COMPOSER } from './helpers/skip-reasons';
-import { isVisibleWithin } from './helpers/visible';
 
 async function openSessionWithComposer(
   page: import('@playwright/test').Page,
-): Promise<import('@playwright/test').Locator | null> {
+): Promise<import('@playwright/test').Locator> {
   // Scraping the first link out of /chats used to be the fallback here. It
   // picked whichever session the run happened to have created by then, so the
-  // composer it returned was not always the seeded one — and when the list was
-  // empty it returned null and the tests skipped themselves.
+  // composer it returned was not always the seeded one. The seed is a declared
+  // dependency of this project, so the composer must render — a missing one is
+  // a failure to surface, not a reason to skip.
   const { sessionId } = requireSeedFixtures();
 
   await page.goto(`/chats/${sessionId}`);
   await page.waitForLoadState('networkidle');
 
   const composer = page.getByRole('textbox').first();
-  if (!(await isVisibleWithin(composer))) return null;
+  await expect(composer).toBeVisible();
   return composer;
 }
 
@@ -45,10 +44,6 @@ test.describe('Chat: Typing indicator', () => {
     await delayChatStream(page, 3000);
 
     const composer = await openSessionWithComposer(page);
-    if (!composer) {
-      test.skip(true, NO_COMPOSER);
-      return;
-    }
 
     await composer.fill('Hello there');
     await composer.press('Enter');
@@ -67,10 +62,6 @@ test.describe('Chat: Retry on failure', () => {
     await failChatStream(page);
 
     const composer = await openSessionWithComposer(page);
-    if (!composer) {
-      test.skip(true, NO_COMPOSER);
-      return;
-    }
 
     await composer.fill('This will fail');
     await composer.press('Enter');

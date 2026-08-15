@@ -1,6 +1,5 @@
 import { test, expect } from "./helpers/base";
-import { NO_ATTACH_CONTROL } from './helpers/skip-reasons';
-import { isVisibleWithin } from './helpers/visible';
+import { requireSeedFixtures } from "./helpers/seed";
 
 // E2E for the bug fix: a deliberately-attached session upload must reach the AI
 // even when the user's message is only loosely related to the document body.
@@ -23,8 +22,6 @@ import { isVisibleWithin } from './helpers/visible';
 // Assumes a seeded active session (see apps/web/src/lib/e2e-fixtures.ts). Set
 // E2E_SESSION_PATH to override the path.
 
-const SESSION_PATH = process.env.E2E_SESSION_PATH ?? "/chats/e2e-seed-session";
-
 const DAVE_EMAIL = [
   "Hey,",
   "",
@@ -36,13 +33,24 @@ const DAVE_EMAIL = [
 
 test.describe("session upload reaches the AI", () => {
   test("a loosely-worded message still consults the attached document", async ({ page }) => {
-    await page.goto(SESSION_PATH);
+    // Capability gate, not a UI probe: the regression lives in similarity-gated
+    // retrieval (the session-upload chunk scoring 0.2 vs the shared 0.5
+    // threshold), which only exists with real embeddings behind a real AI key.
+    // Under the mocked model this assertion cannot be exercised at all, so the
+    // test is gated on USE_REAL_AI rather than skipping on a missing composer.
+    test.skip(
+      process.env.USE_REAL_AI !== "true",
+      "Needs real embeddings — similarity-gated retrieval is not exercised by the mocked model",
+    );
+
+    // E2E_SESSION_PATH lets the /e2e MCP skill point this at a live session;
+    // otherwise use the seeded session, not a hardcoded slug that resolves to
+    // no session at all (which is why this used to skip on a missing composer).
+    const sessionPath = process.env.E2E_SESSION_PATH ?? `/chats/${requireSeedFixtures().sessionId}`;
+    await page.goto(sessionPath);
 
     const attachButton = page.getByRole("button", { name: /attach a file for context/i });
-    test.skip(
-      !(await isVisibleWithin(attachButton)),
-      NO_ATTACH_CONTROL,
-    );
+    await expect(attachButton).toBeVisible();
 
     // Attach the Dave email as a context document and wait for its pill.
     await page.locator('input[type="file"]').setInputFiles({

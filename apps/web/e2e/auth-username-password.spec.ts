@@ -41,11 +41,7 @@ test.describe('Auth: Username / Password login', () => {
     await page.waitForLoadState('networkidle');
 
     const registerLink = page.getByRole('link', { name: /register/i });
-    if (!(await registerLink.isVisible().catch(() => false))) {
-      await page.screenshot({ path: 'screenshots/auth-login-no-register-link.png', fullPage: true });
-      test.skip(true, 'Register link not found on login page — UI may have changed');
-      return;
-    }
+    await expect(registerLink).toBeVisible();
 
     await registerLink.click();
     await page.waitForLoadState('networkidle');
