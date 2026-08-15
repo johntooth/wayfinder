@@ -9,7 +9,13 @@ import Link from "next/link";
 // this page routes into the read-side review and pricing surfaces that are
 // already served. It is the mount point the stage machine grows into, not a
 // fabricated mutation surface.
-export function EvaluationGroupingContent({ evaluationId }: { evaluationId: string }) {
+export function EvaluationGroupingContent({
+  evaluationId,
+  populationError,
+}: {
+  evaluationId: string;
+  populationError?: string | null;
+}) {
   return (
     <div className="mx-auto flex max-w-[1200px] flex-col gap-[16px] px-[20px] py-[24px]">
       <header className="flex flex-col gap-[4px]">
@@ -24,6 +30,17 @@ export function EvaluationGroupingContent({ evaluationId }: { evaluationId: stri
         </nav>
         <h1 className="text-[20px] font-bold text-[#1a1814]">Grouping</h1>
       </header>
+
+      {/* The evaluation was composed successfully — its documents, brands and
+          fields are persisted — but the reading passes over it failed, which is
+          a different failure to a rejected create and lands here rather than on
+          an error toast. */}
+      {populationError && (
+        <p className="max-w-[640px] text-[13px] text-[#b4413c]" role="alert">
+          Reading the corpus failed after the evaluation was created:{" "}
+          {populationError}
+        </p>
+      )}
 
       <p className="max-w-[640px] text-[13px] text-[#5a5650]">
         Documents are grouped by vendor before classification. Once an evaluation

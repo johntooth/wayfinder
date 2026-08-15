@@ -20,6 +20,7 @@ const makeController = (
     listStagedCorpora?: ReturnType<typeof vi.fn>;
     listStagedDocuments?: ReturnType<typeof vi.fn>;
     createEvaluation?: ReturnType<typeof vi.fn>;
+    populate?: ReturnType<typeof vi.fn>;
     // The run half's two sub-controllers, reached through corpus() / runStatus().
     // Stubbed as bare methods here; the router calls corpus().createCorpus and
     // runStatus().poll / .resume through the same workflow controller.
@@ -102,6 +103,23 @@ const makeController = (
       vi
         .fn()
         .mockResolvedValue(ok({ id: "tender-2026", name: "Panel 2026", stage: "documents_uploaded" })),
+    populate:
+      overrides.populate ??
+      vi.fn().mockResolvedValue(
+        ok([
+          {
+            evaluationId: "tender-2026",
+            responseGroupId: "tender-2026:acme:response",
+            vendorName: "Acme",
+            productName: "Acme",
+            requirementId: "tender-2026:warranty",
+            confidence: 0.9,
+            productSummary: "Acme offers a 24 month warranty.",
+            costing: { estimateAud: null, description: "24 months, parts and labour." },
+            source: { documentId: "hashA", elementOrder: 4, page: 2, chunkId: "chunk-1" },
+          },
+        ]),
+      ),
   };
 };
 
@@ -549,7 +567,7 @@ describe("evaluation.stagedDocuments", () => {
 });
 
 describe("evaluation.create", () => {
-  it("creates the evaluation and returns it for the screen to redirect on", async () => {
+  it("creates the evaluation, populates it, and returns the review stage for the screen to redirect on", async () => {
     const controller = makeController();
 
     const result = await createCaller(contextWith(makeContainer(controller))).evaluation.create(
@@ -558,7 +576,7 @@ describe("evaluation.create", () => {
 
     expect(controller.createEvaluation).toHaveBeenCalledWith(createInput);
     expect(result.id).toBe("tender-2026");
-    expect(result.stage).toBe("documents_uploaded");
+    expect(result.stage).toBe("review");
   });
 
   it("admits a non-admin caller holding evaluation:create", async () => {
@@ -615,6 +633,63 @@ describe("evaluation.create", () => {
       }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(controller.createEvaluation).not.toHaveBeenCalled();
+  });
+
+  // The fork mount (redline delivery-plan §2.1: "post-run population, fork
+  // mount"). Composing an evaluation used to leave it with documents and no
+  // responses — WorkflowController.populate existed but nothing served called
+  // it. These prove the mount: create drives the reading passes over the
+  // freshly-composed evaluation, so the specialist lands on responses with
+  // source anchors rather than an empty grid.
+  it("populates the evaluation over the freshly-run corpus and lands it at the review stage", async () => {
+    const controller = makeController();
+
+    const result = await createCaller(contextWith(makeContainer(controller))).evaluation.create(
+      createInput,
+    );
+
+    expect(controller.populate).toHaveBeenCalledWith({ evaluationId: "tender-2026" });
+    expect(result.populated).toBe(true);
+    expect(result.populationError).toBeNull();
+    expect(result.stage).toBe("review");
+  });
+
+  // Reading can fail independently of composition — a rejected adjudicator call
+  // or an unreachable chunk store is not "the evaluation was never created". The
+  // evaluation already exists and is reachable, so population failure needs its
+  // own state on the response rather than a thrown error that reads as a
+  // rejected create.
+  it("still returns the created evaluation when population fails, as its own state rather than a create failure", async () => {
+    const controller = makeController({
+      populate: vi
+        .fn()
+        .mockResolvedValue(
+          err(domainError("EXTRACTION_FAILED", "womblex-ingest returned no elements for hashA")),
+        ),
+    });
+
+    const result = await createCaller(contextWith(makeContainer(controller))).evaluation.create(
+      createInput,
+    );
+
+    expect(result.id).toBe("tender-2026");
+    expect(result.populated).toBe(false);
+    expect(result.populationError).toMatch(/no elements for hasha/i);
+  });
+
+  it("does not attempt to populate an evaluation create refused", async () => {
+    const controller = makeController({
+      createEvaluation: vi
+        .fn()
+        .mockResolvedValue(
+          err(domainError("ALREADY_EXISTS", "an evaluation already exists over corpus tender-2026")),
+        ),
+    });
+
+    await expect(
+      createCaller(contextWith(makeContainer(controller))).evaluation.create(createInput),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(controller.populate).not.toHaveBeenCalled();
   });
 });
 
