@@ -89,6 +89,12 @@ describe("isNewChatShortcut", () => {
     expect(isNewChatShortcut(event({ key: "j" }))).toBe(false);
   });
 
+  // Autofill, password managers and IME composition can dispatch keydown events
+  // with no key at all — those must be ignored, not crash the handler.
+  it("ignores a keydown with no key", () => {
+    expect(isNewChatShortcut(event({ key: undefined }))).toBe(false);
+  });
+
   it("does not fire while an input, textarea or editable element has focus", () => {
     expect(isNewChatShortcut(event({ target: { tagName: "INPUT" } }))).toBe(false);
     expect(isNewChatShortcut(event({ target: { tagName: "TEXTAREA" } }))).toBe(false);

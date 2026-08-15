@@ -70,7 +70,9 @@ export const resolveActiveHref = (
 // Structural subset of KeyboardEvent — enough to decide the binding without
 // requiring a DOM in the tests.
 interface ShortcutEvent {
-  key: string;
+  // Autofill, password managers and IME composition can dispatch keydown events
+  // with no key, so this cannot be assumed to be a string.
+  key: string | undefined;
   metaKey: boolean;
   ctrlKey: boolean;
   target: { tagName?: string; isContentEditable?: boolean } | null;
@@ -85,7 +87,7 @@ const isEditableTarget = (target: ShortcutEvent["target"]): boolean => {
 };
 
 export const isNewChatShortcut = (event: ShortcutEvent): boolean => {
-  if (event.key.toLowerCase() !== "k") return false;
+  if (event.key?.toLowerCase() !== "k") return false;
   if (!event.metaKey && !event.ctrlKey) return false;
   return !isEditableTarget(event.target);
 };
