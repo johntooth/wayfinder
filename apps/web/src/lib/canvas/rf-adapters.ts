@@ -1,6 +1,7 @@
 import { MarkerType, type Edge, type Node } from "@xyflow/react";
-import { normaliseOutputType } from "@rbrasier/domain";
+import { normaliseOutputType, readBranchRule } from "@rbrasier/domain";
 import type { TemplateField } from "@rbrasier/domain";
+import { BranchRuleEdge } from "@/components/canvas/branch-rule-edge";
 import type { AutoNodeData } from "@/components/canvas/auto-node";
 import { AutoNode } from "@/components/canvas/auto-node";
 import type { ApprovalNodeData } from "@/components/canvas/approval-node";
@@ -114,10 +115,22 @@ export const toRfNode = (node: RawNode, stepNumber: number | null): Node => {
   };
 };
 
-export const toRfEdge = (edge: { id: string; fromNodeId: string; toNodeId: string }): Edge => ({
+// Every edge routes through the branch-rule component, which falls back to the
+// plain smoothstep rendering when the edge is not part of a fork (ADR-008
+// extended). Registering one type keeps the adapter free of graph-wide knowledge
+// — the component reads sibling edges from the store itself.
+export const EDGE_TYPES = { branchRuleEdge: BranchRuleEdge };
+
+export const toRfEdge = (edge: {
+  id: string;
+  fromNodeId: string;
+  toNodeId: string;
+  config?: Record<string, unknown>;
+}): Edge => ({
   id: edge.id,
   source: edge.fromNodeId,
   target: edge.toNodeId,
-  type: "smoothstep",
+  type: "branchRuleEdge",
   markerEnd: { type: MarkerType.ArrowClosed },
+  data: { branchRule: readBranchRule(edge.config ?? {}) },
 });

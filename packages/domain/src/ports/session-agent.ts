@@ -43,8 +43,12 @@ export interface BuildSystemPromptInput {
   resolvedSkills?: ResolvedSkill[];
 }
 
+// `rule` is the author's stated condition for taking the branch, held on the
+// edge. `purpose` is the destination step's own description, standing in when no
+// rule was written. A branch carries at most one of them (see
+// `buildBranchDescriptors`).
 export interface BuildBranchChoicePromptInput {
-  branchNodes: { id: string; name: string; purpose?: string }[];
+  branchNodes: { id: string; name: string; rule?: string; purpose?: string }[];
 }
 
 export interface ISessionAgent {

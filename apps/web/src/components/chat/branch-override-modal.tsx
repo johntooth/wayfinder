@@ -11,11 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-interface BranchOption {
-  nodeId: string;
-  nodeName: string;
-}
+import type { BranchOption } from "@/lib/chat/branch-options";
 
 interface BranchOverrideModalProps {
   open: boolean;
@@ -61,7 +57,16 @@ export function BranchOverrideModal({
                     : "border-[#e7e3db] text-[#5c574c] hover:bg-[#f5f3ee]"
                 }`}
               >
-                {branch.nodeName}
+                <span className="block font-medium">{branch.nodeName}</span>
+                {branch.rule && (
+                  <span
+                    className={`mt-1 block text-[12px] leading-[1.5] ${
+                      selected === branch.nodeId ? "text-[#3d4a70]" : "text-[#736d5f]"
+                    }`}
+                  >
+                    Use when: {branch.rule}
+                  </span>
+                )}
               </button>
             ))}
           </div>

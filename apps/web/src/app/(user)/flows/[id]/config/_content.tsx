@@ -63,7 +63,9 @@ import {
   toRfEdge,
   toRfNode,
 } from "@/lib/canvas/rf-adapters";
+import { BranchRuleModal } from "@/components/canvas/branch-rule-modal";
 import { FlowConfigHeader } from "./_flow-config-header";
+import { useBranchRules } from "./_use-branch-rules";
 import { usePriorStepViews } from "./_use-prior-step-views";
 
 // What the template endpoints return on success. Shared by the direct upload and
@@ -158,6 +160,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const deleteNodeMutation = trpc.flow.node.delete.useMutation();
   const createEdgeMutation = trpc.flow.edge.create.useMutation();
   const deleteEdgeMutation = trpc.flow.edge.delete.useMutation();
+  const setBranchRuleMutation = trpc.flow.edge.setBranchRule.useMutation();
 
   useEffect(() => {
     const data = canvasQuery.data;
@@ -197,10 +200,11 @@ function CanvasInner({ flowId }: { flowId: string }) {
     const edge: Edge = {
       ...connection,
       id: `pending-${Date.now()}`,
-      type: "smoothstep",
+      type: "branchRuleEdge",
       markerEnd: { type: MarkerType.ArrowClosed },
       source: connection.source,
       target: connection.target,
+      data: {},
     };
     setRfEdges((eds) => addEdge(edge, eds));
     markEdited();
@@ -238,7 +242,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         const edge = await createEdgeMutation.mutateAsync({ flowId, fromNodeId, toNodeId: created.id });
         setRfEdges((eds) => [
           ...eds,
-          { id: edge.id, source: edge.fromNodeId, target: edge.toNodeId, type: "smoothstep", markerEnd: { type: MarkerType.ArrowClosed } },
+          { id: edge.id, source: edge.fromNodeId, target: edge.toNodeId, type: "branchRuleEdge", markerEnd: { type: MarkerType.ArrowClosed }, data: {} },
         ]);
       }
       setCreatedNodeId(created.id);
@@ -486,6 +490,21 @@ function CanvasInner({ flowId }: { flowId: string }) {
     [rfNodes, stepNumbers],
   );
 
+  const persistBranchRule = useCallback(
+    (edgeId: string, rule: string | null) => {
+      void setBranchRuleMutation.mutateAsync({ edgeId, flowId, rule });
+    },
+    [setBranchRuleMutation, flowId],
+  );
+
+  const { displayEdges, branchRuleTarget, saveBranchRule, closeBranchRule } = useBranchRules(
+    rfNodes,
+    rfEdges,
+    setRfEdges,
+    persistBranchRule,
+    markEdited,
+  );
+
   // Fields declared by steps before the one being edited — auto-node response
   // fields and conversational document-template fields — offered as value
   // sources for the current node's request fields / scheduled timestamp.
@@ -635,7 +654,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
 
       <FlowCanvasViewport
         nodes={displayNodes}
-        edges={rfEdges}
+        edges={displayEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
@@ -645,6 +664,12 @@ function CanvasInner({ flowId }: { flowId: string }) {
         onAddStep={handleAddStep}
         onAddNextStep={handleAddNextStep}
         staleReferences={staleReferences}
+      />
+
+      <BranchRuleModal
+        target={branchRuleTarget}
+        onSave={saveBranchRule}
+        onClose={closeBranchRule}
       />
 
       <ContextDocsStrip flowId={flowId} docs={contextDocs} onDocsChange={setContextDocs} />

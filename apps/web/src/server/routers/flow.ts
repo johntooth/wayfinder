@@ -233,6 +233,29 @@ const edgeRouter = router({
       return result.data;
     }),
 
+  // The rule stating when a fork should take this edge. Null clears it, which
+  // returns the branch to being described by its destination step's own config.
+  setBranchRule: authenticatedProcedure
+    .input(
+      z.object({
+        edgeId: z.string().uuid(),
+        flowId: z.string().uuid(),
+        rule: z.string().max(2000).nullable(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
+      }
+      const result = await ctx.container.useCases.setFlowEdgeBranchRule.execute({
+        edgeId: input.edgeId,
+        rule: input.rule,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      syncDraft(ctx.container, input.flowId);
+      return result.data;
+    }),
+
   delete: authenticatedProcedure
     .input(z.object({ edgeId: z.string().uuid(), flowId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
