@@ -263,6 +263,14 @@ test.describe('redline create corpus', () => {
     await page.getByLabel('Override chunk mode').check();
     await expect(page.getByLabel('Chunk size in tokens')).toBeVisible();
 
+    // The AI chunking model: blank still means token chunking (null reaches the
+    // sidecar, not an empty string), and a named model is what makes semantically
+    // bounded chunking selectable per-run rather than only as the corpus default.
+    await expect(page.getByLabel('AI chunking model')).toBeVisible();
+    await expect(page.getByLabel('AI chunking model')).toHaveValue('');
+    await page.getByLabel('AI chunking model').fill('kanon-2-semantic');
+    await expect(page.getByLabel('AI chunking model')).toHaveValue('kanon-2-semantic');
+
     await expect(page.getByLabel('Default currency')).toBeHidden();
     await page.getByLabel('Override money vocabulary').check();
     await expect(page.getByLabel('Default currency')).toBeVisible();
