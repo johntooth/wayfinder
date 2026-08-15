@@ -150,6 +150,7 @@ export const buildContainer = (env: Env) => {
       anthropic: env.ANTHROPIC_API_KEY ?? null,
       openai: env.OPENAI_API_KEY ?? null,
       mistral: env.MISTRAL_API_KEY ?? null,
+      groq: env.GROQ_API_KEY ?? null,
       bedrock: bedrockEnvCredentials,
     },
     storage: {

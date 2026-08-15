@@ -27,10 +27,13 @@ const envSchema = z.object({
   DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
   N8N_WEBHOOK_SECRET: z.string().optional(),
   SETTINGS_ENCRYPTION_KEY: settingsEncryptionKeySchema,
-  AI_DEFAULT_PROVIDER: z.enum(["anthropic", "openai", "mistral", "bedrock"]).default("anthropic"),
+  AI_DEFAULT_PROVIDER: z
+    .enum(["anthropic", "openai", "mistral", "bedrock", "groq"])
+    .default("anthropic"),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   MISTRAL_API_KEY: z.string().optional(),
+  GROQ_API_KEY: z.string().optional(),
   AWS_BEDROCK_REGION: z.string().optional(),
   AWS_BEDROCK_ACCESS_KEY_ID: z.string().optional(),
   AWS_BEDROCK_SECRET_ACCESS_KEY: z.string().optional(),
