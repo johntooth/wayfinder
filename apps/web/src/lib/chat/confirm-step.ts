@@ -1,4 +1,5 @@
 import {
+  buildBranchDescriptors,
   ok,
   type Flow,
   type FlowEdge,
@@ -13,6 +14,7 @@ import {
   applyAdvanceSideEffects,
   buildGatheredContext,
 } from "@/app/api/chat/[sessionId]/stream/turn-helpers";
+import { toBranchChoiceMessages } from "./branch-choice-messages";
 
 type Container = ReturnType<typeof getContainer>;
 
@@ -33,16 +35,7 @@ async function recomputeBranchChoice(
   const outgoingEdges = edges.filter((e) => e.fromNodeId === session.currentNodeId);
   if (outgoingEdges.length <= 1) return null;
 
-  const branchNodeIds = outgoingEdges.map((e) => e.toNodeId);
-  const branchNodes = nodes
-    .filter((node) => branchNodeIds.includes(node.id))
-    .map((node) => {
-      const config = node.config as { doneWhen?: string; aiInstruction?: string; instruction?: string };
-      const doneWhenPurpose =
-        config.doneWhen && config.doneWhen !== "__TEMPLATE_COMPLETE__" ? config.doneWhen : undefined;
-      const purpose = doneWhenPurpose ?? config.aiInstruction ?? config.instruction;
-      return { id: node.id, name: node.name, purpose };
-    });
+  const branchNodes = buildBranchDescriptors(nodes, outgoingEdges);
 
   const branchPromptResult = container.services.sessionAgent.buildBranchChoicePrompt({ branchNodes });
   if (branchPromptResult.error) return null;
@@ -50,10 +43,7 @@ async function recomputeBranchChoice(
   const aiConfig = await container.runtimeConfig.getAiConfig();
   const branchingModelName = aiConfig.models.branching;
 
-  const coreMessages = messages.map((m) => ({
-    role: m.role as "user" | "assistant" | "system",
-    content: m.content,
-  }));
+  const coreMessages = toBranchChoiceMessages(messages);
 
   const branchResult = await container.services.llm.generateObject<{ branchChoice?: string }>({
     purpose: "chat-branch-choice",

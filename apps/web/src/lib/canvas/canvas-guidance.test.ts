@@ -4,8 +4,10 @@ import {
   STEP_NODE_HEIGHT,
   STEP_NODE_WIDTH,
   findDisconnectedNodeIds,
+  findForksMissingBranchRule,
   findNextStepAnchor,
   findUnclaimedSignatureSlots,
+  isForkedEdge,
   type GuidanceEdge,
   type GuidanceNode,
 } from "./canvas-guidance";
@@ -296,5 +298,125 @@ describe("findUnclaimedSignatureSlots", () => {
     );
 
     expect(slots.map((slot) => slot.nodeId)).toEqual(["doc"]);
+  });
+});
+
+// ── branch rules ─────────────────────────────────────────────────────────────
+
+const named = (id: string, name: string): GuidanceNode =>
+  step(id, 0, 0, { data: { name } });
+
+const ruledEdge = (source: string, target: string, branchRule?: string): GuidanceEdge => ({
+  source,
+  target,
+  data: branchRule === undefined ? {} : { branchRule },
+});
+
+describe("isForkedEdge", () => {
+  it("is false for the only edge leaving a step — there is nothing to choose between", () => {
+    const edges = [ruledEdge("a", "b")];
+
+    expect(isForkedEdge(edges[0]!, edges)).toBe(false);
+  });
+
+  it("is true for each edge leaving a step with two outgoing edges", () => {
+    const edges = [ruledEdge("a", "b"), ruledEdge("a", "c")];
+
+    expect(isForkedEdge(edges[0]!, edges)).toBe(true);
+    expect(isForkedEdge(edges[1]!, edges)).toBe(true);
+  });
+
+  it("is false for an edge whose source forks nowhere, alongside a fork elsewhere", () => {
+    const edges = [ruledEdge("a", "b"), ruledEdge("a", "c"), ruledEdge("b", "d")];
+
+    expect(isForkedEdge(edges[2]!, edges)).toBe(false);
+  });
+
+  it("counts two edges to the same destination as a fork, since each still needs a rule", () => {
+    const edges = [ruledEdge("a", "b"), ruledEdge("a", "b")];
+
+    expect(isForkedEdge(edges[0]!, edges)).toBe(true);
+  });
+});
+
+describe("findForksMissingBranchRule", () => {
+  it("returns nothing for a linear flow", () => {
+    const nodes = [named("a", "Collect details"), named("b", "Draft the letter")];
+
+    expect(findForksMissingBranchRule(nodes, [ruledEdge("a", "b")])).toEqual([]);
+  });
+
+  it("names the forking step when its branches carry no rules", () => {
+    const nodes = [named("a", "Triage"), named("b", "Fast track"), named("c", "Full review")];
+
+    const forks = findForksMissingBranchRule(nodes, [ruledEdge("a", "b"), ruledEdge("a", "c")]);
+
+    expect(forks).toEqual([{ nodeId: "a", stepName: "Triage", missingCount: 2 }]);
+  });
+
+  it("still reports the fork when only one of its branches is missing a rule", () => {
+    const nodes = [named("a", "Triage"), named("b", "Fast track"), named("c", "Full review")];
+
+    const forks = findForksMissingBranchRule(nodes, [
+      ruledEdge("a", "b", "spend is under £1k"),
+      ruledEdge("a", "c"),
+    ]);
+
+    expect(forks).toEqual([{ nodeId: "a", stepName: "Triage", missingCount: 1 }]);
+  });
+
+  it("is clean once every branch of the fork has a rule", () => {
+    const nodes = [named("a", "Triage"), named("b", "Fast track"), named("c", "Full review")];
+
+    const forks = findForksMissingBranchRule(nodes, [
+      ruledEdge("a", "b", "spend is under £1k"),
+      ruledEdge("a", "c", "spend is £1k or over"),
+    ]);
+
+    expect(forks).toEqual([]);
+  });
+
+  it("treats a blank rule as no rule, so whitespace never satisfies the warning", () => {
+    const nodes = [named("a", "Triage"), named("b", "Fast track"), named("c", "Full review")];
+
+    const forks = findForksMissingBranchRule(nodes, [
+      ruledEdge("a", "b", "   "),
+      ruledEdge("a", "c", "spend is £1k or over"),
+    ]);
+
+    expect(forks).toEqual([{ nodeId: "a", stepName: "Triage", missingCount: 1 }]);
+  });
+
+  it("ignores a single outgoing edge with no rule — a rule there decides nothing", () => {
+    const nodes = [named("a", "Collect details"), named("b", "Draft the letter")];
+
+    expect(findForksMissingBranchRule(nodes, [ruledEdge("a", "b")])).toEqual([]);
+  });
+
+  it("reports every incomplete fork on the canvas", () => {
+    const nodes = [
+      named("a", "Triage"),
+      named("b", "Fast track"),
+      named("c", "Full review"),
+      named("d", "Sign off"),
+      named("e", "Reject"),
+    ];
+
+    const forks = findForksMissingBranchRule(nodes, [
+      ruledEdge("a", "b"),
+      ruledEdge("a", "c"),
+      ruledEdge("c", "d"),
+      ruledEdge("c", "e"),
+    ]);
+
+    expect(forks.map((fork) => fork.nodeId)).toEqual(["a", "c"]);
+  });
+
+  it("falls back to a generic step label when the forking node has no name", () => {
+    const nodes = [step("a", 0), named("b", "Fast track"), named("c", "Full review")];
+
+    const forks = findForksMissingBranchRule(nodes, [ruledEdge("a", "b"), ruledEdge("a", "c")]);
+
+    expect(forks[0]!.stepName).toBe("this step");
   });
 });

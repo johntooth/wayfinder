@@ -2,6 +2,7 @@ import { resolveChangeRequests, type EvaluateStepReadinessOutput } from "@rbrasi
 import { nodeFieldSet } from "@rbrasier/domain";
 import type {
   AiTurnPayload,
+  BranchDescriptor,
   ConversationalNodeConfig,
   Flow,
   FlowNode,
@@ -61,7 +62,7 @@ export interface ExecuteTurnInput {
   messagesWithNew: ModelMessage[];
   systemPrompt: string;
   gatheredContext: string;
-  branchNodes: { id: string; name: string; purpose: string | undefined }[];
+  branchNodes: BranchDescriptor[];
   isNeverDone: boolean;
   requireConfirmation: boolean;
   realThreshold: number;

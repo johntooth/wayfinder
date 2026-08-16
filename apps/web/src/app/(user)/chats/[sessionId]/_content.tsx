@@ -12,6 +12,7 @@ import { ChatActionsMenu } from "@/components/chat/chat-actions-menu";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ApprovalGate } from "@/components/chat/approval-gate";
 import { BranchOverrideModal } from "@/components/chat/branch-override-modal";
+import { toBranchOptions } from "@/lib/chat/branch-options";
 import { ConfirmStepCard } from "@/components/chat/confirm-step-card";
 import { hasPendingDocumentGeneration } from "@/components/chat/document-poll-state";
 import { MessageFeed } from "@/components/chat/message-feed";
@@ -204,12 +205,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const stallCount = countStalls(dbMessages, currentNodeId, edges);
   const showBranchOverride = isAdmin && !isReadOnly && stallCount >= NULL_BRANCH_THRESHOLD;
 
-  const outgoingBranches = edges
-    .filter((e) => e.fromNodeId === currentNodeId)
-    .map((e) => {
-      const node = nodes.find((n) => n.id === e.toNodeId);
-      return { nodeId: e.toNodeId, nodeName: node?.name ?? e.toNodeId };
-    });
+  const outgoingBranches = toBranchOptions(edges, nodes, currentNodeId);
 
   const { messages, input, handleSubmit, isLoading, setInput, error, reload, append, setMessages } = useChat({
     api: `/api/chat/${sessionId}/stream`,

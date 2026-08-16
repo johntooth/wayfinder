@@ -223,6 +223,10 @@ export class DrizzleFlowVersionRepository implements IFlowVersionRepository {
               flow_id: input.flowId,
               from_node_id: edge.fromNodeId,
               to_node_id: edge.toNodeId,
+              // A restore replaces every edge row wholesale, so the snapshot's
+              // config has to come with it or the restore silently strips every
+              // branch rule the version was published with.
+              config: edge.config ?? {},
               updated_at: now,
             })),
           );
