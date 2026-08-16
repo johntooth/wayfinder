@@ -600,7 +600,6 @@ export class DecideApproval {
         field("decided_at", decidedAt.toISOString()),
         field("decided_by", decidedBy),
         field("approver_email", approverEmail),
-        field("applies_to", await this.appliesTo(approval, recorded("subject_description"))),
         field("comment", approval.comment ?? ""),
       ],
     });
@@ -622,19 +621,6 @@ export class DecideApproval {
       (candidate) => candidate.nodeId === approval.nodeId && candidate.status !== "pending",
     );
     return Math.max(decided.length, 1);
-  }
-
-  // What the approver signed off, as a report column. The frozen description is
-  // preferred; a record written before the subject was resolvable falls back to
-  // the subject step's own name, which still answers "which step is this about".
-  private async appliesTo(approval: Approval, subjectDescription: string): Promise<string> {
-    if (subjectDescription) return subjectDescription;
-
-    const subjectNodeId = readRecordString(approval.recordSnapshot, SUBJECT_NODE_ID_KEY);
-    if (!subjectNodeId) return "";
-
-    const nodes = await this.flowNodesOfFlow(approval.flowId);
-    return nodes.find((node) => node.id === subjectNodeId)?.name ?? "";
   }
 
   private async advance(

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
+import type { SessionStatus } from "@rbrasier/domain";
 import {
+  RECENT_CHATS_LIMIT,
   formatRecentChatMeta,
   isNewChatShortcut,
+  recentChatSessions,
   recentChatStatusLabel,
   relativeAge,
   resolveActiveHref,
@@ -86,6 +89,12 @@ describe("isNewChatShortcut", () => {
     expect(isNewChatShortcut(event({ key: "j" }))).toBe(false);
   });
 
+  // Autofill, password managers and IME composition can dispatch keydown events
+  // with no key at all — those must be ignored, not crash the handler.
+  it("ignores a keydown with no key", () => {
+    expect(isNewChatShortcut(event({ key: undefined }))).toBe(false);
+  });
+
   it("does not fire while an input, textarea or editable element has focus", () => {
     expect(isNewChatShortcut(event({ target: { tagName: "INPUT" } }))).toBe(false);
     expect(isNewChatShortcut(event({ target: { tagName: "TEXTAREA" } }))).toBe(false);
@@ -135,5 +144,57 @@ describe("resolveActiveHref", () => {
   it("picks the longest of several matching ancestors", () => {
     const candidates = ["/admin", "/admin/flows", "/admin/flows/nested"];
     expect(resolveActiveHref("/admin/flows/nested/deep", candidates)).toBe("/admin/flows/nested");
+  });
+});
+
+describe("recentChatSessions", () => {
+  const chat = (id: string, status: SessionStatus = "active") => ({ id, status });
+
+  it("caps the list so the rail cannot grow without bound", () => {
+    const sessions = Array.from({ length: RECENT_CHATS_LIMIT + 5 }, (_, index) =>
+      chat(`s${index}`),
+    );
+
+    expect(recentChatSessions(sessions)).toHaveLength(RECENT_CHATS_LIMIT);
+  });
+
+  it("returns a shorter list whole", () => {
+    expect(recentChatSessions([chat("s1"), chat("s2")]).map((session) => session.id)).toEqual([
+      "s1",
+      "s2",
+    ]);
+  });
+
+  it("keeps the order it was given, which is the order the rail shows", () => {
+    const sessions = [chat("newest"), chat("older"), chat("oldest")];
+
+    expect(recentChatSessions(sessions).map((session) => session.id)).toEqual([
+      "newest",
+      "older",
+      "oldest",
+    ]);
+  });
+
+  it("leaves out abandoned chats", () => {
+    const sessions = [chat("kept", "active"), chat("dropped", "abandoned")];
+
+    expect(recentChatSessions(sessions).map((session) => session.id)).toEqual(["kept"]);
+  });
+
+  it("counts the cap after abandoned chats are dropped, not before", () => {
+    // Filtering second would let a run of abandoned chats eat the cap and leave
+    // the rail showing two entries when the user has plenty.
+    const sessions = [
+      ...Array.from({ length: RECENT_CHATS_LIMIT }, (_, index) =>
+        chat(`abandoned-${index}`, "abandoned"),
+      ),
+      chat("live"),
+    ];
+
+    expect(recentChatSessions(sessions).map((session) => session.id)).toEqual(["live"]);
+  });
+
+  it("handles an empty list", () => {
+    expect(recentChatSessions([])).toEqual([]);
   });
 });

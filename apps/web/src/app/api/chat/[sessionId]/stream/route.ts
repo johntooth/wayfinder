@@ -1,6 +1,6 @@
 import { createDataStreamResponse } from "ai";
 import {
-  doneWhenGuidance,
+  buildBranchDescriptors,
   normaliseAdvanceConfidenceThreshold,
   type ConversationalNodeConfig,
   type SessionEvent,
@@ -219,17 +219,7 @@ export async function POST(
   if (systemPromptResult.error) return new Response("Failed to build prompt", { status: 500 });
 
   const outgoingEdges = edges.filter((e) => e.fromNodeId === session.currentNodeId);
-  const branchNodeIds = outgoingEdges.map((e) => e.toNodeId);
-  const branchNodes = nodes
-    .filter((node) => branchNodeIds.includes(node.id))
-    .map((node) => {
-      const config = node.config as { doneWhen?: string; aiInstruction?: string; instruction?: string };
-      // doneWhen may hold a sentinel meaning "template complete" — that string is not
-      // meaningful guidance for choosing a branch, so fall back to the instruction.
-      const purpose =
-        doneWhenGuidance(config.doneWhen) ?? config.aiInstruction ?? config.instruction;
-      return { id: node.id, name: node.name, purpose };
-    });
+  const branchNodes = buildBranchDescriptors(nodes, outgoingEdges);
 
   // Server-side context window: the model sees only the most recent turns, the
   // same 20 the client already slices to (scaling wall #1). `dbMessages` is

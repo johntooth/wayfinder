@@ -28,12 +28,16 @@ jobs:
   # MinIO + app, so there is no cross-shard data contention. Playwright reruns
   # the setup/seed/cleanup project dependencies inside every shard.
   #
-  # Six shards. Playwright balances a `--shard=i/n` split by test count (not
-  # file count), so the specs land roughly evenly across the six without any
+  # Three shards. Playwright balances a `--shard=i/n` split by test count (not
+  # file count), so the specs land roughly evenly across the three without any
   # manual grouping here. Every extra shard also re-pays the same fixed setup —
   # install, migrate, browser download, embedding warm-up, app boot — so shards
-  # buy less wall-clock the further you push them; six is where the remaining
-  # per-shard test time still dominates that fixed cost.
+  # buy less wall-clock the further you push them.
+  #
+  # This was six while the suite carried 380 tests. The triage in
+  # `docs/guides/e2e-triage-ledger.md` cut it to 116, at which point six shards
+  # were mostly paying setup cost to run ~19 tests each. Revisit if the suite
+  # grows again — but per `docs/guides/e2e-test-policy.md`, it should not.
   e2e:
     name: Playwright E2E (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
@@ -41,7 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3]
 
     services:
       postgres:
@@ -332,9 +336,21 @@ jobs:
         if: failure()
         run: tail -n 300 /tmp/app.log || true
 
+      # Blob, like the shards, so these results merge into the same report. Run
+      # under its own job they were passing or failing entirely outside the
+      # published run: the summary counted only what the six shards saw, and the
+      # chromium project ignores this spec, so nothing represented it at all.
       - name: Run PKI certificate specs
-        run: npx playwright test --config=playwright.config.ts --project=pki
+        run: npx playwright test --config=playwright.config.ts --project=pki --reporter=blob
         working-directory: apps/web/e2e
+
+      - name: Upload blob report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blob-report-pki
+          path: apps/web/e2e/blob-report/
+          retention-days: 1
 
       - name: Dump app and mocks logs on test failure
         if: failure()
@@ -355,7 +371,7 @@ jobs:
   report:
     name: Merge reports & publish
     if: always()
-    needs: [e2e]
+    needs: [e2e, e2e-pki]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -417,11 +433,45 @@ jobs:
           md += '| ' + (s.expected||0) + ' | ' + (s.unexpected||0) + ' | ' + (s.skipped||0) + ' | ' + (s.flaky||0) + ' | ' + dur + 'm |\n\n';
 
           const failures = [];
+          // Skipped tests are counted against MAX_SKIPPED below, but a count on
+          // its own says nothing about which capability is missing — and a spec
+          // that disarms itself is invisible in a green report. Group the skips
+          // by the reason Playwright recorded so the report names the blocker.
+          const skipReasons = new Map();
+          // A flaky count on its own is not actionable: it says some test passed
+          // only on retry without saying which, so nobody can tell a known-racy
+          // spec from a newly-unblocked one that is fighting another spec for the
+          // same fixture. Name them.
+          const flaky = [];
+          // Grouped by reason, the table says which capability is missing;
+          // grouped by file with line numbers, it says where to go and fixes
+          // cluster — one file's guards are usually one mechanism.
+          const skipped = [];
           function walk(suite, parents) {
             for (const spec of suite.specs || []) {
               if (!spec.ok) {
                 const err = spec.tests?.[0]?.results?.[0]?.error?.message || '';
                 failures.push({ title: [...parents, spec.title].join(' › '), error: err.split('\n')[0].replace(/\x1b\[[0-9;]*m/g, '') });
+              }
+              for (const t of spec.tests || []) {
+                if (t.status === 'flaky') {
+                  const attempts = (t.results || []).length;
+                  const firstError = (t.results || []).find(res => res.error)?.error?.message || '';
+                  flaky.push({
+                    title: spec.file + ' › ' + spec.title,
+                    attempts,
+                    error: firstError.split('\n')[0].replace(/\x1b\[[0-9;]*m/g, '').slice(0, 140),
+                  });
+                }
+                if (t.status !== 'skipped') continue;
+                const annotation = (t.annotations || []).find(a => a.type === 'skip');
+                const reason = (annotation && annotation.description) || 'no reason given';
+                if (!skipReasons.has(reason)) skipReasons.set(reason, []);
+                skipReasons.get(reason).push(spec.file + ' › ' + spec.title);
+                // spec.line is the test() declaration, not the guard that fired
+                // — the annotation carries no location. It is still what you
+                // want to open.
+                skipped.push({ file: spec.file, line: spec.line, title: spec.title, reason });
               }
             }
             for (const child of suite.suites || []) walk(child, [...parents, child.title]);
@@ -437,9 +487,54 @@ jobs:
             md += '\n';
           }
 
+          if (flaky.length) {
+            md += '<details><summary>🔁 ' + flaky.length + ' flaky — passed only on retry</summary>\n\n';
+            md += '| Attempts | Test | First error |\n|---------:|------|-------------|\n';
+            for (const f of flaky.slice(0, 30)) {
+              md += '| ' + f.attempts + ' | ' + f.title.replace(/\|/g, '\\\\|') + ' | ' + (f.error ? '\`' + f.error.replace(/\|/g, '\\\\|') + '\`' : '—') + ' |\n';
+            }
+            if (flaky.length > 30) md += '\n_…and ' + (flaky.length - 30) + ' more._\n';
+            md += '\n</details>\n\n';
+          }
+
+          if (skipReasons.size) {
+            const grouped = [...skipReasons.entries()].sort((a, b) => b[1].length - a[1].length);
+            md += '<details><summary>⏭️ ' + (s.skipped||0) + ' skipped — ' + grouped.length + ' distinct reasons</summary>\n\n';
+            md += '| Count | Reason |\n|------:|--------|\n';
+            for (const [reason, tests] of grouped) {
+              md += '| ' + tests.length + ' | ' + reason.replace(/\|/g, '\\\\|').slice(0, 160) + ' |\n';
+            }
+            md += '\n</details>\n\n';
+            fs.writeFileSync('skipped-tests.md', grouped
+              .map(([reason, tests]) => '## ' + tests.length + ' × ' + reason + '\n\n' + tests.map(t => '- ' + t).join('\n'))
+              .join('\n\n'));
+          }
+
+          if (skipped.length) {
+            const byFile = new Map();
+            for (const entry of skipped) {
+              if (!byFile.has(entry.file)) byFile.set(entry.file, []);
+              byFile.get(entry.file).push(entry);
+            }
+            const files = [...byFile.entries()].sort((a, b) => b[1].length - a[1].length);
+            md += '<details><summary>📍 ' + skipped.length + ' skipped — by file, with line numbers</summary>\n\n';
+            let written = 0;
+            for (const [file, entries] of files) {
+              if (written >= 120) { md += '\n_…and ' + (skipped.length - written) + ' more — see the \`skipped-tests\` artifact._\n'; break; }
+              md += '**apps/web/e2e/' + file + '** — ' + entries.length + '\n';
+              for (const entry of entries.sort((a, b) => a.line - b.line)) {
+                md += '- \`:' + entry.line + '\` ' + entry.title.replace(/\|/g, '\\\\|') + ' — ' + entry.reason.slice(0, 90) + '\n';
+                written++;
+              }
+              md += '\n';
+            }
+            md += '</details>\n\n';
+          }
+
           fs.writeFileSync('summary.md', md);
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
           fs.appendFileSync(process.env.GITHUB_OUTPUT, 'ok=' + ok + '\n');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'skipped=' + (s.skipped||0) + '\n');
           "
 
       # ── Netlify deploy (optional) ──────────────────────────────────────────
@@ -539,6 +634,19 @@ jobs:
           path: apps/web/e2e/playwright-report/
           retention-days: 30
 
+      # The per-test skip list, so shrinking the skipped set is a matter of
+      # reading which capability each one names rather than inferring it from
+      # the specs. Tiny next to the HTML report, and the merged JSON it comes
+      # from is not uploaded anywhere.
+      - name: Upload skipped-test list
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skipped-tests-${{ github.run_number }}
+          path: apps/web/e2e/skipped-tests.md
+          if-no-files-found: ignore
+          retention-days: 30
+
       # Re-assert the overall test outcome so this workflow's status reflects
       # whether any spec failed (the report job itself is otherwise always green).
       - name: Fail if any test failed
@@ -546,3 +654,54 @@ jobs:
         run: |
           echo "One or more E2E tests failed — see the summary above." >&2
           exit 1
+
+      # ── Skip ceiling ───────────────────────────────────────────────────────
+      # A skipped spec is green in every report while asserting nothing, so the
+      # suite can quietly stop testing things without any run turning red. That
+      # is how the withdrawable-approval spec sat dormant for several releases.
+      #
+      # Seed-backed gates now throw (helpers/seed.ts → requireSeedFixtures) and
+      # UI-probe skips have been converted to waiting assertions, so a broken
+      # seed or a missing control now FAILS instead of skipping. What is left
+      # skipping should only be genuine capability gates the CI environment does
+      # not satisfy. This environment provides object storage (E2E_OBJECT_STORAGE),
+      # the mocks server on :4001 (Entra + PKI reachable) and mocked AI, so the
+      # gates that actually fire here are the narrow set that needs something
+      # this run does not have:
+      #   - extraction_flows feature flag off → the synthesise specs
+      #     (enhance-synthesise-summary, fix-synthesise-live-results)
+      #   - real embeddings / a real AI key → fix-session-upload-not-reaching-ai
+      #   - doc-generation seed state / persisted aiPayload → the two chat specs
+      #     still tied to the open persistence investigation (chat-confidence
+      #     document card, chat-transparency reasoning modal)
+      #
+      # That is roughly 7–9 tests, and a couple drift run-to-run because the
+      # synthesise gates depend on runtime data shape. The ceiling sits just
+      # above that band: high enough to tolerate the drift, low enough that a
+      # batch of specs quietly disarming themselves — which moves the count by
+      # tens — turns the run red. A ceiling near the suite size (it was 115 of
+      # ~117) protects nothing.
+      #
+      # Lower it as the deferred persistence-tied specs are made to assert or the
+      # synthesise flag is enabled in CI; that is the point of it. Raising it is
+      # sometimes legitimate, but it must be a decision someone makes with the
+      # report open, not a side effect of adding a skip.
+      - name: Fail if too many tests skipped
+        if: always() && steps.summary.outputs.skipped != ''
+        env:
+          MAX_SKIPPED: "12"
+        run: |
+          SKIPPED='${{ steps.summary.outputs.skipped }}'
+          echo "Skipped: $SKIPPED (ceiling: $MAX_SKIPPED)"
+          if [ "$SKIPPED" -gt "$MAX_SKIPPED" ]; then
+            {
+              echo ""
+              echo "### ⏭️ Skip ceiling exceeded"
+              echo ""
+              echo "\`$SKIPPED\` tests skipped, ceiling is \`$MAX_SKIPPED\`."
+              echo "Open the report and check each skip is a real capability gate."
+            } >> $GITHUB_STEP_SUMMARY
+            echo "Skip ceiling exceeded: $SKIPPED > $MAX_SKIPPED." >&2
+            echo "Every skip must be a capability gate the environment genuinely cannot meet." >&2
+            exit 1
+          fi

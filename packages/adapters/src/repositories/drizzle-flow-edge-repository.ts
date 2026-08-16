@@ -16,6 +16,7 @@ const toEntity = (row: typeof app_flow_edges.$inferSelect): FlowEdge => ({
   flowId: row.flow_id,
   fromNodeId: row.from_node_id,
   toNodeId: row.to_node_id,
+  config: row.config,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -31,6 +32,7 @@ export class DrizzleFlowEdgeRepository implements IFlowEdgeRepository {
           flow_id: input.flowId,
           from_node_id: input.fromNodeId,
           to_node_id: input.toNodeId,
+          config: input.config ?? {},
         })
         .returning();
       if (!row) return err(domainError("INFRA_FAILURE", "Edge insert returned no row."));
@@ -49,6 +51,33 @@ export class DrizzleFlowEdgeRepository implements IFlowEdgeRepository {
       return ok(rows.map(toEntity));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list flow edges.", cause));
+    }
+  }
+
+  async findById(id: string): Promise<Result<FlowEdge | null>> {
+    try {
+      const [row] = await this.db
+        .select()
+        .from(app_flow_edges)
+        .where(eq(app_flow_edges.id, id))
+        .limit(1);
+      return ok(row ? toEntity(row) : null);
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to load flow edge.", cause));
+    }
+  }
+
+  async updateConfig(id: string, config: Record<string, unknown>): Promise<Result<FlowEdge>> {
+    try {
+      const [row] = await this.db
+        .update(app_flow_edges)
+        .set({ config, updated_at: new Date() })
+        .where(eq(app_flow_edges.id, id))
+        .returning();
+      if (!row) return err(domainError("NOT_FOUND", "Flow edge not found."));
+      return ok(toEntity(row));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to update flow edge config.", cause));
     }
   }
 

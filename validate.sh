@@ -330,6 +330,41 @@ else
   echo "$APP_ORM_LEAKS"
 fi
 
+# ── 18b. test file size guard ────────────────────────────────────────────────
+# Section 16 exempts test files, which is how approvals.test.ts reached 3,783
+# lines covering eight use cases — nobody could tell which spec owned what, and
+# the shared doubles at the top made every one of them load the others' setup.
+#
+# Tests get their own, looser line than source: a table-driven spec legitimately
+# runs long, and splitting one purely to hit a number buries the subject. The
+# fail line is set to catch the monolith-of-many-subjects case, not length as
+# such. Split by subject — one file per use case — rather than by line count.
+section "18b. test file size (warn >= 800, fail >= 1600 lines)"
+TEST_SIZE_WARN_LINES=800
+TEST_SIZE_FAIL_LINES=1600
+TEST_SIZE_FAILURES=""
+TEST_SIZE_WARNINGS=""
+while IFS= read -r test_file; do
+  line_count=$(wc -l < "$test_file")
+  [ "$line_count" -lt "$TEST_SIZE_WARN_LINES" ] && continue
+  if [ "$line_count" -ge "$TEST_SIZE_FAIL_LINES" ]; then
+    TEST_SIZE_FAILURES+="  $line_count  $test_file\n"
+  else
+    TEST_SIZE_WARNINGS+="  $line_count  $test_file\n"
+  fi
+done < <(find packages/*/src apps/*/src -type f \
+  \( -name "*.test.ts" -o -name "*.test.tsx" -o -name "*.spec.ts" \) 2>/dev/null)
+if [ -n "$TEST_SIZE_WARNINGS" ]; then
+  warn "test files at or above $TEST_SIZE_WARN_LINES lines — split by subject when next touched:"
+  printf '%b' "$TEST_SIZE_WARNINGS"
+fi
+if [ -z "$TEST_SIZE_FAILURES" ]; then
+  pass "no test file at or above $TEST_SIZE_FAIL_LINES lines"
+else
+  fail "test files at or above $TEST_SIZE_FAIL_LINES lines — split by subject before shipping:"
+  printf '%b' "$TEST_SIZE_FAILURES"
+fi
+
 # ── 19. no focused tests ─────────────────────────────────────────────────────
 # A committed .only silently skips the rest of the suite in CI.
 section "19. no describe.only / it.only / test.only committed"

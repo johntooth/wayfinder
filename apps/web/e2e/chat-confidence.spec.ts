@@ -14,31 +14,11 @@
  */
 
 import { test, expect } from './helpers/base';
-import { loadSeedFixtures } from './helpers/seed';
-
-async function resolveActiveSessionId(page: import('@playwright/test').Page): Promise<string | null> {
-  const seeded = loadSeedFixtures()?.sessionId;
-  if (seeded) return seeded;
-
-  await page.goto('/chats');
-  await page.waitForLoadState('networkidle');
-
-  const sessionLink = page.getByRole('link').filter({ hasText: /.+/ }).first();
-  const href = await sessionLink.getAttribute('href').catch(() => null);
-  if (!href) return null;
-
-  const match = href.match(/\/chats\/([^/?]+)/);
-  return match?.[1] ?? null;
-}
+import { requireSeedFixtures } from './helpers/seed';
 
 test.describe('Chat: Step Rail', () => {
   test('step rail is visible', async ({ page, consoleLogs }) => {
-    const sessionId = await resolveActiveSessionId(page);
-
-    if (!sessionId) {
-      test.skip(true, 'No sessions found — create a flow and session to enable this test');
-      return;
-    }
+    const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
     await page.waitForLoadState('networkidle');
@@ -50,12 +30,7 @@ test.describe('Chat: Step Rail', () => {
   });
 
   test('step rail shows numbered steps', async ({ page }) => {
-    const sessionId = await resolveActiveSessionId(page);
-
-    if (!sessionId) {
-      test.skip(true, 'No sessions found');
-      return;
-    }
+    const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
     await page.waitForLoadState('networkidle');
@@ -83,23 +58,13 @@ test.describe('Chat: Step Rail', () => {
 
 test.describe('Chat: Confidence', () => {
   test('confidence bar appears after response', async ({ page, consoleLogs }) => {
-    const sessionId = await resolveActiveSessionId(page);
-
-    if (!sessionId) {
-      test.skip(true, 'No sessions found');
-      return;
-    }
+    const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
     await page.waitForLoadState('networkidle');
 
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
-    const hasInput = await input.isVisible().catch(() => false);
-
-    if (!hasInput) {
-      test.skip(true, 'Chat input not found — session may be complete or read-only');
-      return;
-    }
+    await expect(input).toBeVisible();
 
     await input.fill('I have gathered all the required information and am ready to proceed');
 
@@ -120,23 +85,13 @@ test.describe('Chat: Confidence', () => {
   });
 
   test('multi-turn chat builds message history', async ({ page, consoleLogs }) => {
-    const sessionId = await resolveActiveSessionId(page);
-
-    if (!sessionId) {
-      test.skip(true, 'No sessions found');
-      return;
-    }
+    const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
     await page.waitForLoadState('networkidle');
 
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
-    const hasInput = await input.isVisible().catch(() => false);
-
-    if (!hasInput) {
-      test.skip(true, 'Chat input not found');
-      return;
-    }
+    await expect(input).toBeVisible();
 
     const timeout = process.env.USE_REAL_AI === 'true' ? 30_000 : 8_000;
 
@@ -175,69 +130,45 @@ test.describe('Chat: Confidence', () => {
 });
 
 test.describe('Chat: Document Generation', () => {
+  // DEFERRED — the seeded session is documented as carrying a completed
+  // document-generation step, but the DocumentCard did not render in CI (this
+  // was one of the live skips in run #695). Whether that is a seed gap (the
+  // step never completes) or a genuine defect needs a live stack to settle, so
+  // the final guard is left as a skip rather than converted to an assertion
+  // that would go red unverified. Tracked with the persistence investigation in
+  // docs/development/e2e-triage-handover.md §"Remaining tasks".
   test('document card shows download button', async ({ page, consoleLogs }) => {
-    // Prefer the seeded session, which has a completed document-generation step.
-    const seededSessionId = loadSeedFixtures()?.sessionId;
-    const candidateIds: string[] = [];
-    if (seededSessionId) {
-      candidateIds.push(seededSessionId);
-    } else {
-      await page.goto('/chats');
-      await page.waitForLoadState('networkidle');
-      const sessionLinks = page.getByRole('link').filter({ hasText: /.+/ });
-      const linkCount = await sessionLinks.count();
-      for (let i = 0; i < Math.min(linkCount, 5); i++) {
-        const href = await sessionLinks.nth(i).getAttribute('href').catch(() => null);
-        const id = href?.match(/\/chats\/([^/?]+)/)?.[1];
-        if (id) candidateIds.push(id);
-      }
-    }
+    // The seeded session is the one that carries a completed document step.
+    const { sessionId } = requireSeedFixtures();
 
-    if (candidateIds.length === 0) {
-      test.skip(true, 'No sessions available — create a flow with a document-generation step and complete it');
+    await page.goto(`/chats/${sessionId}`);
+    await page.waitForLoadState('networkidle');
+
+    // DocumentCard renders with download/regenerate controls
+    const documentCard = page.locator([
+      '[data-testid="document-card"]',
+      '[class*="document-card"]',
+      'button:has-text("Download")',
+      'button:has-text("Regenerate")',
+      'a[download]',
+    ].join(', ')).first();
+
+    if (!(await documentCard.isVisible().catch(() => false))) {
+      test.skip(true, 'No document card on the seeded session — deferred to the persistence investigation');
       return;
     }
 
-    let foundDocument = false;
+    await page.screenshot({ path: 'screenshots/chat-document-card.png', fullPage: true });
 
-    for (const candidateId of candidateIds) {
-      await page.goto(`/chats/${candidateId}`);
-      await page.waitForLoadState('networkidle');
+    // The card must expose at least one action button
+    const actionButton = page.locator([
+      'button:has-text("Download")',
+      'button:has-text("Regenerate")',
+      '[data-testid="document-card"] button',
+    ].join(', ')).first();
+    await expect(actionButton).toBeVisible();
 
-      // DocumentCard renders with download/regenerate controls
-      const documentCard = page.locator([
-        '[data-testid="document-card"]',
-        '[class*="document-card"]',
-        'button:has-text("Download")',
-        'button:has-text("Regenerate")',
-        'a[download]',
-      ].join(', ')).first();
-
-      const hasDocument = await documentCard.isVisible().catch(() => false);
-
-      if (hasDocument) {
-        foundDocument = true;
-        await page.screenshot({ path: 'screenshots/chat-document-card.png', fullPage: true });
-
-        // The card must expose at least one action button
-        const actionButton = page.locator([
-          'button:has-text("Download")',
-          'button:has-text("Regenerate")',
-          '[data-testid="document-card"] button',
-        ].join(', ')).first();
-        await expect(actionButton).toBeVisible();
-
-        const errors = consoleLogs.filter(l => l.type === 'error');
-        expect(errors, `Errors on document card:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
-        break;
-      }
-
-      await page.goto('/chats');
-      await page.waitForLoadState('networkidle');
-    }
-
-    if (!foundDocument) {
-      test.skip(true, 'No sessions with document cards found — complete a document-generation step first');
-    }
+    const errors = consoleLogs.filter(l => l.type === 'error');
+    expect(errors, `Errors on document card:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
   });
 });

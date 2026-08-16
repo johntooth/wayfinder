@@ -22,6 +22,9 @@ export interface GuidanceNode {
 export interface GuidanceEdge {
   source: string;
   target: string;
+  // Mirrors the edge's stored config onto the React Flow edge. Optional because
+  // every other guidance rule reads only the graph shape.
+  data?: Record<string, unknown>;
 }
 
 export interface NextStepAnchor {
@@ -247,4 +250,60 @@ export function findNextStepAnchor(
     nodeHeight: nodeHeight(rightMost),
     connectFromNodeId: openEnds.length === 1 ? openEnds[0]!.id : null,
   };
+}
+
+// ── branch rules ─────────────────────────────────────────────────────────────
+
+export interface ForkMissingBranchRule {
+  nodeId: string;
+  stepName: string;
+  missingCount: number;
+}
+
+/**
+ * Whether this edge leaves a step that forks. A rule states which of several
+ * paths to take, so an edge that is the only way out of its step has nothing to
+ * decide and carries no indicator.
+ */
+export function isForkedEdge(edge: GuidanceEdge, edges: GuidanceEdge[]): boolean {
+  return edges.filter((candidate) => candidate.source === edge.source).length > 1;
+}
+
+const branchRuleOf = (edge: GuidanceEdge): string | undefined => {
+  const rule = edge.data?.branchRule;
+  if (typeof rule !== "string") return undefined;
+  const trimmed = rule.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const stepNameOf = (nodes: GuidanceNode[], nodeId: string): string => {
+  const name = nodes.find((node) => node.id === nodeId)?.data.name;
+  return typeof name === "string" && name.trim().length > 0 ? name : "this step";
+};
+
+/**
+ * Forking steps with at least one outgoing edge that states no rule. Nothing
+ * fails at run time — the model still picks a branch, but from the destination
+ * steps' own descriptions, which say what each step does rather than when to go
+ * there. That silent guess is what the advisory exists to prevent.
+ */
+export function findForksMissingBranchRule(
+  nodes: GuidanceNode[],
+  edges: GuidanceEdge[],
+): ForkMissingBranchRule[] {
+  const bySource = new Map<string, GuidanceEdge[]>();
+  for (const edge of edges) {
+    bySource.set(edge.source, [...(bySource.get(edge.source) ?? []), edge]);
+  }
+
+  const forks: ForkMissingBranchRule[] = [];
+  for (const [nodeId, outgoing] of bySource) {
+    if (outgoing.length < 2) continue;
+
+    const missingCount = outgoing.filter((edge) => branchRuleOf(edge) === undefined).length;
+    if (missingCount === 0) continue;
+
+    forks.push({ nodeId, stepName: stepNameOf(nodes, nodeId), missingCount });
+  }
+  return forks;
 }

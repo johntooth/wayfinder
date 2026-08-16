@@ -456,6 +456,19 @@ const annotateCollapseGroups = (
   }
 };
 
+// A key an approval step used to project and no longer does. Its rows are still
+// on disk, and the report builds columns from whatever the rows contain, so a
+// flow's approval history would keep the column alive long after the write
+// stopped. Skipping it on read retires it everywhere at once.
+//
+// Scoped to approval steps because only they are safe: an approval step has no
+// author-defined fields, just projected ones, so nothing here can swallow a
+// template field somebody wrote. A step deleted from the flow has no type and
+// keeps its column, which is what every historical column for a deleted node
+// already does.
+const isRetiredApprovalField = (node: NodeForReport | undefined, fieldKey: string): boolean =>
+  node?.type === "approval" && fieldKey === "applies_to";
+
 export const computeFieldReport = (
   stepOutputs: StepOutputForReport[],
   nodes: NodeForReport[],
@@ -474,10 +487,11 @@ export const computeFieldReport = (
       // Narrative prose is rendered into the document but never reported on — it
       // is unbounded free text with no comparable value across sessions.
       if (field.type === "narrative") continue;
+      const node = nodeMap.get(output.nodeId);
+      if (isRetiredApprovalField(node, field.key)) continue;
       const columnKey = `${output.nodeId}:${field.key}`;
       if (!seenColumnKeys.has(columnKey)) {
         seenColumnKeys.add(columnKey);
-        const node = nodeMap.get(output.nodeId);
         columns.push({
           columnKey,
           nodeId: output.nodeId,
@@ -504,6 +518,7 @@ export const computeFieldReport = (
     for (const output of sorted) {
       for (const field of output.fields) {
         if (field.type === "narrative") continue;
+        if (isRetiredApprovalField(nodeMap.get(output.nodeId), field.key)) continue;
         // A group is unbounded structured content; only its item count is a
         // comparable, reportable signal (ADR-032 §4). The rendered items live in
         // the document, never in a report column.
