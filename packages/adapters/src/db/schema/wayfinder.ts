@@ -19,7 +19,7 @@ import {
   vector,
 } from "drizzle-orm/pg-core";
 import type { ExtractionFieldResult, FlowPermission, FlowSnapshot, FlowVersionStatus, FlowVisibility } from "@rbrasier/domain";
-import type { AiTurnPayload, PendingExecutions, SessionDocument, StepOutputField } from "@rbrasier/domain";
+import type { AiTurnPayload, PendingExecutions, SeedContextItem, SeedStepOutput, SessionDocument, StepOutputField } from "@rbrasier/domain";
 import { core_users } from "./core";
 
 type StoredContextDoc = {
@@ -160,6 +160,10 @@ export const app_sessions = pgTable(
     status: text("status", { enum: ["active", "complete", "abandoned", "cancelled"] })
       .notNull()
       .default("active"),
+    // Live chat or disposable test run (ADR-048). Defaulted rather than
+    // back-filled: every existing row is a live session, and every production
+    // read filters on this, so a missed predicate is a leak rather than a crash.
+    mode: text("mode", { enum: ["live", "test"] }).notNull().default("live"),
     title: text("title"),
     current_node_id: uuid("current_node_id"),
     awaiting_confirmation_node_id: uuid("awaiting_confirmation_node_id"),
@@ -183,8 +187,11 @@ export const app_sessions = pgTable(
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    by_user: index("app_sessions_user_id_created_at_idx").on(t.user_id, t.created_at),
-    by_flow: index("app_sessions_flow_id_idx").on(t.flow_id),
+    // `mode` sits inside the two indexes that back the filtered reads rather
+    // than getting one of its own: it is 'live' for almost every row, so a
+    // standalone index on it would never be chosen (ADR-048 §4).
+    by_user: index("app_sessions_user_id_created_at_idx").on(t.user_id, t.mode, t.created_at),
+    by_flow: index("app_sessions_flow_id_idx").on(t.flow_id, t.mode),
     by_flow_version: index("app_sessions_flow_version_id_idx").on(t.flow_version_id),
   }),
 );
@@ -678,5 +685,41 @@ export const app_extraction_documents = pgTable(
     // Backs the worker's FOR UPDATE SKIP LOCKED claim (pending rows per run).
     by_run_status: index("app_extraction_documents_run_status_idx").on(t.run_id, t.status),
     by_record: index("app_extraction_documents_record_id_idx").on(t.record_id),
+  }),
+);
+
+// A saved, re-runnable seed for a flow test (ADR-048). Rows are scoped to their
+// creator on every read: a fixture cloned from a live session can hold real
+// personal or commercially sensitive values, and this is the boundary that
+// contains it. Deliberately not shared with everyone who can edit the flow.
+export const app_flow_test_fixtures = pgTable(
+  "app_flow_test_fixtures",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    flow_id: uuid("flow_id")
+      .notNull()
+      .references(() => app_flows.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    // The node the fixture seeds up to. Not a foreign key: a fixture should
+    // survive its node being deleted and re-created during authoring, and the
+    // seed validator already reports a node that is no longer in the flow.
+    start_node_id: uuid("start_node_id").notNull(),
+    gathered_context: jsonb("gathered_context")
+      .$type<SeedContextItem[]>()
+      .notNull()
+      .default([]),
+    step_outputs: jsonb("step_outputs").$type<SeedStepOutput[]>().notNull().default([]),
+    created_by_user_id: uuid("created_by_user_id")
+      .notNull()
+      .references(() => core_users.id, { onDelete: "cascade" }),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    // Backs the only listing there is: this flow's fixtures, for this author.
+    by_flow_creator: index("app_flow_test_fixtures_flow_id_created_by_idx").on(
+      t.flow_id,
+      t.created_by_user_id,
+    ),
   }),
 );

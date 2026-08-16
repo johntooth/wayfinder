@@ -12,6 +12,12 @@ import {
 import type { Database } from "../db/client";
 import { app_flows, app_session_messages, app_sessions } from "../db/schema/wayfinder";
 
+// Analytics is a production surface, so every aggregate here excludes test runs
+// (ADR-048 §4). Two of these queries did not reference app_sessions at all — the
+// seed materialises ordinary message and step-output rows, so a predicate alone
+// would have left them counting an author's experiments as customer activity.
+const LIVE_SESSIONS = eq(app_sessions.mode, "live");
+
 export class DrizzleAnalyticsRepository implements IAnalyticsRepository {
   constructor(private readonly db: Database) {}
 
@@ -30,7 +36,11 @@ export class DrizzleAnalyticsRepository implements IAnalyticsRepository {
         .from(app_sessions)
         .innerJoin(app_flows, eq(app_sessions.flow_id, app_flows.id))
         .where(
-          and(gte(app_sessions.created_at, range.start), lte(app_sessions.created_at, range.end)),
+          and(
+            LIVE_SESSIONS,
+            gte(app_sessions.created_at, range.start),
+            lte(app_sessions.created_at, range.end),
+          ),
         );
       return ok(rows.map((row) => ({ ...row, flowName: row.flowName ?? "Untitled flow" })));
     } catch (cause) {
@@ -49,8 +59,10 @@ export class DrizzleAnalyticsRepository implements IAnalyticsRepository {
           createdAt: app_session_messages.created_at,
         })
         .from(app_session_messages)
+        .innerJoin(app_sessions, eq(app_session_messages.session_id, app_sessions.id))
         .where(
           and(
+            LIVE_SESSIONS,
             eq(app_session_messages.role, "assistant"),
             gte(app_session_messages.created_at, range.start),
             lte(app_session_messages.created_at, range.end),
@@ -76,7 +88,7 @@ export class DrizzleAnalyticsRepository implements IAnalyticsRepository {
         })
         .from(app_sessions)
         .innerJoin(app_flows, eq(app_sessions.flow_id, app_flows.id))
-        .where(eq(app_sessions.flow_id, flowId));
+        .where(and(eq(app_sessions.flow_id, flowId), LIVE_SESSIONS));
       return ok(rows.map((row) => ({ ...row, flowName: row.flowName ?? "Untitled flow" })));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list sessions by flow for analytics.", cause));
@@ -95,7 +107,7 @@ export class DrizzleAnalyticsRepository implements IAnalyticsRepository {
         })
         .from(app_session_messages)
         .innerJoin(app_sessions, eq(app_session_messages.session_id, app_sessions.id))
-        .where(eq(app_sessions.flow_id, flowId));
+        .where(and(eq(app_sessions.flow_id, flowId), LIVE_SESSIONS));
       return ok(rows);
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list messages by flow for analytics.", cause));

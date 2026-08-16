@@ -10,6 +10,7 @@ import {
   type Session,
   type SessionListPage,
   type SessionListPageOptions,
+  type SessionMode,
   type SessionUpdate,
 } from "@rbrasier/domain";
 import type { Database } from "../db/client";
@@ -96,11 +97,41 @@ export const buildReleaseTurnStatement = (sessionId: string, turnId: string): SQ
     AND ${app_sessions.active_turn_id} = ${turnId}
 `;
 
+// The isolation predicate (ADR-048 §4). Exported and shared by every list path
+// so the rendered SQL can be asserted without a live database, exactly as the
+// turn-lease statements above are. `findById` deliberately has no equivalent:
+// the test modal must be able to load the run it just started, so authorisation
+// guards that path instead.
+export const sessionModePredicate = (mode: SessionMode = "live"): SQL =>
+  eq(app_sessions.mode, mode);
+
+export const buildListByUserWhere = (userId: string, mode: SessionMode = "live"): SQL =>
+  and(eq(app_sessions.user_id, userId), sessionModePredicate(mode))!;
+
+export const buildListAllWhere = (mode: SessionMode = "live"): SQL => sessionModePredicate(mode);
+
+export const buildListByUserPageWhere = (
+  userId: string,
+  mode: SessionMode,
+  cursor: SQL | undefined,
+): SQL => {
+  const clauses: SQL[] = [eq(app_sessions.user_id, userId), sessionModePredicate(mode)];
+  if (cursor) clauses.push(cursor);
+  return and(...clauses)!;
+};
+
+export const buildListAllPageWhere = (mode: SessionMode, cursor: SQL | undefined): SQL => {
+  const clauses: SQL[] = [sessionModePredicate(mode)];
+  if (cursor) clauses.push(cursor);
+  return and(...clauses)!;
+};
+
 const toEntity = (row: typeof app_sessions.$inferSelect): Session => ({
   id: row.id,
   flowId: row.flow_id,
   userId: row.user_id,
   status: row.status,
+  mode: row.mode,
   title: row.title,
   currentNodeId: row.current_node_id,
   awaitingConfirmationNodeId: row.awaiting_confirmation_node_id ?? null,
@@ -125,6 +156,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
         .values({
           flow_id: input.flowId,
           user_id: input.userId,
+          mode: input.mode ?? "live",
           title: input.title ?? null,
           current_node_id: input.currentNodeId ?? null,
           flow_version_id: input.flowVersionId ?? null,
@@ -146,12 +178,12 @@ export class DrizzleSessionRepository implements ISessionRepository {
     }
   }
 
-  async listByUser(userId: string): Promise<Result<Session[]>> {
+  async listByUser(userId: string, mode: SessionMode = "live"): Promise<Result<Session[]>> {
     try {
       const rows = await this.db
         .select()
         .from(app_sessions)
-        .where(eq(app_sessions.user_id, userId))
+        .where(buildListByUserWhere(userId, mode))
         .orderBy(desc(app_sessions.updated_at));
       return ok(rows.map(toEntity));
     } catch (cause) {
@@ -159,11 +191,12 @@ export class DrizzleSessionRepository implements ISessionRepository {
     }
   }
 
-  async listAll(): Promise<Result<Session[]>> {
+  async listAll(mode: SessionMode = "live"): Promise<Result<Session[]>> {
     try {
       const rows = await this.db
         .select()
         .from(app_sessions)
+        .where(buildListAllWhere(mode))
         .orderBy(desc(app_sessions.updated_at));
       return ok(rows.map(toEntity));
     } catch (cause) {
@@ -181,13 +214,10 @@ export class DrizzleSessionRepository implements ISessionRepository {
       // Fetch one more row than requested so a full page yields a nextCursor
       // pointing at the first row of the next page; drop that sentinel from
       // the returned items.
-      const whereClauses: SQL[] = [eq(app_sessions.user_id, userId)];
-      const cursorClause = cursorPredicate(decoded);
-      if (cursorClause) whereClauses.push(cursorClause);
       const rows = await this.db
         .select()
         .from(app_sessions)
-        .where(and(...whereClauses))
+        .where(buildListByUserPageWhere(userId, options.mode ?? "live", cursorPredicate(decoded)))
         .orderBy(desc(app_sessions.updated_at), desc(app_sessions.id))
         .limit(limit + 1);
       const hasMore = rows.length > limit;
@@ -208,13 +238,12 @@ export class DrizzleSessionRepository implements ISessionRepository {
     try {
       const limit = clampLimit(options.limit);
       const decoded = decodeCursor(options.cursor);
-      const cursorClause = cursorPredicate(decoded);
-      const query = this.db
+      const rows = await this.db
         .select()
         .from(app_sessions)
+        .where(buildListAllPageWhere(options.mode ?? "live", cursorPredicate(decoded)))
         .orderBy(desc(app_sessions.updated_at), desc(app_sessions.id))
         .limit(limit + 1);
-      const rows = await (cursorClause ? query.where(cursorClause) : query);
       const hasMore = rows.length > limit;
       const trimmed = rows.slice(0, limit);
       const nextCursor = hasMore ? encodeCursor(trimmed[trimmed.length - 1]!) : null;
