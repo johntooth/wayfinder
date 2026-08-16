@@ -1,19 +1,20 @@
 # Phase — Flow Test Runs (Preview & Seeded Step Test)
 
-- **Status**: Draft — awaiting `/doc-review`
-- **Target version**: **TBC** — **MINOR** (new feature + additive
-  `app_sessions.mode` column + one new `app_` table). The number is allocated at
-  `/doc-review` against whichever line the build is scheduled on.
-- **Base branch**: **TBC.** `CLAUDE.md` routes new features to `main`; these docs
-  were authored on `release/alpha-2` at the requester's direction. Settle the
-  line before building, and set the version and the `implemented/<line>/`
-  destination from it.
+- **Status**: Reviewed — `/doc-review` passed 2026-08-16. Ready to build.
+- **Target version**: **0.29.0** — **MINOR** (new feature + additive
+  `app_sessions.mode` column + one new `app_` table).
+- **Base branch**: **`release/alpha-2`**, at the requester's direction. This
+  departs from `CLAUDE.md`, which routes new features to `main`; recorded so the
+  exception is visible. The implemented doc lands in
+  `docs/development/implemented/alpha-2/v0.29.0/`. 0.29.0 rather than 0.28.0
+  because the line already carries 0.28.4 and versions never go backwards.
 - **PRD**: `docs/development/prd/flow-test-runs.prd.md`
 - **ADR**: `docs/development/adr/048-flow-test-sessions-and-seeded-context.adr.md`
 - **Depends on**: ADR-006 (flow/session schema), ADR-007 (session-scoped
-  LangGraph), ADR-015 (versioning — the published/draft split), ADR-026
-  (operator-confirmed completion), ADR-018 (approver resolution — overridden
-  under test), `ai_usage_events` (per-call cost, already recorded)
+  LangGraph), `015-flow-versioning-snapshots` (the published/draft split),
+  `026-operator-confirmed-step-completion`, ADR-018 (approver resolution —
+  overridden under test), `ai_usage_events` (per-call cost and tokens, already
+  recorded — but **no duration column**, see step 9)
 
 ## 1. Problem
 
@@ -65,11 +66,11 @@ test file before each implementation file (`CLAUDE.md`).
 | Layer | File | Change |
 |-------|------|--------|
 | domain | `packages/domain/src/entities/session.ts` | add `SessionMode = "live" \| "test"`; `mode` on `Session` and `NewSession` (optional; absent reads `"live"`) |
-| domain | `packages/domain/src/entities/flow-test-fixture.ts` | new — `FlowTestFixture`, `NewFlowTestFixture`, `TestSeedSource`, `SeedStepOutput` |
+| domain | `packages/domain/src/entities/flow-test-fixture.ts` | new — `FlowTestFixture` (carrying `createdByUserId`), `NewFlowTestFixture`, `TestSeedSource`, `SeedStepOutput` |
 | domain | `packages/domain/src/entities/flow-test-report.ts` | new — `FlowTestStepReport`, `FlowTestRunReport` |
 | domain | `packages/domain/src/entities/flow-test-seed.ts` | new — `validateSeedAgainstNodes(seed, nodes)`: pure, returns accepted items + rejects with reasons |
 | domain | `packages/domain/src/ports/seed-proposer.ts` | new — `ISeedProposer.propose(...) -> Result<SeedProposal>` |
-| domain | `packages/domain/src/ports/flow-test-fixture-repository.ts` | new — `listByFlow`, `findById`, `create`, `update`, `delete` |
+| domain | `packages/domain/src/ports/flow-test-fixture-repository.ts` | new — `listByFlow`, `findById`, `create`, `update`, `delete`; every read takes the requesting user id, since a fixture is visible only to its creator |
 | domain | `packages/domain/src/ports/session-repository.ts` | add `mode` filter to `SessionListPageOptions`; document the default as `"live"` |
 | application | `packages/application/src/use-cases/session/start-session.ts` | accept `mode`, `startNodeId?`; when `mode === "test"` skip the published guard, resolve from **live rows**, set `flowVersionId: null` |
 | application | `packages/application/src/use-cases/flow-test/start-test-run.ts` | new — authorise (owner/admin), start the session, materialise the seed, return the session |
@@ -77,15 +78,16 @@ test file before each implementation file (`CLAUDE.md`).
 | application | `packages/application/src/use-cases/flow-test/generate-seed.ts` | new — `ISeedProposer` + `validateSeedAgainstNodes`; reports rejects, never substitutes silently |
 | application | `packages/application/src/use-cases/flow-test/get-test-run-report.ts` | new — assemble `FlowTestRunReport` from sessions, messages, step outputs, `ai_usage_events` |
 | application | `packages/application/src/use-cases/flow-test/delete-test-session.ts` | new — author-scoped delete; refuses a `live` session outright |
-| application | `packages/application/src/use-cases/flow-test/sweep-test-sessions.ts` | new — retention sweep (default 30 days), driven by the existing scheduler (ADR-019) |
-| application | `packages/application/src/use-cases/approval/*` (resolution path) | under `mode === "test"`, resolve the approver to the initiating author |
-| adapters | `packages/adapters/src/db/schema/wayfinder.ts` | `app_sessions`: `mode text not null default 'live'` + index on `(mode)`; new `app_flow_test_fixtures` |
-| adapters | `packages/adapters/drizzle/<next>.sql` | migration, `-- data-impact: preserved` |
+| application | `packages/application/src/use-cases/flow-test/sweep-test-sessions.ts` | new — retention sweep (30 days), driven by the existing scheduler (ADR-019); honours by-session legal holds and per-batch caps |
+| application | `packages/application/src/use-cases/approvals/suggest-approver.ts` | under `mode === "test"`, resolve the approver to the initiating author — a real row, so the approval path is genuinely exercised |
+| adapters | `packages/adapters/src/db/schema/wayfinder.ts` | `app_sessions`: `mode text not null default 'live'`; rebuild `app_sessions_user_id_created_at_idx` as `(user_id, mode, created_at)` and `app_sessions_flow_id_idx` as `(flow_id, mode)`; new `app_flow_test_fixtures` |
+| adapters | `packages/adapters/drizzle/0044_*.sql` | migration, `-- data-impact: preserved` |
 | adapters | `packages/adapters/src/repositories/drizzle-session-repository.ts` | map `mode`; apply the `mode` predicate on `listByUser`, `listAll`, `listByUserPage`, `listAllPage` |
-| adapters | `packages/adapters/src/repositories/drizzle-analytics-repository.ts` | exclude `mode = 'test'` from every session-touching aggregate |
+| adapters | `packages/adapters/src/repositories/drizzle-analytics-repository.ts` | predicate on `listSessions` and `listSessionsByFlow`; predicate on `listMessagesByFlow` (already joins `app_sessions`); **add a join** to `listAssistantMessages`, which today reads `app_session_messages` alone |
+| adapters | `packages/adapters/src/repositories/drizzle-session-step-output-repository.ts` | **add a join** to `listByFlow` — filters on `flow_id` only today, and feeds `GetFlowDeepDive`'s field report with seeded rows |
 | adapters | `packages/adapters/src/repositories/drizzle-approval-repository.ts` | exclude test sessions from approver queues |
-| adapters | `packages/adapters/src/repositories/drizzle-schedule-run-repository.ts` | exclude test sessions from scheduled-run selection |
-| adapters | `packages/adapters/src/repositories/drizzle-flow-test-fixture-repository.ts` | new |
+| adapters | `packages/adapters/src/repositories/drizzle-schedule-run-repository.ts` | exclude test sessions from `listRecent`, the admin-facing run history. **Not** `drizzle-schedule-repository.claimDue` — filtering due-schedule selection would break testing a scheduled node |
+| adapters | `packages/adapters/src/repositories/drizzle-flow-test-fixture-repository.ts` | new — reads scoped to `created_by_user_id`, so a fixture is visible only to its creator |
 | adapters | `packages/adapters/src/ai/ai-seed-proposer.ts` | new — `generateObject`, temp 0, `purpose: "test-seed"`, output sanitised to the declared fields |
 | web | `apps/web/src/server/routers/flow-test.ts` | new — `start`, `report`, `delete`, `listSeedableSessions`, `generateSeed`, `fixture.{list,create,update,delete}` |
 | web | `apps/web/src/components/canvas/flow-test-modal.tsx` | new — near-full-screen modal, two panes |
@@ -93,6 +95,8 @@ test file before each implementation file (`CLAUDE.md`).
 | web | `apps/web/src/components/canvas/flow-test-step-report.tsx` | new — per-step metrics pane |
 | web | `apps/web/src/components/canvas/*` (toolbar, node menu) | **Test** actions; node menu opens the modal pre-scoped to that step |
 | web | `apps/web/src/lib/container.ts` | wire `ISeedProposer`, the fixture repository and the new use-cases |
+| e2e | one new Playwright spec | the streamed transcript reaching the DOM (policy group 2) and the document downloading from a seeded step (group 3); everything else about the modal is a component test |
+| root | `validate.sh` | new check: fail if the diff against the base branch touches `run-turn`, `evaluate-step-readiness`, `buildSystemPrompt` or the stream route |
 
 ## 6. Implementation steps (test-first per CLAUDE.md)
 
@@ -126,23 +130,46 @@ test file before each implementation file (`CLAUDE.md`).
    offered, invalid values are reported, a proposer error degrades to an empty
    seed via Result rather than a throw.
 
-5. **Adapters — schema, migration, mapping.** Add `mode` + its index and
-   `app_flow_test_fixtures`; generate the migration with
-   `-- data-impact: preserved`. Repository test asserts `mode` round-trips and
-   that pre-existing rows read back as `"live"`.
+5. **Adapters — schema, migration, mapping.** Add `mode` and
+   `app_flow_test_fixtures`; rebuild the two `app_sessions` indexes as
+   `(user_id, mode, created_at)` and `(flow_id, mode)`. No standalone `(mode)`
+   index — the column reads `'live'` for almost every row, so the planner would
+   ignore it. Generate the migration with `-- data-impact: preserved` (the
+   column is defaulted and the index rebuilds carry no rows). Repository test
+   asserts `mode` round-trips and that pre-existing rows read back as `"live"`.
 
 6. **Adapters — the isolation predicate.** This is the phase's principal risk;
-   cover it exhaustively. Apply `mode = 'live'` in **four** repositories and
-   write a test per read path:
+   cover it exhaustively. Apply `mode = 'live'` across **five** repositories,
+   with a test per read path:
    - `drizzle-session-repository`: `listByUser`, `listAll`, `listByUserPage`,
      `listAllPage`
-   - `drizzle-analytics-repository`: every session-touching aggregate
+   - `drizzle-analytics-repository`: `listSessions`, `listSessionsByFlow`,
+     `listMessagesByFlow` — all three already reference `app_sessions`
+   - `drizzle-analytics-repository.listAssistantMessages`: **needs an
+     `app_sessions` join added first.** It reads `app_session_messages` alone,
+     and the seed materialises synthetic *assistant messages* — so without the
+     join every dashboard fed by it counts test data. A predicate on its own
+     does nothing here.
+   - `drizzle-session-step-output-repository.listByFlow`: **also needs a join
+     added.** It filters on `flow_id` only and feeds `GetFlowDeepDive`'s field
+     report, which the PRD names explicitly as a surface that must exclude test
+     sessions. `GetFlowDeepDive` is its only production caller, so adding the
+     predicate in the repository costs nothing elsewhere.
    - `drizzle-approval-repository`: approver queue reads
-   - `drizzle-schedule-run-repository`: scheduled-run selection
+   - `drizzle-schedule-run-repository.listRecent`: the admin-facing run history.
+     Leave `drizzle-schedule-repository.claimDue` alone — it selects due rows
+     from `app_session_schedules`, and filtering it would make a scheduled node
+     untestable.
 
    Each test seeds one `live` and one `test` session and asserts only the live
    one is returned. `findById` deliberately keeps returning test sessions — the
    modal needs it — so authorisation, not the predicate, guards that path.
+
+   The two joins above are the lesson of this step: the seed's whole mechanism
+   is that it writes *ordinary* message and step-output rows, so any aggregate
+   over those tables sees test data whether or not it knows `app_sessions`
+   exists. A read path added later must be checked against that, not just
+   against the session table.
 
 7. **Adapters — seed proposer.** `ai-seed-proposer.test.ts`: output is
    constrained to the declared field keys, invented keys are dropped, temp 0 and
@@ -151,28 +178,60 @@ test file before each implementation file (`CLAUDE.md`).
 
 8. **Application — approvals under test.** Test first: an approval node reached
    in a `mode = "test"` session resolves the approver to the initiating author,
-   and no approval row appears in any real supervisor's queue. Then implement.
+   and no approval row appears in any real supervisor's queue. The row is real,
+   not simulated — the point is that row creation, notification suppression,
+   decision handling and signature all run. Then implement.
 
 9. **Application — report, delete, sweep.** `get-test-run-report.test.ts`
-   asserts per-step cost/tokens/latency/turns/confidence/gate outcome assembled
-   from `ai_usage_events` and session rows. `delete-test-session.test.ts`
-   asserts a `live` session can never be deleted through this path. Wire the
-   sweep to the existing scheduler.
+   asserts per-step cost/tokens/turns/confidence/gate outcome assembled from
+   `ai_usage_events` and session rows.
 
-10. **Web — tRPC.** Add `flowTest.*`, all author-gated. Router tests cover the
-    authorisation boundary on every procedure.
+   **Latency has no column.** `ai_usage_events` records tokens and `cost_usd`
+   but no duration, and none is added here. Derive per-turn latency from message
+   timestamps: an assistant message's `created_at` minus that of the user
+   message that provoked it. That covers the whole server-side turn — model
+   call, tool loop, document generation — which is the number an author tuning a
+   step wants. Test it against fixed timestamps so the assertion is exact.
+
+   `delete-test-session.test.ts` asserts a `live` session can never be deleted
+   through this path. Wire the sweep to the existing scheduler; it stays its own
+   use-case rather than a `RETENTION_TARGETS` entry, because that registry is
+   keyed by table with a whole-table timestamp policy and cannot express "rows
+   where `mode = 'test'`" — but it must still honour by-session legal holds and
+   per-batch caps, as `ApplyRetentionPolicies` does.
+
+10. **Web — tRPC.** Add `flowTest.*`, all author-gated. Reuse the existing
+    `canEditFlow` helper (`apps/web/src/server/routers/flow.ts`) rather than
+    re-deriving owner/admin — flow permissions already carry group and
+    organisation visibility, and a hand-rolled check will drift from them.
+    Router tests cover the authorisation boundary on every procedure, including
+    that a fixture is unreadable by anyone but its creator.
 
 11. **Web — UI.** The modal at approximately `max-w-[92vw] h-[88vh]` (against
     `max-w-3xl` for `NodeConfigModal`, `node-config-modal.tsx:464`): left pane
     run setup (scope, seed source, editable values), right pane the live
-    transcript under a persistent **TEST** banner plus the step report. Canvas
-    toolbar and node-menu actions. Closing returns to the canvas with position
-    intact.
+    transcript under a persistent **TEST** banner plus the step report. The
+    banner also states that an approval under test was resolved to the author.
+    The fixture save dialog warns that cloned values may carry real session
+    data. Canvas toolbar and node-menu actions. Closing returns to the canvas
+    with position intact.
 
-12. **Version + validate.** Set `VERSION` and root `package.json#version` to the
-    number allocated at `/doc-review`. Run `./validate.sh`; fix all failures.
-    Move this doc to `docs/development/implemented/<line>/v<version>/` with an
-    implementation summary.
+12. **E2E.** One Playwright spec, covering only what a browser can see per
+    `docs/guides/e2e-test-policy.md`: the streamed transcript reaching the DOM
+    (group 2) and the generated document downloading from a seeded step
+    (group 3). No `test.skip()` on a condition the test itself probes, no
+    `isVisible()` for control flow. Everything else about the modal is a
+    component test.
+
+13. **Guard the untouched runner.** Add a `validate.sh` check that fails if the
+    diff against `release/alpha-2` touches `run-turn`, `evaluate-step-readiness`,
+    `buildSystemPrompt` or the stream route. This is what makes "the runner is
+    unchanged" a fact rather than an intention.
+
+14. **Version + validate.** Set `VERSION` and root `package.json#version` to
+    `0.29.0`. Run `./validate.sh`; fix all failures. Move this doc to
+    `docs/development/implemented/alpha-2/v0.29.0/` with an implementation
+    summary.
 
 ## 7. Acceptance criteria
 
@@ -184,47 +243,67 @@ Mirror PRD §10. In particular:
 - [ ] The seed round-trips through `aggregateGatheredContext` with that query
       unchanged, and renders in `<gathered_context>`.
 - [ ] `run-turn`, `evaluate-step-readiness`, `buildSystemPrompt` and the stream
-      route are unchanged — verified against the diff, not merely asserted.
+      route are unchanged — enforced by the `validate.sh` guard from step 13.
 - [ ] Seeds can be cloned, hand-edited and saved as a fixture, and re-run to
       produce a second run against identical inputs.
+- [ ] A fixture is readable only by its creator, asserted at the repository; the
+      save dialog warns that cloned values may carry real data.
 - [ ] A generated seed's invalid values are reported, never silently substituted.
 - [ ] A document step under test produces a downloadable file from seeded values.
-- [ ] Per-step cost, tokens, latency, turns, confidence and gate outcome are
-      reported.
-- [ ] Test sessions are excluded from all four repositories' read paths, with a
-      test per path.
-- [ ] An approval under test resolves to the author; the modal says so.
-- [ ] Test sessions delete on demand and sweep after the retention window; test
-      spend is attributed and not exempt from budgets.
+- [ ] Per-step cost, tokens, turns, confidence and gate outcome are reported from
+      `ai_usage_events` and session rows; latency is derived from message
+      timestamps, with no duration column added.
+- [ ] Test sessions are excluded from all five repositories' read paths, with a
+      test per path — including the two that need an `app_sessions` join added
+      before any predicate can apply.
+- [ ] An approval under test creates a real row resolved to the author; the modal
+      says so.
+- [ ] Test sessions delete on demand and sweep after 30 days, honouring
+      by-session legal holds; test spend counts against budgets and stays visible
+      in usage reporting.
 - [ ] The modal never navigates away from the canvas.
+- [ ] One Playwright spec covers the streamed transcript and the seeded document
+      download; nothing else about the modal is an e2e test.
 - [ ] `domain` dependency-free; ports in domain; Result at every boundary;
-      `VERSION` = `package.json#version`; `./validate.sh` passes.
+      `VERSION` = `package.json#version` = `0.29.0`; `./validate.sh` passes.
 
 ## 8. Risks / open questions
 
 Carried from PRD §12:
 
 - **Isolation is the principal risk.** A missed read path leaks an author's
-  experiments into a customer's reporting. Step 6 enumerates the four
-  repositories; any new session read path added during the build must be added
-  there too.
+  experiments into a customer's reporting. Step 6 enumerates five repositories;
+  the review found two the first draft missed, both because they aggregate the
+  seed's materialised rows without referencing `app_sessions` at all. Any new
+  session read path — or any new aggregate over `app_session_messages` or
+  `app_session_step_outputs` — must be added there too.
 - **Approval divergence** is deliberate and is the one behaviour a test does not
-  reproduce faithfully. Open: simulate a decision without creating an approval
-  row at all.
-- **Cloned seeds carry real data** into a persisted fixture — redact on clone,
-  warn at save, or scope fixture visibility to the author. Unresolved.
+  reproduce faithfully. Settled: a real row resolved to the author, so the
+  mechanism runs; simulating a decision with no row was rejected because it
+  would leave the approval path untested.
+- **Cloned seeds carry real data** into a persisted fixture. Settled: fixtures
+  are author-scoped and the save dialog warns. Redaction was rejected — it makes
+  the seed unrealistic, which defeats cloning. Residual risk accepted.
 - **Generated seeds can mislead** when a value violates a constraint; mitigated
   by validating before materialising.
-- **Cost**: test runs spend real tokens. Open — whether test spend needs its own
-  budget scope (ADR-031).
-- **Retention default** of 30 days is proposed against a product with no
-  retention policy anywhere else; confirm.
+- **Cost**: test runs spend real tokens. Settled: counted against budgets and
+  visible in usage reporting. A dedicated test budget scope (ADR-031) is
+  deferred as a governance change.
+- **Retention** settled at 30 days — the product's first retention default of
+  any kind, so a judgement call rather than a policy application.
+- **Index rebuild**: the migration rebuilds two indexes on `app_sessions` rather
+  than only adding one. Carries no rows, but it is the one part of the migration
+  that is not purely additive.
 - **Modal vs. route**: a modal keeps the author on the canvas as required, but a
   run cannot be deep-linked or shared. Accepted for this version.
 
 ## 9. Approved change summary
 
-Recorded per the `/new-feature` lifecycle; approved 2026-08-11.
+Recorded per the `/new-feature` lifecycle; approved 2026-08-11. Revised
+2026-08-16 at `/doc-review`: version and line allocated (0.29.0 on
+`release/alpha-2`), the isolation enumeration corrected from four repositories to
+five, latency re-sourced to message timestamps, and the six open questions in §8
+settled.
 
 **Headline.** An author can run a draft flow — or a single step of it — from a
 near-full-screen modal on the canvas, without publishing and without leaving the
@@ -245,9 +324,12 @@ latency, turns-to-advance and gate outcomes back into the modal.
   pane live transcript plus step report.
 - **Data** — `SessionMode`, `FlowTestFixture`, `TestSeedSource`,
   `FlowTestStepReport`, `ISeedProposer`.
-- **Database** — additive `app_sessions.mode` (+ index) and one new `app_` table;
-  no change to messages or step outputs.
-- **Risks** — the `mode = 'live'` predicate must reach every read path;
+- **Database** — additive `app_sessions.mode`, two index rebuilds folding `mode`
+  into existing composites, and one new `app_` table; no change to messages or
+  step outputs.
+- **Risks** — the `mode = 'live'` predicate must reach every read path,
+  including two aggregates that read the seed's rows without joining
+  `app_sessions` at all;
   approval divergence; cloned seeds carrying real data; generated seeds
   misleading; real token spend.
 - **Out of scope** — assertions, CI runs, concurrency, run diffing, replaying a
