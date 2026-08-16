@@ -16,30 +16,16 @@
  */
 
 import { test, expect } from './helpers/base';
-import { loadSeedFixtures } from './helpers/seed';
-
-async function resolveExistingSessionId(page: import('@playwright/test').Page): Promise<string | null> {
-  const seeded = loadSeedFixtures()?.sessionId;
-  if (seeded) return seeded;
-
-  await page.goto('/chats');
-  await page.waitForLoadState('networkidle');
-
-  const sessionLink = page.locator('a[href^="/chats/"]').first();
-  const href = await sessionLink.getAttribute('href').catch(() => null);
-  if (!href) return null;
-
-  const match = href.match(/\/chats\/([^/?]+)/);
-  return match?.[1] ?? null;
-}
+import { requireSeedFixtures } from './helpers/seed';
 
 test.describe('Chat: AI transparency modal', () => {
+  // DEFERRED — the reasoning modal only renders for an assistant message that
+  // carries a persisted aiPayload, and in CI (run #695) none did. That is the
+  // same missing-aiPayload signal called out in the persistence investigation
+  // (docs/development/e2e-triage-handover.md §2), so the final guard stays a
+  // skip until a live stack settles whether the payload is being persisted.
   test('assistant message exposes an AI reasoning modal', async ({ page }) => {
-    const sessionId = await resolveExistingSessionId(page);
-    if (!sessionId) {
-      test.skip(true, 'No sessions found — create a flow and session to enable this test');
-      return;
-    }
+    const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
     await page.waitForLoadState('networkidle');

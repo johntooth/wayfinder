@@ -39,7 +39,7 @@ sections.
 | Data & types | Domain entities, value objects and TypeScript types created or changed, with the shape of each change |
 | Files & packages touched | Paths to create, modify or delete, grouped under `domain` / `application` / `adapters` / `apps`, so architecture-boundary violations are visible before any code exists |
 | Database & migration impact | Tables and their group prefix, whether a generated migration is required, and the `-- data-impact:` line it will have to carry |
-| Tests | The test files written before each sub-component, and the named Playwright e2e spec that will be written but not run |
+| Tests | The test files written before each sub-component, and either the named Playwright e2e spec that will be extended (with the `e2e-test-policy.md` group it falls under) or an explicit "no e2e — behaviour is covered at `<layer>`" |
 | Version, branch & PR target | MINOR or PATCH and the resulting version, the `enhance/<slug>` branch name, the base branch, and the branch the PR opens against |
 | Risks | What could break, and anything destructive or irreversible |
 | Out of scope | What is deliberately not being done |
@@ -81,9 +81,10 @@ it — and carry the approved summary into the phase doc when step 1 generates i
    - Decompose into sub-components
    - Write tests before implementation for each sub-component
    - Run `./validate.sh` after each sub-component
-4. Write at least one Playwright e2e test that exercises the changed or extended functionality end-to-end — write it, do not run it:
-   - Place tests under `apps/web/e2e/` in a file named after the enhancement (e.g. `enhance-<slug>.spec.ts`)
-   - Cover the primary user-facing behaviour introduced or modified by this enhancement
+4. Decide whether this enhancement needs a Playwright e2e test — **most do not**:
+   - Read [`docs/guides/e2e-test-policy.md`](../../docs/guides/e2e-test-policy.md). Write a spec **only** if the changed behaviour falls into one of its six groups (auth session lifecycle, streaming into the DOM, file upload/download, navigation state across a page load, accessibility, smoke).
+   - If it does not — which is the common case — the coverage belongs at the layer that owns the logic (`packages/application`, `packages/domain`, `packages/adapters`, or a component test). You have already written those in step 3. **Write no spec, and say so in the summary.**
+   - If it does qualify: extend the existing spec for that capability rather than adding a file, and obey the policy's non-negotiable rules — no `test.skip()` on a self-probed condition, no `isVisible()` for control flow, no environment-variable gates.
    - **Do not run the e2e suite.** CI runs it — `.github/workflows/e2e.yml` fires on every pull request and push to `main` and `release/**`, sharded, against a full stack. A local run needs Postgres, Redis, MinIO and a built app, and only duplicates that. Run `/e2e` or `/e2e-cc-web` only if the user explicitly asks for a local run.
 5. On completion:
    - Move phase doc to `implemented/<release line>/v[version]/`. The release line comes from

@@ -33,7 +33,7 @@ sections.
 | Data & types | Domain entities, value objects and TypeScript types created or changed, with the shape of each change |
 | Files & packages touched | Paths to create, modify or delete, grouped under `domain` / `application` / `adapters` / `apps`, so architecture-boundary violations are visible before any code exists |
 | Database & migration impact | Tables and their group prefix, whether a generated migration is required, and the `-- data-impact:` line it will have to carry |
-| Tests | The test files written before each implementation file, and the named Playwright e2e spec that will be written but not run |
+| Tests | The test files written before each implementation file, and either the named Playwright e2e spec that will be extended (with the `e2e-test-policy.md` group it falls under) or an explicit "no e2e — behaviour is covered at `<layer>`" |
 | Version, branch & PR target | MINOR or PATCH and the resulting version, the `feature/<slug>` branch name, and `main` as both base and PR target |
 | Risks | What could break, and anything destructive or irreversible |
 | Out of scope | What is deliberately not being done in this phase |
@@ -87,11 +87,13 @@ Never create a doc just to house the summary.
 - Fix every failure before moving to the next sub-component
 - Do not proceed until `validate.sh` exits 0
 
-### Step 3 — Playwright e2e test (write it, don't run it)
+### Step 3 — Playwright e2e test (only if it qualifies; write it, don't run it)
 
-Once all sub-components pass validation, write at least one Playwright e2e test that exercises the completed feature end-to-end through the UI or API surface:
-- Place tests under `apps/web/e2e/` in a file named after the phase (e.g. `phase-<slug>.spec.ts`)
-- Cover the primary happy path and at least one error path visible to the user
+Once all sub-components pass validation, decide whether the feature needs an e2e test. A new phase is more likely to qualify than an enhancement or a fix, but it is still not automatic.
+
+- Read [`docs/guides/e2e-test-policy.md`](../../docs/guides/e2e-test-policy.md). Write a spec **only** for the parts of the feature that fall into one of its six groups (auth session lifecycle, streaming into the DOM, file upload/download, navigation state across a page load, accessibility, smoke). A phase often qualifies for *one* of these while the rest of it is covered by the sub-component tests from Step 2.
+- If no part of the feature qualifies, write no spec and **say so explicitly in the summary**, naming the layer that carries the coverage instead.
+- If it does qualify: extend the existing spec for that capability rather than adding a file, cover the happy path and one user-visible error path, and obey the policy's non-negotiable rules — no `test.skip()` on a self-probed condition, no `isVisible()` for control flow, no environment-variable gates.
 - **Do not run the e2e suite.** CI runs it — `.github/workflows/e2e.yml` fires on every pull request and push to `main` and `release/**`, sharded, against a full stack. A local run needs Postgres, Redis, MinIO and a built app, and only duplicates that. Run `/e2e` or `/e2e-cc-web` only if the user explicitly asks for a local run.
 - Review the spec by reading it, not by executing it: correct selectors, correct fixtures, no reliance on data another spec creates. If CI later reports it failing, fix it then.
 

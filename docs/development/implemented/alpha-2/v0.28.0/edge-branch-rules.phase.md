@@ -143,7 +143,7 @@ New pure domain module `entities/branch-rule.ts`:
   rule for ruled branches and the metadata fallback for un-ruled ones.
 - `apps/web/src/lib/canvas/canvas-guidance.test.ts` — forks missing rules are
   found; single-outgoing-edge nodes are ignored; fully-ruled forks are clean.
-- `apps/web/e2e/enhance-branch-rules.spec.ts` — **written, not run locally**
+- `apps/web/e2e/branch-rules.spec.ts` — **written, not run locally**
   (CI runs it): fork a step, see the warning badge and advisory, open the edge
   modal, save a rule, badge flips to the ruled state and the advisory clears
   once every forked edge is ruled.

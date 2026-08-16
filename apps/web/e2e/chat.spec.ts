@@ -14,9 +14,7 @@
  */
 
 import { test, expect } from './helpers/base';
-import { loadSeedFixtures } from './helpers/seed';
-
-const AI_MODE = process.env.USE_REAL_AI === 'true' ? 'REAL AI' : 'MOCKED AI';
+import { requireSeedFixtures } from './helpers/seed';
 
 test.describe('Chat: List', () => {
   test('chats list loads', async ({ page, consoleLogs }) => {
@@ -48,35 +46,8 @@ test.describe('Chat: List', () => {
 });
 
 test.describe('Chat: Session', () => {
-  /**
-   * Resolve an existing session ID by checking the /chats list.
-   * If no sessions exist this returns null and the test skips.
-   */
-  async function resolveExistingSessionId(page: import('@playwright/test').Page): Promise<string | null> {
-    const seeded = loadSeedFixtures()?.sessionId;
-    if (seeded) return seeded;
-
-    await page.goto('/chats');
-    await page.waitForLoadState('networkidle');
-
-    // Session cards link to /chats/[sessionId]. Nav links use bare "/chats"
-    // (no trailing slash + UUID) so a[href^="/chats/"] skips them safely.
-    const sessionLink = page.locator('a[href^="/chats/"]').first();
-    const href = await sessionLink.getAttribute('href').catch(() => null);
-
-    if (!href) return null;
-
-    const match = href.match(/\/chats\/([^/?]+)/);
-    return match?.[1] ?? null;
-  }
-
   test('session page loads', async ({ page, consoleLogs }) => {
-    const sessionId = await resolveExistingSessionId(page);
-
-    if (!sessionId) {
-      test.skip(true, 'No existing sessions found — create a flow and session to enable this test');
-      return;
-    }
+    const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
     await page.waitForLoadState('networkidle');
@@ -87,25 +58,14 @@ test.describe('Chat: Session', () => {
   });
 
   test('message input accepts text', async ({ page }) => {
-    const sessionId = await resolveExistingSessionId(page);
-
-    if (!sessionId) {
-      test.skip(true, 'No existing sessions found — skipping input test');
-      return;
-    }
+    const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
     await page.waitForLoadState('networkidle');
 
     // ChatComposer renders a <textarea> with placeholder "Message Wayfinder…"
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
-    const visible = await input.isVisible().catch(() => false);
-
-    if (!visible) {
-      await page.screenshot({ path: 'screenshots/chat-no-input-found.png', fullPage: true });
-      test.skip(true, 'Chat input not found — session may be complete/read-only. See screenshot.');
-      return;
-    }
+    await expect(input).toBeVisible();
 
     await input.fill('Hello, I need help with a workflow');
     await page.screenshot({ path: 'screenshots/chat-text-entered.png' });
@@ -113,23 +73,26 @@ test.describe('Chat: Session', () => {
   });
 
   test('sending a message shows AI response', async ({ page, consoleLogs }) => {
-    const sessionId = await resolveExistingSessionId(page);
-
-    if (!sessionId) {
-      test.skip(true, 'No existing sessions found — skipping send test');
-      return;
-    }
+    const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
     await page.waitForLoadState('networkidle');
 
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
-    const visible = await input.isVisible().catch(() => false);
+    await expect(input).toBeVisible();
 
-    if (!visible) {
-      test.skip(true, 'Chat input not found — session may be complete/read-only');
-      return;
-    }
+    // None of the four selectors this used to wait for exist in the feed:
+    // message-feed.tsx has no data-testid, no [role="log"], and its Tailwind
+    // classes contain no "message". It reported "AI response did not appear"
+    // for a reply that was on screen the whole time, and only surfaced at all
+    // once the composer guard stopped skipping the test.
+    //
+    // The reply has to be counted from a baseline, not merely found: the seed
+    // gives every session a thread that already contains assistant messages, so
+    // "an assistant bubble is visible" is true before a single word is sent.
+    // Counting from before the send is what makes this about *this* turn.
+    const assistantBubbles = page.locator('[data-chat-message="assistant"]');
+    const bubblesBefore = await assistantBubbles.count();
 
     await input.fill('Hello');
 
@@ -140,42 +103,27 @@ test.describe('Chat: Session', () => {
     // Wait for AI response (mocked = fast, real = up to 30s)
     const timeout = process.env.USE_REAL_AI === 'true' ? 30_000 : 8_000;
 
-    try {
-      await page.waitForSelector([
-        '[data-testid="message"]',
-        '[class*="message"]',
-        '[class*="chat-message"]',
-        '[role="log"] > *',
-      ].join(', '), { timeout });
-
-      await page.screenshot({ path: 'screenshots/chat-ai-responded.png', fullPage: true });
-    } catch {
-      await page.screenshot({ path: 'screenshots/chat-after-send-timeout.png', fullPage: true });
-      throw new Error(`AI response did not appear within ${timeout}ms — see screenshot`);
-    }
+    // Greater-than rather than exactly one more: a single streamed response can
+    // split into several bubbles at finish_step boundaries (message-feed.tsx),
+    // so an exact count would be asserting the shape of the reply, not that one
+    // arrived.
+    await expect
+      .poll(() => assistantBubbles.count(), { timeout })
+      .toBeGreaterThan(bubblesBefore);
+    await page.screenshot({ path: 'screenshots/chat-ai-responded.png', fullPage: true });
 
     const errors = consoleLogs.filter(l => l.type === 'error');
     expect(errors, `Errors during chat:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
   });
 
   test('multi-turn conversation works', async ({ page, consoleLogs }) => {
-    const sessionId = await resolveExistingSessionId(page);
-
-    if (!sessionId) {
-      test.skip(true, 'No existing sessions found — skipping multi-turn test');
-      return;
-    }
+    const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
     await page.waitForLoadState('networkidle');
 
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
-    const visible = await input.isVisible().catch(() => false);
-
-    if (!visible) {
-      test.skip(true, 'Chat input not found — skipping multi-turn test');
-      return;
-    }
+    await expect(input).toBeVisible();
 
     const timeout = process.env.USE_REAL_AI === 'true' ? 30_000 : 8_000;
     const messages = [
@@ -183,7 +131,13 @@ test.describe('Chat: Session', () => {
       'My name is Test User and I work at Example Corp',
     ];
 
+    const assistantBubbles = page.locator('[data-chat-message="assistant"]');
+
     for (let i = 0; i < messages.length; i++) {
+      // Per-turn baseline: the seeded thread already carries assistant
+      // messages, so only the growth across this turn says a reply arrived.
+      const bubblesBefore = await assistantBubbles.count();
+
       await input.fill(messages[i]);
 
       // Same headless-mode portal issue — use Enter consistently.
@@ -199,8 +153,14 @@ test.describe('Chat: Session', () => {
         { timeout }
       ).catch(() => {});
 
-      // Wait for the response to appear before the next turn
-      await page.waitForSelector('[class*="message"], [data-testid="message"]', { timeout }).catch(() => {});
+      // Wait for the response to appear before the next turn.
+      //
+      // This used to wait on the same dead selectors and then `.catch(() => {})`
+      // the timeout, so the test spent 8s per turn proving nothing and passed
+      // regardless. Each turn must add at least one assistant bubble.
+      await expect
+        .poll(() => assistantBubbles.count(), { timeout })
+        .toBeGreaterThan(bubblesBefore);
 
       await page.screenshot({
         path: `screenshots/chat-turn-${i + 1}.png`,

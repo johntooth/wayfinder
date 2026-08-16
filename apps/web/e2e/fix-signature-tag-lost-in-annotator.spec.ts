@@ -22,7 +22,8 @@
 
 import { test, expect } from './helpers/base';
 import type { Page, Route } from '@playwright/test';
-import { loadSeedFixtures } from './helpers/seed';
+import { requireSeedFixtures } from './helpers/seed';
+import { createFlowAndOpenCanvas } from './helpers/flow-builder';
 
 const fakeDocx = () => Buffer.from('PK\x03\x04 fake docx content');
 
@@ -33,19 +34,6 @@ const SIGNATURE_ROW = {
   locked: false,
 };
 
-async function createFlowAndOpenCanvas(page: Page, name: string): Promise<void> {
-  await page.goto('/admin/flows');
-  await page.waitForLoadState('networkidle');
-
-  await page.getByRole('button', { name: /new flow/i }).first().click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.locator('#flow-name').fill(name);
-  await page.locator('#flow-expert-role').fill('E2E Signature Expert');
-  await page.getByRole('button', { name: /create flow/i }).click();
-  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 }).catch(() => undefined);
-  await page.waitForLoadState('networkidle');
-  await page.waitForTimeout(1_200);
-}
 
 async function addDocumentStep(page: Page): Promise<void> {
   await page.getByRole('button', { name: '+ Create your first step in your workflow' }).click();
@@ -86,7 +74,7 @@ async function uploadTemplate(page: Page): Promise<void> {
 
 test.describe('fix: the signature tag survives the annotation editor', () => {
   test('lists an (approval) tag as a Signature rather than as Text', async ({ page }) => {
-    await createFlowAndOpenCanvas(page, `Signature Annotation ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Signature Annotation ${Date.now()}`, { expertRole: 'E2E Signature Expert' });
     await addDocumentStep(page);
     await mockAnalyse(page, [SIGNATURE_ROW]);
 
@@ -101,7 +89,7 @@ test.describe('fix: the signature tag survives the annotation editor', () => {
   });
 
   test('offers Signature in the type dropdown, with the row already on it', async ({ page }) => {
-    await createFlowAndOpenCanvas(page, `Signature Type ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Signature Type ${Date.now()}`, { expertRole: 'E2E Signature Expert' });
     await addDocumentStep(page);
     await mockAnalyse(page, [SIGNATURE_ROW]);
 
@@ -118,7 +106,7 @@ test.describe('fix: the signature tag survives the annotation editor', () => {
   // The fault that destroyed the author's document: every reviewed row is
   // re-serialised from the model and written back into the stored .docx.
   test('re-emits (approval) after the row is edited, not (optional)', async ({ page }) => {
-    await createFlowAndOpenCanvas(page, `Signature Roundtrip ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Signature Roundtrip ${Date.now()}`, { expertRole: 'E2E Signature Expert' });
     await addDocumentStep(page);
     await mockAnalyse(page, [SIGNATURE_ROW]);
 
@@ -135,7 +123,7 @@ test.describe('fix: the signature tag survives the annotation editor', () => {
   });
 
   test('the settings cog offers no constraints for a signature', async ({ page }) => {
-    await createFlowAndOpenCanvas(page, `Signature Config ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Signature Config ${Date.now()}`, { expertRole: 'E2E Signature Expert' });
     await addDocumentStep(page);
     await mockAnalyse(page, [SIGNATURE_ROW]);
 
@@ -152,7 +140,7 @@ test.describe('fix: the signature tag survives the annotation editor', () => {
   });
 
   test('documents (approval) in the complete annotation reference', async ({ page }) => {
-    await createFlowAndOpenCanvas(page, `Signature Reference ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Signature Reference ${Date.now()}`, { expertRole: 'E2E Signature Expert' });
     await addDocumentStep(page);
     // A document with no placeholders routes to the "no fields yet" panel, which
     // is where the reference is reachable from.
@@ -168,9 +156,7 @@ test.describe('fix: the signature tag survives the annotation editor', () => {
 
 test.describe('fix: a lone signature slot is bound rather than assumed', () => {
   test('shows the slot dropdown when the subject step declares a signature', async ({ page }) => {
-    const seed = loadSeedFixtures();
-    const flowId = seed?.approvalSubjectFlowId;
-    test.skip(!flowId, 'No seeded approval flow — run the seed setup project');
+    const flowId = requireSeedFixtures().approvalSubjectFlowId;
 
     await page.goto(`/flows/${flowId}/config`);
     await page.waitForLoadState('networkidle');

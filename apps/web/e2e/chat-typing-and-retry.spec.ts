@@ -18,29 +18,23 @@
 
 import { test, expect } from './helpers/base';
 import { delayChatStream, failChatStream } from './helpers/chat-mock';
-import { loadSeedFixtures } from './helpers/seed';
+import { requireSeedFixtures } from './helpers/seed';
 
 async function openSessionWithComposer(
   page: import('@playwright/test').Page,
-): Promise<import('@playwright/test').Locator | null> {
-  let sessionId = loadSeedFixtures()?.sessionId;
-  if (!sessionId) {
-    await page.goto('/chats');
-    await page.waitForLoadState('networkidle');
-
-    const sessionLink = page.locator('a[href^="/chats/"]').first();
-    const href = await sessionLink.getAttribute('href').catch(() => null);
-    if (!href) return null;
-
-    sessionId = href.match(/\/chats\/([^/?]+)/)?.[1];
-  }
-  if (!sessionId) return null;
+): Promise<import('@playwright/test').Locator> {
+  // Scraping the first link out of /chats used to be the fallback here. It
+  // picked whichever session the run happened to have created by then, so the
+  // composer it returned was not always the seeded one. The seed is a declared
+  // dependency of this project, so the composer must render — a missing one is
+  // a failure to surface, not a reason to skip.
+  const { sessionId } = requireSeedFixtures();
 
   await page.goto(`/chats/${sessionId}`);
   await page.waitForLoadState('networkidle');
 
   const composer = page.getByRole('textbox').first();
-  if (!(await composer.isVisible().catch(() => false))) return null;
+  await expect(composer).toBeVisible();
   return composer;
 }
 
@@ -50,10 +44,6 @@ test.describe('Chat: Typing indicator', () => {
     await delayChatStream(page, 3000);
 
     const composer = await openSessionWithComposer(page);
-    if (!composer) {
-      test.skip(true, 'No active session with a usable composer found');
-      return;
-    }
 
     await composer.fill('Hello there');
     await composer.press('Enter');
@@ -72,10 +62,6 @@ test.describe('Chat: Retry on failure', () => {
     await failChatStream(page);
 
     const composer = await openSessionWithComposer(page);
-    if (!composer) {
-      test.skip(true, 'No active session with a usable composer found');
-      return;
-    }
 
     await composer.fill('This will fail');
     await composer.press('Enter');

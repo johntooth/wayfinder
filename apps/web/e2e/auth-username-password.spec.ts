@@ -41,15 +41,14 @@ test.describe('Auth: Username / Password login', () => {
     await page.waitForLoadState('networkidle');
 
     const registerLink = page.getByRole('link', { name: /register/i });
-    if (!(await registerLink.isVisible().catch(() => false))) {
-      await page.screenshot({ path: 'screenshots/auth-login-no-register-link.png', fullPage: true });
-      test.skip(true, 'Register link not found on login page — UI may have changed');
-      return;
-    }
+    await expect(registerLink).toBeVisible();
 
     await registerLink.click();
-    await page.waitForLoadState('networkidle');
-    await expect(page).toHaveURL(/\/register/);
+    // waitForURL over networkidle + toHaveURL: the client-side nav can lag a
+    // slow hydration, and networkidle resolving first left toHaveURL to time out
+    // at its 5s default against a still-/login page (a flake in run #702).
+    // waitForURL waits for the navigation itself, with headroom.
+    await page.waitForURL(/\/register/, { timeout: 15_000 });
     await page.screenshot({ path: 'screenshots/auth-register-from-login.png', fullPage: true });
   });
 });

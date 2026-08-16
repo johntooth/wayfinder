@@ -3,7 +3,7 @@
 - **Version**: 0.27.6 → **0.28.0** (MINOR — new column on `app_flow_edges`)
 - **Base branch**: `release/alpha-2`
 - **Phase doc**: `edge-branch-rules.phase.md` (this folder)
-- **E2E**: `apps/web/e2e/enhance-branch-rules.spec.ts` (written, run in CI)
+- **E2E**: `apps/web/e2e/branch-rules.spec.ts` (written, run in CI)
 
 ## What changed
 
