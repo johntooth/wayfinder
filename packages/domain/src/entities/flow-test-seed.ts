@@ -5,6 +5,49 @@ import type { StepOutputField } from "./session-step-output";
 import type { TemplateField } from "./template-field";
 import { validateTemplateFieldValue } from "./template-field";
 
+// The only part of an edge this needs, declared structurally so a caller can
+// pass rows straight from the repository.
+export interface SeedEdge {
+  readonly fromNodeId: string;
+  readonly toNodeId: string;
+}
+
+// Every node from which `targetNodeId` is reachable — the steps that would have
+// run before it, and therefore the steps a seed has to stand in for. Reverse
+// breadth-first over incoming edges, and cycle-safe: a flow can loop back on
+// itself when an approval requests changes (ADR-044), so a naive walk would not
+// terminate. The target itself is never included.
+export const nodesPrecedingNode = (
+  edges: readonly SeedEdge[],
+  targetNodeId: string,
+): string[] => {
+  const incoming = new Map<string, string[]>();
+  for (const edge of edges) {
+    const existing = incoming.get(edge.toNodeId);
+    if (existing) {
+      existing.push(edge.fromNodeId);
+      continue;
+    }
+    incoming.set(edge.toNodeId, [edge.fromNodeId]);
+  }
+
+  const preceding: string[] = [];
+  const seen = new Set<string>([targetNodeId]);
+  const queue = [targetNodeId];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const parent of incoming.get(current) ?? []) {
+      if (seen.has(parent)) continue;
+      seen.add(parent);
+      preceding.push(parent);
+      queue.push(parent);
+    }
+  }
+
+  return preceding;
+};
+
 // One seeded value that will not be written, and why. Rejects are reported to
 // the author rather than dropped: a generated seed that quietly substitutes a
 // legal value for an illegal one makes a broken step look sound, and a cloned

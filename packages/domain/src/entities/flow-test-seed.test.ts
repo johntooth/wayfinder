@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FlowNode } from "./flow-node";
 import type { FlowTestSeed } from "./flow-test-fixture";
-import { validateSeedAgainstNodes } from "./flow-test-seed";
+import { nodesPrecedingNode, validateSeedAgainstNodes } from "./flow-test-seed";
 
 const node = (id: string, fields: Record<string, unknown>[]): FlowNode => ({
   id,
@@ -216,5 +216,48 @@ describe("validateSeedAgainstNodes", () => {
     const result = validateSeedAgainstNodes(seed, nodes);
 
     expect(result.accepted.stepOutputs).toEqual([]);
+  });
+});
+
+describe("nodesPrecedingNode", () => {
+  const edge = (fromNodeId: string, toNodeId: string) => ({ fromNodeId, toNodeId });
+
+  it("returns the whole chain leading to the target", () => {
+    const edges = [edge("a", "b"), edge("b", "c"), edge("c", "d")];
+
+    expect(nodesPrecedingNode(edges, "d").sort()).toEqual(["a", "b", "c"]);
+  });
+
+  it("excludes the target itself", () => {
+    expect(nodesPrecedingNode([edge("a", "b")], "b")).not.toContain("b");
+  });
+
+  it("returns nothing for the root", () => {
+    expect(nodesPrecedingNode([edge("a", "b")], "a")).toEqual([]);
+  });
+
+  it("excludes branches that do not reach the target", () => {
+    // a splits to b and c; only b leads to d.
+    const edges = [edge("a", "b"), edge("a", "c"), edge("b", "d")];
+
+    expect(nodesPrecedingNode(edges, "d").sort()).toEqual(["a", "b"]);
+  });
+
+  it("gathers both arms of a join", () => {
+    const edges = [edge("a", "b"), edge("a", "c"), edge("b", "d"), edge("c", "d")];
+
+    expect(nodesPrecedingNode(edges, "d").sort()).toEqual(["a", "b", "c"]);
+  });
+
+  it("terminates on a flow that loops back on itself", () => {
+    // An approval at "c" can send work back to "b" (ADR-044), so the graph
+    // legitimately contains a cycle.
+    const edges = [edge("a", "b"), edge("b", "c"), edge("c", "b"), edge("c", "d")];
+
+    expect(nodesPrecedingNode(edges, "d").sort()).toEqual(["a", "b", "c"]);
+  });
+
+  it("returns nothing when the target is not in the graph", () => {
+    expect(nodesPrecedingNode([edge("a", "b")], "elsewhere")).toEqual([]);
   });
 });
