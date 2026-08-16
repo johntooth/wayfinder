@@ -1,4 +1,4 @@
-import { and, desc, eq, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, lt, notInArray, sql, type SQL } from "drizzle-orm";
 import {
   domainError,
   err,
@@ -250,6 +250,46 @@ export class DrizzleSessionRepository implements ISessionRepository {
       return ok({ items: trimmed.map(toEntity), nextCursor });
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list all sessions.", cause));
+    }
+  }
+
+  async deleteTestSession(id: string): Promise<Result<void>> {
+    try {
+      const rows = await this.db
+        .delete(app_sessions)
+        .where(and(eq(app_sessions.id, id), eq(app_sessions.mode, "test")))
+        .returning();
+      if (rows.length === 0) {
+        return err(domainError("NOT_FOUND", "Test session not found."));
+      }
+      return ok(undefined);
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to delete test session.", cause));
+    }
+  }
+
+  async listTestSessionsOlderThan(
+    cutoff: Date,
+    limit: number,
+    excludedSessionIds: readonly string[],
+  ): Promise<Result<Session[]>> {
+    try {
+      const clauses: SQL[] = [
+        eq(app_sessions.mode, "test"),
+        lt(app_sessions.created_at, cutoff),
+      ];
+      if (excludedSessionIds.length > 0) {
+        clauses.push(notInArray(app_sessions.id, [...excludedSessionIds]));
+      }
+      const rows = await this.db
+        .select()
+        .from(app_sessions)
+        .where(and(...clauses))
+        .orderBy(app_sessions.created_at)
+        .limit(limit);
+      return ok(rows.map(toEntity));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to list expired test sessions.", cause));
     }
   }
 

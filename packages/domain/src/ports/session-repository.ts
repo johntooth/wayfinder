@@ -70,6 +70,17 @@ export interface ISessionRepository {
   ): Promise<Result<SessionListPage<Session>>>;
   listAllPage(options: SessionListPageOptions): Promise<Result<SessionListPage<Session>>>;
   update(id: string, patch: SessionUpdate): Promise<Result<Session>>;
+  // Deletes a session only if it is a test run. The mode check is in the SQL as
+  // well as in the calling use-case: this is the only delete path sessions have,
+  // and a live session is a customer's record of work (ADR-048 §6).
+  deleteTestSession(id: string): Promise<Result<void>>;
+  // Test runs older than the cutoff, oldest first, excluding any session under
+  // a legal hold. Bounded by `limit` so one sweep cannot rewrite the table.
+  listTestSessionsOlderThan(
+    cutoff: Date,
+    limit: number,
+    excludedSessionIds: readonly string[],
+  ): Promise<Result<Session[]>>;
   // Atomically take the turn lease if it is free or expired. `leaseSeconds` is
   // the staleness window after which a stamped-but-crashed turn can be taken over.
   claimTurn(

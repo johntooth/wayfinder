@@ -198,6 +198,32 @@ export class FakeSessionRepository implements ISessionRepository {
     return ok(updated);
   }
 
+  async deleteTestSession(id: string): Promise<Result<void>> {
+    const existing = this.sessions.get(id);
+    if (!existing || (existing.mode ?? "live") !== "test") {
+      return err(domainError("NOT_FOUND", "Test session not found."));
+    }
+    this.sessions.delete(id);
+    return ok(undefined);
+  }
+
+  async listTestSessionsOlderThan(
+    cutoff: Date,
+    limit: number,
+    excludedSessionIds: readonly string[],
+  ): Promise<Result<Session[]>> {
+    const excluded = new Set(excludedSessionIds);
+    const rows = [...this.sessions.values()]
+      .filter(
+        (session) =>
+          (session.mode ?? "live") === "test" &&
+          session.createdAt.getTime() < cutoff.getTime() &&
+          !excluded.has(session.id),
+      )
+      .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
+    return ok(rows.slice(0, limit));
+  }
+
   async claimTurn(): Promise<Result<never>> { return notUsed(); }
   async heartbeatTurn(): Promise<Result<void>> { return ok(undefined); }
   async releaseTurn(): Promise<Result<void>> { return ok(undefined); }

@@ -19,10 +19,16 @@ export interface FlowTestStepReport {
   // Every `stepCompleteConfidence` recorded on this step, in order, so the
   // author can see a step converging — or oscillating.
   confidenceTrajectory: number[];
-  // Whether the readiness gate let the step advance, and what it was still
-  // waiting for if not. Null when the step was never gated.
-  gatePassed: boolean | null;
-  missingInformation: string[];
+  // Whether the run got past this step. Derived from the transcript — a later
+  // step having turns means this one advanced — because the readiness gate's
+  // own verdict is computed per turn and never persisted.
+  //
+  // The gate's `missingInformation` is deliberately absent for the same reason:
+  // EvaluateStepReadiness returns it to the turn that asked, and nothing writes
+  // it down, so it cannot be recovered after the run. Reporting it would mean
+  // persisting gate outcomes, which is a change to the runner this feature is
+  // built specifically not to make.
+  advanced: boolean;
   // Set when this step generated a document, so the modal can offer it for
   // download rather than only reporting that generation happened.
   documentFilename: string | null;
