@@ -15,21 +15,8 @@
 
 import { test, expect } from './helpers/base';
 import type { Page, Route } from '@playwright/test';
+import { createFlowAndOpenCanvas } from './helpers/flow-builder';
 
-async function createFlowAndOpenCanvas(page: Page, name: string): Promise<void> {
-  await page.goto('/admin/flows');
-  await page.waitForLoadState('networkidle');
-
-  await page.getByRole('button', { name: /new flow/i }).first().click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.locator('#flow-name').fill(name);
-  await page.locator('#flow-expert-role').fill('E2E Spreadsheet Expert');
-  await page.getByRole('button', { name: /create flow/i }).click();
-  // Creating a flow lands on the canvas editor directly (v0.21.0).
-  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 }).catch(() => undefined);
-  await page.waitForLoadState('networkidle');
-  await page.waitForTimeout(1_200);
-}
 
 async function addGenerateDocumentStep(page: Page): Promise<void> {
   const addStepButtons = page.getByRole('button', { name: '+ Add step' });
@@ -47,7 +34,7 @@ const fakeXlsx = Buffer.from('PK\x03\x04 fake xlsx content');
 
 test.describe('phase: spreadsheet (xlsx) templates', () => {
   test('uploading a header-row .xlsx shows the detected header mode', async ({ page }) => {
-    await createFlowAndOpenCanvas(page, `Xlsx Header ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Xlsx Header ${Date.now()}`, { expertRole: 'E2E Spreadsheet Expert' });
     await addGenerateDocumentStep(page);
 
     // The file input accepts spreadsheets alongside Word documents.
@@ -112,7 +99,7 @@ test.describe('phase: spreadsheet (xlsx) templates', () => {
   });
 
   test('a rejected .xlsx upload surfaces the server error to the author', async ({ page }) => {
-    await createFlowAndOpenCanvas(page, `Xlsx Reject ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Xlsx Reject ${Date.now()}`, { expertRole: 'E2E Spreadsheet Expert' });
     await addGenerateDocumentStep(page);
 
     await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template\/analyse$/, async (route: Route) => {

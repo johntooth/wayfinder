@@ -35,6 +35,7 @@ import { useSidebar } from "@/components/sidebar-context";
 import {
   formatRecentChatMeta,
   isNewChatShortcut,
+  recentChatSessions,
   resolveActiveHref,
 } from "@/components/sidebar-model";
 import { UsageMeter, UsageRing } from "@/components/usage-meter";
@@ -418,9 +419,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
 
   const recentChats = isAdmin
     ? []
-    : (sessionsQuery.data ?? [])
-        .filter((session) => session.status !== "abandoned")
-        .slice(0, 8)
+    : recentChatSessions(sessionsQuery.data ?? [])
         .map((session) => {
           const flow = publishedFlowsQuery.data?.find((f) => f.id === session.flowId);
           return {
@@ -450,7 +449,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   ]);
 
   const brand = (trailing?: React.ReactNode) => (
-    <div className="flex items-center gap-[9px] px-[6px]">
+    <div className="flex shrink-0 items-center gap-[9px] px-[6px]">
       <Link href={homeHref} onClick={closeMobile} aria-label="Wayfinder home">
         <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[7px] bg-[#2f56d3] text-[13px] font-bold text-white">
           W
@@ -498,7 +497,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   );
 
   const footer = (
-    <div className="mt-auto flex flex-col gap-[8px] px-[4px] pb-[4px] pt-[10px]">
+    <div className="flex shrink-0 flex-col gap-[8px] px-[4px] pb-[4px] pt-[10px]">
       {isAdmin && (
         <button
           onClick={() => {
@@ -584,8 +583,15 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     </div>
   );
 
+  // The only part of the rail that scrolls. `min-h-0` is what makes it scroll
+  // rather than grow: a flex child defaults to `min-height: auto`, which refuses
+  // to shrink below its content, so an admin rail with every group expanded
+  // would push the footer out of the container and off the screen.
   const railBody = (
-    <>
+    <div
+      data-testid="app-sidebar-scroll"
+      className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto"
+    >
       <nav className="flex flex-col gap-[2px]">
         <NavGroups
           groups={nav}
@@ -595,15 +601,17 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
         />
       </nav>
       {recentChatsBlock}
-    </>
+    </div>
   );
 
   return (
     <>
-      {/* Desktop rail — tinted surface, single hairline, no panel shadow. */}
+      {/* Desktop rail — tinted surface, single hairline, no panel shadow. Brand
+          and footer are pinned; only the nav and Recent block between them
+          scroll, so the account menu is always reachable. */}
       <aside
         data-testid="app-sidebar"
-        className="hidden w-[246px] shrink-0 flex-col gap-[18px] overflow-y-auto border-r border-[#e7e3db] bg-[#f5f3ee] px-[14px] py-[18px] sm:flex"
+        className="hidden w-[246px] shrink-0 flex-col gap-[18px] overflow-hidden border-r border-[#e7e3db] bg-[#f5f3ee] px-[14px] py-[18px] sm:flex"
       >
         {brand()}
         {railBody}
@@ -623,7 +631,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
           {/* Drawer */}
           <div
             data-testid="app-sidebar-drawer"
-            className="fixed bottom-0 left-0 top-0 z-50 flex w-[246px] flex-col gap-[18px] overflow-y-auto bg-[#f5f3ee] px-[14px] py-[18px] shadow-[4px_0_20px_rgba(28,27,25,.12)]"
+            className="fixed bottom-0 left-0 top-0 z-50 flex w-[246px] flex-col gap-[18px] overflow-hidden bg-[#f5f3ee] px-[14px] py-[18px] shadow-[4px_0_20px_rgba(28,27,25,.12)]"
           >
             {brand(
               <button

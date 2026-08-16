@@ -23,22 +23,10 @@
 
 import { test, expect } from './helpers/base';
 import type { Page, Route } from '@playwright/test';
+import { createFlowAndOpenCanvas } from './helpers/flow-builder';
 
 const fakeDocx = () => Buffer.from('PK\x03\x04 fake docx content');
 
-async function createFlowAndOpenCanvas(page: Page, name: string): Promise<void> {
-  await page.goto('/admin/flows');
-  await page.waitForLoadState('networkidle');
-
-  await page.getByRole('button', { name: /new flow/i }).first().click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.locator('#flow-name').fill(name);
-  await page.locator('#flow-expert-role').fill('E2E Template Expert');
-  await page.getByRole('button', { name: /create flow/i }).click();
-  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 }).catch(() => undefined);
-  await page.waitForLoadState('networkidle');
-  await page.waitForTimeout(1_200);
-}
 
 async function addDocumentStep(page: Page): Promise<void> {
   await page
@@ -105,7 +93,7 @@ async function uploadTemplate(page: Page): Promise<void> {
 
 test.describe('enhance: guided annotation upload', () => {
   test('the placeholders in the document are listed and accepted as they are', async ({ page }) => {
-    await createFlowAndOpenCanvas(page, `Template Annotation ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Template Annotation ${Date.now()}`, { expertRole: 'E2E Template Expert' });
     await addDocumentStep(page);
 
     await mockAnalyse(page, {
@@ -151,7 +139,7 @@ test.describe('enhance: guided annotation upload', () => {
   });
 
   test('a document with no placeholders is shown how to add them', async ({ page }) => {
-    await createFlowAndOpenCanvas(page, `Template No Fields ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Template No Fields ${Date.now()}`, { expertRole: 'E2E Template Expert' });
     await addDocumentStep(page);
 
     await mockAnalyse(page, {
@@ -185,7 +173,7 @@ test.describe('enhance: guided annotation upload', () => {
   });
 
   test('the raw annotation string updates live as the field is edited', async ({ page }) => {
-    await createFlowAndOpenCanvas(page, `Template Live Line ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Template Live Line ${Date.now()}`, { expertRole: 'E2E Template Expert' });
     await addDocumentStep(page);
 
     await mockAnalyse(page, {
@@ -236,7 +224,7 @@ test.describe('enhance: guided annotation upload', () => {
   test('re-uploading the edited document restarts the flow with the new fields', async ({
     page,
   }) => {
-    await createFlowAndOpenCanvas(page, `Template Reupload ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Template Reupload ${Date.now()}`, { expertRole: 'E2E Template Expert' });
     await addDocumentStep(page);
 
     // The author adds placeholders in Word between the two uploads, so the same
@@ -287,7 +275,7 @@ test.describe('enhance: guided annotation upload', () => {
   });
 
   test('the config icon takes an accent colour when a non-default option is set', async ({ page }) => {
-    await createFlowAndOpenCanvas(page, `Field Cog Accent ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Field Cog Accent ${Date.now()}`, { expertRole: 'E2E Template Expert' });
 
     await page
       .getByRole('button', { name: '+ Create your first step in your workflow' })

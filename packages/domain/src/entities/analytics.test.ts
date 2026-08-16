@@ -766,19 +766,75 @@ describe("computeFieldReport", () => {
 
     expect(report.columns.every((column) => column.versionGroupId === "amount::version")).toBe(true);
   });
+
+  it("drops the applies_to column an approval step projected before it was retired", () => {
+    // The key is gone from APPROVAL_PROJECTION_FIELDS, so nothing writes it any
+    // more — but every approval decided before that still carries it, and the
+    // report builds its columns from whatever the stored rows contain.
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n2",
+          createdAt: new Date("2026-05-20T02:00:00Z"),
+          fields: [
+            { key: "outcome", label: "Outcome", type: "text", value: "approved" },
+            { key: "decided_by", label: "Decided by", type: "text", value: "Jane Doe" },
+            {
+              key: "applies_to",
+              label: "Applies to",
+              type: "text",
+              value: 'the output of the step "Intake"',
+            },
+          ],
+        },
+      ],
+      [{ id: "n2", name: "Approval", type: "approval" }],
+      [sessionS1],
+    );
+
+    expect(report.columns.map((column) => column.fieldKey)).toEqual(["outcome", "decided_by"]);
+    expect(report.rows[0]?.values["n2:applies_to"]).toBeUndefined();
+  });
+
+  it("keeps an applies_to field a non-approval step authored", () => {
+    // An approval step has no author-defined fields, only projected ones, which
+    // is what makes dropping the key safe there. Anywhere else the same key is
+    // somebody's template field and must survive.
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n1",
+          createdAt: new Date("2026-05-20T01:00:00Z"),
+          fields: [
+            { key: "applies_to", label: "Applies to", type: "text", value: "Northern region" },
+          ],
+        },
+      ],
+      [{ id: "n1", name: "Intake", type: "conversational" }],
+      [sessionS1],
+    );
+
+    expect(report.columns.map((column) => column.columnKey)).toEqual(["n1:applies_to"]);
+    expect(report.rows[0]?.values["n1:applies_to"]).toBe("Northern region");
+  });
 });
 
 describe("APPROVAL_PROJECTION_FIELDS", () => {
-  it("names the seven keys a decision projects, in report order", () => {
+  it("names the six keys a decision projects, in report order", () => {
     expect(APPROVAL_PROJECTION_FIELDS.map((field) => field.key)).toEqual([
       "outcome",
       "revision",
       "decided_at",
       "decided_by",
       "approver_email",
-      "applies_to",
       "comment",
     ]);
+  });
+
+  it("no longer projects the approval subject, which the record still holds", () => {
+    expect(APPROVAL_PROJECTION_FIELDS.some((field) => field.key === "applies_to")).toBe(false);
   });
 
   it("types the revision as a number, so it filters and pivots as one", () => {

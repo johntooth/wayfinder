@@ -338,7 +338,7 @@ export function MessageFeed({
                   at={msg.createdAt}
                 />
               ) : msg.role === "user" ? (
-                <div className="flex justify-end">
+                <div className="flex justify-end" data-chat-message="user">
                   <div
                     title={senderName ?? undefined}
                     className="max-w-[460px] rounded-[14px] rounded-br-[4px] bg-[#ebe8e0] px-4 py-3"
@@ -355,7 +355,7 @@ export function MessageFeed({
                   </div>
                 </div>
               ) : (
-                <div className="flex gap-[14px]">
+                <div className="flex gap-[14px]" data-chat-message="assistant">
                   <AgentMark initials={botInitials} />
                   <div className="relative min-w-0 flex-1">
                     <MarkdownText
@@ -463,7 +463,7 @@ export function MessageFeed({
               <div key={msg.id} className="flex flex-col gap-5">
               {segments.map((segment, segmentIndex) =>
                 msg.role === "user" ? (
-                  <div key={segmentIndex} className="flex justify-end">
+                  <div key={segmentIndex} className="flex justify-end" data-chat-message="user">
                     <div className="max-w-[460px] rounded-[14px] rounded-br-[4px] bg-[#ebe8e0] px-4 py-3">
                       <p className="whitespace-pre-wrap text-[14px] leading-[1.5] text-[#1c1b19]">
                         {segment}
@@ -471,7 +471,7 @@ export function MessageFeed({
                     </div>
                   </div>
                 ) : (
-                  <div key={segmentIndex} className="flex gap-[14px]">
+                  <div key={segmentIndex} className="flex gap-[14px]" data-chat-message="assistant">
                     <AgentMark initials={botInitials} />
                     <div className="min-w-0 flex-1">
                       <MarkdownText

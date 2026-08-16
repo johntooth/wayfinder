@@ -1,0 +1,2 @@
+-- data-impact: preserved — additive column with a default; existing edges backfill to '{}' and keep routing on the destination step's metadata until an author writes a branch rule
+ALTER TABLE "app_flow_edges" ADD COLUMN "config" jsonb DEFAULT '{}'::jsonb NOT NULL;

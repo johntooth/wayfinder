@@ -17,21 +17,8 @@
 
 import { test, expect } from './helpers/base';
 import type { Page, Route } from '@playwright/test';
+import { createFlowAndOpenCanvas } from './helpers/flow-builder';
 
-async function createFlowAndOpenCanvas(page: Page, name: string): Promise<void> {
-  await page.goto('/admin/flows');
-  await page.waitForLoadState('networkidle');
-
-  await page.getByRole('button', { name: /new flow/i }).first().click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.locator('#flow-name').fill(name);
-  await page.locator('#flow-expert-role').fill('E2E Groups Expert');
-  await page.getByRole('button', { name: /create flow/i }).click();
-  // Creating a flow lands on the canvas editor directly (v0.21.0).
-  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 }).catch(() => undefined);
-  await page.waitForLoadState('networkidle');
-  await page.waitForTimeout(1_200);
-}
 
 async function addGenerateDocumentStep(page: Page): Promise<void> {
   const addStepButtons = page.getByRole('button', { name: '+ Add step' });
@@ -45,7 +32,7 @@ async function addGenerateDocumentStep(page: Page): Promise<void> {
 
 test.describe('phase: repeating / structured groups', () => {
   test('the tags help dialog documents the (repeat) group marker', async ({ page }) => {
-    await createFlowAndOpenCanvas(page, `Groups Help ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Groups Help ${Date.now()}`, { expertRole: 'E2E Groups Expert' });
     await addGenerateDocumentStep(page);
 
     await page.getByRole('button', { name: 'How template tags work' }).click();
@@ -57,7 +44,7 @@ test.describe('phase: repeating / structured groups', () => {
   });
 
   test('a group nested inside a section is rejected on upload with a clear message', async ({ page }) => {
-    await createFlowAndOpenCanvas(page, `Groups Nesting ${Date.now()}`);
+    await createFlowAndOpenCanvas(page, `Groups Nesting ${Date.now()}`, { expertRole: 'E2E Groups Expert' });
     await addGenerateDocumentStep(page);
 
     // The real dry-run (extractFields) raises this on a nested group. Since

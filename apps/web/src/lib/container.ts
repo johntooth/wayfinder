@@ -15,6 +15,7 @@ import {
   ListGroupMembers,
   AddGroupMember,
   SetGroupMemberRole,
+  SetFlowEdgeBranchRule,
   RemoveGroupMember,
   ResolveGroupAuthorization,
   CreateUser,
@@ -213,6 +214,7 @@ import {
   type ResolvedAdminSettings,
 } from "./cached-admin-settings";
 import { serverEnv } from "./env";
+import { getScriptedLanguageModel } from "./scripted-llm";
 
 const globalForContainer = globalThis as typeof globalThis & {
   _wayfinder_container: ReturnType<typeof build> | undefined;
@@ -371,12 +373,16 @@ const build = () => {
     maxConcurrent: env.LLM_MAX_CONCURRENCY,
     maxAttempts: env.LLM_MAX_ATTEMPTS,
   });
-  const baseLlm = new LanguageModelAdapter(
-    env.AI_DEFAULT_PROVIDER,
-    runtimeConfig,
-    llmGovernor,
-    errorLogger,
-  );
+  // The E2E suite's AI mock is a browser route intercept, which cannot reach
+  // the calls made here on the server — so specs asserting on turn, branching
+  // and document-gate behaviour had nothing to control. Under TEST_AUTH_BYPASS
+  // the provider is replaced by a scripted stand-in that the test-only
+  // /api/test/ai-script route drives per session. It is swapped in at the base,
+  // inside the decorator chain below, so quota enforcement and usage tracking
+  // stay under test rather than being bypassed along with the provider.
+  const baseLlm =
+    getScriptedLanguageModel() ??
+    new LanguageModelAdapter(env.AI_DEFAULT_PROVIDER, runtimeConfig, llmGovernor, errorLogger);
   // Decorator order (ADR-026 §3): quota enforcement is outermost so it blocks
   // before the inner usage-tracking + provider call runs. The same enforcer is
   // shared with the chat stream route, which calls the SDK outside the port.
@@ -696,6 +702,7 @@ const build = () => {
       deleteFlowNode: new DeleteFlowNode(flowNodes),
       createFlowEdge: new CreateFlowEdge(flowEdges),
       deleteFlowEdge: new DeleteFlowEdge(flowEdges),
+      setFlowEdgeBranchRule: new SetFlowEdgeBranchRule(flowEdges),
       addContextDoc: new AddContextDoc(flows),
       removeContextDoc: new RemoveContextDoc(flows),
       addSessionUpload: new AddSessionUpload(sessionUploads),

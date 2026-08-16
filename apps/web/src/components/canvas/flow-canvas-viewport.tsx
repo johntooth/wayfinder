@@ -16,14 +16,16 @@ import {
 } from "@xyflow/react";
 import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { NODE_TYPES } from "@/lib/canvas/rf-adapters";
+import { EDGE_TYPES, NODE_TYPES } from "@/lib/canvas/rf-adapters";
 import {
   findDisconnectedNodeIds,
+  findForksMissingBranchRule,
   findNextStepAnchor,
   findUnclaimedSignatureSlots,
   type NextStepAnchor,
 } from "@/lib/canvas/canvas-guidance";
 import { DisconnectedStepsWarning } from "./disconnected-steps-warning";
+import { MissingBranchRulesWarning } from "./missing-branch-rules-warning";
 import { UnclaimedSignaturesWarning } from "./unclaimed-signatures-warning";
 
 // The shared canvas surface for both the user and admin flow-config screens:
@@ -64,6 +66,10 @@ export function FlowCanvasViewport({
     () => findUnclaimedSignatureSlots(nodes, edges),
     [nodes, edges],
   );
+  const forksMissingRules = useMemo(
+    () => findForksMissingBranchRule(nodes, edges),
+    [nodes, edges],
+  );
 
   return (
     <div className="relative flex-1">
@@ -71,6 +77,7 @@ export function FlowCanvasViewport({
         nodes={nodes}
         edges={edges}
         nodeTypes={NODE_TYPES}
+        edgeTypes={EDGE_TYPES}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
@@ -126,6 +133,7 @@ export function FlowCanvasViewport({
           problem stacks them rather than overlapping them on the canvas. */}
       <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex w-[calc(100%-2rem)] max-w-[900px] -translate-x-1/2 flex-col gap-2">
         <DisconnectedStepsWarning count={disconnectedCount} />
+        <MissingBranchRulesWarning forks={forksMissingRules} />
         <UnclaimedSignaturesWarning slots={unclaimedSignatures} />
       </div>
       {staleReferences.length > 0 && (

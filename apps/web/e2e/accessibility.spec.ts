@@ -80,17 +80,16 @@ test.describe('Accessibility: WCAG 2.2 AA runtime audit', () => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
-    // Open the first flow in the list, if any, to reach the editor route.
-    const firstFlow = page.getByRole('link', { name: /open|edit|flow/i }).first();
-    const editButton = page.getByRole('button', { name: /open|edit/i }).first();
-    if (await firstFlow.count()) {
-      await firstFlow.click();
-    } else if (await editButton.count()) {
-      await editButton.click();
-    } else {
-      test.skip(true, 'No seeded flow to open');
-      return;
-    }
+    // Open the seeded flow to reach the editor route. It appears in the admin
+    // list as a "Configure Flow" link (matched by /flow/i); the seed is a
+    // declared dependency, so a missing entry is a seed failure to surface, not
+    // a reason to skip the editor audit.
+    const flowEntry = page
+      .getByRole('link', { name: /open|edit|flow/i })
+      .or(page.getByRole('button', { name: /open|edit/i }))
+      .first();
+    await expect(flowEntry).toBeVisible();
+    await flowEntry.click();
     await page.waitForLoadState('networkidle');
 
     const results = await runAxe(page, true);

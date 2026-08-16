@@ -48,6 +48,7 @@ const makeEdge = (overrides: Partial<FlowEdge> = {}): FlowEdge => ({
   flowId: "flow-1",
   fromNodeId: "node-1",
   toNodeId: "node-2",
+  config: {},
   createdAt: new Date("2026-01-01"),
   updatedAt: new Date("2026-01-01"),
   ...overrides,
@@ -81,7 +82,19 @@ describe("buildFlowSnapshot", () => {
   it("captures edges as from/to node id pairs", () => {
     const snapshot = buildFlowSnapshot(makeFlow(), [], [makeEdge()]);
 
-    expect(snapshot.edges).toEqual([{ id: "edge-1", fromNodeId: "node-1", toNodeId: "node-2" }]);
+    expect(snapshot.edges).toEqual([
+      { id: "edge-1", fromNodeId: "node-1", toNodeId: "node-2", config: {} },
+    ]);
+  });
+
+  it("captures an edge's branch rule, so a published version routes by the rules it froze", () => {
+    const snapshot = buildFlowSnapshot(
+      makeFlow(),
+      [],
+      [makeEdge({ config: { branchRule: "the claim is over £10,000" } })],
+    );
+
+    expect(snapshot.edges[0]!.config).toEqual({ branchRule: "the claim is over £10,000" });
   });
 
   it("returns the same shape for identical inputs (immutable definition)", () => {
@@ -119,10 +132,32 @@ describe("flowNodesFromSnapshot / flowEdgesFromSnapshot", () => {
         flowId: "flow-9",
         fromNodeId: "n1",
         toNodeId: "n2",
+        config: {},
         createdAt: at,
         updatedAt: at,
       },
     ]);
+  });
+
+  it("rebuilds an edge's branch rule from the snapshot", () => {
+    const ruled = buildFlowSnapshot(
+      makeFlow(),
+      [],
+      [makeEdge({ id: "e1", config: { branchRule: "spend is over £50k" } })],
+    );
+
+    expect(flowEdgesFromSnapshot("flow-9", ruled, at)[0]!.config).toEqual({
+      branchRule: "spend is over £50k",
+    });
+  });
+
+  it("reads a legacy snapshot edge with no config back as an edge with empty config", () => {
+    const legacy = {
+      ...snapshot,
+      edges: [{ id: "e1", fromNodeId: "n1", toNodeId: "n2" }],
+    };
+
+    expect(flowEdgesFromSnapshot("flow-9", legacy, at)[0]!.config).toEqual({});
   });
 });
 
