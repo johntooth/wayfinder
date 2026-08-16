@@ -181,6 +181,15 @@ file-upload specs into one) and dropping the `fix-*`/`enhance-*`/`phase-*` prefi
 suite risks the exact silently-broken test this effort removes, so it should ride
 a pass with the stack up (`/e2e-cc-web` or the PR's CI).
 
+**Folded in when `release/alpha-2` merged (branch-rules feature, v0.28.0).** The
+base's `enhance-branch-rules.spec.ts` arrived carrying the pattern this branch
+removes — a ticket-style name and four `test.skip(!flowId, …)` guards on a fixture
+the spec itself needs (`forkFlowId`). Renamed to `branch-rules.spec.ts` and the
+four guards replaced with `requireSeedFixtures()`, so a missing fork flow fails
+the run instead of skipping green. CI confirmed the fork flow seeds (those four
+tests ran and passed in run #706 before the change), so the conversion loses no
+coverage. The two v0.28.0 feature docs were updated to the new filename.
+
 ---
 
 ## 4. Traps in this repo — learned the hard way

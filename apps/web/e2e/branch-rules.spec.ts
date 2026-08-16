@@ -1,16 +1,20 @@
 import { test, expect } from "./helpers/base";
-import { loadSeedFixtures } from "./helpers/seed";
+import { requireSeedFixtures } from "./helpers/seed";
 
 // E2E for branch rules on edges.
-// (docs/development/implemented/alpha-2/v0.28/edge-branch-rules.phase.md)
+// (docs/development/implemented/alpha-2/v0.28.0/edge-branch-rules.phase.md)
 //
 // Runs in CI (.github/workflows/e2e.yml) against a full stack — excluded from
-// the vitest unit run. Assumes the seeded fixture in
+// the vitest unit run. Uses the seeded fixture in
 // apps/web/src/lib/e2e-fixtures.ts:
 //
 //   seedForkFlow — "Request Intake" forks into "Standard Purchase" and
 //     "Procurement Approval", with no branch rules on either edge. That is the
 //     un-ruled fork this enhancement is about, so the spec needs no new seed.
+//
+// forkFlowId is a required seed key (helpers/seed.ts), and the chromium project
+// depends on the seed setup, so requireSeedFixtures() throws — rather than the
+// spec skipping — if the fork flow is ever missing.
 //
 // What is under test:
 //   1. A forked connector carries the indicator; the unforked connectors do not.
@@ -25,8 +29,6 @@ import { loadSeedFixtures } from "./helpers/seed";
 // Assertions read the data attributes the edge and advisory expose rather than
 // SVG geometry, so they stay stable against canvas layout.
 
-const seed = loadSeedFixtures();
-
 const FIRST_RULE = "the purchase is under £1,000 and needs no sign-off";
 const SECOND_RULE = "the purchase is £1,000 or more and needs sign-off";
 
@@ -39,10 +41,9 @@ const advisory = (page: import("@playwright/test").Page) =>
 
 test.describe("branch rules on forked connectors", () => {
   test("only the forked connectors carry an indicator", async ({ page }) => {
-    const flowId = seed?.forkFlowId;
-    test.skip(!flowId, "No seeded fork flow — run the seed setup project");
+    const { forkFlowId } = requireSeedFixtures();
 
-    await page.goto(`/flows/${flowId}/config`);
+    await page.goto(`/flows/${forkFlowId}/config`);
     await expect(page.getByText("Request Intake").first()).toBeVisible();
 
     // Four edges in the seeded flow, but only the two leaving "Request Intake"
@@ -56,10 +57,9 @@ test.describe("branch rules on forked connectors", () => {
   });
 
   test("the advisory names the forking step and explains the fix", async ({ page }) => {
-    const flowId = seed?.forkFlowId;
-    test.skip(!flowId, "No seeded fork flow — run the seed setup project");
+    const { forkFlowId } = requireSeedFixtures();
 
-    await page.goto(`/flows/${flowId}/config`);
+    await page.goto(`/flows/${forkFlowId}/config`);
     await expect(page.getByText("Request Intake").first()).toBeVisible();
 
     const warning = advisory(page);
@@ -69,10 +69,9 @@ test.describe("branch rules on forked connectors", () => {
   });
 
   test("clicking an indicator opens the modal and a saved rule persists", async ({ page }) => {
-    const flowId = seed?.forkFlowId;
-    test.skip(!flowId, "No seeded fork flow — run the seed setup project");
+    const { forkFlowId } = requireSeedFixtures();
 
-    await page.goto(`/flows/${flowId}/config`);
+    await page.goto(`/flows/${forkFlowId}/config`);
     await expect(page.getByText("Request Intake").first()).toBeVisible();
 
     const firstBadge = branchBadges(page).first();
@@ -108,10 +107,9 @@ test.describe("branch rules on forked connectors", () => {
   test("ruling every branch clears the advisory, and removing one brings it back", async ({
     page,
   }) => {
-    const flowId = seed?.forkFlowId;
-    test.skip(!flowId, "No seeded fork flow — run the seed setup project");
+    const { forkFlowId } = requireSeedFixtures();
 
-    await page.goto(`/flows/${flowId}/config`);
+    await page.goto(`/flows/${forkFlowId}/config`);
     await expect(page.getByText("Request Intake").first()).toBeVisible();
 
     // Rule whichever branches are still open, so the spec does not depend on
