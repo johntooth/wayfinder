@@ -334,3 +334,45 @@ latency, turns-to-advance and gate outcomes back into the modal.
   misleading; real token spend.
 - **Out of scope** — assertions, CI runs, concurrency, run diffing, replaying a
   live session against a modified draft.
+
+## 10. Approved build summary
+
+Approved at `/build` on 2026-08-16, after `/doc-review` settled the open
+questions in §8. Recorded here so the plan the build followed is on the record.
+
+Flow authors get a **Test** action on the canvas that runs an unpublished draft —
+whole flow or a single mid-flow step — inside a near-full-screen modal, without
+publishing and without leaving the canvas. Prior-step data is simulated by
+writing ordinary assistant messages and step-output rows into a disposable
+session marked `mode = "test"`, so the production runner executes unmodified and
+simply sees a session that appears to have reached node N.
+
+### Confirmed against the codebase before building
+
+- `buildAggregateGatheredContextStatement`
+  (`drizzle-session-message-repository.ts:66`) selects
+  `ai_payload->'contextGathered'` from assistant messages with a non-null
+  `step_node_id`, ordered by `seq`. A seeded row therefore needs
+  `role = 'assistant'`, `step_node_id` set, and `ai_payload.contextGathered` as a
+  JSON array — and the query itself needs no change, as ADR-048 claims.
+- The retention worker runs in **`apps/api`**, not `apps/web`:
+  `ApplyRetentionPolicies` is wired at `apps/api/src/container.ts:222`. The sweep
+  wires in beside it, not in the web container that §5 names.
+
+### Branch and PR target
+
+Built on `claude/flow-test-runs-phase-review-vxgun0`, which is based on
+`release/alpha-2`, with the PR raised against `release/alpha-2`. This departs
+from the `/build` skill, which mandates a `feature/<slug>` branch from `main` and
+a PR against `main`; the departure follows the requester's explicit `/doc-review`
+decision and the session's branch constraint. Version **0.29.0**, MINOR.
+
+### Build order
+
+Nineteen sub-components, strictly bottom-up, `./validate.sh` green before each
+next step: domain types and the pure seed validator (1–3); the application
+use-cases for starting, seeding, cloning and generating (4–7); schema, migration
+and the five-repository isolation predicate (8–11); the seed proposer (12);
+approvals under test (13); report, delete and sweep (14); the tRPC router and
+container wiring (15); the modal and its two panes (16–17); the `validate.sh`
+guard and the Playwright spec (18); version, doc move and PR (19).
