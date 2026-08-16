@@ -44,8 +44,11 @@ test.describe('Auth: Username / Password login', () => {
     await expect(registerLink).toBeVisible();
 
     await registerLink.click();
-    await page.waitForLoadState('networkidle');
-    await expect(page).toHaveURL(/\/register/);
+    // waitForURL over networkidle + toHaveURL: the client-side nav can lag a
+    // slow hydration, and networkidle resolving first left toHaveURL to time out
+    // at its 5s default against a still-/login page (a flake in run #702).
+    // waitForURL waits for the navigation itself, with headroom.
+    await page.waitForURL(/\/register/, { timeout: 15_000 });
     await page.screenshot({ path: 'screenshots/auth-register-from-login.png', fullPage: true });
   });
 });
