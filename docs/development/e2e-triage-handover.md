@@ -34,28 +34,42 @@ as a non-negotiable.
 
 ---
 
-## 2. The formerly-red test — status: GREEN in CI, watch for recurrence
+## 2. The "persistence defect" was a locator bug, not a product defect
 
-> **Update (PR #244, run #700 on `1ed0202`): this test PASSED — the whole e2e
-> job was 85 passed · 0 failed.** The reload-race fix `918a4f2` (wait for the
-> stream body to close before reloading, hypothesis 3 below) is in this branch,
-> and with it the turn has demonstrably committed before the reload asserts. The
-> handover called that fix "changed nothing" on the strength of #695, but the
-> runs since — with the guard converted from a skip to an assertion so the test
-> actually runs — are green.
+> **Resolved (PR #244, run #702 on `471fe96`).** The first *complete* run's app
+> log gives the observation four rounds of static reading could not: the failure
+> is a Playwright **strict-mode violation** —
+> `getByText('Recorded — this turn is committed to the thread.') resolved to 2
+> elements` — on the assistant-reply assertion. The reply is not absent; it is
+> **present twice**. A turn that completes its step renders the reply as more
+> than one bubble (the feed splits at finish_step boundaries — `message-feed.tsx`,
+> and `chat.spec.ts` already documents this), so `getByText` matches every
+> segment and the unscoped locator fails strict mode. The error text
+> ("assistant reply after reload … toBeVisible failed") reads exactly like the
+> row being missing, which is how it was diagnosed as a persistence defect.
 >
-> It was historically **intermittent** ("one reproduction is not proof", §6), so
-> one green run is not proof of a fix either. Treatment: keep watching CI. If it
-> reddens again, the next step is still the one below — get the row — and that
-> needs a docker-capable stack (this triage's sandbox has no Postgres), so it is
-> a CI-or-devbox job, not a static-reading one. The diagnostic history is kept
-> below because it is the map for that day.
+> The assertion was only added in this branch — before it, the reload re-checked
+> only the user message — so it had never passed, and its one failure mode is
+> this strict-mode violation, not a lost row. Fix: `.first()` on both
+> `ASSISTANT_REPLY` assertions (before and after reload). The reload half still
+> genuinely proves persistence: the reply text is in the DOM after a document
+> reload, so the row committed.
+>
+> Earlier runs (`#690`–`#695`) reported this test as the sole red; `#700`/`#701`
+> looked green but were **cancelled** partial runs (successive pushes tripped
+> `cancel-in-progress`) that never finished the code-quality shard, so their
+> "green" was noise. `#702` is the first shard-complete run, and it is what
+> surfaced the real cause. CI will confirm the `.first()` fix; if a *genuine*
+> absence ever appears (reply text not in the DOM at all), that is a different
+> failure and would need the row from a docker-capable stack (this sandbox has
+> no Postgres). The diagnostic history below is kept as the map for that day.
 
 **`code-quality-hot-paths.spec.ts` › Group C: transactional turn persistence ›
 `a committed turn keeps its user message and assistant reply after reload`**
 
-Historically failed with `Error: assistant reply after reload`. The **user**
-message survives the reload; the **assistant** reply did not.
+Historically reported `Error: assistant reply after reload` — read as: the
+**user** message survives the reload, the **assistant** reply did not. The
+observation above reframes that as a strict-mode match on a segmented reply.
 
 Seen in runs #690, #692, #694, #695. Run #693 failed differently (45s timeout) —
 that variant is explained by the `networkidle` wait, now removed.
