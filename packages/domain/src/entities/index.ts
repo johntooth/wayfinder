@@ -25,6 +25,8 @@ export * from "./flow-visibility";
 export * from "./flow-version";
 export * from "./flow-export";
 export * from "./flow-export-manifest";
+export * from "./flow-import-resolve";
+export * from "./flow-import-rewrite";
 export * from "./extraction-schema";
 export * from "./extraction-draft-document";
 export * from "./extraction-record";
