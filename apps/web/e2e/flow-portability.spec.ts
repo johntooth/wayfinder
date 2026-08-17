@@ -13,11 +13,11 @@
  *   packages/application/src/use-cases/flow/flow-portability.test.ts
  *   apps/web/src/app/api/flows/**\/route.test.ts
  *
- * The export tests depend on the seeded flow's template and context-document
- * objects actually existing in MinIO. They did not — e2e-fixtures.ts wrote the
+ * The export tests depend on the seeded flows' template and context-document
+ * objects actually existing in MinIO. They did not — the fixture files wrote
  * storage *paths* into node config and never wrote the objects, so export
- * returned NOT_FOUND and the download assertion was unreachable by
- * construction. seedStorageObjects() now writes a placeholder at each path.
+ * returned NOT_FOUND. seedStorageObjects() now writes a placeholder at every
+ * path any fixture file references.
  */
 
 import { test, expect } from './helpers/base';
@@ -41,16 +41,24 @@ test.describe('Flow portability: export download', () => {
   });
 
   test('the admin flow list offers an export download per row', async ({ page }) => {
+    const { flowId } = requireSeedFixtures();
+
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
-    const exportLink = page.getByRole('link', { name: /^Export / }).first();
+    // Targeted by href, not `.first()`: the admin list shows every seeded flow
+    // and its order is not ours to rely on. Picking an arbitrary row made this
+    // assert against whichever fixture happened to sort first.
+    const exportLink = page.locator(`a[href="/api/flows/${flowId}/export"]`);
     await expect(exportLink).toBeVisible();
 
     const downloadPromise = page.waitForEvent('download');
     await exportLink.click();
     const download = await downloadPromise;
 
+    // A failed export still downloads — the browser saves the JSON error body
+    // as `export.json`, named from the URL's last segment. Asserting the
+    // extension is therefore asserting that the export actually succeeded.
     expect(download.suggestedFilename()).toMatch(/\.zip$/);
   });
 });

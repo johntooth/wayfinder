@@ -151,6 +151,13 @@ sight of them at Step 0:
   lines against an 800-line hard limit, so this feature's wiring lives in
   `lib/container-flow-portability.ts` alongside the existing `container-*`
   modules. The net change to `container.ts` is zero lines.
+- **A failed export still downloads.** The row action and canvas control are
+  plain `<a download>` links, so when the route answers with a JSON error the
+  browser saves that body as `export.json`, named from the URL's last segment,
+  rather than reporting the error in the page. Routing the download through
+  JavaScript would mean buffering the whole archive in the page, which the link
+  avoids. The e2e spec asserts the `.zip` extension precisely because that is
+  what distinguishes a real export from this case.
 - **Duplicate does not copy flow permissions.** The copy is owned by whoever
   duplicated it, with no shared-viewer grants carried over.
 
