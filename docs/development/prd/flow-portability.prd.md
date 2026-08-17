@@ -4,8 +4,8 @@
 - **Date**: 2026-08-11
 - **Author**: Solo / Claude Code
 - **Target version**: **0.30.0** — **MINOR** (new feature, no schema change).
-  Allocated at `/doc-review` against `release/alpha-2` (`0.28.4` at the time);
-  `0.29.0` is claimed on another branch. See §9.
+  Allocated at `/doc-review`; `main` sat at `0.28.4` and `0.29.0` is claimed on
+  another branch. See §9.
 
 ## 1. Problem
 
@@ -138,12 +138,10 @@ object-storage keys.
   MCP tools on `admin_mcp_servers.label` plus `McpToolRef.toolName`. Neither
   column is unique, so resolution can be ambiguous; see §10 for the decided
   behaviour.
-- **Branch and version**: `CLAUDE.md` routes new features to `main` and keeps
-  release branches to fixes and enhancements. This feature is a deliberate
-  exception — it is built on **`release/alpha-2`** at the requester's direction,
-  because the customers driving it are on the current release line. Target
-  version **0.30.0**; implemented docs land in
-  `docs/development/implemented/alpha-2/v0.30.0/`.
+- **Branch and version**: standard routing per `CLAUDE.md` — new features land on
+  **`main`**, the next release line. Target version **0.30.0**; implemented docs
+  land in `docs/development/implemented/alpha-3/v0.30.0/`, the line `CLAUDE.md`
+  names for `main`.
 
 ## 10. Acceptance criteria
 

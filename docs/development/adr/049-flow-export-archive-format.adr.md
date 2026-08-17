@@ -1,7 +1,7 @@
 # ADR-049 — Flow Portability: A Zip Archive Around the Existing Snapshot
 
 - **Status**: Proposed (scoped by `flow-portability.prd.md`, target **0.30.0** on
-  `release/alpha-2`)
+  `main`)
 - **Date**: 2026-08-11
 - **Builds on**: ADR-015 *Flow Versioning via Immutable Snapshots* (the
   serialisation this reuses rather than reinvents), ADR-006 *Wayfinder Flow and

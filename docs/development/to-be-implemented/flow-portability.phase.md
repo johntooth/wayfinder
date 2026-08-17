@@ -2,13 +2,13 @@
 
 - **Status**: Reviewed — `/doc-review` passed, ready to build
 - **Target version**: **0.30.0** — **MINOR** (new feature, **no schema change**).
-  Allocated against `release/alpha-2`, which sat at `0.28.4`; `0.29.0` is claimed
-  on another branch.
-- **Base branch**: **`release/alpha-2`.** `CLAUDE.md` routes new features to
-  `main` and keeps release branches to fixes and enhancements — this is a
-  deliberate exception at the requester's direction, because the customers
-  driving the feature are on the current line. Implemented docs go to
-  `docs/development/implemented/alpha-2/v0.30.0/`.
+  `main` sat at `0.28.4`; `0.29.0` is claimed on another branch.
+- **Base branch**: **`main`**, per `CLAUDE.md` — new features land on the next
+  release line. Implemented docs go to
+  `docs/development/implemented/alpha-3/v0.30.0/` (`alpha-3` is the next release
+  line named in `CLAUDE.md`, read from the branch and never from the version
+  number). An earlier draft of this doc targeted `release/alpha-2`; that was
+  reverted to the standard routing before the build.
 - **PRD**: `docs/development/prd/flow-portability.prd.md`
 - **ADR**: `docs/development/adr/049-flow-export-archive-format.adr.md`
 - **Depends on**: ADR-015 *Flow Versioning via Immutable Snapshots*
@@ -219,7 +219,7 @@ are shared, not reimplemented — see step 5.
 
 12. **Version + validate.** Set `VERSION` and root `package.json#version` to
     **0.30.0**. Run `./validate.sh`; fix all failures. Move this doc to
-    `docs/development/implemented/alpha-2/v0.30.0/` with an implementation
+    `docs/development/implemented/alpha-3/v0.30.0/` with an implementation
     summary.
 
 ## 7. Acceptance criteria
@@ -331,10 +331,58 @@ versioning. Import is inspect-then-commit: the archive is opened and reported on
 - **Out of scope** — merging into an existing flow, a marketplace, instance data,
   signed archives, a separate export permission, end-to-end streaming.
 
-**Amended at `/doc-review` (2026-08-17).** Version fixed at 0.30.0 on
-`release/alpha-2`; the `kb_collection` dependency kind removed (no such concept
+**Amended at `/doc-review` (2026-08-17).** Version fixed at 0.30.0 on `main`
+(docs to `implemented/alpha-3/`); the `kb_collection` dependency kind removed (no such concept
 exists); MCP identity corrected to the server `label`; ambiguous matches decided
 as unresolved-not-guessed; the unresolved flag given a home and a publish gate;
 ceilings given numbers and buffering accepted in place of streaming; PizZip
 confirmed as the library with its guards shared with `ZipIngestor`; one
 Playwright spec added under e2e policy group 3.
+
+## 10. Approved build summary
+
+Approved at `/build`, 2026-08-17. Base `main`, target **0.30.0**, docs to
+`implemented/alpha-3/v0.30.0/`.
+
+**Headline.** A flow's definition becomes a portable `.zip` — `manifest.json`
+wrapping `FlowSnapshot` verbatim, plus an `assets/` directory of uploaded
+templates and context documents. Export from the flow list or the canvas; import
+into any other deployment, where the archive is opened, validated and reported on
+before a single row is written, then committed as a new draft flow owned by the
+importer. Skills and MCP tools travel by name and resolve against the
+destination; what does not resolve lands as a flagged node that blocks publish
+rather than a silent gap. Duplicate is the same machinery without the file
+round-trip.
+
+- **Goal** — staging-to-production promotion, shippable starter flows, in-place
+  duplication, a definition reviewable outside the database, and export as an
+  audited event.
+- **Business rules** — definition only, never instance data; references export by
+  name and an ambiguous match is never guessed; unresolved dependencies block
+  publish but not import; import always creates a new draft flow; the archive is
+  untrusted input throughout.
+- **UI** — Export/Duplicate on flow rows, Import on the list header, Export on
+  the canvas toolbar; an import dialog whose inspection panel precedes any write;
+  warning badges on flagged nodes; publish errors naming what is unresolved.
+- **Data** — `FlowExportManifest`, `FlowExportAsset`, `FlowExportDependency`,
+  `FlowImportInspection`, `IFlowArchiveReader`/`IFlowArchiveWriter`, and
+  `unresolvedDependencies` on node config. `FlowSnapshot` and `IObjectStorage`
+  unchanged.
+- **Database** — none. No migration, no `-- data-impact:` line.
+- **Tests** — test file before implementation file at every layer; one Playwright
+  spec (`flow-portability.spec.ts`) under e2e policy group 3, file upload and
+  download; nothing else in the feature qualifies.
+- **Risks** — untrusted-archive handling; refactoring the security-critical
+  `ZipIngestor` onto shared guards; buffered assets bounded only by the ceilings;
+  export as an exfiltration path.
+- **Out of scope** — merging into an existing flow, a marketplace, signed
+  archives, instance data, exporting a specific published version, a distinct
+  export permission, end-to-end streaming.
+
+**Added at `/build` (not in §5–§7 above).** `ApprovalSubject`
+(`{ kind: "step", nodeId }`) and `ChangesRequestedTarget`
+(`{ kind: "step", nodeId }`) embed node ids *inside node config*. Regenerating
+node ids without remapping them would leave an imported approval node pointing at
+an id that does not exist, and a `changes_requested` decision would silently fall
+back to `nearest_editable`. `rewriteSnapshot` remaps both, with a test asserting
+it.
