@@ -131,6 +131,11 @@ export function FlowConfigHeader({
         <Button size="sm" variant="outline" onClick={onAddStep}>
           + Add step
         </Button>
+        <Button size="sm" variant="outline" asChild>
+          <a href={`/api/flows/${flowId}/export`} download>
+            Export
+          </a>
+        </Button>
         <div className="relative" ref={flowMenuRef}>
           <Button
             size="sm"

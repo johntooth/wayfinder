@@ -16,6 +16,8 @@ export * from "./n8n/n8n-workflow-directory";
 export * from "./documents/index";
 export * from "./exports/index";
 export * from "./extraction/index";
+export * from "./archives/index";
+export * from "./flows/index";
 export * from "./storage/index";
 export * from "./config/index";
 export * from "./email/index";
