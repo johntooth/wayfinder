@@ -59,7 +59,7 @@ round-trip.
 - `packages/application/src/use-cases/flow/publish-flow-version.ts` — refuses a
   flow whose live nodes still carry `unresolvedDependencies`.
 - `apps/web/src/server/routers/flow.ts` — `flow.duplicate`.
-- `apps/web/src/lib/container.ts` — wires `ZipFlowArchive` and the four use-cases.
+- `apps/web/src/lib/container.ts` — builds the portability module (net zero lines).
 - `apps/web/src/app/(admin)/admin/flows/_content.tsx` — Import button, row actions.
 - `apps/web/src/app/(user)/flows/[id]/config/_flow-config-header.tsx` — Export.
 - `apps/web/src/components/canvas/conversational-node.tsx`, `mcp-node.tsx` — badge.
@@ -77,7 +77,7 @@ impact.
 
 ## Deviations from the approved change summary
 
-Five, all recorded here rather than absorbed silently.
+Six, all recorded here rather than absorbed silently.
 
 1. **`FlowExportDependency` carries an opaque `sourceId`.** The manifest keys
    dependencies by name while the embedded snapshot keeps the exporting
