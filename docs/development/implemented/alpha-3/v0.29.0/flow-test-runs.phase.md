@@ -3,11 +3,15 @@
 - **Status**: Reviewed — `/doc-review` passed 2026-08-16. Ready to build.
 - **Target version**: **0.29.0** — **MINOR** (new feature + additive
   `app_sessions.mode` column + one new `app_` table).
-- **Base branch**: **`release/alpha-2`**, at the requester's direction. This
-  departs from `CLAUDE.md`, which routes new features to `main`; recorded so the
-  exception is visible. The implemented doc lands in
-  `docs/development/implemented/alpha-2/v0.29.0/`. 0.29.0 rather than 0.28.0
-  because the line already carries 0.28.4 and versions never go backwards.
+- **Base branch**: **`main`**, per `CLAUDE.md`'s routing of new features to the
+  next release line. The implemented doc lands in
+  `docs/development/implemented/alpha-3/v0.29.0/`. 0.29.0 rather than 0.28.0
+  because `main` already carries 0.28.4 after the alpha-2 forward-merge, and
+  versions never go backwards.
+
+  This was built on `release/alpha-2` first, at the requester's direction, and
+  moved to `main` before review. The move was a clean rebase: alpha-2 is fully
+  merged into `main`, so no release-line commits travelled with it.
 - **PRD**: `docs/development/prd/flow-test-runs.prd.md`
 - **ADR**: `docs/development/adr/048-flow-test-sessions-and-seeded-context.adr.md`
 - **Depends on**: ADR-006 (flow/session schema), ADR-007 (session-scoped
@@ -224,13 +228,13 @@ test file before each implementation file (`CLAUDE.md`).
     component test.
 
 13. **Guard the untouched runner.** Add a `validate.sh` check that fails if the
-    diff against `release/alpha-2` touches `run-turn`, `evaluate-step-readiness`,
+    diff against `main` touches `run-turn`, `evaluate-step-readiness`,
     `buildSystemPrompt` or the stream route. This is what makes "the runner is
     unchanged" a fact rather than an intention.
 
 14. **Version + validate.** Set `VERSION` and root `package.json#version` to
     `0.29.0`. Run `./validate.sh`; fix all failures. Move this doc to
-    `docs/development/implemented/alpha-2/v0.29.0/` with an implementation
+    `docs/development/implemented/alpha-3/v0.29.0/` with an implementation
     summary.
 
 ## 7. Acceptance criteria
@@ -303,7 +307,7 @@ Carried from PRD §12:
 
 Recorded per the `/new-feature` lifecycle; approved 2026-08-11. Revised
 2026-08-16 at `/doc-review`: version and line allocated (0.29.0 on
-`release/alpha-2`), the isolation enumeration corrected from four repositories to
+`main`), the isolation enumeration corrected from four repositories to
 five, latency re-sourced to message timestamps, and the six open questions in §8
 settled.
 
@@ -364,10 +368,10 @@ simply sees a session that appears to have reached node N.
 ### Branch and PR target
 
 Built on `claude/flow-test-runs-phase-review-vxgun0`, which is based on
-`release/alpha-2`, with the PR raised against `release/alpha-2`. This departs
-from the `/build` skill, which mandates a `feature/<slug>` branch from `main` and
-a PR against `main`; the departure follows the requester's explicit `/doc-review`
-decision and the session's branch constraint. Version **0.29.0**, MINOR.
+`main`, with the PR raised against `main` — the line `CLAUDE.md` routes new
+features to. The branch name is the session's own rather than `feature/<slug>`,
+which is the one remaining departure from the `/build` skill. Version
+**0.29.0**, MINOR.
 
 ### Build order
 

@@ -144,16 +144,15 @@ writes ordinary rows into them, which is the mechanism, not a workaround.
   deliberately does not touch, and **ADR-018** for the approver resolution it
   deliberately overrides under test. Where an ADR number is used twice in
   `docs/development/adr/`, it is cited here by filename.
-- **Branch and version**: settled at `/doc-review` on 2026-08-16. This builds on
-  **`release/alpha-2`** at the requester's direction, at version **0.29.0**, with
+- **Branch and version**: this builds on **`main`**, at version **0.29.0**, with
   the implemented doc landing in
-  `docs/development/implemented/alpha-2/v0.29.0/`.
+  `docs/development/implemented/alpha-3/v0.29.0/` — the routing `CLAUDE.md`
+  specifies for a new feature.
 
-  This is a deliberate departure from `CLAUDE.md`, which routes new features to
-  `main` and reserves release lines for fixes and enhancements. Recorded here so
-  the exception is visible rather than inferred. The version is 0.29.0 rather
-  than 0.28.0 because `release/alpha-2` already carries 0.28.4 and versions never
-  go backwards across lines.
+  It was built on `release/alpha-2` first, at the requester's direction, and
+  moved to `main` before review. The version is unaffected: `main` already
+  carries 0.28.4 after the alpha-2 forward-merge, so a MINOR bump lands on
+  0.29.0 either way.
 
 ## 10. Acceptance criteria
 

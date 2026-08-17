@@ -4,7 +4,7 @@
 - **PRD**: `docs/development/prd/flow-test-runs.prd.md`
 - **ADR**: `docs/development/adr/048-flow-test-sessions-and-seeded-context.adr.md`
 - **Version**: 0.29.0 — MINOR (new feature + additive schema)
-- **Base branch**: `release/alpha-2`
+- **Base branch**: `main` (release line `alpha-3`)
 
 ## What was built
 

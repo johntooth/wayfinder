@@ -466,7 +466,7 @@ RUNNER_PATHS=(
   "packages/adapters/src/agents/flow-session-graph.ts"
   "apps/web/src/app/api/chat"
 )
-RUNNER_BASE="${RUNNER_BASE_REF:-origin/release/alpha-2}"
+RUNNER_BASE="${RUNNER_BASE_REF:-origin/main}"
 if ! git rev-parse --verify --quiet "$RUNNER_BASE" > /dev/null; then
   pass "runner guard skipped — base ref '$RUNNER_BASE' not present in this clone"
 else
