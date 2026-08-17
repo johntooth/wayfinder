@@ -406,7 +406,7 @@ beforeEach(() => {
   archive = new FakeArchive();
   generatedKeys = 1;
 
-  exportFlow = new ExportFlow(flows, nodes, edges, skills, servers, storage, archive, audit, "0.30.0");
+  exportFlow = new ExportFlow(flows, nodes, edges, skills, servers, storage, archive, audit, "0.30.0", sha256);
   inspectImport = new InspectFlowImport(archive, skills, servers);
   importFlow = new ImportFlow(archive, skills, servers, storage, flows, nodes, edges, audit, generateKey);
   duplicateFlow = new DuplicateFlow(flows, nodes, edges, storage, generateKey);

@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   buildFlowSnapshot,
   collectDependencies,
@@ -22,6 +21,7 @@ import type {
   IObjectStorage,
   ISkillRepository,
   Result,
+  Sha256Bytes,
 } from "@rbrasier/domain";
 
 export interface ExportFlowInput {
@@ -50,8 +50,6 @@ const slugify = (name: string): string =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 60) || "flow";
 
-const sha256Of = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");
-
 // Assembles the portable archive: the existing publish-time snapshot, the
 // dependencies it needs from its host resolved to portable names, and the
 // binaries those two refer to.
@@ -70,6 +68,9 @@ export class ExportFlow {
     private readonly archiveWriter: IFlowArchiveWriter,
     private readonly auditLogger: IAuditLogger,
     private readonly appVersion: string,
+    // Injected rather than imported: packages/application may not reach outside
+    // @rbrasier/domain and @rbrasier/shared, node:crypto included.
+    private readonly sha256Bytes: Sha256Bytes,
   ) {}
 
   async execute(input: ExportFlowInput): Promise<Result<ExportFlowOutput>> {
@@ -230,7 +231,7 @@ export class ExportFlow {
           filename: entry.filename,
           mimeType: entry.mimeType,
           sizeBytes: bytes.data.length,
-          sha256: sha256Of(bytes.data),
+          sha256: this.sha256Bytes(bytes.data),
         },
         bytes: bytes.data,
       });

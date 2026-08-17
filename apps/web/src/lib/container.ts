@@ -71,10 +71,6 @@ import {
   NotifyOnStepComplete,
   OverrideBranch,
   PublishFlowVersion,
-  ExportFlow,
-  InspectFlowImport,
-  ImportFlow,
-  DuplicateFlow,
   RestoreFlowVersion,
   SyncFlowDraft,
   PingJob,
@@ -178,7 +174,6 @@ import {
   LlmCallGovernor,
   createEmbeddingsProvider,
   MinioStorageAdapter,
-  ZipFlowArchive,
   N8nHttpWorkflowDirectory,
   NodemailerEmailSender,
   PinoLogger,
@@ -204,6 +199,7 @@ import {
 } from "@rbrasier/adapters";
 import type { FlowVersion, PermissionKey } from "@rbrasier/domain";
 import { buildSkillsAndMcp } from "./container-skills-mcp";
+import { buildFlowPortability } from "./container-flow-portability";
 import { buildExtractionModule } from "./container-extraction";
 import { buildPeopleDirectory } from "./container-people-directory";
 import { buildSmtpEnvConfig } from "./container-smtp";
@@ -490,7 +486,9 @@ const build = () => {
     buildPeopleDirectory({ env, hrDatasets, users });
 
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
-  const flowArchive = new ZipFlowArchive();
+  const flowPortability = buildFlowPortability({
+    flows, flowNodes, flowEdges, objectStorage, auditLogger, skillsAndMcp,
+  });
   const extraction = buildExtractionModule({
     db,
     flows,
@@ -746,33 +744,7 @@ const build = () => {
       // into the session/user repos directly for the lease.
       turnLease: new TurnLease(sessions, users),
       publishFlowVersion: new PublishFlowVersion(flows, flowNodes, flowEdges, flowVersions, auditLogger),
-      exportFlow: new ExportFlow(
-        flows,
-        flowNodes,
-        flowEdges,
-        skillsAndMcp.repos.skills,
-        skillsAndMcp.repos.mcpServers,
-        objectStorage,
-        flowArchive,
-        auditLogger,
-        process.env.NEXT_PUBLIC_APP_VERSION ?? "unknown",
-      ),
-      inspectFlowImport: new InspectFlowImport(
-        flowArchive,
-        skillsAndMcp.repos.skills,
-        skillsAndMcp.repos.mcpServers,
-      ),
-      importFlow: new ImportFlow(
-        flowArchive,
-        skillsAndMcp.repos.skills,
-        skillsAndMcp.repos.mcpServers,
-        objectStorage,
-        flows,
-        flowNodes,
-        flowEdges,
-        auditLogger,
-      ),
-      duplicateFlow: new DuplicateFlow(flows, flowNodes, flowEdges, objectStorage),
+      ...flowPortability,
       listFlowVersions: new ListFlowVersions(flowVersions),
       getFlowVersion: new GetFlowVersion(flowVersions),
       restoreFlowVersion: new RestoreFlowVersion(flowVersions, auditLogger),

@@ -42,6 +42,7 @@ round-trip.
 
 **Web** (`apps/web/src/`)
 `app/api/flows/[id]/export/route.ts`, `app/api/flows/import/route.ts`,
+`lib/container-flow-portability.ts`,
 `lib/http-errors.ts`, `components/flow/flow-import-dialog.tsx`,
 `components/flow/flow-import-inspection-panel.tsx`,
 `components/flow/flow-import-summary.ts`, `components/flow/flow-row-actions.tsx`,
@@ -62,6 +63,9 @@ round-trip.
 - `apps/web/src/app/(admin)/admin/flows/_content.tsx` — Import button, row actions.
 - `apps/web/src/app/(user)/flows/[id]/config/_flow-config-header.tsx` — Export.
 - `apps/web/src/components/canvas/conversational-node.tsx`, `mcp-node.tsx` — badge.
+- `packages/domain/src/entities/audit-hash.ts` — `Sha256Bytes`, the byte-oriented
+  counterpart to the existing `Sha256Hex`.
+- `packages/adapters/src/audit/sha256.ts` — `sha256Bytes` implementing it.
 - Barrels in domain, adapters and application.
 
 ## Migrations
@@ -101,7 +105,13 @@ Five, all recorded here rather than absorbed silently.
    `flow-import-summary.ts` and `unresolved-dependencies.ts` follow it. Adding a
    component-test stack would have been infrastructure work outside this phase.
 
-5. **`collectDependencies` also collects the tool a deterministic MCP node
+5. **Asset hashing is injected, not imported.** `ExportFlow` first called
+   `node:crypto` directly, which `validate.sh` rejects — `packages/application`
+   may import only `@rbrasier/domain` and `@rbrasier/shared`. It now takes a
+   `Sha256Bytes` function, wired to the adapter's `sha256Bytes`, mirroring how
+   `Sha256Hex` already serves the audit hash-chain.
+
+6. **`collectDependencies` also collects the tool a deterministic MCP node
    calls.** The phase doc named only `skillRefs` and `allowedMcpToolRefs`.
    `McpNodeConfig.serverId`/`toolName` is equally a cross-deployment reference,
    and omitting it would have imported MCP nodes with a dangling server id.
@@ -137,6 +147,10 @@ sight of them at Step 0:
 - **Row actions are mounted on `/admin/flows` only.** The user-facing `/flows`
   list was left alone; `FlowRowActions` is not coupled to the admin page and can
   be mounted there when that surface is next touched.
+- **The root container was at its size ceiling.** `container.ts` was already 796
+  lines against an 800-line hard limit, so this feature's wiring lives in
+  `lib/container-flow-portability.ts` alongside the existing `container-*`
+  modules. The net change to `container.ts` is zero lines.
 - **Duplicate does not copy flow permissions.** The copy is owned by whoever
   duplicated it, with no shared-viewer grants carried over.
 
