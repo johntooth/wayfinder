@@ -4,6 +4,7 @@ export * from "./group/index";
 export * from "./organisation/index";
 export * from "./onboarding/index";
 export * from "./session/index";
+export * from "./flow-test/index";
 export * from "./scheduling/index";
 export * from "./retention/index";
 export * from "./document/index";

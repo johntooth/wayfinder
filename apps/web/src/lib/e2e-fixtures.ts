@@ -452,6 +452,31 @@ import {
   seedWithdrawableApprovalSession,
 } from "./e2e-fixtures-approval";
 
+
+// Storage paths the seeded fixtures point at. The bytes only have to exist and
+// be stable — no spec reads their content, but export bundles them and verifies
+// each one's sha256.
+const SEEDED_STORAGE_PATHS = [
+  "templates/e2e-seed-purchase.docx",
+  "templates/e2e-seed-onboarding.docx",
+  "context/e2e-seed/purchase-request.docx",
+  "context/e2e-seed/onboarding-plan.docx",
+] as const;
+
+const seedStorageObjects = async (container: Container): Promise<void> => {
+  for (const path of SEEDED_STORAGE_PATHS) {
+    const placeholder = Buffer.from(`e2e seed placeholder for ${path}`, "utf8");
+    unwrap(
+      await container.objectStorage.put(
+        path,
+        placeholder,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ),
+      `seed storage object ${path}`,
+    );
+  }
+};
+
 export const seedE2EFixtures = async (container: Container): Promise<SeedResult> => {
   const ownerUserId = await resolveAdminUserId(container);
   await resolveMemberUserId(container);
@@ -486,6 +511,12 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     }),
     "create seed skill",
   );
+
+  // The fixtures below reference template and context-document objects by
+  // storage path. Nothing was ever written at those paths, so any code that
+  // actually reads one — flow export, for instance — failed against the seed.
+  // Write a placeholder for each so the seeded flow is internally consistent.
+  await seedStorageObjects(container);
 
   // ── Rich flow: a conversational step plus a document-generation step ──────
   const flow = unwrap(

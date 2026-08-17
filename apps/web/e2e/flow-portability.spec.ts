@@ -12,6 +12,12 @@
  *   packages/adapters/src/flows/zip-flow-archive.test.ts
  *   packages/application/src/use-cases/flow/flow-portability.test.ts
  *   apps/web/src/app/api/flows/**\/route.test.ts
+ *
+ * The export tests depend on the seeded flow's template and context-document
+ * objects actually existing in MinIO. They did not — e2e-fixtures.ts wrote the
+ * storage *paths* into node config and never wrote the objects, so export
+ * returned NOT_FOUND and the download assertion was unreachable by
+ * construction. seedStorageObjects() now writes a placeholder at each path.
  */
 
 import { test, expect } from './helpers/base';

@@ -71,6 +71,9 @@ interface NodeConfigModalProps {
   initialValues?: Partial<NodeConfigValues>;
   onSave: (values: NodeConfigValues) => void;
   onDelete?: () => void;
+  // Opens the test modal pre-scoped to this step, so the steps before it are
+  // simulated rather than replayed by hand.
+  onTestStep?: () => void;
   onClose: () => void;
   isSaving?: boolean;
   // Fields declared by steps earlier in the flow, offered as value sources.
@@ -99,6 +102,7 @@ export function NodeConfigModal({
   initialValues,
   onSave,
   onDelete,
+  onTestStep,
   onClose,
   isSaving = false,
   priorStepFields = [],
@@ -651,6 +655,11 @@ export function NodeConfigModal({
                   {onDelete && (
                     <Button type="button" variant="danger" size="sm" onClick={() => setConfirmDelete(true)}>
                       Remove step
+                    </Button>
+                  )}
+                  {onTestStep && (
+                    <Button type="button" variant="outline" size="sm" onClick={onTestStep}>
+                      Test this step
                     </Button>
                   )}
                   <div className="ml-auto flex gap-2">

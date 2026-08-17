@@ -50,6 +50,7 @@ export function FlowConfigHeader({
   setFlowMenuOpen,
   flowMenuRef,
   onAddStep,
+  onTestFlow,
   updateFlowMutation,
   refetchVersionStatus,
   setEditingMetadata,
@@ -72,6 +73,7 @@ export function FlowConfigHeader({
   setFlowMenuOpen: Dispatch<SetStateAction<boolean>>;
   flowMenuRef: RefObject<HTMLDivElement | null>;
   onAddStep: () => void;
+  onTestFlow: () => void;
   updateFlowMutation: UpdateFlowMutation;
   refetchVersionStatus: () => void;
   setEditingMetadata: Dispatch<SetStateAction<boolean>>;
@@ -130,6 +132,12 @@ export function FlowConfigHeader({
       <div className="ml-auto flex items-center gap-2">
         <Button size="sm" variant="outline" onClick={onAddStep}>
           + Add step
+        </Button>
+        {/* Runs the working draft, published or not, without leaving the
+            canvas (ADR-048). Offered on a draft precisely because a draft is
+            what the author cannot otherwise exercise. */}
+        <Button size="sm" variant="outline" onClick={onTestFlow}>
+          Test
         </Button>
         <Button size="sm" variant="outline" asChild>
           <a href={`/api/flows/${flowId}/export`} download>

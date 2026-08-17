@@ -63,6 +63,7 @@ import {
   toRfEdge,
   toRfNode,
 } from "@/lib/canvas/rf-adapters";
+import { useFlowTestLauncher } from "./_use-flow-test-launcher";
 import { BranchRuleModal } from "@/components/canvas/branch-rule-modal";
 import { FlowConfigHeader } from "./_flow-config-header";
 import { useBranchRules } from "./_use-branch-rules";
@@ -107,6 +108,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [editingMetadata, setEditingMetadata] = useState(false);
 
   const [configOpen, setConfigOpen] = useState(false);
+  const flowTest = useFlowTestLauncher(flowId, rfNodes);
   const [typePickerOpen, setTypePickerOpen] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   // The node just created by the picker / a drag-out. If the author cancels the
@@ -645,6 +647,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         setFlowMenuOpen={setFlowMenuOpen}
         flowMenuRef={flowMenuRef}
         onAddStep={handleAddStep}
+        onTestFlow={flowTest.openFlowTest}
         updateFlowMutation={updateFlowMutation}
         refetchVersionStatus={() => void versionStatusQuery.refetch()}
         setEditingMetadata={setEditingMetadata}
@@ -665,6 +668,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         onAddNextStep={handleAddNextStep}
         staleReferences={staleReferences}
       />
+
+      {flowTest.modal}
 
       <BranchRuleModal
         target={branchRuleTarget}
@@ -694,6 +699,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         initialValues={initialConfigValues}
         onSave={handleConfigSave}
         onDelete={editingNodeId ? handleNodeDelete : undefined}
+        onTestStep={editingNodeId ? () => flowTest.openStepTest(editingNodeId) : undefined}
         onClose={handleConfigClose}
         isSaving={isSavingConfig}
         priorStepFields={priorStepFields}

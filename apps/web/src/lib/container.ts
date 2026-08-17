@@ -112,6 +112,7 @@ import {
   UpsertFeatureFlag,
 } from "@rbrasier/application";
 import { buildApprovalNotifiers } from "./container-approval-notifiers";
+import { buildFlowTestUseCases } from "./container-flow-test-use-cases";
 import { buildApprovalUseCases } from "./container-approval-use-cases";
 import { buildDocumentUseCases } from "./container-document-use-cases";
 import { buildOnboarding } from "./container-onboarding";
@@ -152,6 +153,8 @@ import {
   DrizzleSessionParticipantRepository,
   DrizzleSessionUploadRepository,
   DrizzleSessionStepOutputRepository,
+  DrizzleFlowTestFixtureRepository,
+  AiSeedProposer,
   DrizzleScheduleRepository,
   DrizzleScheduleRunRepository,
   DrizzleAnalyticsRepository,
@@ -273,6 +276,7 @@ const build = () => {
   const sessionMessages = new DrizzleSessionMessageRepository(db);
   const sessionUploads = new DrizzleSessionUploadRepository(db);
   const sessionStepOutputs = new DrizzleSessionStepOutputRepository(db);
+  const flowTestFixtures = new DrizzleFlowTestFixtureRepository(db);
   // Real-time transport replacing the 2 s/3 s polls (scaling wall #2). Backed by
   // Postgres LISTEN/NOTIFY on its own direct connection so it stays correct
   // across instances without adding a new service.
@@ -398,6 +402,7 @@ const build = () => {
     withQuotaEnforcement(withUsageTracking(baseLlm, usageRepo), quotaEnforcer),
     env,
   );
+  const seedProposer = new AiSeedProposer(llm);
   const agent = new LangGraphAgentRunner(llm);
   const sessionAgent = new FlowSessionGraph();
   const docxGenerator = new DocxGenerator();
@@ -486,9 +491,6 @@ const build = () => {
     buildPeopleDirectory({ env, hrDatasets, users });
 
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
-  const flowPortability = buildFlowPortability({
-    flows, flowNodes, flowEdges, objectStorage, auditLogger, skillsAndMcp,
-  });
   const extraction = buildExtractionModule({
     db,
     flows,
@@ -648,7 +650,7 @@ const build = () => {
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter, ...skillsAndMcp.services },
-    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds, extractionRuns: extraction.repository, extractionDrafts: extraction.draftRepository, ...skillsAndMcp.repos },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, flowTestFixtures, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds, extractionRuns: extraction.repository, extractionDrafts: extraction.draftRepository, ...skillsAndMcp.repos },
     useCases: {
       ...documentUseCases,
       evaluateStepReadiness: new EvaluateStepReadiness(llm, documentGenerator, objectStorage),
@@ -725,6 +727,7 @@ const build = () => {
       reindexAllDocuments: new ReindexAllDocuments(reindexSource, documentIndexer, jobRepo),
       grantFlowOwner: new GrantFlowOwner(flows),
       startSession: new StartSession(sessions, flows, flowNodes, flowEdges, flowVersions),
+      ...buildFlowTestUseCases({ sessions, sessionMessages, sessionStepOutputs, flows, flowNodes, flowEdges, flowVersions, usage: usageRepo, seedProposer }),
       listSessions: new ListSessions(sessions),
       // Keyset-paginated variants of the two list use cases (phase Group A
       // item 4). Additive server support; tRPC exposure follows.
@@ -744,7 +747,7 @@ const build = () => {
       // into the session/user repos directly for the lease.
       turnLease: new TurnLease(sessions, users),
       publishFlowVersion: new PublishFlowVersion(flows, flowNodes, flowEdges, flowVersions, auditLogger),
-      ...flowPortability,
+      ...buildFlowPortability({ flows, flowNodes, flowEdges, objectStorage, auditLogger, skillsAndMcp }),
       listFlowVersions: new ListFlowVersions(flowVersions),
       getFlowVersion: new GetFlowVersion(flowVersions),
       restoreFlowVersion: new RestoreFlowVersion(flowVersions, auditLogger),
