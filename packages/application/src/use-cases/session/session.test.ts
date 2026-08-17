@@ -154,6 +154,7 @@ class FakeSessionRepository implements ISessionRepository {
       flowId: input.flowId,
       userId: input.userId,
       status: "active",
+      mode: input.mode ?? "live",
       title: input.title ?? null,
       currentNodeId: input.currentNodeId ?? null,
       flowVersionId: input.flowVersionId ?? null,
@@ -520,6 +521,152 @@ describe("StartSession", () => {
     nodes.nodes.clear();
     const result = await useCase.execute({ flowId: "flow-1", userId: "user-1" });
     expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+});
+
+// ── StartSession under mode: "test" (ADR-048) ────────────────────────────────
+
+describe("StartSession in test mode", () => {
+  let flows: FakeFlowRepository;
+  let nodes: FakeFlowNodeRepository;
+  let edges: FakeFlowEdgeRepository;
+  let sessions: FakeSessionRepository;
+  let flowVersions: FakeFlowVersionRepository;
+  let useCase: StartSession;
+
+  beforeEach(() => {
+    flows = new FakeFlowRepository();
+    nodes = new FakeFlowNodeRepository();
+    edges = new FakeFlowEdgeRepository();
+    sessions = new FakeSessionRepository();
+    flowVersions = new FakeFlowVersionRepository();
+    flows.flows.set("flow-1", makeFlow({ status: "draft" }));
+    nodes.nodes.set("node-1", makeNode());
+    useCase = new StartSession(sessions, flows, nodes, edges, flowVersions);
+  });
+
+  it("starts on a draft flow for its owner", async () => {
+    const result = await useCase.execute({ flowId: "flow-1", userId: "user-1", mode: "test" });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.mode).toBe("test");
+    expect(result.data?.currentNodeId).toBe("node-1");
+  });
+
+  it("starts on a draft flow for an admin who does not own it", async () => {
+    const result = await useCase.execute({
+      flowId: "flow-1",
+      userId: "someone-else",
+      mode: "test",
+      isAdmin: true,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.mode).toBe("test");
+  });
+
+  it("still refuses a live session on a draft flow", async () => {
+    const result = await useCase.execute({ flowId: "flow-1", userId: "user-1", mode: "live" });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("refuses a test run for a caller with no edit rights on the flow", async () => {
+    const result = await useCase.execute({
+      flowId: "flow-1",
+      userId: "operator-9",
+      mode: "test",
+    });
+
+    expect(result.error?.code).toBe("FORBIDDEN");
+  });
+
+  it("allows a test run for a user granted the owner permission", async () => {
+    flows.flows.set(
+      "flow-1",
+      makeFlow({ status: "draft", permissions: [{ userId: "co-owner", role: "owner" }] }),
+    );
+
+    const result = await useCase.execute({
+      flowId: "flow-1",
+      userId: "co-owner",
+      mode: "test",
+    });
+
+    expect(result.error).toBeUndefined();
+  });
+
+  it("refuses a test run for a user granted only the viewer permission", async () => {
+    flows.flows.set(
+      "flow-1",
+      makeFlow({ status: "draft", permissions: [{ userId: "reader", role: "viewer" }] }),
+    );
+
+    const result = await useCase.execute({ flowId: "flow-1", userId: "reader", mode: "test" });
+
+    expect(result.error?.code).toBe("FORBIDDEN");
+  });
+
+  it("resolves from the live rows and pins nothing, even when a published version exists", async () => {
+    // The published snapshot's root differs from the live rows. A live session
+    // would start on "snap-root"; a test run must start on the live node,
+    // because the unpublished edit is the thing under test.
+    const snapshot = buildFlowSnapshot(makeFlow(), [makeNode({ id: "snap-root" })], []);
+    flowVersions.versions.set(
+      "version-7",
+      makeVersion({ id: "version-7", versionNumber: 2, snapshot }),
+    );
+
+    const result = await useCase.execute({ flowId: "flow-1", userId: "user-1", mode: "test" });
+
+    expect(result.data?.currentNodeId).toBe("node-1");
+    expect(result.data?.flowVersionId).toBeNull();
+  });
+
+  it("starts at the requested node rather than the root", async () => {
+    nodes.nodes.set("node-2", makeNode({ id: "node-2", positionX: 300 }));
+    edges.edges.set("edge-1", {
+      id: "edge-1",
+      flowId: "flow-1",
+      fromNodeId: "node-1",
+      toNodeId: "node-2",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const result = await useCase.execute({
+      flowId: "flow-1",
+      userId: "user-1",
+      mode: "test",
+      startNodeId: "node-2",
+    });
+
+    expect(result.data?.currentNodeId).toBe("node-2");
+  });
+
+  it("rejects a startNodeId that is not in the flow", async () => {
+    const result = await useCase.execute({
+      flowId: "flow-1",
+      userId: "user-1",
+      mode: "test",
+      startNodeId: "node-elsewhere",
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("runs a published flow in test mode against the live rows, not the snapshot", async () => {
+    flows.flows.set("flow-1", makeFlow({ status: "published" }));
+    const snapshot = buildFlowSnapshot(makeFlow(), [makeNode({ id: "snap-root" })], []);
+    flowVersions.versions.set(
+      "version-7",
+      makeVersion({ id: "version-7", versionNumber: 2, snapshot }),
+    );
+
+    const result = await useCase.execute({ flowId: "flow-1", userId: "user-1", mode: "test" });
+
+    expect(result.data?.currentNodeId).toBe("node-1");
+    expect(result.data?.flowVersionId).toBeNull();
   });
 });
 

@@ -9,6 +9,7 @@ import { feedbackRouter } from "./routers/feedback";
 import { featureFlagRouter } from "./routers/feature-flag";
 import { flowRouter } from "./routers/flow";
 import { flowVersionRouter } from "./routers/flow-version";
+import { flowTestRouter } from "./routers/flow-test";
 import { governanceRouter } from "./routers/governance";
 import { groupRouter } from "./routers/group";
 import { hrRouter } from "./routers/hr";
@@ -37,6 +38,7 @@ export const appRouter = router({
   usage: usageRouter,
   flow: flowRouter,
   flowVersion: flowVersionRouter,
+  flowTest: flowTestRouter,
   extraction: extractionRouter,
   role: roleRouter,
   group: groupRouter,

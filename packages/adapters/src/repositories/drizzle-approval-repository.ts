@@ -137,6 +137,9 @@ export class DrizzleApprovalRepository implements IApprovalRepository {
           and(
             this.assigneeMatch(input),
             eq(app_session_approvals.status, "pending"),
+            // An approval raised by a test run resolves to the testing author,
+            // never a real supervisor — so it must not reach any queue (ADR-048 §5).
+            eq(app_sessions.mode, "live"),
             notInArray(app_sessions.status, [...DISCARDED_SESSION_STATUSES]),
           ),
         )
@@ -167,6 +170,7 @@ export class DrizzleApprovalRepository implements IApprovalRepository {
       const pendingMatch = and(
         eq(app_session_approvals.status, "pending"),
         this.assigneeMatch(input),
+        eq(app_sessions.mode, "live"),
         notInArray(app_sessions.status, [...DISCARDED_SESSION_STATUSES]),
       );
 

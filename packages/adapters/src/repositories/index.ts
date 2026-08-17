@@ -21,6 +21,7 @@ export * from "./drizzle-session-participant-repository";
 export * from "./drizzle-session-message-repository";
 export * from "./drizzle-session-upload-repository";
 export * from "./drizzle-session-step-output-repository";
+export * from "./drizzle-flow-test-fixture-repository";
 export * from "./drizzle-analytics-repository";
 export * from "./drizzle-system-settings-repository";
 export * from "./encrypted-system-settings-repository";

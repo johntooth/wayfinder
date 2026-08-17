@@ -96,6 +96,7 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
       deps.flowNodes,
       deps.reportingLineResolver,
       deps.users,
+      deps.sessions,
       deps.embeddings,
       deps.documentChunks,
       deps.languageModel,
