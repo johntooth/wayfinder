@@ -1,19 +1,25 @@
 # Phase — Flow Portability (Export / Import / Duplicate)
 
-- **Status**: Draft — awaiting `/doc-review`
-- **Target version**: **TBC** — **MINOR** (new feature, **no schema change**).
-  The number is allocated at `/doc-review` against whichever line the build is
-  scheduled on.
-- **Base branch**: **TBC.** `CLAUDE.md` routes new features to `main`; these docs
-  were authored on `release/alpha-2` at the requester's direction. Settle the
-  line before building, and set the version and the `implemented/<line>/`
-  destination from it.
+- **Status**: Reviewed — `/doc-review` passed, ready to build
+- **Target version**: **0.30.0** — **MINOR** (new feature, **no schema change**).
+  Allocated against `release/alpha-2`, which sat at `0.28.4`; `0.29.0` is claimed
+  on another branch.
+- **Base branch**: **`release/alpha-2`.** `CLAUDE.md` routes new features to
+  `main` and keeps release branches to fixes and enhancements — this is a
+  deliberate exception at the requester's direction, because the customers
+  driving the feature are on the current line. Implemented docs go to
+  `docs/development/implemented/alpha-2/v0.30.0/`.
 - **PRD**: `docs/development/prd/flow-portability.prd.md`
 - **ADR**: `docs/development/adr/049-flow-export-archive-format.adr.md`
-- **Depends on**: ADR-015 (`FlowSnapshot` — the serialisation this reuses),
-  ADR-006 (flow schema), ADR-031 (skills library), ADR-032 (MCP flags and
-  transport), ADR-033 (audit log), `IObjectStorage` (assets), ADR-018 (approval
-  nodes — already portable, no user id baked in)
+- **Depends on**: ADR-015 *Flow Versioning via Immutable Snapshots*
+  (`FlowSnapshot` — the serialisation this reuses), ADR-006 *Wayfinder Flow and
+  Session Schema* (jsonb node config), ADR-033 *Immutable Audit Log & Legal
+  Hold*, ADR-018 *Approval Step and Approver Resolution* (already portable — no
+  user id baked in), and `IObjectStorage` for assets. Cited by title because 015
+  and 033 each number two different ADRs. The skills and MCP decisions the code
+  labels "ADR-031"/"ADR-032" have no ADR file at all — 031 is
+  *Usage Limit Scope Cascade* and the three 032s are unrelated — so read
+  `entities/skill.ts` and `entities/mcp-server.ts` instead.
 
 ## 1. Problem
 
@@ -49,8 +55,10 @@ See the PRD for full detail.
 ## 3. Non-goals
 
 Updating/merging an existing flow from an archive, a hosted gallery or
-marketplace, exporting instance data, bundling KB collection contents, signing or
-verifying archives, bulk export/import. (PRD §4.)
+marketplace, exporting instance data, signing or verifying archives, bulk
+export/import, a separate export permission, end-to-end streaming. (PRD §4, §11.)
+Knowledge-base collections are not a non-goal — they do not exist; a flow's
+context documents travel as assets.
 
 ## 4. Approach
 
@@ -65,9 +73,19 @@ impossible), ceilings are enforced before extraction, and every asset's `sha256`
 is verified.
 
 Build bottom-up (domain → application → adapters → web), test file before
-implementation file (`CLAUDE.md`). The zip library must be **verified in
-`node_modules`** for its real API and its streaming/size-limit support before
-step 5 — `CLAUDE.md` forbids relying on training data for third-party API shapes.
+implementation file (`CLAUDE.md`).
+
+The zip library is **PizZip** — already a dependency of `packages/adapters` and
+already driving `ZipIngestor`. Its API must still be re-read in `node_modules`
+before step 5, particularly the generate/write path this repo does not yet
+exercise; `CLAUDE.md` forbids working from training data on third-party shapes.
+Note `node_modules` is not present in a fresh checkout — run `pnpm install`
+first.
+
+The flow archive gets its own reader rather than reusing `IArchiveExtractor`
+(ADR-049 §10): `ZipIngestor` drops entries whose MIME it cannot sniff, which
+would silently discard `manifest.json` and every `.xlsx` template. The **guards**
+are shared, not reimplemented — see step 5.
 
 ## 5. Key entities / files
 
@@ -75,23 +93,30 @@ step 5 — `CLAUDE.md` forbids relying on training data for third-party API shap
 |-------|------|--------|
 | domain | `packages/domain/src/entities/flow-export.ts` | new — `FlowExportManifest`, `FlowExportAsset`, `FlowExportDependency`, `FlowImportInspection`, `FLOW_EXPORT_FORMAT_VERSION` |
 | domain | `packages/domain/src/entities/flow-export-manifest.ts` | new — pure `validateManifest(unknown)` and `migrateManifest(manifest)` (older supported versions forward; newer refused) |
-| domain | `packages/domain/src/entities/flow-export-dependencies.ts` | new — pure `collectDependencies(snapshot)`: walks node config for `skillRefs`, `allowedMcpToolRefs`, KB refs |
+| domain | `packages/domain/src/entities/flow-export-dependencies.ts` | new — pure `collectDependencies(snapshot)`: walks node config for `skillRefs` and `allowedMcpToolRefs` (no KB refs exist) |
 | domain | `packages/domain/src/entities/flow-import-rewrite.ts` | new — pure `rewriteSnapshot(snapshot, resolution)`: regenerates node ids, rewrites edges, points config at local ids, flags unresolved |
 | domain | `packages/domain/src/ports/flow-archive.ts` | new — `IFlowArchiveWriter.write(manifest, assets)`, `IFlowArchiveReader.read(bytes)` with the ceilings as input |
 | domain | `packages/domain/src/entities/flow-version.ts` | **unchanged** — `FlowSnapshot` reused as-is |
+| domain | `packages/domain/src/entities/flow-node.ts` | add `unresolvedDependencies?: FlowExportDependency[]` to the node configs that can carry one; jsonb, so no migration |
+| domain | `packages/domain/src/ports/object-storage.ts` | **unchanged** — `get` stays buffer-only; ceilings bound memory instead (ADR-049 §7) |
 | application | `packages/application/src/use-cases/flow/export-flow.ts` | new — authorise, build the snapshot, collect dependencies, stream assets from `IObjectStorage`, emit `flow.exported` |
 | application | `packages/application/src/use-cases/flow/inspect-flow-import.ts` | new — read + validate + resolve; **writes nothing** |
 | application | `packages/application/src/use-cases/flow/import-flow.ts` | new — rewrite, store assets under fresh keys, create the flow as `draft`, emit `flow.imported` |
 | application | `packages/application/src/use-cases/flow/duplicate-flow.ts` | new — in-place clone; copies assets rather than sharing keys |
-| adapters | `packages/adapters/src/flows/zip-flow-archive.ts` | new — implements both archive ports; the only place the zip library appears |
-| adapters | `packages/adapters/src/flows/dependency-resolver.ts` | new — resolve skill names and MCP server+tool names to local ids |
+| application | `packages/application/src/use-cases/flow/publish-flow-version.ts` | refuse a flow whose live nodes still carry `unresolvedDependencies`, naming them |
+| adapters | `packages/adapters/src/archives/zip-guards.ts` | new — the zip-slip / count / per-entry / bomb checks lifted out of `zip-ingestor.ts`, one implementation for both readers |
+| adapters | `packages/adapters/src/extraction/zip-ingestor.ts` | refactor onto `zip-guards.ts`; behaviour unchanged, existing tests must stay green |
+| adapters | `packages/adapters/src/flows/zip-flow-archive.ts` | new — implements both archive ports over PizZip, using `zip-guards.ts` |
+| adapters | `packages/adapters/src/flows/dependency-resolver.ts` | new — resolve skill names and MCP server `label` + tool names to local ids; **two matches is unresolved**, never a guess |
 | web | `apps/web/src/server/routers/flow.ts` | add `export`, `inspectImport`, `import`, `duplicate` — permission-gated |
 | web | `apps/web/src/app/api/flows/[id]/export/route.ts` | new — archive download (binary, not tRPC) |
 | web | `apps/web/src/app/api/flows/import/route.ts` | new — archive upload, size-capped |
-| web | `apps/web/src/components/flows/flow-import-dialog.tsx` | new — file picker → inspection panel → commit |
-| web | `apps/web/src/components/flows/flow-row-actions.tsx` | Export / Duplicate actions on flow rows |
+| web | `apps/web/src/components/flow/flow-import-dialog.tsx` | new — file picker → inspection panel → commit (note: `components/flow/`, singular) |
+| web | `apps/web/src/components/flow/flow-row-actions.tsx` | new — Export / Duplicate actions, consumed by the flow list pages |
+| web | `apps/web/src/app/(user)/flows/page.tsx`, `apps/web/src/app/(admin)/admin/flows/page.tsx` | mount the row actions and the Import entry point |
 | web | `apps/web/src/components/canvas/*` | Export on the canvas toolbar; warning badge on nodes with unresolved dependencies |
 | web | `apps/web/src/lib/container.ts` | wire the archive adapter, resolver and four use-cases |
+| e2e | `apps/web/e2e/flow-portability.spec.ts` | new — export download + import upload (policy group 3). Named for the capability; no existing spec covers it (`chat-composer-upload` is session attachments) |
 
 ## 6. Implementation steps (test-first per CLAUDE.md)
 
@@ -104,9 +129,16 @@ step 5 — `CLAUDE.md` forbids relying on training data for third-party API shap
 
 2. **Domain — dependency collection.** `flow-export-dependencies.test.ts`:
    `skillRefs` on multiple nodes collapse to one dependency listing all
-   `nodeIds`; `allowedMcpToolRefs` produce `{ kind: "mcp_tool", name, toolName }`;
-   a flow with no external references produces an empty list; approval nodes
-   contribute nothing (no user ids exist to carry).
+   `nodeIds`; `allowedMcpToolRefs` produce `{ kind: "mcp_tool", name, toolName }`
+   where `name` is the server's label; a flow with no external references
+   produces an empty list; approval nodes contribute nothing (no user ids exist
+   to carry). Only two kinds exist — there is no KB collection in the product.
+
+   Note the asymmetry to handle: `collectDependencies` is pure and receives a
+   snapshot holding `serverId`, not a label. The export use-case (step 4) is what
+   resolves ids to labels before the manifest is written; the domain function
+   emits the ids it can see and the use-case maps them. Keep the lookup out of
+   `packages/domain` — it has no repositories.
 
 3. **Domain — import rewrite.** `flow-import-rewrite.test.ts`: (a) every node id
    is regenerated and no original id survives; (b) every edge is rewritten and
@@ -122,45 +154,73 @@ step 5 — `CLAUDE.md` forbids relying on training data for third-party API shap
    whole payload; (d) a non-owner non-admin gets `FORBIDDEN`; (e) `flow.exported`
    is emitted to the audit logger.
 
-5. **Adapters — the archive.** *Verify the zip library in `node_modules` first
-   and record the choice in this doc.* `zip-flow-archive.test.ts`: round-trips a
-   manifest and assets; **rejects an entry whose path escapes the archive root**
-   (`../`); enforces archive size, uncompressed size, asset count and per-asset
-   size ceilings **before** extraction; a malformed zip and a missing manifest
-   each return a Result error rather than throwing; an asset whose `sha256`
-   mismatches fails and its bytes are not returned.
+5. **Adapters — the archive.** Two parts, in order.
+
+   **5a. Extract the guards.** Lift the zip-slip, entry-count, per-entry-size and
+   decompression-bomb checks out of `zip-ingestor.ts` into
+   `archives/zip-guards.ts` and refactor `ZipIngestor` onto it. Pure refactor —
+   the existing ingestor tests must pass untouched, and that is the check that it
+   was a refactor. One implementation of a zip-slip check, not two.
+
+   **5b. The flow archive.** *Re-read PizZip in `node_modules` first — the
+   generate/write path especially, which this repo has not used.*
+   `zip-flow-archive.test.ts`: round-trips a manifest and assets; **rejects an
+   entry whose path escapes the archive root** (`../`); enforces the four
+   ceilings **before** extraction (50 MB compressed, 200 MB uncompressed, 100
+   assets, 25 MB per asset); a malformed zip and a missing manifest each return a
+   Result error rather than throwing; an asset whose `sha256` mismatches fails
+   and its bytes are not returned; a `manifest.json` and an `.xlsx` asset both
+   survive the read — the regression that reusing `ZipIngestor` would have
+   caused.
 
 6. **Application — inspect.** `inspect-flow-import.test.ts`: (a) returns
    resolved and unresolved dependencies correctly; (b) **writes no row and no
    object** — assert counts before and after; (c) a refused `formatVersion`
-   surfaces as a Result error, not an inspection; (d) ambiguous name resolution
-   (two skills sharing a name) is reported as a warning.
+   surfaces as a Result error, not an inspection; (d) two skills sharing a name
+   (or two servers sharing a label) resolve to **nothing** — the dependency comes
+   back unresolved with both candidates named in a warning. Neither
+   `app_skills.name` nor `admin_mcp_servers.label` is unique, so this is a real
+   deployment state, not a contrived one.
 
 7. **Application — import.** `import-flow.test.ts`: (a) always creates a new
    flow, owned by the importer, `status: "draft"`; (b) no existing flow is
    modified by any import; (c) assets are stored under **freshly generated
    keys**, never a path from the archive; (d) an archive with unresolved
-   dependencies still imports, with the flow not publishable until resolved;
-   (e) `flow.imported` is emitted.
+   dependencies still imports, writing `unresolvedDependencies` onto each
+   affected node's config; (e) `flow.imported` is emitted.
+
+   Then the gate, in `publish-flow-version.test.ts`: publishing a flow whose live
+   nodes still carry `unresolvedDependencies` returns `VALIDATION_FAILED` naming
+   them, and succeeds once they are cleared. Without this, "not publishable until
+   resolved" has nothing enforcing it.
 
 8. **Application — duplicate.** `duplicate-flow.test.ts`: independent draft copy,
    suffixed name, fresh node ids, its own asset copies; deleting the original's
    template leaves the copy's intact.
 
 9. **Web — routes and tRPC.** Binary download and upload route handlers (upload
-   size-capped at the edge, before the archive reader sees it); `flow.export`,
+   capped at 50 MB at the edge, before the archive reader sees it); `flow.export`,
    `flow.inspectImport`, `flow.import`, `flow.duplicate`. Router tests cover the
-   authorisation boundary on each.
+   authorisation boundary on each: owner-or-admin, using the existing procedure
+   helpers — **no new `PermissionKey`** (ADR-049 §9).
 
 10. **Web — UI.** Import dialog: file picker → inspection panel (flow name,
     description, node count, asset list, resolved/unresolved dependency table) →
     commit. Export and Duplicate on flow rows; Export on the canvas toolbar.
-    Warning badges on imported nodes with unresolved dependencies.
+    Warning badges on nodes carrying `unresolvedDependencies`. Component tests
+    for the panel and the badge.
 
-11. **Version + validate.** Set `VERSION` and root `package.json#version` to the
-    number allocated at `/doc-review`. Run `./validate.sh`; fix all failures.
-    Move this doc to `docs/development/implemented/<line>/v<version>/` with an
-    implementation summary.
+11. **E2E — one spec.** `flow-portability.spec.ts`: export a flow and assert the
+    download; upload that archive and assert the inspection panel, then commit.
+    This is the only part of the feature that earns a browser
+    (`docs/guides/e2e-test-policy.md` group 3 — file upload and download).
+    Everything else stays at the layer that owns it. No `test.skip()` on a
+    condition the spec itself probes; no `isVisible()` for control flow.
+
+12. **Version + validate.** Set `VERSION` and root `package.json#version` to
+    **0.30.0**. Run `./validate.sh`; fix all failures. Move this doc to
+    `docs/development/implemented/alpha-2/v0.30.0/` with an implementation
+    summary.
 
 ## 7. Acceptance criteria
 
@@ -172,16 +232,25 @@ Mirror PRD §10. In particular:
       `sha256`.
 - [ ] No instance data of any kind appears in an archive — asserted over the
       whole payload.
-- [ ] Dependencies export by name; no local skill or MCP server id appears in a
-      manifest.
+- [ ] Dependencies export by name — `app_skills.name`, and the server's
+      `admin_mcp_servers.label` plus `toolName`. No local skill or MCP server id
+      appears in a manifest.
+- [ ] An ambiguous match (two skills of one name, two servers of one label) is
+      reported unresolved with both candidates named — never auto-resolved.
 - [ ] `inspectFlowImport` writes no row and no object.
-- [ ] Unresolved dependencies import as a flagged draft that cannot be published
-      until resolved.
+- [ ] Unresolved dependencies import as a flagged draft — `unresolvedDependencies`
+      on the affected node configs — and `PublishFlowVersion` refuses such a flow
+      with a `VALIDATION_FAILED` naming them.
 - [ ] Import always creates a new flow; no existing flow is ever modified.
 - [ ] Node ids are regenerated, edges rewritten, none orphaned.
 - [ ] **Zip-slip is impossible** — a `../` entry is rejected, and no archive path
       is used as a write path.
-- [ ] Size, count and per-asset ceilings are enforced before extraction.
+- [ ] Size, count and per-asset ceilings are enforced before extraction: 50 MB
+      compressed (at the upload route), 200 MB uncompressed, 100 assets, 25 MB
+      per asset.
+- [ ] One zip-slip implementation exists, in `archives/zip-guards.ts`, used by
+      both readers; `ZipIngestor`'s existing tests pass unchanged after the
+      refactor.
 - [ ] A newer `formatVersion` is refused naming both versions; an older supported
       one migrates forward.
 - [ ] Malformed zip, missing manifest and invalid manifest each return an
@@ -190,31 +259,46 @@ Mirror PRD §10. In particular:
 - [ ] Duplicate produces an independent copy with its own assets.
 - [ ] Round trip into a clean deployment with the same skills and MCP servers
       yields an equivalent snapshot modulo regenerated ids.
-- [ ] The zip library appears only in `packages/adapters`; ports in `domain`;
-      Result at every boundary; `VERSION` = `package.json#version`;
+- [ ] One Playwright spec covers export download and import upload; no other e2e
+      spec is added.
+- [ ] PizZip appears only in `packages/adapters`; ports in `domain`; Result at
+      every boundary; `VERSION` = `package.json#version` = `0.30.0`;
       `./validate.sh` passes.
 
-## 8. Risks / open questions
+## 8. Risks / decisions
 
-Carried from PRD §12:
+Carried from PRD §12. The four questions PRD §12 left open were closed at
+`/doc-review` and are marked **Decided** below — nothing here is still a
+question at build time.
 
 - **Import is the largest untrusted-input surface in the product.** Zip-slip,
   decompression bombs, oversized assets and manifest drift. ADR-049 §7 is the
   mitigation and its guards are acceptance criteria above, not implementation
   detail.
 - **Export is a new exfiltration path** — prompt IP, skills and whole context
-  documents in one click. Open: whether export warrants a permission distinct
-  from flow edit.
+  documents in one click. **Decided**: owner/admin plus an audit event, no new
+  `PermissionKey`; a distinct export permission is future work (PRD §11).
 - **`formatVersion` discipline** — the refuse-newer policy only works if the
   version is incremented honestly and read-side migrations are maintained from
   the first release.
-- **Asset size** — ceilings are required and their defaults are unconfirmed;
-  both sides need streaming rather than buffering.
-- **Name collisions** — two skills sharing a name, or two MCP servers exposing
-  the same tool name, make resolution ambiguous. Open: reject as ambiguous, or
-  take the most recently updated and warn. Step 6(d) reports it either way.
-- **Zip library choice** — verify in `node_modules` at step 5 and record the
-  decision here before writing the adapter.
+- **Asset size** — **Decided**: buffer both sides and bound it with the ceilings
+  in step 5b, rather than reworking `IObjectStorage.get` (buffer-only) for
+  streaming. Residual risk is roughly one uncompressed archive in memory per
+  concurrent import; if that bites, the ceilings move to `runtime-config-store`
+  next to the existing archive-intake limits before the port changes.
+- **Name collisions** — neither `app_skills.name` nor `admin_mcp_servers.label`
+  has a unique constraint, so ambiguity is a live deployment state.
+  **Decided**: never auto-resolve — report unresolved with the candidates named
+  (step 6d). A heuristic like "most recently updated" wires a step to the wrong
+  tool in a way nobody audits later.
+- **Zip library** — **Decided**: PizZip, already in `packages/adapters` and
+  already used by `ZipIngestor`. Still re-read its API in `node_modules` at
+  step 5b; the write path is new to this repo.
+- **A second zip reader** — `IArchiveExtractor` cannot be reused (it drops
+  `manifest.json` and `.xlsx` on MIME sniffing), so a second reader exists. The
+  guards are shared via `zip-guards.ts` so there is still only one zip-slip
+  implementation; the risk is that a later change touches one reader and not the
+  shared module.
 - **Duplicate copies assets** rather than sharing keys, so storage grows per
   duplicate. Accepted: shared keys would let one flow's template deletion corrupt
   another's.
@@ -239,9 +323,18 @@ versioning. Import is inspect-then-commit: the archive is opened and reported on
 - **UI** — Export/Duplicate on flow rows and the canvas; an Import dialog whose
   inspection panel precedes any write; warning badges on unresolved nodes.
 - **Data** — `FlowExportManifest`, `FlowExportAsset`, `FlowExportDependency`,
-  `FlowImportInspection`, `IFlowArchiveReader` / `IFlowArchiveWriter`.
+  `FlowImportInspection`, `IFlowArchiveReader` / `IFlowArchiveWriter`, and
+  `unresolvedDependencies` on node config (jsonb).
 - **Database** — none.
 - **Risks** — untrusted-archive handling (zip-slip, bombs, drift); export as an
   exfiltration path; `formatVersion` discipline; asset size; name collisions.
 - **Out of scope** — merging into an existing flow, a marketplace, instance data,
-  KB contents, signed archives.
+  signed archives, a separate export permission, end-to-end streaming.
+
+**Amended at `/doc-review` (2026-08-17).** Version fixed at 0.30.0 on
+`release/alpha-2`; the `kb_collection` dependency kind removed (no such concept
+exists); MCP identity corrected to the server `label`; ambiguous matches decided
+as unresolved-not-guessed; the unresolved flag given a home and a publish gate;
+ceilings given numbers and buffering accepted in place of streaming; PizZip
+confirmed as the library with its guards shared with `ZipIngestor`; one
+Playwright spec added under e2e policy group 3.
