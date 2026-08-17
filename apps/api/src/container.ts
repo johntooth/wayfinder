@@ -2,6 +2,7 @@ import { buildRetentionPolicies } from "@rbrasier/domain";
 import {
   ApplyAutoNodeResult,
   ApplyRetentionPolicies,
+  SweepTestSessions,
   CreateUser,
   DeleteUser,
   FailJob,
@@ -229,9 +230,24 @@ export const buildContainer = (env: Env) => {
       maxBatchesPerTarget: env.RETENTION_MAX_BATCHES_PER_TARGET,
     },
   );
+  const sweepTestSessions = new SweepTestSessions(sessions, legalHolds);
+
+  // Both sweeps ride the one retention worker rather than registering a second
+  // job: they run on the same daily cadence, and a 30-day window does not need
+  // its own poller. Composed here because RetentionWorker takes a single
+  // structural sweeper, and a failure in either must not strand the other.
+  const retentionSweeper = {
+    execute: async () => {
+      const policies = await applyRetentionPolicies.execute();
+      const testSessions = await sweepTestSessions.execute();
+      if (policies.error) return policies;
+      return testSessions;
+    },
+  };
+
   const retentionWorkers = env.RETENTION_ENABLED
     ? [
-        new RetentionWorker(applyRetentionPolicies, jobRepo, logger, {
+        new RetentionWorker(retentionSweeper, jobRepo, logger, {
           tickIntervalMs: env.RETENTION_TICK_MS,
         }),
       ]

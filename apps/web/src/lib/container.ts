@@ -102,11 +102,6 @@ import {
   SetColumnMapping,
   SetFeatureFlagRoles,
   StartSession,
-  StartTestRun,
-  BuildSeedFromSession,
-  GenerateSeed,
-  GetTestRunReport,
-  DeleteTestSession,
   TrackUsage,
   UpdateErrorStatus,
   UpdateFlow,
@@ -117,6 +112,7 @@ import {
   UpsertFeatureFlag,
 } from "@rbrasier/application";
 import { buildApprovalNotifiers } from "./container-approval-notifiers";
+import { buildFlowTestUseCases } from "./container-flow-test-use-cases";
 import { buildApprovalUseCases } from "./container-approval-use-cases";
 import { buildDocumentUseCases } from "./container-document-use-cases";
 import { buildOnboarding } from "./container-onboarding";
@@ -730,21 +726,7 @@ const build = () => {
       reindexAllDocuments: new ReindexAllDocuments(reindexSource, documentIndexer, jobRepo),
       grantFlowOwner: new GrantFlowOwner(flows),
       startSession: new StartSession(sessions, flows, flowNodes, flowEdges, flowVersions),
-      startTestRun: new StartTestRun(
-        new StartSession(sessions, flows, flowNodes, flowEdges, flowVersions),
-        flowNodes,
-        sessionMessages,
-        sessionStepOutputs,
-      ),
-      buildSeedFromSession: new BuildSeedFromSession(
-        sessions,
-        flows,
-        sessionMessages,
-        sessionStepOutputs,
-      ),
-      generateSeed: new GenerateSeed(flows, flowNodes, flowEdges, seedProposer),
-      getTestRunReport: new GetTestRunReport(sessions, flows, flowNodes, sessionMessages, usageRepo),
-      deleteTestSession: new DeleteTestSession(sessions, flows),
+      ...buildFlowTestUseCases({ sessions, sessionMessages, sessionStepOutputs, flows, flowNodes, flowEdges, flowVersions, usage: usageRepo, seedProposer }),
       listSessions: new ListSessions(sessions),
       // Keyset-paginated variants of the two list use cases (phase Group A
       // item 4). Additive server support; tRPC exposure follows.

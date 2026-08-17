@@ -35,7 +35,7 @@ export interface TestRunStarted {
 // message with empty content would read as a failed turn to anything that
 // inspects the transcript.
 const seededContent = (nodeName: string): string =>
-  `[Seeded for this test run] Captured context from "${nodeName}".`;
+  `[Seeded for this test run] Context captured by the "${nodeName}" step.`;
 
 export class StartTestRun {
   constructor(

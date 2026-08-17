@@ -63,7 +63,7 @@ import {
   toRfEdge,
   toRfNode,
 } from "@/lib/canvas/rf-adapters";
-import { FlowTestModal } from "@/components/canvas/flow-test-modal";
+import { useFlowTestLauncher } from "./_use-flow-test-launcher";
 import { BranchRuleModal } from "@/components/canvas/branch-rule-modal";
 import { FlowConfigHeader } from "./_flow-config-header";
 import { useBranchRules } from "./_use-branch-rules";
@@ -108,11 +108,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [editingMetadata, setEditingMetadata] = useState(false);
 
   const [configOpen, setConfigOpen] = useState(false);
-  // Test-run modal state. The node is held here rather than in the modal so
-  // opening from a step and opening from the toolbar are the same modal with a
-  // different scope — a whole-flow run is a step test at the root.
-  const [testOpen, setTestOpen] = useState(false);
-  const [testNodeId, setTestNodeId] = useState<string | null>(null);
+  const flowTest = useFlowTestLauncher(flowId, rfNodes);
   const [typePickerOpen, setTypePickerOpen] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   // The node just created by the picker / a drag-out. If the author cancels the
@@ -651,10 +647,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         setFlowMenuOpen={setFlowMenuOpen}
         flowMenuRef={flowMenuRef}
         onAddStep={handleAddStep}
-        onTestFlow={() => {
-          setTestNodeId(null);
-          setTestOpen(true);
-        }}
+        onTestFlow={flowTest.openFlowTest}
         updateFlowMutation={updateFlowMutation}
         refetchVersionStatus={() => void versionStatusQuery.refetch()}
         setEditingMetadata={setEditingMetadata}
@@ -676,18 +669,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         staleReferences={staleReferences}
       />
 
-      <FlowTestModal
-        open={testOpen}
-        flowId={flowId}
-        startNodeId={testNodeId}
-        startNodeName={
-          testNodeId
-            ? ((rfNodes.find((node) => node.id === testNodeId)?.data.name as string | undefined) ??
-              null)
-            : null
-        }
-        onClose={() => setTestOpen(false)}
-      />
+      {flowTest.modal}
 
       <BranchRuleModal
         target={branchRuleTarget}
@@ -717,15 +699,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         initialValues={initialConfigValues}
         onSave={handleConfigSave}
         onDelete={editingNodeId ? handleNodeDelete : undefined}
-        onTestStep={
-          editingNodeId
-            ? () => {
-                setTestNodeId(editingNodeId);
-                handleConfigClose();
-                setTestOpen(true);
-              }
-            : undefined
-        }
+        onTestStep={editingNodeId ? () => flowTest.openStepTest(editingNodeId) : undefined}
         onClose={handleConfigClose}
         isSaving={isSavingConfig}
         priorStepFields={priorStepFields}
