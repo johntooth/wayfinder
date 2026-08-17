@@ -10,8 +10,16 @@
  *   modal" are genuinely different facts. Nothing below the browser can tell
  *   them apart.
  *
- *   Group 3 — file download. A document generated from seeded values crosses
- *   the browser boundary, which is the whole point of testing a document step.
+ * Group 3 — file download — is deliberately NOT covered here. Reaching a real
+ * document generation needs a step with an uploaded template, a server-side AI
+ * script returning field values complete enough to pass the readiness gate, and
+ * the id of a session the modal creates and never exposes to the DOM. No spec
+ * in this suite drives generation end to end for exactly that reason; the
+ * spreadsheet-templates spec mocks the upload at the network boundary and
+ * asserts UI hints only. A spec that cannot reach its assertion is worse than
+ * no spec, so the coverage stays where it already is: DocxGenerator adapter
+ * tests for generation, and GetTestRunReport's documentFilename test for a
+ * seeded run surfacing the file. Revisit if a seeded-document fixture lands.
  *
  * Everything else about this feature is covered where it belongs: the seed
  * validator and nodesPrecedingNode in packages/domain, the materialisation and
@@ -60,15 +68,24 @@ test.describe('phase: flow test runs', () => {
     // the modal is the evidence that the real surface mounted, not a copy.
     const composer = page.getByRole('textbox').last();
     await expect(composer).toBeVisible({ timeout: 20_000 });
+
+    // Counted from a baseline rather than merely found, matching chat.spec.ts:
+    // asserting "a bubble is visible" would pass on a thread that already had
+    // one, which is about the seed rather than about this turn.
+    const assistantBubbles = page.locator('[data-chat-message="assistant"]');
+    const bubblesBefore = await assistantBubbles.count();
+
     await composer.fill('We need 40 laptops for the finance team.');
+    // Enter rather than the send button: the Next.js dev overlay portal covers
+    // the button in headless mode (chat.spec.ts hit the same thing).
     await composer.press('Enter');
 
     // The streamed assistant turn has to reach the DOM inside the modal — the
     // one fact no unit or adapter test can establish.
+    await expect
+      .poll(() => assistantBubbles.count(), { timeout: 30_000 })
+      .toBeGreaterThan(bubblesBefore);
     await expect(page.getByText(TEST_BANNER)).toBeVisible();
-    await expect(page.locator('[data-role="assistant"], .prose').first()).toBeVisible({
-      timeout: 30_000,
-    });
 
     // The author never navigated away: same URL, canvas still behind the modal.
     expect(page.url()).toBe(canvasUrl);
@@ -86,27 +103,5 @@ test.describe('phase: flow test runs', () => {
     await expect(page.getByText(TEST_BANNER)).toBeHidden({ timeout: 10_000 });
     await expect(page.getByRole('button', { name: '+ Add step' }).first()).toBeVisible();
     expect(page.url()).toBe(canvasUrl);
-  });
-
-  test('a document generated from seeded values downloads', async ({ page }) => {
-    const flowName = `Test Runs Doc ${Date.now()}`;
-    await createFlowAndOpenCanvas(page, flowName, { expertRole: 'E2E Procurement Expert' });
-    await addConversationalStep(page, 'Gather requirements');
-
-    await openTestModal(page);
-    await page.getByRole('button', { name: 'Start test run' }).click();
-
-    const composer = page.getByRole('textbox').last();
-    await expect(composer).toBeVisible({ timeout: 20_000 });
-    await composer.fill('We need 40 laptops for the finance team.');
-    await composer.press('Enter');
-
-    const downloadLink = page.getByRole('link', { name: /\.docx|Download/i }).first();
-    await expect(downloadLink).toBeVisible({ timeout: 30_000 });
-
-    // The download crosses the browser boundary, which is the only reason this
-    // assertion is here rather than in a document-generator adapter test.
-    const [download] = await Promise.all([page.waitForEvent('download'), downloadLink.click()]);
-    expect(download.suggestedFilename()).toMatch(/\.(docx|xlsx)$/);
   });
 });

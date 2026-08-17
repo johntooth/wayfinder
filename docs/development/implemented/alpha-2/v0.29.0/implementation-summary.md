@@ -98,17 +98,28 @@ stream route — making "the runner is unchanged" enforced rather than asserted.
 
 ## E2E
 
-`apps/web/e2e/phase-flow-test-runs.spec.ts` covers only the two policy groups a
-browser is needed for: the streamed turn reaching the DOM inside the modal
-(group 2) and a document generated from seeded values downloading (group 3).
-Written, not run — CI runs the suite, and the e2e workspace's dependencies are
-not installed in this environment.
+`apps/web/e2e/phase-flow-test-runs.spec.ts` covers policy **group 2** — the
+streamed turn reaching the DOM inside the modal — and that closing the modal
+returns the author to the canvas.
+
+**Group 3 (file download) is not covered.** The first version of this spec
+asserted a document download from a step with no template, so it could never
+have passed; CI caught it. Reaching a real generation needs an uploaded
+template, a server-side AI script returning field values complete enough to
+pass the readiness gate, and the id of a session the modal creates and never
+exposes to the DOM. No spec in this suite drives generation end to end for that
+reason — the spreadsheet-templates spec mocks the upload at the network
+boundary and asserts UI hints only. The coverage stays where it already is:
+`DocxGenerator` adapter tests for generation, and `GetTestRunReport`'s
+`documentFilename` test for a seeded run surfacing the file. The PRD criterion
+"a document step under test produces a downloadable file from seeded values" is
+therefore met below the browser but not asserted through one.
 
 ## Known limitations
 
-- The migration has not been applied; `validate.sh` was not run end to end
-  because Postgres, Redis and MinIO are unavailable here. Per-package typecheck
-  and tests were run individually instead.
+- The migration has not been applied — no Postgres in the build environment.
+  It is generated and reviewed, unapplied. (`./validate.sh` itself passes: its
+  external-service checks are WARN-only by design.)
 - Approval behaviour under test is deliberately not production behaviour: the
   approver resolves to the testing author.
 - A run cannot be deep-linked or shared — accepted for this version.
@@ -116,3 +127,5 @@ not installed in this environment.
   visibility and manual deletion.
 - Both retention sweeps share one worker tick; a test-session sweep failure is
   reported only if the policy sweep succeeded.
+- No e2e assertion that a document generated from seeded values downloads — see
+  the E2E section above for why, and where that behaviour is covered instead.

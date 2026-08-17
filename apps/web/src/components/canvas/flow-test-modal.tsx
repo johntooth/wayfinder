@@ -7,6 +7,7 @@ import {
   Dialog,
   DialogCloseButton,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -150,6 +151,12 @@ export function FlowTestModal({
             <span className="rounded bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
               Test
             </span>
+            {/* Radix warns without one, and a screen-reader user opening a
+                near-full-screen dialog needs to know it is a disposable run. */}
+            <DialogDescription className="sr-only">
+              Runs this flow against disposable data. Nothing here reaches operators, dashboards or
+              approver queues.
+            </DialogDescription>
           </div>
           <DialogCloseButton />
         </DialogHeader>

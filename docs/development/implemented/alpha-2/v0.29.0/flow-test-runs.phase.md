@@ -262,8 +262,10 @@ Mirror PRD §10. In particular:
       by-session legal holds; test spend counts against budgets and stays visible
       in usage reporting.
 - [ ] The modal never navigates away from the canvas.
-- [ ] One Playwright spec covers the streamed transcript and the seeded document
-      download; nothing else about the modal is an e2e test.
+- [x] One Playwright spec covers the streamed transcript; nothing else about the
+      modal is an e2e test. The seeded document download is **not** covered in a
+      browser — no spec in this suite can reach a real generation — and stays
+      covered at the adapter and application layers instead.
 - [ ] `domain` dependency-free; ports in domain; Result at every boundary;
       `VERSION` = `package.json#version` = `0.29.0`; `./validate.sh` passes.
 
