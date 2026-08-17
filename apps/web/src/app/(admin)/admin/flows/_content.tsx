@@ -19,6 +19,8 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { FlowImportDialog } from "@/components/flow/flow-import-dialog";
+import { FlowRowActions } from "@/components/flow/flow-row-actions";
 import { EmptyState } from "@/components/empty-state";
 import { TableSkeletonRows } from "@/components/skeleton/card-skeleton";
 import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/flow-metadata-dialog";
@@ -57,6 +59,14 @@ export function AdminFlowsContent() {
       void utils.flow.list.invalidate();
       setEditing(null);
       toast.success("Flow updated");
+    },
+  });
+
+  const [importing, setImporting] = useState(false);
+
+  const duplicateMutation = trpc.flow.duplicate.useMutation({
+    onSuccess: () => {
+      void utils.flow.list.invalidate();
     },
   });
 
@@ -112,7 +122,12 @@ export function AdminFlowsContent() {
     <div className="flex h-full flex-col overflow-hidden">
       <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#e7e3db] bg-white pl-5 pr-[52px]">
         <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1c1b19]">All Flows</h1>
-        <Button onClick={() => setCreating(true)}>New Flow</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setImporting(true)}>
+            Import Flow
+          </Button>
+          <Button onClick={() => setCreating(true)}>New Flow</Button>
+        </div>
       </header>
 
       <div className="flex-1 overflow-auto">
@@ -201,6 +216,13 @@ export function AdminFlowsContent() {
                             Share
                           </Button>
                         )}
+                        <FlowRowActions
+                          flowId={flow.id}
+                          flowName={flow.name}
+                          onDuplicate={async (flowId) => {
+                            await duplicateMutation.mutateAsync({ flowId });
+                          }}
+                        />
                         <Button size="sm" asChild>
                           <Link href={`/flows/${flow.id}/config`}>Configure Flow</Link>
                         </Button>
@@ -211,6 +233,15 @@ export function AdminFlowsContent() {
               </Table>
             )}
           </CardContent>
+
+          <FlowImportDialog
+            open={importing}
+            onClose={() => setImporting(false)}
+            onImported={() => {
+              setImporting(false);
+              void utils.flow.list.invalidate();
+            }}
+          />
 
           <FlowMetadataDialog
             open={creating}

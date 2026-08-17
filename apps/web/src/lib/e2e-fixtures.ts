@@ -2,6 +2,7 @@ import type { Result } from "@rbrasier/domain";
 import { schema } from "@rbrasier/adapters";
 import { eq, inArray } from "drizzle-orm";
 import type { Container } from "./container";
+import { seedStorageObjects } from "./e2e-fixtures-storage";
 import { seedStructuredSession } from "./e2e-fixtures-structured";
 
 // Deterministic fixture data seeded before the E2E suite so that specs gated on
@@ -452,6 +453,10 @@ import {
   seedWithdrawableApprovalSession,
 } from "./e2e-fixtures-approval";
 
+
+// Storage paths the seeded fixtures point at. The bytes only have to exist and
+// be stable — no spec reads their content, but export bundles them and verifies
+// each one's sha256.
 export const seedE2EFixtures = async (container: Container): Promise<SeedResult> => {
   const ownerUserId = await resolveAdminUserId(container);
   await resolveMemberUserId(container);
@@ -486,6 +491,12 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     }),
     "create seed skill",
   );
+
+  // The fixtures below reference template and context-document objects by
+  // storage path. Nothing was ever written at those paths, so any code that
+  // actually reads one — flow export, for instance — failed against the seed.
+  // Write a placeholder for each so the seeded flow is internally consistent.
+  await seedStorageObjects(container);
 
   // ── Rich flow: a conversational step plus a document-generation step ──────
   const flow = unwrap(

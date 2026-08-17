@@ -11,8 +11,28 @@ import {
   type IFlowNodeRepository,
   type IFlowRepository,
   type IFlowVersionRepository,
+  type FlowNode,
   type Result,
 } from "@rbrasier/domain";
+
+// An imported flow whose skills or MCP tools did not resolve carries them on the
+// nodes that wanted them (ADR-049 §4). Publishing such a flow would put a step
+// into production with a reference that silently does nothing, so it is refused
+// until an author picks a local replacement or removes the step's need for it.
+const describeUnresolvedDependencies = (nodes: FlowNode[]): string[] =>
+  nodes.flatMap((node) => {
+    const unresolved = node.config.unresolvedDependencies;
+    if (!Array.isArray(unresolved) || unresolved.length === 0) return [];
+
+    return unresolved.map((dependency) => {
+      const reference = dependency as { kind?: string; name?: string; toolName?: string };
+      const what =
+        reference.kind === "mcp_tool"
+          ? `MCP tool "${reference.toolName}" on server "${reference.name}"`
+          : `skill "${reference.name}"`;
+      return `${node.name} needs ${what}`;
+    });
+  });
 
 export interface PublishFlowVersionInput {
   flowId: string;
@@ -77,6 +97,17 @@ export class PublishFlowVersion {
     ]);
     if (nodesResult.error) return nodesResult;
     if (edgesResult.error) return edgesResult;
+
+    const unresolved = describeUnresolvedDependencies(nodesResult.data);
+    if (unresolved.length > 0) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `This flow cannot be published until every imported reference is resolved. Still missing: ${unresolved.join("; ")}.`,
+        ),
+      );
+    }
+
     return ok(buildFlowSnapshot(flow, nodesResult.data, edgesResult.data));
   }
 

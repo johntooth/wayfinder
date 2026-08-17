@@ -3,6 +3,7 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { cn } from "@/lib/utils";
 import { NodeTypeBadge } from "./node-styles";
+import { UnresolvedDependenciesBadge } from "./unresolved-dependencies-badge";
 
 export interface ConversationalNodeData {
   name: string;
@@ -47,6 +48,7 @@ export function ConversationalNode({ data, selected }: NodeProps) {
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-gray-900">{displayName}</p>
           <p className="mt-0.5 text-xs text-gray-500 leading-snug line-clamp-2">{subtitle}</p>
+          <UnresolvedDependenciesBadge config={(nodeData.config ?? {}) as Record<string, unknown>} />
         </div>
       </div>
 

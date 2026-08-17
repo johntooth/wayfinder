@@ -256,6 +256,62 @@ describe("PublishFlowVersion", () => {
     useCase = new PublishFlowVersion(flows, nodes, edges, versions, audit);
   });
 
+  it("refuses to publish a flow whose imported references are still unresolved", async () => {
+    nodes.nodes.set(
+      "node-3",
+      makeNode({
+        id: "node-3",
+        name: "Draft the order",
+        config: {
+          aiInstruction: "Draft.",
+          unresolvedDependencies: [
+            { kind: "skill", sourceId: "src-skill", name: "Procurement Policy", nodeIds: ["node-3"] },
+          ],
+        },
+      }),
+    );
+
+    const result = await useCase.execute({ flowId: "flow-1", publishedByUserId: "user-1" });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toContain("Procurement Policy");
+    expect(result.error?.message).toContain("Draft the order");
+    expect(versions.versions).toHaveLength(0);
+  });
+
+  it("names an unresolved MCP tool by its server as well as its tool name", async () => {
+    nodes.nodes.set(
+      "node-3",
+      makeNode({
+        id: "node-3",
+        config: {
+          unresolvedDependencies: [
+            {
+              kind: "mcp_tool",
+              sourceId: "src-server",
+              name: "Finance",
+              toolName: "lookup_supplier",
+              nodeIds: ["node-3"],
+            },
+          ],
+        },
+      }),
+    );
+
+    const result = await useCase.execute({ flowId: "flow-1", publishedByUserId: "user-1" });
+
+    expect(result.error?.message).toContain("lookup_supplier");
+    expect(result.error?.message).toContain("Finance");
+  });
+
+  it("publishes once the unresolved reference has been cleared", async () => {
+    nodes.nodes.set("node-3", makeNode({ id: "node-3", config: { unresolvedDependencies: [] } }));
+
+    const result = await useCase.execute({ flowId: "flow-1", publishedByUserId: "user-1" });
+
+    expect(result.error).toBeUndefined();
+  });
+
   it("records version 1 with a complete snapshot of the live definition", async () => {
     const result = await useCase.execute({ flowId: "flow-1", publishedByUserId: "user-1" });
 

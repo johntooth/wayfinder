@@ -202,6 +202,7 @@ import {
 } from "@rbrasier/adapters";
 import type { FlowVersion, PermissionKey } from "@rbrasier/domain";
 import { buildSkillsAndMcp } from "./container-skills-mcp";
+import { buildFlowPortability } from "./container-flow-portability";
 import { buildExtractionModule } from "./container-extraction";
 import { buildPeopleDirectory } from "./container-people-directory";
 import { buildSmtpEnvConfig } from "./container-smtp";
@@ -746,6 +747,7 @@ const build = () => {
       // into the session/user repos directly for the lease.
       turnLease: new TurnLease(sessions, users),
       publishFlowVersion: new PublishFlowVersion(flows, flowNodes, flowEdges, flowVersions, auditLogger),
+      ...buildFlowPortability({ flows, flowNodes, flowEdges, objectStorage, auditLogger, skillsAndMcp }),
       listFlowVersions: new ListFlowVersions(flowVersions),
       getFlowVersion: new GetFlowVersion(flowVersions),
       restoreFlowVersion: new RestoreFlowVersion(flowVersions, auditLogger),
