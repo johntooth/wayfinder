@@ -231,6 +231,8 @@ jsonb` is the accumulator, and `source_document_ids` is the citation link
   the batch engine, the retry/resume semantics, the per-run cost ceiling, and the
   results grid, and avoids bending the one-session/one-conversation model that
   ADR-033 explicitly declined to bend.
+- §7 designs (a) end to end as two flows, including the handoff mechanism and
+  its trade-offs.
 
 ---
 
@@ -258,9 +260,198 @@ The mapping is direct:
 Chat's job is **schema definition, refinement, and inspection**. The batch
 engine's job is **the corpus**. Keep that split.
 
+§7 works this split through as a concrete pair of flows.
+
 ---
 
-## 7. Deployment
+## 7. Worked flow design — "Supplier Response Comparison"
+
+A concrete flow that uses Redline, expressed in this repo's actual config shapes
+(`ConversationalNodeConfig`, `McpNodeConfig`, `ExtractionSchema`). Treat it as
+the reference implementation the PRD and phase docs are written against: if a
+design decision can't be expressed here, it isn't ready to build.
+
+**The scenario.** A procurement officer has 500 supplier responses already
+ingested by Womblex. They need one row per supplier, with columns they decide —
+not columns a model invented — and every cell traceable to the exact element in
+the exact source document.
+
+It runs as **two flows**, matching §5.5 option (a) and the §6 split: a guided
+flow defines the schema and hands off, an extraction flow processes the corpus.
+
+### 7.0 The governing pattern: reference-then-resolve
+
+The single design rule that makes the rest of it work, and the thing to get
+right before any node is authored:
+
+> **The model never returns a value. It returns a locator.**
+> The model's job is to decide _which_ element answers a field —
+> `{ documentId, elementId, offset, length }`. Wayfinder then fetches those bytes
+> from Redline and writes **those bytes** into the cell. The model's output never
+> becomes cell content.
+
+Why this matters more than any prompt instruction: it makes hallucinated source
+data **structurally impossible** rather than merely discouraged. A model that
+invents a quotation produces a locator that either doesn't resolve (→ exception)
+or resolves to text that isn't what it imagined (→ the real text lands in the
+cell, and the mismatch is visible). No "please quote verbatim" instruction can
+offer that.
+
+Two consequences to carry into the design:
+
+- **Confidence means something different here.** The stored per-field
+  `confidence` is confidence in the _selection_ — "this element is the one that
+  answers this field" — never in the accuracy of the text, which is exact by
+  construction. Label it that way in the UI or reviewers will misread it.
+- **Derived fields are a separate, marked category.** "Total contract value
+  across three tables" is arithmetic over verbatim inputs, not a verbatim value.
+  It is allowed, marked derived, and retains the locators it was computed from
+  (rule 3 in §9).
+
+### 7.1 Flow A — guided flow: define the schema and hand off
+
+`flow_type = 'guided'`. Five nodes. Node types and config keys below are the
+existing ones unless flagged **new**.
+
+**Step 1 — Conversational: "Choose the source set"**
+
+| Config               | Value                                                                            |
+| -------------------- | -------------------------------------------------------------------------------- |
+| `outputType`         | `structured`                                                                     |
+| `structuredFields`   | `documentSet (text)`, `documentCount (number)`                                   |
+| `allowedMcpToolRefs` | Redline: `list_document_sets`, `list_documents`                                  |
+| `doneWhen`           | "A document set is selected and its document count confirmed with the operator." |
+
+The AI lists what Womblex holds and the operator picks. `list_documents` returns
+**metadata only** (§4) — 500 titles and entity names cost almost nothing in
+context, 500 documents' text would be impossible. Deny-by-default allowlisting
+means no retrieval tool is reachable from this step at all.
+
+**Step 2 — MCP node: "Discover the source schema"**
+
+| Config               | Value                                                                                  |
+| -------------------- | -------------------------------------------------------------------------------------- |
+| `serverId`           | Redline                                                                                |
+| `toolName`           | `get_schema`                                                                           |
+| `requestFields`      | `documentSetId (text)`                                                                 |
+| `requestFieldValues` | `{ documentSetId: { kind: "step_field", nodeId: <step 1>, fieldKey: "documentSet" } }` |
+| `responseFields`     | `columns (text) (multiple)`, `elementTypes (text) (multiple)`                          |
+
+Deliberately an **`mcp` node, not a conversational step**. `RunMcpNode` is a
+deterministic single-tool call with no model in the loop, and `step_field`
+binding means the document-set id is _carried_, not _guessed_. The response
+persists to `session_step_outputs` via the existing ADR-020 path.
+
+This is the "what are the exact column headers in this extracted table?"
+capability: discovered at runtime, per document set, never compiled in.
+
+**Step 3 — Conversational: "Define the report schema"** — the §5.2 form step
+
+| Config                | Value                                                                                                               |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `outputType`          | `structured`                                                                                                        |
+| `allowedMcpToolRefs`  | Redline: `get_schema`, `get_verbatim_data`                                                                          |
+| `requireConfirmation` | `true`                                                                                                              |
+| `doneWhen`            | "Every report column has a name, a type, and an extraction instruction, and the operator has confirmed the schema." |
+
+The AI reads step 2's discovered columns, proposes a report schema, and calls
+`request_schema_definition` (**new tool**). Wayfinder intercepts the call and
+renders a form card in the message feed instead of streaming prose. The operator
+names each column, picks a type from the existing `TemplateFieldType` set, marks
+required, sets constraints.
+
+Two details that make this trustworthy rather than merely convenient:
+
+- While the operator decides, the AI may pull **one real sample cell** per
+  proposed column via `get_verbatim_data`, so they are naming a column against
+  actual source text rather than against a model's guess at what the documents
+  contain. Verbatim channel only (§5.1).
+- `requireConfirmation: true` is not optional here. The schema is the definition
+  of what the finished report claims to be; it gets an explicit human Proceed,
+  and it is persisted and audited as workflow state.
+
+Output shape is an `ExtractionFieldDraft[]` — `{ label, annotation, instruction,
+doneWhen }` — which is exactly what `buildExtractionField` already consumes. The
+form is a new renderer over an **existing** vocabulary; no second field language.
+
+**Step 4 — Handoff: publish the extraction flow and start the run** _(new)_
+
+The confirmed drafts become an `ExtractionSchema` inside a flow version snapshot
+(ADR-033 §3 — no new authoring tables), and a run starts over the document set
+from step 1.
+
+The mechanism is **open decision #6** (§10). The honest options:
+
+| Option                                  | Trade-off                                                                                                                               |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| A new `handoff` node type               | Cleanest semantics; a new node type touches the editor, canvas, publish validation, and export/import                                   |
+| An `auto` node with a built-in executor | Reuses `AutoNodeConfig` + `ApplyAutoNodeResult` wiring; `NodeExecutorKind` is currently `n8n \| mock`, so it still widens a domain type |
+| A tRPC action on the step, not a node   | Smallest surface; the handoff then isn't visible on the canvas, which is a real governance loss                                         |
+
+Recommendation: the `auto` executor route, as the smallest change that keeps the
+handoff on the canvas where an auditor can see it.
+
+**Step 5 — Conversational: "Review and export"**
+
+Polls the run, surfaces the results grid, and offers the exports — XLSX today,
+CSV from §5.3. Where a locator failed to resolve, the row shows in the
+exceptions bucket rather than as a blank cell (§7.3).
+
+### 7.2 Flow B — extraction flow: assemble from source
+
+`flow_type = 'extraction'`, published by step 4. Its `ExtractionSchema`:
+
+| Config               | Value                                                                                                                                |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `fields`             | From step 3. Each `ExtractionField` is `{ field: TemplateField, instruction, doneWhen }`                                             |
+| `input.cardinality`  | `one_per_file` — one supplier response, one row. (`many_per_record` + `selectionCriteria` when a supplier submits a folder of files) |
+| `input.guidance`     | Plain-English notes about the corpus                                                                                                 |
+| `output.format`      | `xlsx` (+ `csv` per §5.3)                                                                                                            |
+| `output.contextDocs` | The tender documents the responses answer, if any                                                                                    |
+
+**Per record, the worker loop.** This is where reference-then-resolve is
+enforced, and it is the one part of the batch runner that changes:
+
+1. Claim the document task (`FOR UPDATE SKIP LOCKED`, existing).
+2. Call Redline `list_elements(documentId)` — metadata and headings, paginated —
+   to orient within this one document.
+3. For each schema field, the model reads the field's `instruction` and the
+   element list and returns a **locator**, not a value.
+4. Wayfinder calls Redline `get_verbatim_data(locator)` and takes the bytes.
+5. Write `{ key, value, confidence, rationale, locator }` into the record's
+   `fields jsonb` — `value` being Redline's bytes, unmodified. The `locator` slot
+   is the schema addition from §5.1.
+6. Next field, then next document. The model's context holds one document at a
+   time and is discarded between records; the accumulator is the table.
+
+`source_document_ids` continues to power "select a row → highlight the source
+files"; the per-field locator refines that from document-level to element-level,
+which is what makes a cell defensible rather than merely attributed.
+
+### 7.3 Failure modes, by design
+
+| Situation                                  | Behaviour                                                                                                                                                        |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Locator doesn't resolve                    | Field marked unresolved, record routed to the run's **exceptions** bucket. Never a blank cell, never a model-authored substitute.                                |
+| Redline unreachable / errors               | Task fails and retries via existing `attempts`. On exhaustion the run surfaces the error. **Never** degrades to reading document text with a model (rule 6, §9). |
+| Model returns a value instead of a locator | Rejected at the tool-schema boundary. The tool's contract accepts a locator; there is no value field to populate.                                                |
+| No element answers a field                 | Field left empty with a rationale. An empty cell is a valid, auditable answer; an invented one is not.                                                           |
+| Womblex re-extracts and locators shift     | Runs pin the Womblex asset version. A locator is only valid against the version it was resolved from — hence "versioned data assets" in §1.                      |
+
+### 7.4 What this flow proves
+
+Walk the guarantee end to end: the operator picked the corpus (step 1), the
+schema came from Womblex's real structure (step 2), a human defined every column
+(step 3), each cell's text arrived byte-identical from Redline against a locator
+the model chose (§7.2), unresolvable selections surfaced as exceptions rather
+than as plausible text (§7.3), and the CSV carries the locators out with it
+(§5.3). Every cell in the finished report answers "where did this come from?"
+with a document, an element, and an offset.
+
+That is the whole point of the three-system split, expressed as one runnable
+flow.
+
+## 8. Deployment
 
 Redline runs as a **sidecar container**, not as code inside this repo.
 
@@ -280,7 +471,7 @@ Redline runs as a **sidecar container**, not as code inside this repo.
 
 ---
 
-## 8. Provenance rules (non-negotiable, once built)
+## 9. Provenance rules (non-negotiable, once built)
 
 1. A value presented as source data is byte-identical to what Redline returned.
 2. Every such value carries a resolvable reference to its Womblex origin.
@@ -296,7 +487,7 @@ in `CLAUDE.md` — not an e2e spec.
 
 ---
 
-## 9. Open decisions
+## 10. Open decisions
 
 | #   | Decision                                                                                                          | Owner                  | Blocks                                      |
 | --- | ----------------------------------------------------------------------------------------------------------------- | ---------------------- | ------------------------------------------- |
@@ -305,10 +496,11 @@ in `CLAUDE.md` — not an e2e spec.
 | 3   | Chat hands off to an extraction run (a) vs. session scratchpad (b)                                                | Product + architecture | §5.5, §6                                    |
 | 4   | Does the CSV carry provenance columns?                                                                            | Product                | §5.3                                        |
 | 5   | Whether the schema-definition form is a new node type or a tool-triggered card on an existing conversational node | Architecture           | §5.2                                        |
+| 6   | How the guided flow hands off to an extraction run — new `handoff` node, an `auto` executor, or a step action     | Architecture           | §7.1 step 4                                 |
 
 ---
 
-## 10. Out of scope
+## 11. Out of scope
 
 - Any build item inside Womblex or Redline. Womblex's output schemas are treated
   as a locked, documented foundation; Redline's pruning and MCP contract
@@ -321,7 +513,7 @@ in `CLAUDE.md` — not an e2e spec.
 
 ---
 
-## 11. How this becomes work
+## 12. How this becomes work
 
 This note is planning input, not a plan of record. Turn it into docs the repo
 recognises:
