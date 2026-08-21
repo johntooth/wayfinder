@@ -5,6 +5,15 @@
 - **Source**: the UI-affecting workstreams of
   [`WOMBLEX-REDLINE-WAYFINDER.md`](WOMBLEX-REDLINE-WAYFINDER.md) (§5.1–§5.4, §7.0),
   extracted and corrected against the code as it stands at `0.30.0`.
+
+> **What is and isn't from the source note.** Items 1, 2 and 4 restate
+> workstreams the note describes, with path- and scope-level corrections marked
+> inline. **Item 3 is largely inferred** — the note calls for a verbatim-only
+> flag but never asks for an admin control; that a per-server flag needs a place
+> to be set is this document's reading, not the note's instruction. The
+> **sequencing (§5), acceptance criteria, risks (§7), and decisions D2 and D4 are
+> new here** — the note contains none of them. Where this document disagrees
+> with the note, it says so rather than quietly rewriting it.
 - **Base branch**: `main` (new feature surface, per **Release Branching** in `CLAUDE.md`)
 - **Target version**: **0.31.0** — MINOR. Item 3 adds a column to
   `admin_mcp_servers`; items 1 and 2 are additive feature surface.
@@ -41,9 +50,12 @@ queries and is persisted as workflow state.
 
 ### Where it actually goes
 
-The source note pointed at `confirm-step-card.tsx` and `approval-gate.tsx` as
-the precedent. **Those are the wrong models.** Neither renders in the message
-feed — both are siblings of `<MessageFeed>` in
+The source note asks for the card to render in the message feed, "as a card in
+the same family as `confirm-step-card.tsx` / `approval-gate.tsx`". Read as
+*visual* family that is fair — `ConfirmStepCard`'s own comment says it mirrors
+`DocumentCard`'s visual language. Read as a *structural* recipe it misleads,
+because neither component renders in the feed. Both are siblings of
+`<MessageFeed>` in
 `apps/web/src/app/(user)/chats/[sessionId]/_content.tsx`:
 
 - `ConfirmStepCard` (line 490) is pinned above the composer, driven by
@@ -52,7 +64,7 @@ feed — both are siblings of `<MessageFeed>` in
   `currentNode.type === "approval"`.
 
 Both are keyed off **session/node state**, not off a message. A tool call
-arriving mid-turn is neither.
+arriving mid-turn is neither, so neither component's mounting logic transfers.
 
 **The right precedent is `apps/web/src/components/chat/record-card.tsx`** — a
 genuine in-feed card, keyed off `messageId`, that reads its fields through
@@ -72,16 +84,26 @@ this is a new discriminator on `SessionMessage`, not a component drop-in.
 
 ### The hard part: suspending the turn
 
-There is **no existing mechanism** for suspending a live turn on a tool call.
-The current answer to "the AI needs something from the human" is
-`apps/web/src/app/api/chat/[sessionId]/stream/gate-holds.ts`: the pre-generation
-gate appends `OUTSTANDING — still required from the user` to the next turn's
-gathered context, and the model asks in prose on the following turn. Both named
-gates park *between* steps.
+Nothing today interrupts a turn *mid-tool-call*. But the repo is not empty here,
+and an earlier draft of this plan overstated the gap — there are two working
+park-and-resume paths, both at **node** granularity:
 
-So the form requires a decision (D1) and then real stream work: end the stream
-cleanly, persist a pending-form state against the message, and resume as a new
-turn on submit. Budget this as the bulk of item 1.
+- `dispatchAutoNode` (`turn-helpers.ts:319`) records a pending execution, hands
+  off to the node executor, and lets an inbound webhook advance the session
+  later via a correlation id.
+- `dispatchScheduledNode` (`turn-helpers.ts:433`) creates a schedule row, pauses
+  the session with no message generated, and lets the worker resume it when due.
+
+The prose fallback is separate again: `gate-holds.ts` appends
+`OUTSTANDING — still required from the user` to the next turn's gathered
+context so the model asks in words on the following turn.
+
+This bears directly on **D1**. If the form is a **new node type**, it can follow
+the auto/scheduled park pattern, which is well-trodden and needs no new stream
+behaviour. If it is a **tool-triggered card mid-turn**, it needs genuinely new
+work: ending the stream cleanly, persisting pending-form state against the
+message, and resuming as a fresh turn on submit. The node route is cheaper and
+should be the default unless something forces the mid-turn variant.
 
 ### Field vocabulary
 
@@ -108,9 +130,14 @@ covering text / number / currency / date / email / yes-no / select / multiselect
 `components/canvas/template-field-editor.tsx` and
 `components/canvas/structured-field-editor.tsx` are the author-time siblings.
 
-**Reuse `ExtractionFieldEditor`.** This also keeps item 1 consistent with §6 of
-the source note, which has the chat form setting the extraction schema in the
-flow version snapshot.
+**Build on `ExtractionFieldEditor` rather than on `TemplateField`.** Caveat: it
+is an admin-surface component today, with a dialog-based per-field config and a
+`derived` mode tied to template-locked fields. Reuse probably means lifting the
+field-row editor out of it rather than mounting it unchanged in a chat card —
+scope that before committing to it. The vocabulary is the part that should
+carry over regardless, and it keeps item 1 consistent with §6 of the source
+note, which has the chat form setting the extraction schema in the flow version
+snapshot.
 
 ### Component notes
 
@@ -213,6 +240,14 @@ Do not ship (b) labelled as if it were (a).
 **What it is.** A per-server flag marking a server's tool results as
 verbatim-only, so they can never be routed through the summarising pre-pass by
 misconfiguration. Server-enforced; the UI is only how it gets set.
+
+**This item is inferred, not instructed.** §5.1 of the source note asks for the
+flag and says it must be "server-enforced, not a UI convention" — a statement
+about where enforcement lives, not a request for an admin control. §5.4's "no
+new admin screen" is about registering Redline, not about this flag. The note
+never says how the flag gets set. A per-server flag needs a place to be set, so
+this document proposes the obvious one; treat the whole item as a proposal to
+confirm.
 
 No new admin screen — but it is not zero UI work either. The form at
 `apps/web/src/app/(admin)/admin/mcp-servers/_content.tsx` holds `label`, `url`,
@@ -319,9 +354,9 @@ D2 and D4 are additions to the source note's §10 — neither was listed there.
 
 ## 7. Risks
 
-- **Turn suspension is the schedule risk.** It has no precedent in the stream
-  code, and the two components the source note offered as models do not apply.
-  Estimate item 1 from D2's answer, not from the card.
+- **Turn suspension is the schedule risk — but only on one branch of D1.** As a
+  node type it reuses the auto/scheduled park pattern; as a mid-turn card it is
+  new stream work with no precedent. Estimate item 1 after D1, not before.
 - **A half-relabelled confidence display is worse than none.** If item 4 ships
   partially, a reviewer sees "High confidence" on a verbatim cell and reads it as
   a claim about text accuracy — the exact misreading §7.0 exists to prevent.
