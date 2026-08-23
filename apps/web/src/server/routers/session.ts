@@ -11,6 +11,52 @@ import { confirmStep } from "@/lib/chat/confirm-step";
 
 const COMPLETE_CONFIDENCE_THRESHOLD = 90;
 
+// The type stays a plain string here; the domain owns the vocabulary and returns
+// a named error for a template-only type, which is a better message than a zod
+// enum mismatch would give.
+const schemaRequestFieldInput = z.object({
+  label: z.string(),
+  type: z.string(),
+  required: z.boolean(),
+  options: z.array(z.string()),
+  min: z.number().nullable(),
+  max: z.number().nullable(),
+  instruction: z.string(),
+});
+
+// Answering a schema form is a send, so it takes the send grant rather than the
+// owner-only check `confirmStep` uses — a collaborator driving the session must
+// be able to answer. Resolves the session from the message so a caller cannot
+// pair a message id with a session they happen to have access to.
+const authoriseSchemaRequest = async (
+  container: Container,
+  messageId: string,
+  userId: string,
+  isAdmin: boolean,
+): Promise<string> => {
+  const messageResult = await container.repos.sessionMessages.findById(messageId);
+  if (messageResult.error) throw toTrpcError(messageResult.error);
+  if (!messageResult.data) throw new TRPCError({ code: "NOT_FOUND", message: "Message not found." });
+
+  const sessionResult = await container.useCases.getSession.execute(messageResult.data.sessionId);
+  if (sessionResult.error) throw toTrpcError(sessionResult.error);
+  if (!sessionResult.data) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found." });
+
+  const accessResult = await container.useCases.resolveSessionAccess.execute({
+    session: sessionResult.data.session,
+    flow: sessionResult.data.flow,
+    userId,
+    isAdmin,
+    isApprover: false,
+    allowAutoEnrol: false,
+  });
+  if (accessResult.error) throw toTrpcError(accessResult.error);
+  if (!accessResult.data.canSend) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
+  }
+  return messageResult.data.sessionId;
+};
+
 // Maps each of the given user ids to their organisation id (or omits them when
 // unaffiliated), in a single batch lookup. Backs the `organisation` visibility
 // owner-join (ADR-038) without a per-flow query or a denormalised column.
@@ -446,6 +492,33 @@ export const sessionRouter = router({
       });
       if (result.error) throw toTrpcError(result.error);
       void ctx.container.services.sessionEvents.publish(input.sessionId, { type: "session.updated" });
+      return result.data;
+    }),
+
+  submitSchemaDefinition: authenticatedProcedure
+    .input(z.object({ messageId: z.string().uuid(), fields: z.array(schemaRequestFieldInput).min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const sessionId = await authoriseSchemaRequest(ctx.container, input.messageId, ctx.userId, ctx.isAdmin);
+      const result = await ctx.container.useCases.resolveSchemaRequest.submit({
+        messageId: input.messageId,
+        userId: ctx.userId,
+        fields: input.fields,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      void ctx.container.services.sessionEvents.publish(sessionId, { type: "session.updated" });
+      return result.data;
+    }),
+
+  dismissSchemaRequest: authenticatedProcedure
+    .input(z.object({ messageId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const sessionId = await authoriseSchemaRequest(ctx.container, input.messageId, ctx.userId, ctx.isAdmin);
+      const result = await ctx.container.useCases.resolveSchemaRequest.dismiss({
+        messageId: input.messageId,
+        userId: ctx.userId,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      void ctx.container.services.sessionEvents.publish(sessionId, { type: "session.updated" });
       return result.data;
     }),
 });

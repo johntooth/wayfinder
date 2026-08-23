@@ -75,6 +75,7 @@ const makeAssistantMessage = (overrides: Partial<SessionMessage> = {}): SessionM
       { key: "Department", value: "Sales" },
     ],
   },
+  schemaRequest: null,
   createdAt: new Date(),
   ...overrides,
 });

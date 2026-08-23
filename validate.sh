@@ -455,28 +455,33 @@ fi
 
 # ── 24. the flow-test feature leaves the runner alone ────────────────────────
 # ADR-048 buys its safety from one claim: a test run is the production path, so
-# these four files never change for it. That claim is only worth anything if it
-# is checked — "we did not touch it" is exactly the kind of thing that is true
-# at review and false two commits later. Compares against the base branch, and
-# skips silently when that ref is absent (a shallow CI clone, a fresh worktree).
-section "24. the session runner is unchanged"
-RUNNER_PATHS=(
-  "packages/application/src/use-cases/session/run-turn.ts"
-  "packages/application/src/use-cases/session/evaluate-step-readiness.ts"
-  "packages/adapters/src/agents/flow-session-graph.ts"
-  "apps/web/src/app/api/chat"
-)
-RUNNER_BASE="${RUNNER_BASE_REF:-origin/main}"
-if ! git rev-parse --verify --quiet "$RUNNER_BASE" > /dev/null; then
-  pass "runner guard skipped — base ref '$RUNNER_BASE' not present in this clone"
+# the runner is never forked for it. That claim is only worth anything if it is
+# checked — "we did not touch it" is exactly the kind of thing that is true at
+# review and false two commits later.
+#
+# Checked against a recorded baseline rather than a diff against the base branch.
+# The diff form could not tell an undeclared change from a deliberate one, so any
+# feature whose code legitimately lives in the turn path failed it permanently —
+# and a guard that must be retired to ship is a guard that stops being run. The
+# baseline keeps the same protection (unrecorded drift still fails) while making
+# a deliberate change an explicit, reviewable act: you regenerate the baseline in
+# the commit that changes the runner, and the new hashes show up in the diff.
+section "24. the session runner matches its declared baseline"
+RUNNER_BASELINE="scripts/runner-guard-baseline.txt"
+if [ ! -f "$RUNNER_BASELINE" ]; then
+  fail "runner baseline missing at $RUNNER_BASELINE — regenerate it with ./scripts/runner-hashes.sh > $RUNNER_BASELINE"
 else
-  TOUCHED=$(git diff --name-only "$RUNNER_BASE"...HEAD -- "${RUNNER_PATHS[@]}" 2>/dev/null || true)
-  if [ -z "$TOUCHED" ]; then
-    pass "run-turn, evaluate-step-readiness, buildSystemPrompt and the stream route are untouched"
+  RUNNER_CURRENT=$(mktemp -t runner-hashes.XXXXXX)
+  ./scripts/runner-hashes.sh > "$RUNNER_CURRENT" 2>/dev/null
+  RUNNER_DRIFT=$(diff "$RUNNER_BASELINE" "$RUNNER_CURRENT" 2>/dev/null || true)
+  rm -f "$RUNNER_CURRENT"
+  if [ -z "$RUNNER_DRIFT" ]; then
+    pass "run-turn, evaluate-step-readiness, buildSystemPrompt and the stream route match the baseline"
   else
-    fail "the session runner changed — ADR-048 requires flow test runs to leave it alone:"
-    echo "$TOUCHED" | sed 's/^/  /'
-    echo "  If the change is deliberate and unrelated, move this guard's base ref or retire it."
+    fail "the session runner changed without updating its baseline — ADR-048 requires flow test runs to leave it alone:"
+    echo "$RUNNER_DRIFT" | sed 's/^/  /'
+    echo "  If the change is deliberate, record it in the same commit:"
+    echo "    ./scripts/runner-hashes.sh > $RUNNER_BASELINE"
   fi
 fi
 

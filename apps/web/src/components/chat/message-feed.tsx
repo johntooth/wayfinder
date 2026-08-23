@@ -10,6 +10,7 @@ import { MarkdownText } from "./markdown-text";
 import { messageTextSegments } from "./message-segments";
 import { DocumentCard } from "./document-card";
 import { RecordCard } from "./record-card";
+import { SchemaRequestCard } from "./schema-request-card";
 import { MessageInfoModal } from "./message-info-modal";
 import {
   AdvancingBadge,
@@ -60,6 +61,11 @@ interface MessageFeedProps {
   // affordance; the approver's own path from /approvals is unaffected.
   isOnApprovalNode?: boolean;
   onDocumentEdited?: () => void;
+  // Whether the viewer may answer an AI-triggered schema-definition form. Same
+  // coarse gate as document editing — a read-only participant sees the form but
+  // cannot submit it, and the server enforces the send grant regardless.
+  canAnswerSchemaRequest?: boolean;
+  onSchemaRequestResolved?: () => void;
   expertRole?: string | null;
   senderNamesById?: Record<string, string>;
   // The step held open awaiting operator confirmation. Its milestone pill is
@@ -197,6 +203,8 @@ export function MessageFeed({
   canEditDocuments,
   isOnApprovalNode,
   onDocumentEdited,
+  canAnswerSchemaRequest,
+  onSchemaRequestResolved,
   expertRole,
   senderNamesById,
   awaitingConfirmationNodeId,
@@ -310,7 +318,17 @@ export function MessageFeed({
           return (
             <div key={msg.id}>
               {isNewStep && node && <FeedDivider label={node.name} />}
-              {decision ? (
+              {msg.schemaRequest ? (
+                // Replaces the bubble rather than sitting under it: the card
+                // already shows the model's prompt, so rendering both would say
+                // the same thing twice.
+                <SchemaRequestCard
+                  messageId={msg.id}
+                  schemaRequest={msg.schemaRequest}
+                  canEdit={Boolean(canAnswerSchemaRequest)}
+                  onResolved={onSchemaRequestResolved}
+                />
+              ) : decision ? (
                 // An approver is rarely the viewer, and their decision carries
                 // its own attribution — so it always renders as someone else's.
                 <OtherPersonMessage

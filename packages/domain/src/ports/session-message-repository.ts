@@ -1,4 +1,5 @@
 import type { AiTurnPayload, DocumentStatus, SessionDocument, SessionMessage, NewSessionMessage } from "../entities/session-message";
+import type { PendingSchemaRequest } from "../entities/schema-request";
 import type { Result } from "../result";
 
 // Pre-aggregated inputs for the session-list view, computed SQL-side across many
@@ -56,4 +57,8 @@ export interface ISessionMessageRepository {
   updateDocument(id: string, document: SessionDocument): Promise<Result<SessionMessage>>;
   updateDocumentStatus(id: string, status: DocumentStatus): Promise<Result<SessionMessage>>;
   updateAiPayload(id: string, aiPayload: AiTurnPayload): Promise<Result<SessionMessage>>;
+  // Replaces the message's pending schema request — how a submission or a
+  // dismissal is recorded (D2: the pending form state is session state, not
+  // browser state, so it survives a reload).
+  updateSchemaRequest(id: string, schemaRequest: PendingSchemaRequest): Promise<Result<SessionMessage>>;
 }

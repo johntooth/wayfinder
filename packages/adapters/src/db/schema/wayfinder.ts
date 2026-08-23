@@ -19,7 +19,7 @@ import {
   vector,
 } from "drizzle-orm/pg-core";
 import type { ExtractionFieldResult, FlowPermission, FlowSnapshot, FlowVersionStatus, FlowVisibility } from "@rbrasier/domain";
-import type { AiTurnPayload, PendingExecutions, SeedContextItem, SeedStepOutput, SessionDocument, StepOutputField } from "@rbrasier/domain";
+import type { AiTurnPayload, PendingExecutions, PendingSchemaRequest, SeedContextItem, SeedStepOutput, SessionDocument, StepOutputField } from "@rbrasier/domain";
 import { core_users } from "./core";
 
 type StoredContextDoc = {
@@ -286,6 +286,9 @@ export const app_session_messages = pgTable(
     document: jsonb("document").$type<SessionDocument>(),
     document_status: text("document_status", { enum: ["pending", "complete", "failed"] }),
     ai_payload: jsonb("ai_payload").$type<AiTurnPayload>(),
+    // The AI-triggered schema-definition request this message suspended the turn
+    // for. Nullable: only a schema-request message carries one.
+    schema_request: jsonb("schema_request").$type<PendingSchemaRequest>(),
     // Monotonic per-session cursor for real-time replay (scaling wall #2). A
     // global bigserial is strictly increasing within any one session, so an SSE
     // reconnect replays losslessly with `WHERE seq > lastEventId`; cross-session

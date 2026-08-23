@@ -24,21 +24,11 @@ import {
   DeleteFlowNode,
   DeleteUser,
   EvaluateStepReadiness,
-  CreateBudget,
-  UpdateBudget,
-  DeleteBudget,
-  ListBudgets,
-  GetGovernanceDashboard,
-  GetUserUsage,
-  GetUsageLimitsEnabled,
-  SetUsageLimitsEnabled,
   FailJob,
   GetEffectivePermissions,
   GetFeatureFlag,
   GetFlowCanvas,
-  GetFlowDeepDive,
   GetFlowVersion,
-  GetOverviewDashboard,
   GetSession,
   GetSessionForTurn,
   GetUsageSummary,
@@ -68,6 +58,7 @@ import {
   NotifyOnFlowShared,
   NotifyOnSessionComplete,
   ConfirmStepAdvance,
+  ResolveSchemaRequest,
   NotifyOnStepComplete,
   OverrideBranch,
   PublishFlowVersion,
@@ -204,6 +195,7 @@ import type { FlowVersion, PermissionKey } from "@rbrasier/domain";
 import { buildSkillsAndMcp } from "./container-skills-mcp";
 import { buildFlowPortability } from "./container-flow-portability";
 import { buildExtractionModule } from "./container-extraction";
+import { buildGovernanceModule } from "./container-governance";
 import { buildPeopleDirectory } from "./container-people-directory";
 import { buildSmtpEnvConfig } from "./container-smtp";
 import { createCachedPermissionResolver } from "./cached-permission-resolver";
@@ -762,16 +754,19 @@ const build = () => {
       listScheduleRuns: new ListScheduleRuns(scheduleRuns),
       overrideBranch: new OverrideBranch(sessions, flowEdges),
       confirmStepAdvance: new ConfirmStepAdvance(sessions, flowEdges, flowVersions, notifyOnStepComplete),
-      getOverviewDashboard: new GetOverviewDashboard(analyticsRepo),
-      getGovernanceDashboard: new GetGovernanceDashboard(usageRepo, budgets, users, flows),
-      createBudget: new CreateBudget(budgets),
-      updateBudget: new UpdateBudget(budgets),
-      deleteBudget: new DeleteBudget(budgets),
-      listBudgets: new ListBudgets(budgets),
-      getUserUsage: new GetUserUsage(systemSettings, budgets, userRoles, usageRepo),
-      getUsageLimitsEnabled: new GetUsageLimitsEnabled(systemSettings),
-      setUsageLimitsEnabled: new SetUsageLimitsEnabled(systemSettings),
-      getFlowDeepDive: new GetFlowDeepDive(flows, flowNodes, analyticsRepo, sessionStepOutputs, flowEdges),
+      resolveSchemaRequest: new ResolveSchemaRequest(sessionMessages, auditLogger),
+      ...buildGovernanceModule({
+        analytics: analyticsRepo,
+        usage: usageRepo,
+        budgets,
+        users,
+        userRoles,
+        flows,
+        flowNodes,
+        flowEdges,
+        sessionStepOutputs,
+        systemSettings,
+      }),
       ...approvalUseCases,
       // Accounts first: they are the people who can actually act on what they
       // are sent, and ranking makes them win a de-dupe against the same address
