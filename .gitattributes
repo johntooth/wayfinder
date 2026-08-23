@@ -1,0 +1,10 @@
+# Drizzle writes a full schema snapshot (~5,900 lines) beside every generated
+# migration. They are build products, not authored code: `drizzle-kit generate`
+# diffs the newest one to produce the next migration, and
+# `packages/adapters/scripts/check-schema-drift.mjs` copies the whole `meta/`
+# folder — so they have to stay in the repository rather than be ignored.
+#
+# Marking them generated keeps them out of the way without untracking them:
+# GitHub collapses them in pull-request diffs by default and excludes them from
+# language stats, so a one-column migration reviews as a one-column migration.
+packages/adapters/drizzle/meta/*.json linguist-generated=true
