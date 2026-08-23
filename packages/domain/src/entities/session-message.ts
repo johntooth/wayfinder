@@ -1,5 +1,6 @@
 import type { MessageRole } from "./conversation";
 import type { McpToolCallRecord } from "./mcp-server";
+import type { PendingSchemaRequest } from "./schema-request";
 
 export type { MessageRole };
 
@@ -64,6 +65,10 @@ export interface SessionMessage {
   document: SessionDocument | null;
   documentStatus: DocumentStatus | null;
   aiPayload: AiTurnPayload | null;
+  // The AI-triggered schema-definition request this message suspended the turn
+  // for, and (once answered) the operator's submission. Null on every message
+  // that is not a schema request.
+  schemaRequest: PendingSchemaRequest | null;
   // Monotonic per-session cursor assigned by the database on insert. Drives
   // lossless SSE replay (Last-Event-ID) and incremental delta fetches. Optional
   // because rows constructed in tests or read before this column existed may
@@ -82,4 +87,5 @@ export interface NewSessionMessage {
   document?: SessionDocument | null;
   documentStatus?: DocumentStatus | null;
   aiPayload?: AiTurnPayload | null;
+  schemaRequest?: PendingSchemaRequest | null;
 }

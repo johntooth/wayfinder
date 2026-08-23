@@ -454,6 +454,8 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         canEditDocuments={session.status === "active" && !isReadOnly && !isFlowDeleted}
         isOnApprovalNode={isApprovalGate}
         onDocumentEdited={() => void utils.session.get.invalidate({ sessionId })}
+        canAnswerSchemaRequest={session.status === "active" && !isReadOnly && !isFlowDeleted}
+        onSchemaRequestResolved={() => void utils.session.get.invalidate({ sessionId })}
         expertRole={flow.expertRole ?? null}
         senderNamesById={senderNamesById}
         currentUserId={myUserId}

@@ -18,7 +18,7 @@ import {
   buildPromptSessionUploads,
   renderGatheredContext,
 } from "./turn-helpers";
-import { runMcpToolPrepass } from "./mcp-turn-helpers";
+import { runMcpToolPrepass, suspendForSchemaRequest } from "./mcp-turn-helpers";
 
 // The most recent turns the model is given as context, mirrored from the
 // client's own slice so the two agree (scaling wall #1).
@@ -186,7 +186,7 @@ export async function POST(
   // Conversational tool-loop (ADR-032): when a step allows MCP tools, let the model
   // call them in a non-streaming pre-pass and fold the gathered results into the
   // step context, leaving the structured streaming turn below untouched.
-  const gatheredContextWithTools = await runMcpToolPrepass({
+  const prepassResult = await runMcpToolPrepass({
     container,
     nodeConfig,
     dbMessages,
@@ -198,6 +198,7 @@ export async function POST(
     sessionId,
     nodeId: session.currentNodeId,
   });
+  const gatheredContextWithTools = prepassResult.gatheredContext;
 
   // The lease is claimed; tell every open window whose turn it now is so they
   // disable Send and can attribute the hold ("Alex's turn is in progress").
@@ -253,6 +254,22 @@ export async function POST(
         void container.useCases.turnLease.heartbeat(session.id, turnId);
       }, container.env.TURN_HEARTBEAT_MS);
       try {
+        // The model asked the operator to define a schema. The turn stops before
+        // the structured reply streams: the user's message is persisted so the
+        // thread is intact, and the request is stored against a system message
+        // that the feed renders as a form (JOHNS-PLAN §1, D1/D2).
+        if (prepassResult.schemaRequest) {
+          await suspendForSchemaRequest({
+            container,
+            session,
+            publishEvent,
+            userId: authSession.userId,
+            lastUserMessage,
+            schemaRequest: prepassResult.schemaRequest,
+          });
+          return;
+        }
+
         await executeTurn({
           container,
           writer,

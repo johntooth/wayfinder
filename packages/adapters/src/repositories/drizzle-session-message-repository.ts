@@ -8,6 +8,7 @@ import {
   type GatheredContextItem,
   type ISessionMessageRepository,
   type NewSessionMessage,
+  type PendingSchemaRequest,
   type Result,
   type SessionDocument,
   type SessionListSummary,
@@ -113,6 +114,7 @@ const toEntity = (row: typeof app_session_messages.$inferSelect): SessionMessage
   document: row.document ?? null,
   documentStatus: row.document_status ?? null,
   aiPayload: (row.ai_payload as AiTurnPayload | null) ?? null,
+  schemaRequest: (row.schema_request as PendingSchemaRequest | null) ?? null,
   seq: typeof row.seq === "number" ? row.seq : Number(row.seq),
   createdAt: row.created_at,
 });
@@ -134,6 +136,7 @@ export class DrizzleSessionMessageRepository implements ISessionMessageRepositor
           document: input.document ?? undefined,
           document_status: input.documentStatus ?? undefined,
           ai_payload: input.aiPayload ?? undefined,
+          schema_request: input.schemaRequest ?? undefined,
         })
         .returning();
       if (!row) return err(domainError("INFRA_FAILURE", "Message insert returned no row."));
@@ -327,6 +330,23 @@ export class DrizzleSessionMessageRepository implements ISessionMessageRepositor
       return ok(toEntity(row));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to update session message AI payload.", cause));
+    }
+  }
+
+  async updateSchemaRequest(
+    id: string,
+    schemaRequest: PendingSchemaRequest,
+  ): Promise<Result<SessionMessage>> {
+    try {
+      const [row] = await this.db
+        .update(app_session_messages)
+        .set({ schema_request: schemaRequest })
+        .where(eq(app_session_messages.id, id))
+        .returning();
+      if (!row) return err(domainError("NOT_FOUND", "Session message not found."));
+      return ok(toEntity(row));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to update session message schema request.", cause));
     }
   }
 }

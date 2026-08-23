@@ -4,11 +4,14 @@ import {
   type Flow,
   type FlowNode,
   type McpToolCallRecord,
+  type PendingSchemaRequest,
   type Session,
+  type SessionEvent,
   type SessionMessage,
 } from "@rbrasier/domain";
 import { resolveModel } from "@rbrasier/adapters";
 import type { getContainer } from "@/lib/container";
+import { buildPendingSchemaRequest, findSchemaRequestCall } from "./schema-request-gate";
 
 type Container = ReturnType<typeof getContainer>;
 
@@ -75,6 +78,41 @@ export async function dispatchMcpNode(input: DispatchMcpNodeInput): Promise<void
   }
 }
 
+export interface SuspendForSchemaRequestInput {
+  container: Container;
+  session: Session;
+  publishEvent: (event: SessionEvent) => void;
+  userId: string;
+  lastUserMessage: string;
+  schemaRequest: PendingSchemaRequest;
+}
+
+// Ends the turn on the schema-request tool call. Nothing is streamed: the card
+// carries the model's prompt, so a streamed line would only duplicate it. The
+// user's own message is persisted first, so suspending never swallows what they
+// typed, and the request rides on a system message — which is what makes it
+// survive a reload (D2).
+export async function suspendForSchemaRequest(input: SuspendForSchemaRequestInput): Promise<void> {
+  const { container, session, publishEvent, userId, lastUserMessage, schemaRequest } = input;
+
+  const userMessage = await container.useCases.runTurn.persistUserMessage({
+    session,
+    userMessage: lastUserMessage,
+    senderUserId: userId,
+  });
+  if (!userMessage.error && typeof userMessage.data.seq === "number") {
+    publishEvent({ type: "message.created", seq: userMessage.data.seq });
+  }
+
+  await container.repos.sessionMessages.create({
+    sessionId: session.id,
+    role: "system",
+    content: schemaRequest.prompt,
+    stepNodeId: session.currentNodeId,
+    schemaRequest,
+  });
+}
+
 export interface RunMcpToolPrepassInput {
   container: Container;
   nodeConfig: ConversationalNodeConfig;
@@ -98,26 +136,37 @@ const collectPriorToolCalls = (messages: SessionMessage[]): McpToolCallRecord[] 
 const renderToolResults = (records: McpToolCallRecord[]): string =>
   records.map((record) => `- ${record.toolName}: ${record.result}`).join("\n");
 
+export interface McpToolPrepassResult {
+  gatheredContext: string;
+  // Set when the model called the node's schema-request tool: the turn stops
+  // here and the operator answers a form instead of receiving prose (D1). Null
+  // on every other turn, which proceeds exactly as before.
+  schemaRequest: PendingSchemaRequest | null;
+}
+
 // Runs the conversational tool-loop pre-pass (ADR-032) when a step allows MCP
 // tools, returning the step's gathered context with tool results appended. The
 // `mcp` flag is the runtime kill switch: with it off, no tools run even for an
 // already-authored flow. Returns the context unchanged when the flag is off, no
 // tools are allowed, none resolve, or the pre-pass fails — a tool problem must
 // never block the turn.
-export async function runMcpToolPrepass(input: RunMcpToolPrepassInput): Promise<string> {
+export async function runMcpToolPrepass(
+  input: RunMcpToolPrepassInput,
+): Promise<McpToolPrepassResult> {
   const { container, nodeConfig, dbMessages, lastUserMessage, gatheredContext } = input;
+  const unchanged: McpToolPrepassResult = { gatheredContext, schemaRequest: null };
   const allowed = nodeConfig.allowedMcpToolRefs ?? [];
-  if (allowed.length === 0) return gatheredContext;
+  if (allowed.length === 0) return unchanged;
 
   const flag = await container.useCases.isFeatureEnabledForUser.execute(
     input.userId,
     "mcp",
     input.isAdmin,
   );
-  if (flag.error || flag.data !== true) return gatheredContext;
+  if (flag.error || flag.data !== true) return unchanged;
 
   const resolved = await container.useCases.resolveStepTools.execute(allowed);
-  if (resolved.error || resolved.data.refs.length === 0) return gatheredContext;
+  if (resolved.error || resolved.data.refs.length === 0) return unchanged;
 
   const allowedToolNamesByServer: Record<string, string[]> = {};
   for (const ref of resolved.data.refs) {
@@ -168,9 +217,19 @@ export async function runMcpToolPrepass(input: RunMcpToolPrepassInput): Promise<
   // Combine prior + new results so the structured turn retains everything the
   // step gathered, not only what was fetched on this turn.
   const combined = [...priorToolCalls, ...newToolCalls];
-  if (combined.length === 0) return gatheredContext;
 
-  return `${gatheredContext}\n\n<tool_results>\n${renderToolResults(combined)}\n</tool_results>`;
+  // Checked against this turn's calls only. A request answered on an earlier
+  // turn is still in `priorToolCalls`, and matching it again would re-suspend
+  // the step on every subsequent turn.
+  const schemaCall = findSchemaRequestCall(newToolCalls, nodeConfig.schemaRequestToolName);
+  const schemaRequest = schemaCall ? buildPendingSchemaRequest(schemaCall) : null;
+
+  if (combined.length === 0) return { gatheredContext, schemaRequest };
+
+  return {
+    gatheredContext: `${gatheredContext}\n\n<tool_results>\n${renderToolResults(combined)}\n</tool_results>`,
+    schemaRequest,
+  };
 }
 
 // Persists the pre-pass tool calls as the audit trail: the transcript carries a

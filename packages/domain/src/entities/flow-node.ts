@@ -57,6 +57,10 @@ export interface ConversationalNodeConfig {
   // non-document data; read only through nodeFieldSet.
   structuredFields?: TemplateField[] | null;
   advanceConfidenceThreshold?: number;
+  // Names the tool whose call suspends the turn and renders the schema-definition
+  // form instead of streaming a reply. Absent means the step never does this, so
+  // an already-authored flow is unchanged.
+  schemaRequestToolName?: string;
   // Whether the operator may manually correct generated document field values.
   // Absent means allowed — editing is on by default.
   allowManualEdit?: boolean;

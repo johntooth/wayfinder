@@ -29,6 +29,7 @@ export * from "./flow-export-manifest";
 export * from "./flow-import-resolve";
 export * from "./flow-import-rewrite";
 export * from "./extraction-schema";
+export * from "./schema-request";
 export * from "./extraction-draft-document";
 export * from "./extraction-record";
 export * from "./confidence-threshold";
