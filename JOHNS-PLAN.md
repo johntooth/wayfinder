@@ -98,12 +98,11 @@ The prose fallback is separate again: `gate-holds.ts` appends
 `OUTSTANDING — still required from the user` to the next turn's gathered
 context so the model asks in words on the following turn.
 
-This bears directly on **D1**. If the form is a **new node type**, it can follow
-the auto/scheduled park pattern, which is well-trodden and needs no new stream
-behaviour. If it is a **tool-triggered card mid-turn**, it needs genuinely new
-work: ending the stream cleanly, persisting pending-form state against the
-message, and resuming as a fresh turn on submit. The node route is cheaper and
-should be the default unless something forces the mid-turn variant.
+This bears directly on **D1**, now decided: the form is a **tool-triggered
+card mid-turn**, not a new node type. This means genuinely new work — ending
+the stream cleanly, persisting pending-form state against the message, and
+resuming as a fresh turn on submit — with no precedent in the auto/scheduled
+park pattern above. Estimate item 1 accordingly; see the risk note in §7.
 
 ### Field vocabulary
 
@@ -341,22 +340,29 @@ channel.
 
 ## 6. Open decisions
 
-| # | Decision | Blocks | Owner |
-|---|---|---|---|
-| D1 | Is the schema form a new node type, or a tool-triggered card on an existing conversational node? | 1 | Architecture |
-| D2 | How does a turn suspend and resume — and where does the pending form state live? | 1 | Architecture |
-| D3 | Does the CSV carry provenance columns, and is it therefore a separate artifact from the paste-ready sheet? | 2 | Product |
-| D4 | Does a record carry which path produced it, so labels can vary by provenance? | 4 | Architecture |
+| # | Decision | Blocks | Owner | Status |
+|---|---|---|---|---|
+| D1 | Is the schema form a new node type, or a tool-triggered card on an existing conversational node? | 1 | Architecture | **Decided: tool-triggered card mid-turn.** New stream-suspension work is required — see §1 "The hard part" and the risk note in §7. |
+| D2 | How does a turn suspend and resume — and where does the pending form state live? | 1 | Architecture | **Decided: Option A — persisted to the session.** Pending form state survives navigation/reload; the operator can close the browser mid-form and resume exactly where they left off. Requires a durable "form in progress" record and reload logic to restore it (see acceptance criteria in §1: "Reload mid-form restores the pending card rather than losing it"). |
+| D3 | Does the CSV carry provenance columns, and is it therefore a separate artifact from the paste-ready sheet? | 2 | Product | Open |
+| D4 | Does a record carry which path produced it, so labels can vary by provenance? | 4 | Architecture | Open |
 
 D2 and D4 are additions to the source note's §10 — neither was listed there.
+
+With D1 and D2 both resolved toward the higher-cost branch (mid-turn card,
+persisted state), item 1 no longer has an estimate held open by open
+questions — see §7 for the resulting schedule risk.
 
 ---
 
 ## 7. Risks
 
-- **Turn suspension is the schedule risk — but only on one branch of D1.** As a
-  node type it reuses the auto/scheduled park pattern; as a mid-turn card it is
-  new stream work with no precedent. Estimate item 1 after D1, not before.
+- **Turn suspension is now a confirmed schedule risk, not a contingent one.**
+  D1 landed on the mid-turn card, which is new stream work with no precedent —
+  the cheaper node-type route was not taken. Combined with D2's decision to
+  persist pending-form state durably (not just in browser memory), item 1
+  carries the largest, least-precedented build in this plan. Estimate it
+  accordingly and consider a spike before committing to a phase-doc estimate.
 - **A half-relabelled confidence display is worse than none.** If item 4 ships
   partially, a reviewer sees "High confidence" on a verbatim cell and reads it as
   a claim about text accuracy — the exact misreading §7.0 exists to prevent.
