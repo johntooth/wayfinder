@@ -1,391 +1,507 @@
-# John's Plan — UI Updates for Verbatim Report Assembly
+# John's Plan — Platform Capabilities for Tool-Sourced Report Assembly
 
-- **Status**: Planning input. Not a phase doc — see §8 for how it becomes one.
-- **Date**: 2026-08-21
-- **Source**: the UI-affecting workstreams of
-  [`WOMBLEX-REDLINE-WAYFINDER.md`](WOMBLEX-REDLINE-WAYFINDER.md) (§5.1–§5.4, §7.0),
-  extracted and corrected against the code as it stands at `0.30.0`.
-
-> **What is and isn't from the source note.** Items 1, 2 and 4 restate
-> workstreams the note describes, with path- and scope-level corrections marked
-> inline. **Item 3 is largely inferred** — the note calls for a verbatim-only
-> flag but never asks for an admin control; that a per-server flag needs a place
-> to be set is this document's reading, not the note's instruction. The
-> **sequencing (§5), acceptance criteria, risks (§7), and decisions D2 and D4 are
-> new here** — the note contains none of them. Where this document disagrees
-> with the note, it says so rather than quietly rewriting it.
+- **Status**: Planning input. Not a phase doc — see §6 for how it becomes one.
+- **Date**: 2026-08-24 (supersedes the 2026-08-21 draft)
 - **Base branch**: `main` (new feature surface, per **Release Branching** in `CLAUDE.md`)
-- **Target version**: **0.31.0** — MINOR. Item 3 adds a column to
-  `admin_mcp_servers`; items 1 and 2 are additive feature surface.
+- **Repo state at drafting**: `0.31.0`
+
+> **What changed from the previous draft.** That draft was a Redline integration
+> plan with feature-shaped headings: four items, each specified in terms of what
+> Redline needs. This one restates the work as **platform capabilities that stand
+> on their own**, with Redline demoted to a motivating consumer (§5). The
+> substance is not a rewrite for its own sake — checking the previous draft
+> against the code found that most of its items describe general gaps in
+> Wayfinder that are live today, and that two of its four items were specified
+> against behaviour that does not exist. Corrections are marked inline.
+>
+> References to Womblex have been removed throughout. Wayfinder consumes MCP
+> servers; what sits behind one of them is not Wayfinder's concern and must not
+> appear in its domain model.
 
 ---
 
-## 0. Scope
+## 0. Scope and the test that shapes it
 
-Four UI changes. They are independent of each other and can ship in any order,
-**except** that item 1 is only worth building once the verbatim tool-result
-channel (§5.1 of the source note) exists — a schema form that feeds a
-paraphrasing pipeline defeats its own purpose.
+Eight capabilities. Each one must pass:
 
-| # | Change | Surface | Blocked on |
-|---|--------|---------|------------|
-| 1 | AI-triggered schema-definition form in chat | `/chats/[sessionId]` | Verbatim channel (§5.1); open decisions D1, D2 |
-| 2 | CSV export | `/synthesise/[id]/runs/[runId]` | Open decision D3 |
-| 3 | Verbatim-only flag on the MCP server form | `/admin/mcp-servers` | Nothing |
-| 4 | Confidence relabel + derived-field marker | Results grid, chat, XLSX | Verbatim channel (§5.1) |
+> **If Redline never ships, is this still worth building?**
 
-**Not in scope:** any Womblex or Redline work; the verbatim channel itself
-(adapter/application layer, needs its own ADR); the handoff mechanism between a
-guided flow and an extraction run.
+Anything that fails that test is specified as an integration, not a feature. All
+eight pass, and the evidence in each section is drawn from Wayfinder's current
+behaviour rather than from a prospective integration. In several cases the
+general version is also *less* code than the Redline-specific version in the
+previous draft, because it needs no per-server discriminator.
 
----
+| # | Capability | Stands alone because, today… | Schema |
+|---|---|---|---|
+| C1 | An MCP tool result reaches the model intact | every tool result from every server is clipped at 4,000 characters | none |
+| C2 | A value records how it was produced | a human-corrected value is indistinguishable from an AI-generated one | none |
+| C3 | A tool result can become a value without the model retyping it | every tool result reaches a value only by passing through model prose | none |
+| C4 | Extraction records can take tool-sourced values | no external data source can contribute to an extraction run | migration |
+| C5 | CSV export | run results are downloadable only as XLSX or JSON | none |
+| C6 | Trust boundary and scope-bearing arguments | an internal sidecar cannot be used in a flow at all | column |
+| C7 | The AI can request structured input mid-turn | the AI can only ask for a report schema, not for values | none |
+| C8 | A session keeps a durable working set | gathered facts scroll out of the window and collide on key | new table |
 
-## 1. AI-triggered schema-definition form in chat
-
-**What it is.** When the model needs the operator to define part of a report
-schema, it calls a tool (e.g. `request_schema_definition`) instead of asking in
-prose. Wayfinder intercepts the call and renders an interactive field editor in
-the conversation. The submitted schema becomes the argument set for Redline
-queries and is persisted as workflow state.
-
-### Where it actually goes
-
-The source note asks for the card to render in the message feed, "as a card in
-the same family as `confirm-step-card.tsx` / `approval-gate.tsx`". Read as
-*visual* family that is fair — `ConfirmStepCard`'s own comment says it mirrors
-`DocumentCard`'s visual language. Read as a *structural* recipe it misleads,
-because neither component renders in the feed. Both are siblings of
-`<MessageFeed>` in
-`apps/web/src/app/(user)/chats/[sessionId]/_content.tsx`:
-
-- `ConfirmStepCard` (line 490) is pinned above the composer, driven by
-  `isAwaitingConfirmation`.
-- `ApprovalGate` (line 502) sits inside `data-composer-stack`, driven by
-  `currentNode.type === "approval"`.
-
-Both are keyed off **session/node state**, not off a message. A tool call
-arriving mid-turn is neither, so neither component's mounting logic transfers.
-
-**The right precedent is `apps/web/src/components/chat/record-card.tsx`** — a
-genuine in-feed card, keyed off `messageId`, that reads its fields through
-`trpc.document.getFields` and edits them through `DocumentEditDialog`. It is
-already the completion card for a structured conversation step (ADR-038 §4), and
-it already renders exactly the field vocabulary this form needs to collect.
-
-`message-feed.tsx` dispatches cards two ways today:
-
-- off persisted message fields — `msg.document` → `DocumentCard`, `msg.record` →
-  `RecordCard` (lines 385–427);
-- off parsed message content — `parseApprovalDecisionMessage`,
-  `parseApproverEditMessage`, `parseScheduledMessage`.
-
-A schema-request card needs one of these two channels. Neither exists for it, so
-this is a new discriminator on `SessionMessage`, not a component drop-in.
-
-### The hard part: suspending the turn
-
-Nothing today interrupts a turn *mid-tool-call*. But the repo is not empty here,
-and an earlier draft of this plan overstated the gap — there are two working
-park-and-resume paths, both at **node** granularity:
-
-- `dispatchAutoNode` (`turn-helpers.ts:319`) records a pending execution, hands
-  off to the node executor, and lets an inbound webhook advance the session
-  later via a correlation id.
-- `dispatchScheduledNode` (`turn-helpers.ts:433`) creates a schedule row, pauses
-  the session with no message generated, and lets the worker resume it when due.
-
-The prose fallback is separate again: `gate-holds.ts` appends
-`OUTSTANDING — still required from the user` to the next turn's gathered
-context so the model asks in words on the following turn.
-
-This bears directly on **D1**, now decided: the form is a **tool-triggered
-card mid-turn**, not a new node type. This means genuinely new work — ending
-the stream cleanly, persisting pending-form state against the message, and
-resuming as a fresh turn on submit — with no precedent in the auto/scheduled
-park pattern above. Estimate item 1 accordingly; see the risk note in §7.
-
-### Field vocabulary
-
-Use the **extraction authoring vocabulary**, not `TemplateField`.
-
-`TemplateField` (`packages/domain/src/entities/template-field.ts`) is a parse
-product of a Word template tag: `raw: string` is required and holds the tag
-text, and its type union includes `section`, `group` and `signature` — none of
-which an AI-requested report schema can produce. The v2.9.0 structured
-conversation work already rejects `section` on both client and server. Note also
-that its polarity is `optional`, not `required`.
-
-The authoring-side models are:
-
-- `ExtractionFieldDraft` (`packages/domain/src/entities/extraction-schema.ts`) —
-  `{ label, annotation, instruction, doneWhen }`
-- `ExtractionFieldModel` (`apps/web/src/components/extraction/extraction-editor-model.ts`) —
-  `{ label, type, optional, options, maxLength?, min?, max?, instruction, locked }`
-
-And the UI already exists:
-`apps/web/src/components/extraction/extraction-field-editor.tsx` (283 lines) is a
-working editor over `ExtractionFieldModel`, with `EXTRACTION_TYPE_OPTIONS`
-covering text / number / currency / date / email / yes-no / select / multiselect.
-`components/canvas/template-field-editor.tsx` and
-`components/canvas/structured-field-editor.tsx` are the author-time siblings.
-
-**Build on `ExtractionFieldEditor` rather than on `TemplateField`.** Caveat: it
-is an admin-surface component today, with a dialog-based per-field config and a
-`derived` mode tied to template-locked fields. Reuse probably means lifting the
-field-row editor out of it rather than mounting it unchanged in a chat card —
-scope that before committing to it. The vocabulary is the part that should
-carry over regardless, and it keeps item 1 consistent with §6 of the source
-note, which has the chat form setting the extraction schema in the flow version
-snapshot.
-
-### Component notes
-
-- `apps/web/src/components/ui/` has **no select, checkbox or radio primitive** —
-  only badge, button, card, dialog, field-group-label, input, label, sheet,
-  spinner, table, textarea and the date/time pickers. The house pattern is a
-  hand-rolled native `<select>`; see `extraction-field-editor.tsx:92`. Copy that,
-  don't reach for a form library.
-- `zod` (^3.23.8) is already in `apps/web`. Validate the submitted schema with it
-  on the server; do not add a JSON-schema form renderer.
-
-### Persistence and audit
-
-The submitted schema is the definition of what the report claims to be, so it is
-workflow state: persist it (`SessionStepOutput` or the flow version snapshot,
-per D2) and emit an audit event on submit. Do not leave it living only in the
-message thread.
-
-### Acceptance criteria
-
-- A tool call named by the flow's config renders a schema card in the feed rather
-  than streaming prose.
-- The card collects label, type, required, and type-specific config (options,
-  min/max) for N fields, and rejects `section` / `group` / `signature`.
-- The turn does not continue until the operator submits or dismisses.
-- On submit, the schema is persisted, audited, and readable by the next turn.
-- On dismiss, the session is left in a state the operator can act on — not a
-  dead thread.
-- Reload mid-form restores the pending card rather than losing it.
-
-Per `docs/guides/e2e-test-policy.md`, decide explicitly whether this warrants a
-Playwright spec; the card itself is a component test, the suspend/resume round
-trip may not be.
+**Not in scope:** registering any particular MCP server; the handoff between a
+guided flow and an extraction run beyond what C4 requires; anything in another
+repository.
 
 ---
 
-## 2. CSV export
+## 1. The capabilities
+
+### C1 — An MCP tool result reaches the model intact
+
+**What it is.** The audit budget and the model-context budget are two different
+budgets. Today they are one.
+
+**Why it stands alone.** `packages/adapters/src/mcp/mcp-tool-prepass.ts` sets
+`AUDIT_RESULT_MAX_CHARS = 4_000` and clips every tool result with
+`… [truncated]`. That clipped string is not only what gets persisted — it is
+what `renderToolResults` (`mcp-turn-helpers.ts:136`) injects into the gathered
+context for the structured turn. Every MCP server in the product is affected: a
+CRM returning records, a pricing service returning a table, any tool returning
+more than a couple of pages of text. The model is reasoning over a truncated
+payload and has no way to know what was removed.
+
+**Correction to the previous draft.** Item 3 there specified a per-server
+"verbatim-only" flag to keep results away from "the summarising pre-pass". The
+pre-pass does not summarise — its `summary` goes to the audit payload only, and
+`record.result` (the raw output) is what reaches the model. The defect is the
+truncation, and fixing it needs no flag, no column and no per-server
+discriminator.
+
+**Acceptance criteria**
+
+- **Given** an MCP server whose tool returns a 20,000-character result, **when** a
+  conversational step's tool pre-pass calls it, **then** the full result is
+  present in the gathered context passed to the structured turn.
+- **Given** that same call, **when** the audit record is persisted, **then**
+  `McpToolCallRecord.result` is bounded by the audit budget and marked as
+  abridged — the audit copy is capped, the model copy is not.
+- **Given** a result exceeding the context budget, **when** it is assembled into
+  gathered context, **then** the step states how much was withheld and why,
+  rather than appending a truncation marker to a silently clipped string.
+- **Given** a result within budget, **when** it is rendered to the model, **then**
+  no truncation marker appears.
+
+*Test layer: adapter unit tests on `mcp-tool-prepass.ts`. No e2e.*
+*Version: PATCH — a defect in a shipped limit.*
+
+---
+
+### C2 — A value records how it was produced
+
+**What it is.** Origin becomes a first-class property of a field value: AI-generated,
+operator-supplied, tool-sourced, or derived.
+
+**Why it stands alone.** `ExtractionFieldResult` is
+`{ key, value, confidence, rationale }` — there is no origin. `applyFieldEdit`
+records a human correction by stamping `confidence: 1` and writing
+"Manually corrected by …" into the **rationale prose**. `result-grid.tsx` and
+`result-grid-model.ts` contain no reference to edited, manual or corrected state.
+So in the shipped product a value a person typed and a value the model guessed
+both render "High confidence", are visually identical, and are indistinguishable
+in the exported workbook. Nobody can filter a run for "which values did a human
+set" without reading rationale sentences. That is an audit weakness now.
+
+**Cost note.** `app_extraction_records.fields` is a `jsonb` column typed as
+`ExtractionFieldResult[]`, so adding an origin key needs **no SQL migration**.
+Absent means AI-generated, and existing rows are correct by default.
+
+**Granularity.** Per *value*, not per record. A record legitimately mixes origins —
+a quoted figure, a model summary and a computed total in one row — and only
+per-value origin can describe that. A per-record column would be cheaper for the
+admin dashboards to aggregate and is wrong for the normal case.
+
+**Acceptance criteria**
+
+- **Given** a field value a person corrected, **when** the results grid renders it,
+  **then** it is visibly distinct from an AI-generated value without relying on
+  the rationale prose.
+- **Given** a run containing both AI-generated and human-corrected values, **when**
+  it is exported, **then** origin is its own column in every format, not a
+  sentence inside `rationale`.
+- **Given** a record written before this change, **when** it is read, **then** it
+  reads as AI-generated and nothing fails.
+- **Given** a value supplied by a tool call, **when** it is stored, **then** its
+  origin is tool-sourced and it carries a reference the platform can hand back to
+  that tool to re-resolve.
+- **Given** a tool-sourced reference of arbitrary internal structure, **when**
+  Wayfinder stores, renders or exports it, **then** it round-trips unchanged and
+  no part of it is parsed or validated.
+- **Given** a value computed from other values, **when** it is rendered, **then**
+  it is marked derived and exposes the values it was computed from.
+
+*Test layer: domain unit tests on the value type; component test on `result-grid.tsx`.*
+*Version: MINOR.*
+
+The fifth criterion is the boundary guard, and it is directly testable: a
+reference with a fabricated internal shape must survive a full round trip
+untouched. Wayfinder must never grow a typed model of another system's
+addressing scheme.
+
+**Confidence labelling.** Where a value's origin means its confidence describes
+something different — selection rather than accuracy — the label follows from
+origin and does not need its own mechanism. Two admin dashboards average
+confidence across sessions and steps; averaging two different measures into one
+number is meaningless, so those dashboards are in scope for this capability, not
+a follow-up. A half-applied relabel is worse than none.
+
+---
+
+### C3 — A tool result can become a value without the model retyping it
+
+**What it is.** A structured tool result can land in a structured place without a
+model re-authoring it in prose first.
+
+**Why it stands alone.** Today every MCP result enters a **prompt string** and
+whatever reaches a field is the model's restatement of it. For any tool that is
+authoritative for its data — a pricing service, a records system, a reference
+API — a model-restated value is strictly worse than the value itself, and the
+failure is silent. This is the general form of what the previous draft called the
+"verbatim channel"; stated this way it names no server.
+
+**Acceptance criteria**
+
+- **Given** a step whose tool returns structured results, **when** the model
+  selects one as the answer for a field, **then** the stored value is
+  byte-identical to what the tool returned.
+- **Given** the model's prose restates a tool value inexactly, **when** the field
+  is written, **then** the tool's value is stored and the prose is not.
+- **Given** a tool marked authoritative for a field, **when** that tool call
+  fails, **then** the step surfaces an error and no model-authored substitute is
+  written.
+
+*Test layer: application unit tests on the step executor.*
+*Version: MINOR.*
+
+---
+
+### C4 — Extraction records can take tool-sourced values
+
+**What it is.** An extraction run can populate values from tool calls, not only
+from documents whose bytes Wayfinder holds.
+
+**Why it stands alone.** `FlowNodeType` is
+`"conversational" | "auto" | "scheduled" | "approval" | "mcp"` — MCP exists only
+as a *flow* node. There are no MCP references anywhere in
+`packages/application/src/use-cases/extraction/` or
+`apps/web/src/components/extraction/`. And `app_extraction_documents.storage_key`
+is `NOT NULL`, so every extraction document must have bytes in Wayfinder's own
+object storage. Together these mean **no external data source can contribute to
+an extraction run at all** — which is where records, the results grid,
+confidence and every export live.
+
+This is the largest of the eight and the one the previous draft did not carry.
+Its absence is why that draft's items 2 and 4 appeared independent while both
+depended on a connection that does not exist.
+
+**Acceptance criteria**
+
+- **Given** an extraction flow configured with an MCP tool, **when** a run
+  executes, **then** values may be populated from tool calls as well as from
+  uploaded documents.
+- **Given** an extraction run with no uploaded documents at all, **when** it
+  completes, **then** it is a valid run — the pipeline does not require Wayfinder
+  to hold document bytes.
+- **Given** a record whose values came from a tool, **when** the run results are
+  viewed, **then** those values carry tool-sourced origin per C2 and the record
+  resolves without a source document.
+
+*Test layer: application unit tests on the extraction use-cases.*
+*Version: MINOR. Migration: `app_extraction_documents.storage_key` becomes
+nullable — additive, `-- data-impact: preserved`.*
+
+---
+
+### C5 — CSV export
 
 **What it is.** A third download format on the extraction run-results screen,
-beside the existing XLSX and JSON.
+beside XLSX and JSON.
 
-### The scope the source note missed
+**Why it stands alone.** It always did. Nothing about it is Redline-shaped.
 
-§5.3 said to "wire the artifact key, MIME, and filename in the same route". That
-route only *serves* objects — it never produces them. `run-results.tsx:101`
-spells this out: hitting the artifact URL without exporting first serves a stale
-file, or a 410 on a run never exported.
-
-The full change set:
+**The scope the source material missed.** The artifact route only *serves*
+objects; it never produces them (`run-results.tsx:101` says so). The change set:
 
 | File | Change |
 |---|---|
-| `packages/domain/src/entities/audit-export.ts` | Export the escaping (`escapeCsvField` / `cell` are module-private today) or extract a shared helper. No CSV library. |
+| `packages/domain/src/entities/audit-export.ts` | Export the escaping (`escapeCsvField` / `cell` are module-private) or extract a shared helper. No CSV library. |
 | `packages/domain/` (new) | Pure `toExtractionCsv(fields, records)`, unit-tested independently of HTTP and storage, following `toAuditCsv`'s quoting rules. |
-| `packages/application/src/use-cases/extraction/export-run-results.ts` | Write `results.csv` alongside the XLSX and JSON; add `csvKey` to `ExportRunResultsOutput`; add `"csv"` to the `formats` array on the `extraction_run.exported` audit event. **This is the data-egress event — it fires here, not in the route.** |
+| `packages/application/src/use-cases/extraction/export-run-results.ts` | Write `results.csv` beside the XLSX and JSON; add `csvKey` to the output; add `"csv"` to the `formats` array on the `extraction_run.exported` audit event. **The data-egress event fires here, not in the route.** |
 | `apps/web/src/app/api/synthesise/runs/[runId]/artifacts/[artifact]/route.ts` | Add `csv: "text/csv"` to the `MIME` map and an `export-csv` branch to `resolveArtifact`. |
 | `apps/web/src/components/extraction/run-results.tsx` | Widen `ExportFormat` to `"xlsx" \| "json" \| "csv"` and replace the two-way ternary at line 109 — it cannot express a third format. |
 
 **Permissions need no work.** `authoriseRunAccess` runs once in the route before
-artifact resolution, so a new artifact key inherits the check automatically. The
-v1.59.0 IDOR precedent is already satisfied structurally.
+artifact resolution, so a new artifact key inherits the check.
 
-### Placement
+**Placement.** "Download Excel" is the primary button; JSON sits behind a
+secondary dropdown. CSV goes in that menu, next to Download JSON.
 
-"Beside Download Excel" is wrong — JSON is not beside it. "Download Excel" is the
-primary `<Button>`; JSON sits behind a secondary dropdown (`menuOpen`) with the
-document and summary-doc links. **CSV goes in that menu, next to Download JSON.**
+**Provenance columns.** Resolved by C2 rather than decided here. Once origin is a
+property of every value, the CSV carries it for the same reason it carries the
+value. The previous draft's D3 asked whether the CSV should be a separate
+provenance-carrying artifact; that question only existed because provenance was
+being treated as an extra bolted onto one export.
 
-### Provenance columns (D3)
+**Acceptance criteria**
 
-The source note recommends including source document / element references. Worth
-naming what that overrides: the XLSX data sheet is deliberately values-only, so
-the sheet can be pasted into a report without deleting interleaved metadata
-columns — confidence and rationale live on a second tab. A CSV is single-sheet,
-so it cannot make that split.
+- **Given** a completed run, **when** the operator exports, **then** `results.csv`
+  is written beside `results.xlsx` and `results.json`, and the audit event's
+  `formats` includes `"csv"`.
+- **Given** a value containing a comma, a double quote and a newline, **when** it
+  round-trips through the CSV into a spreadsheet, **then** it is unchanged.
+- **Given** a run never exported, **when** the CSV artifact is requested, **then**
+  the existing 410 applies.
+- **Given** a user without access to the run, **when** they request the CSV
+  artifact, **then** they get the existing 403/404 and no file.
 
-Two coherent options:
-
-- **(a) Mirror tab 1** — values only, the paste-ready artifact. Provenance stays
-  in the JSON export.
-- **(b) Provenance-carrying** — a distinct artifact, and say so in the UI label,
-  because it is not the same thing as the Excel download.
-
-Do not ship (b) labelled as if it were (a).
-
-### Acceptance criteria
-
-- Exporting a run writes `results.csv` next to `results.xlsx` and `results.json`.
-- `GET …/artifacts/export-csv` returns `text/csv` with a
-  `run-<shortId>-results.csv` filename and the same 410-on-missing behaviour.
-- The audit event records `formats` including `"csv"`.
-- A value containing a comma, a double quote and a newline round-trips through a
-  spreadsheet unchanged (unit test, no HTTP).
-- A user without access to the run gets the existing 403/404, not a file.
+*Test layer: domain unit test for shaping and escaping, no HTTP. Route behaviour
+is covered by the existing artifact tests.*
+*Version: MINOR.*
 
 ---
 
-## 3. Verbatim-only flag on the MCP server admin form
+### C6 — Trust boundary and scope-bearing arguments
 
-**What it is.** A per-server flag marking a server's tool results as
-verbatim-only, so they can never be routed through the summarising pre-pass by
-misconfiguration. Server-enforced; the UI is only how it gets set.
+**What it is.** Two related gaps in how the platform admits an MCP server and how
+it fills that server's arguments.
 
-**This item is inferred, not instructed.** §5.1 of the source note asks for the
-flag and says it must be "server-enforced, not a UI convention" — a statement
-about where enforcement lives, not a request for an admin control. §5.4's "no
-new admin screen" is about registering Redline, not about this flag. The note
-never says how the flag gets set. A per-server flag needs a place to be set, so
-this document proposes the obvious one; treat the whole item as a proposal to
-confirm.
+**Why it stands alone.** `communicatesExternally` conflates "reaches the public
+internet" with "is a third party", and is enforced as a hard refusal in four
+places: `run-mcp-node.ts:85`, `mcp-server-directory.ts:26`, `mcp.ts:179`, and
+`flow-import-resolve.ts:79` — that last one meaning flows using such a server
+cannot even be imported. Any internal sidecar or on-prem service hits the same
+wall today.
 
-No new admin screen — but it is not zero UI work either. The form at
-`apps/web/src/app/(admin)/admin/mcp-servers/_content.tsx` holds `label`, `url`,
-`transport`, `communicatesExternally` and `credentialRef` as local state; this
-adds a fifth control in the same family as the existing `communicatesExternally`
-checkbox, plus a column on `admin_mcp_servers`
-(`packages/adapters/src/db/schema/admin.ts:169`) and a field through
-`mcp-server.ts` (router) → `mcp.ts` (use-case) →
-`drizzle-mcp-server-repository.ts`.
+Separately, MCP node arguments default to `{ kind: "ai" }` and are resolved by a
+language model via `resolveFieldValues`. For an argument that scopes data access
+— a tenant, account or corpus key — a model-chosen value is a cross-tenant read.
 
-The migration is additive with a default, so it is a `preserved` data-impact
-declaration per `docs/guides/database-conventions.md`. It is also what makes this
-release MINOR rather than PATCH.
+**Correction to my own earlier framing.** Literal pinning already exists:
+`valueSources[key] = { kind: "literal", value }` resolves directly without the
+model, as does `step_field`. The gap is not that pinning is impossible — it is
+that the **default is `ai`** and nothing lets a flow author declare an argument
+as scope-bearing so it cannot be left on that default. This is a much smaller
+change than "add argument pinning".
 
-### Related: Redline's classification
+**Acceptance criteria**
 
-Registering Redline itself needs no new UI. But the classification decision is
-load-bearing, and the source note undercounts where it bites.
-`communicatesExternally: true` blocks a server in **four** places:
+- **Given** an MCP server inside the deployment's trust boundary, **when** an
+  administrator registers it, **then** it can be selected in flows without being
+  classified as externally-communicating.
+- **Given** a tool argument declared scope-bearing, **when** a flow author
+  configures the node, **then** it cannot be left on the AI default and the
+  editor says why.
+- **Given** such an argument pinned to a literal or organisation-scoped value,
+  **when** the step runs, **then** the value sent to the tool is the pinned one
+  regardless of what the transcript or the model proposes.
 
-- `packages/application/src/use-cases/session/run-mcp-node.ts:85` — refuses to run it
-- `packages/adapters/src/mcp/mcp-server-directory.ts:26` — filters it out of the flow editor
-- `packages/application/src/use-cases/mcp/mcp.ts:179` — skips it
-- `packages/domain/src/entities/flow-import-resolve.ts:79` — rejects it on flow import
-
-That last one matters because the worked flows in §7 of the source note are
-meant to be shareable. Classified `true`, Redline flows cannot be authored,
-run, *or* imported.
-
-### Acceptance criteria
-
-- The flag is settable on create and edit, defaults to off, and survives a round
-  trip through the repository.
-- A server marked verbatim-only cannot have its results reach the summarising
-  pre-pass — enforced in the adapter, with a test that proves the refusal.
-- Existing servers are unaffected by the migration.
+*Test layer: application unit tests on `run-mcp-node.ts` and `resolveFieldValues`;
+domain test for the classification.*
+*Version: MINOR — a column on `admin_mcp_servers`, additive with a default,
+`-- data-impact: preserved`.*
 
 ---
 
-## 4. Confidence relabel and derived-field marker
+### C7 — The AI can request structured input from the operator mid-turn
 
-**What it is.** Under reference-then-resolve (§7.0), the model returns a locator,
-not a value, and Wayfinder writes Redline's bytes into the cell. The stored
-per-field `confidence` therefore means confidence in the **selection** — "this
-element is the one that answers this field" — never in the accuracy of the text,
-which is exact by construction. The current UI copy says the opposite.
+**What it is.** Generalising the payload of a mechanism that already exists.
 
-The source note flags this in passing ("label it that way in the UI or reviewers
-will misread it") but never lists it as a workstream. It is a real change across
-at least five sites:
+**Why it stands alone.** `v0.31.0` shipped the suspend/resume machinery, and it is
+genuinely general: a tool call is detected mid-turn, the turn suspends, state
+persists at `session_messages.schema_request` (jsonb, nullable), a card renders,
+and submit resumes as a fresh turn — with `status` tracking
+pending/submitted/dismissed so a dismissal does not kill the thread.
 
-| Site | Current |
-|---|---|
-| `apps/web/src/components/chat/confidence-bar.tsx:23` | "High / Medium / Low confidence" |
-| `apps/web/src/components/extraction/result-grid.tsx:61-64` | `BAND_LABEL` — same three strings |
-| `apps/web/src/components/extraction/result-grid.tsx:284` | "Confidence is a self-assessed triage signal, not a guarantee — always verify amber and …" |
-| `packages/domain` — `confidenceBand` | The band vocabulary itself |
-| `export-run-results.ts` — confidence sheet | "Confidence %" and "Band" columns |
+The **payload** is not general. Every row is a schema field *definition*:
+`SchemaRequestFieldDraft { label, type, required, options, min, max, instruction }`,
+and `parseSchemaRequestSubmission` refuses an empty list with "A report schema
+needs at least one field." The node config key is `schemaRequestToolName`,
+singular. So the AI can ask *"what columns should this report have?"* It cannot
+ask *"what is the contract value?"* as a typed input, *"which of these three
+candidates is right?"*, or *"confirm these five extracted values"* — all the same
+machinery with a different payload.
 
-**Do not blanket-rename.** A record produced by the existing extraction path
-(model reads the document) still has accuracy-confidence; only a
-Redline-sourced record has selection-confidence. The label has to vary by
-provenance, which means the record needs to carry which path produced it.
+**Acceptance criteria**
 
-The derived-field marker is the same shape of problem: an arithmetic result over
-verbatim inputs is allowed, but must be visibly marked and must retain the
-locators it was computed from. `result-grid.tsx` already renders
-`record.sourceDocumentIds` as "Source files" (lines 450, 489) — that is the
-document-level hook; the element-level reference arrives with the verbatim
-channel.
+- **Given** a node configured with a tool that requests operator input, **when**
+  the model calls it mid-turn, **then** the turn suspends and a form renders
+  against the shape that tool declared — schema definition being one shape, not
+  the only one.
+- **Given** a request for typed values rather than field definitions, **when** the
+  card renders, **then** it collects values against the declared types using the
+  same suspend/resume machinery, with no new mechanism.
+- **Given** a node declaring more than one input-requesting tool, **when** the
+  model calls any of them, **then** the matching form renders.
+- **Given** a pending request, **when** the operator reloads, **then** the form is
+  restored with anything already entered.
+- **Given** a pending request, **when** the operator dismisses it, **then** the
+  session stays actionable and the model is told it was declined.
+- **Given** a submitted form, **when** the next turn runs, **then** the submission
+  is readable as structured data, persisted outside the message thread, and
+  audited.
+- **Given** tool arguments naming an unsupported input type, **when** the form is
+  seeded, **then** that row degrades to a safe default rather than the operator
+  getting no form.
 
-### Acceptance criteria
-
-- A Redline-sourced field's confidence reads as selection confidence in the grid,
-  the rationale dialog, the chat bar, and the exported workbook.
-- A field from the existing extraction path is labelled unchanged.
-- A derived field is visually distinct from a verbatim one and exposes the
-  locators behind it.
-
----
-
-## 5. Sequencing
-
-1. **Item 3** — no dependencies, unblocks safe Redline registration, carries the migration.
-2. **Item 2** — fully independent; ships value with or without Redline.
-3. Verbatim channel (§5.1 of the source note) — separate ADR, not this plan.
-4. **Item 4** — needs a record to know its provenance, so it follows the channel.
-5. **Item 1** — needs the channel and both open decisions resolved; largest by far.
+*Test layer: domain unit tests on the request and submission types; component
+test on the card.*
+*Version: MINOR. The payload column is already nullable jsonb, so widening the
+shape is non-destructive.*
 
 ---
 
-## 6. Open decisions
+### C8 — A session keeps a durable working set
+
+**What it is.** The place a session holds what it has gathered so far, as
+structured data the operator can see and correct.
+
+**Why it stands alone.** Something exists — `accumulateInsights(messages)` — and
+every one of its limits is a general defect:
+
+- **Re-derived from the transcript every turn.** Nothing is stored as a working set.
+- **Flat `key → string`.** No type, no origin, no confidence, no reference.
+- **Model-authored only.** `contextGathered` comes from the AI turn payload; a
+  tool result cannot write into it.
+- **Invisible to the operator.** `contextGathered` has no references in any
+  component. ("Flow Insights" in the admin nav is unrelated — analytics over
+  completed sessions.)
+- **Bounded by the visible message window,** so facts scroll out and are gone.
+- **One global key space, last-write-wins** (`values.set(item.key, item.value)`).
+  Gathering the same field across two subjects means the second silently
+  overwrites the first.
+
+The last two are live data-loss bugs in any long session, with no external data
+source involved. This capability is what lets a long gather exist at all; every
+other capability here improves the quality of a value.
+
+**Acceptance criteria**
+
+- **Given** a session that gathered facts many turns ago, **when** the message
+  window has advanced past them, **then** those facts are still available to the
+  next turn.
+- **Given** facts gathered about two different subjects using the same field
+  name, **when** the working set is read, **then** both are present and
+  separately addressable.
+- **Given** an entry in the working set, **when** it is read, **then** it carries
+  its origin per C2 — model-authored, tool-sourced or operator-supplied — not
+  just a key and a string.
+- **Given** a tool result, **when** a value from it enters the working set,
+  **then** it is written as data, not by the model restating it in prose.
+- **Given** a session in progress, **when** the operator views it, **then** they
+  can see what has been gathered and correct or remove an entry.
+- **Given** an operator correction to an entry, **when** the next turn runs,
+  **then** the model sees the corrected value.
+- **Given** a completed session, **when** its working set is handed to an
+  extraction run or an export, **then** it transfers as structured data.
+
+*Test layer: domain unit tests on the working-set type; application tests on
+read and write; component test for the operator view.*
+*Version: MINOR. Migration: a new table — additive.*
+
+---
+
+## 2. Sequencing
+
+Ordered by what is broken now and what unblocks what, not by which is most
+visible.
+
+1. **C8** — the working set. Live data loss, and the substrate the rest writes into.
+2. **C2** — value origin. No migration, and it fixes an audit gap in the shipped product.
+3. **C1** — result truncation. A defect, self-contained, benefits every MCP server.
+4. **C7** — generalise the input payload. Machinery already exists.
+5. **C3** — tool result to value without model restatement. Depends on C2's origin.
+6. **C4** — tool-sourced extraction values. The largest; depends on C2 and C3.
+7. **C5** and **C6** — independent; drop in wherever there is room.
+
+C5 is the natural candidate to ship first if something small and complete is
+wanted early. It depends on nothing.
+
+---
+
+## 3. Open decisions
+
+The previous draft carried four. D1 and D2 were decided and shipped in `0.31.0`.
+D3 dissolves under C2 — provenance is a property of every value, so no export
+needs a separate decision about carrying it. D4 becomes C2 itself.
 
 | # | Decision | Blocks | Owner | Status |
 |---|---|---|---|---|
-| D1 | Is the schema form a new node type, or a tool-triggered card on an existing conversational node? | 1 | Architecture | **Decided: tool-triggered card mid-turn.** New stream-suspension work is required — see §1 "The hard part" and the risk note in §7. |
-| D2 | How does a turn suspend and resume — and where does the pending form state live? | 1 | Architecture | **Decided: Option A — persisted to the session.** Pending form state survives navigation/reload; the operator can close the browser mid-form and resume exactly where they left off. Requires a durable "form in progress" record and reload logic to restore it (see acceptance criteria in §1: "Reload mid-form restores the pending card rather than losing it"). |
-| D3 | Does the CSV carry provenance columns, and is it therefore a separate artifact from the paste-ready sheet? | 2 | Product | Open |
-| D4 | Does a record carry which path produced it, so labels can vary by provenance? | 4 | Architecture | Open |
+| E1 | What is the model-context budget for a tool result, and is it per-server or global? | C1 | Architecture | Open |
+| E2 | Does the working set live per session, or per session *and* subject, with subjects declared by the flow? | C8 | Architecture | Open |
+| E3 | Does an operator-corrected working-set entry lock against further model overwrite? | C8 | Product | Open |
+| E4 | Which admin dashboards keep a single confidence aggregate once origins differ? | C2 | Reporting owner | Open |
 
-D2 and D4 are additions to the source note's §10 — neither was listed there.
-
-With D1 and D2 both resolved toward the higher-cost branch (mid-turn card,
-persisted state), item 1 no longer has an estimate held open by open
-questions — see §7 for the resulting schedule risk.
+E1 and E2 are the two worth resolving before a phase doc is written. E3 and E4
+can be answered during build.
 
 ---
 
-## 7. Risks
+## 4. Risks
 
-- **Turn suspension is now a confirmed schedule risk, not a contingent one.**
-  D1 landed on the mid-turn card, which is new stream work with no precedent —
-  the cheaper node-type route was not taken. Combined with D2's decision to
-  persist pending-form state durably (not just in browser memory), item 1
-  carries the largest, least-precedented build in this plan. Estimate it
-  accordingly and consider a spike before committing to a phase-doc estimate.
-- **A half-relabelled confidence display is worse than none.** If item 4 ships
-  partially, a reviewer sees "High confidence" on a verbatim cell and reads it as
-  a claim about text accuracy — the exact misreading §7.0 exists to prevent.
-- **CSV without provenance quietly becomes the export everyone uses**, because
-  it is the easiest to open. That is the outcome this architecture exists to
-  prevent, which is why D3 is a product decision and not a default.
-- **Misclassifying Redline as externally-communicating blocks the whole plan** at
-  four separate layers, including flow import.
+- **C8 is the largest unbuilt thing here and the one everything else assumes.**
+  If it is deferred, C3 and C4 have nowhere durable to write, and the plan
+  reverts to improving values that a long session will lose anyway.
+- **A half-applied origin display is worse than none.** If C2 ships partially, a
+  reviewer sees a familiar confidence label on a value whose confidence now means
+  something else. The admin dashboards are the quiet case — nobody reviews an
+  average.
+- **C4 touches the extraction pipeline's core assumption** that a record derives
+  from documents Wayfinder holds. Scope it against the retention sweep, the
+  exceptions bucket and the per-run ceiling guard, not just the happy path.
+- **Nothing here should name an MCP server.** The moment a capability, table
+  column or domain type names one, this plan has become an integration again and
+  the coupling it exists to avoid is back.
 
 ---
 
-## 8. How this becomes work
+## 5. Redline as a motivating consumer
+
+Recorded so the origin of these capabilities is not lost, and contained to this
+section so it does not leak into the specifications above.
+
+[Redline](https://github.com/DeepCivic/Redline) is a read-only MCP server that
+serves source data verbatim and refuses to generate. It is the first server that
+makes each of the eight capabilities above pay off at once, which is why they
+surfaced together. It is **not** their justification — each one is justified by
+Wayfinder's current behaviour in its own section.
+
+Three facts about it bear on planning, none of which belong in a specification:
+
+- **It is under construction.** Version `0.0.0`, no tags, no release, active
+  daily development. Its own status document opens with "Under construction".
+- **Its tool surface is provisional.** Three of the five tools it exposes today
+  are marked for deletion in its own outstanding work, and the tools this kind of
+  work would want are unbuilt. Building against current tool names would be
+  building against names scheduled to disappear.
+- **Its architectural shape is settled** — addressing by identifier, retrieval
+  bounded by rows and characters, values never truncated to meet a budget,
+  accumulation explicitly the client's responsibility. C8 exists because
+  Wayfinder is that client and does not currently accumulate reliably.
+
+Because nothing above names it, its churn costs Wayfinder flow configuration and
+nothing else. There is no contract test between the two repositories and neither
+is versioned against the other; if a closer coupling is ever proposed, that gap
+is the first thing to close.
+
+---
+
+## 6. How this becomes work
 
 This file is planning input at the repo root, deliberately outside the normal
 docs lifecycle. Nothing here is a plan of record until it goes through the
 skills:
 
-1. `/new-feature` against `main`, producing a PRD and the ADRs the source note
-   names (the verbatim channel ADR is mandatory).
-2. Phase docs in `docs/development/to-be-implemented/`, split so the verbatim
-   channel lands before items 1 and 4 depend on it.
+1. `/new-feature` against `main`, producing a PRD per capability — or per
+   coherent group — and the ADRs they need. C8 and C4 each warrant their own.
+2. Phase docs in `docs/development/to-be-implemented/`, one per capability, so
+   they can ship independently.
 3. `/doc-review` before any build.
 4. `/build`, then `./validate.sh`, then the phase doc moves to
    `docs/development/implemented/alpha-3/v<version>/`.
 
-Version bump is planned here and applied by `/build`, never by this file.
+Version bumps are planned per capability above and applied by `/build`, never by
+this file.
