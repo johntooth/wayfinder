@@ -58,9 +58,11 @@ moderate, so the high/critical audit gate passes; they still show as open alerts
   - **Checksums.** Only the checksums an operation requires
     (`WHEN_REQUIRED`). Since 3.729 the SDK defaults to adding CRC32 to every
     upload, which not every S3-compatible server accepts. `minio` never sent it.
-  - **Not found.** `NotFound`, `NoSuchKey`, `NoSuchBucket`, or a bare 404 (HEAD
-    responses have no body). As before, this maps to `NOT_FOUND` on `get` and
-    to `false` on `exists`.
+  - **Not found.** `NotFound`, `NoSuchKey`, or a bare 404 (HEAD responses have
+    no body). As before, this maps to `NOT_FOUND` on `get` and to `false` on
+    `exists`. `NoSuchBucket` also arrives as a 404 but is excluded: a missing
+    bucket is misconfiguration, so `get` reports `INFRA_FAILURE`, as `minio`
+    did. Only the bucket check reads it as "absent".
 - `minio-storage.ts`: same class and contract. It now sends SDK commands, and
   takes an optional client factory so tests can use a fake `send` instead of
   `vi.mock`.
@@ -76,12 +78,14 @@ moderate, so the high/critical audit gate passes; they still show as open alerts
 
 ## Regression tests
 
-- `s3-client.test.ts` (new, 11 tests): endpoint, credentials, addressing,
-  blank versus set region, checksum mode, not-found recognition, and
-  `bucketExists` true / false / rethrow.
-- `minio-storage.test.ts` (rewritten, 13 tests): every case the `minio` version
-  had, against SDK commands and their inputs, plus a missing body on `get`
-  and a failed `exists` check that must not read as "absent".
+- `s3-client.test.ts` (new, 13 tests): endpoint, credentials, addressing,
+  blank versus set region, checksum mode, not-found recognition (a missing
+  bucket is not a missing object), and `bucketExists` true / false
+  (`NotFound` or `NoSuchBucket`) / rethrow.
+- `minio-storage.test.ts` (rewritten, 14 tests): every case the `minio` version
+  had, against SDK commands and their inputs, plus a missing body on `get`, a
+  missing bucket on `get` reporting `INFRA_FAILURE`, and a failed `exists`
+  check that must not read as "absent".
 - Probe tests are unchanged and pass.
 
 ## Verification

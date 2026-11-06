@@ -5,7 +5,14 @@ import type { StorageConfig } from "@wayfinder/domain";
 // no region, and where S3 itself answers with a redirect to the real one.
 const FALLBACK_REGION = "us-east-1";
 
-const NOT_FOUND_NAMES = new Set(["NotFound", "NoSuchKey", "NoSuchBucket"]);
+const NOT_FOUND_NAMES = new Set(["NotFound", "NoSuchKey"]);
+
+// Arrives as a 404 too, but means misconfiguration rather than a missing
+// object: minio surfaced it as a failure, so this keeps it one.
+const MISSING_BUCKET_NAME = "NoSuchBucket";
+
+const errorName = (error: unknown): string | undefined =>
+  typeof error === "object" && error !== null ? (error as { name?: string }).name : undefined;
 
 // Only `send` is used, so tests can stand in a fake without a live endpoint.
 export type S3Sender = Pick<S3Client, "send">;
@@ -35,6 +42,7 @@ export const createS3Client = (config: StorageConfig): S3Sender => new S3Client(
 export const isNotFound = (error: unknown): boolean => {
   if (typeof error !== "object" || error === null) return false;
   const { name, $metadata } = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+  if (name === MISSING_BUCKET_NAME) return false;
   if (name && NOT_FOUND_NAMES.has(name)) return true;
   return $metadata?.httpStatusCode === 404;
 };
@@ -44,7 +52,7 @@ export const bucketExists = async (client: S3Sender, bucket: string): Promise<bo
     await client.send(new HeadBucketCommand({ Bucket: bucket }));
     return true;
   } catch (error) {
-    if (isNotFound(error)) return false;
+    if (isNotFound(error) || errorName(error) === MISSING_BUCKET_NAME) return false;
     throw error;
   }
 };

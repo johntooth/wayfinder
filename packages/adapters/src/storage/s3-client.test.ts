@@ -65,7 +65,12 @@ describe("isNotFound", () => {
   it("recognises S3's not-found answers", () => {
     expect(isNotFound(serviceError("NotFound", 404))).toBe(true);
     expect(isNotFound(serviceError("NoSuchKey", 404))).toBe(true);
-    expect(isNotFound(serviceError("NoSuchBucket", 404))).toBe(true);
+  });
+
+  // A missing bucket is misconfiguration, not a missing object. minio reported
+  // it as a failure, and the 404 it arrives with must not turn it into NOT_FOUND.
+  it("does not mistake a missing bucket for a missing object", () => {
+    expect(isNotFound(serviceError("NoSuchBucket", 404))).toBe(false);
   });
 
   // HEAD responses carry no body, so some servers answer with only the status.
@@ -102,6 +107,14 @@ describe("bucketExists", () => {
   it("is false when the bucket is missing", async () => {
     const { sender } = senderAnswering(async () => {
       throw serviceError("NotFound", 404);
+    });
+
+    expect(await bucketExists(sender, "wayfinder-documents")).toBe(false);
+  });
+
+  it("is false when the server names the bucket missing", async () => {
+    const { sender } = senderAnswering(async () => {
+      throw serviceError("NoSuchBucket", 404);
     });
 
     expect(await bucketExists(sender, "wayfinder-documents")).toBe(false);

@@ -149,6 +149,16 @@ describe("MinioStorageAdapter", () => {
       expect(result.error?.code).toBe("NOT_FOUND");
     });
 
+    it("returns an error rather than NOT_FOUND when the bucket is missing", async () => {
+      const { adapter } = makeAdapter(() => {
+        throw notFound("NoSuchBucket");
+      });
+
+      const result = await adapter.get("generated/session1/doc.docx");
+
+      expect(result.error?.code).toBe("INFRA_FAILURE");
+    });
+
     it("returns an error when the response carries no body", async () => {
       const { adapter } = makeAdapter(() => ({}));
 
