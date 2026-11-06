@@ -97,6 +97,40 @@ describe("createAuth id generation", () => {
   });
 });
 
+describe("createAuth client address", () => {
+  const database = createDatabase("postgres://user:pass@localhost:5432/wayfinder_test");
+
+  const config = {
+    secret: "test-secret-value-at-least-32-chars-long",
+    baseURL: "http://localhost:3000",
+    adminSeedEmail: undefined,
+    authMethod: { type: "email-password" } as AuthMethod,
+    authConfig: {
+      emailPasswordEnabled: true,
+      entraEnabled: false,
+      entra: { tenantId: "", clientId: "", clientSecret: "" },
+    } satisfies AuthConfig,
+  };
+
+  const ipAddressOptions = (auth: unknown) =>
+    (auth as { options?: { advanced?: { ipAddress?: { ipAddressHeaders?: string[] } } } }).options?.advanced
+      ?.ipAddress;
+
+  // Without a proxy that overwrites it, any header is whatever the caller chose
+  // to send, and trusting it would hand every request its own rate-limit bucket.
+  it("keeps Better Auth's own address resolution when no header is trusted", () => {
+    expect(ipAddressOptions(createAuth(database, config))).toBeUndefined();
+  });
+
+  // Only the trusted header: falling back to X-Forwarded-For would let a caller
+  // who strips the trusted header pick their own address again.
+  it("reads the client address only from the trusted header when one is configured", () => {
+    const auth = createAuth(database, { ...config, trustedClientIpHeader: "x-wayfinder-client-ip" });
+
+    expect(ipAddressOptions(auth)?.ipAddressHeaders).toEqual(["x-wayfinder-client-ip"]);
+  });
+});
+
 describe("createAuth account linking", () => {
   const database = createDatabase("postgres://user:pass@localhost:5432/wayfinder_test");
 

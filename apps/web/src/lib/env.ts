@@ -166,6 +166,15 @@ const serverEnvSchema = z.object({
   // sign-in flow must not be repointable at an arbitrary host from the UI.
   // Used by the local mock Entra server (restart.sh --with-mocks).
   ENTRA_AUTHORITY: z.string().url().optional(),
+  // A header the proxy in front of web overwrites with the client's address,
+  // for sign-in rate limiting (deploy/terraform sets it behind CloudFront).
+  // Set it only when a proxy really does overwrite it: otherwise every caller
+  // can name their own address. Unset, Better Auth reads X-Forwarded-For.
+  TRUSTED_CLIENT_IP_HEADER: z
+    .string()
+    .regex(/^[A-Za-z0-9-]+$/, "a header name")
+    .transform((value) => value.toLowerCase())
+    .optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

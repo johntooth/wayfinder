@@ -31,6 +31,10 @@ export interface CreateAuthOptions {
   readonly authMethod: AuthMethod;
   readonly authConfig: AuthMethodsConfig;
   readonly entraAuthority?: string;
+  // A request header that a proxy in front of the app overwrites with the
+  // client's address (TRUSTED_CLIENT_IP_HEADER). Env-only: trusting a header no
+  // proxy overwrites lets every caller choose their own rate-limit bucket.
+  readonly trustedClientIpHeader?: string;
   // Shared with the cached session resolver so an eviction takes effect on the
   // evicted device's next request rather than at the end of the cache TTL.
   readonly sessionRevocations: SessionRevocationRegistry;
@@ -136,6 +140,11 @@ export const createAuth = (db: Database, config: CreateAuthOptions): Auth => {
       database: {
         generateId: "uuid",
       },
+      // Better Auth falls back to one shared rate-limit bucket when it cannot
+      // trust an address, which is the case behind most reverse proxies.
+      ...(config.trustedClientIpHeader
+        ? { ipAddress: { ipAddressHeaders: [config.trustedClientIpHeader] } }
+        : {}),
     },
     user: {
       modelName: "user",

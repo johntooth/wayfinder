@@ -127,6 +127,7 @@ export interface AuthRuntimeDependencies {
   readonly baseURL: string;
   readonly adminSeedEmail: string | undefined;
   readonly entraAuthority: string | undefined;
+  readonly trustedClientIpHeader: string | undefined;
   readonly sessionRevocations: SessionRevocationRegistry;
 }
 
@@ -163,6 +164,7 @@ export const buildAuthRuntime = (dependencies: AuthRuntimeDependencies): AuthRun
       authMethod: dependencies.authMethod,
       authConfig,
       entraAuthority: dependencies.entraAuthority,
+      trustedClientIpHeader: dependencies.trustedClientIpHeader,
       sessionRevocations: dependencies.sessionRevocations,
       // Errors are swallowed on purpose: Better Auth answers a reset request
       // with the same "if this address exists" message either way, so letting a

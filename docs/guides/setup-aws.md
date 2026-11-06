@@ -175,6 +175,7 @@ smallest working set for a deployment, with each value explained. On AWS:
 | `SCHEDULER_TICK_SECRET` | From Secrets Manager, same value on both | both |
 | `ADMIN_SEED_EMAIL` | Optional — pre-fills and binds the admin email on `/setup` | web |
 | `WEB_PORT` / `API_PORT` | `3000` / `3001` (defaults) | web / api |
+| `TRUSTED_CLIENT_IP_HEADER` | Optional — a header your proxy overwrites with the client's address, so sign-in is rate-limited per caller. Set it only if the proxy really does overwrite it ([§8](#8-front-it-with-an-alb)) | web |
 
 Object storage and the AI provider are **normally configured in the setup
 wizard**, not here — the wizard tests each connection before accepting it and
@@ -247,6 +248,13 @@ work with `FOR UPDATE SKIP LOCKED`, so concurrent ticks never double-fire.
 - Chat responses stream over Server-Sent Events. The app sends a keepalive every
   `SSE_HEARTBEAT_MS` (default 25 s), which is inside the ALB's 60 s default idle
   timeout. If you raise the heartbeat, raise the idle timeout to stay ahead of it.
+- Better Auth rate-limits sign-in per client address. Behind CloudFront, or any
+  second proxy in front of the ALB, `X-Forwarded-For` carries more than one
+  address and Better Auth trusts none of them, so every caller shares one
+  bucket. Have the outermost proxy overwrite a header of its own with the
+  client's address and name it in `TRUSTED_CLIENT_IP_HEADER`.
+  [`deploy/terraform`](../../deploy/terraform/README.md) does this with a
+  CloudFront function.
 - Point a Route 53 record at the ALB, and use that hostname for `BETTER_AUTH_URL`.
 
 ## 9. First login
@@ -274,6 +282,9 @@ the `SMTP_*` and `M365_*` variables in [`.env.example`](../../.env.example).
 
 ## Alternatives
 
+- **Terraform.** [`deploy/terraform`](../../deploy/terraform/README.md) builds
+  this guide's ECS deployment for you, behind CloudFront and a WAF with an
+  internal ALB, and runs migrations before each rollout.
 - **AWS Lambda** removes the always-on web and worker compute entirely, which
   suits pilots and low-duty-cycle tenants where a 24/7 Fargate pair is poor
   value. It is a hybrid rather than fully serverless — one small always-on

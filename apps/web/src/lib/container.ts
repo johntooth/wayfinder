@@ -559,6 +559,7 @@ const build = () => {
     baseURL: env.BETTER_AUTH_URL,
     adminSeedEmail: env.ADMIN_SEED_EMAIL,
     entraAuthority: env.ENTRA_AUTHORITY,
+    trustedClientIpHeader: env.TRUSTED_CLIENT_IP_HEADER,
     sessionRevocations,
   });
 

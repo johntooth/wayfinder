@@ -1,0 +1,4 @@
+# The digest `aws ecr describe-images` reports for the pushed image (it can
+# differ from a local build's digest).
+image            = "<account-id>.dkr.ecr.ap-southeast-2.amazonaws.com/wayfinder@sha256:REPLACE"
+admin_seed_email = "you@example.gov.au"

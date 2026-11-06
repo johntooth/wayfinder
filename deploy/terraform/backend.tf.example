@@ -1,0 +1,12 @@
+# Copy to backend.tf (git-ignored) and fill in: an existing S3 state bucket,
+# encrypted with a KMS key you control.
+terraform {
+  backend "s3" {
+    bucket       = "REPLACE-terraform-state"
+    key          = "wayfinder/terraform.tfstate"
+    region       = "ap-southeast-2"
+    encrypt      = true
+    kms_key_id   = "alias/REPLACE"
+    use_lockfile = true
+  }
+}
