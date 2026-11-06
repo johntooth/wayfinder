@@ -166,6 +166,15 @@ const serverEnvSchema = z.object({
   // sign-in flow must not be repointable at an arbitrary host from the UI.
   // Used by the local mock Entra server (restart.sh --with-mocks).
   ENTRA_AUTHORITY: z.string().url().optional(),
+  // Sign-in through an Amazon Cognito user pool. Env-only, for the same reason
+  // as ENTRA_AUTHORITY: sign-in links accounts by email, so repointing the
+  // issuer must take a deployment change. Offered only when the issuer, client
+  // id and secret are all set; it never creates accounts.
+  COGNITO_ISSUER: z.string().url().optional(),
+  COGNITO_CLIENT_ID: z.string().optional(),
+  COGNITO_CLIENT_SECRET: z.string().optional(),
+  // What the sign-in button calls the provider ("Sign in with …").
+  COGNITO_DISPLAY_NAME: z.string().max(40).optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

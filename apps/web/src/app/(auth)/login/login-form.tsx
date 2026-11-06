@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
 import { CERT_SIGN_IN_ERROR_PARAM, certSignInErrorMessage } from "@/lib/cert-sign-in-errors";
+import { COGNITO_ERROR_CALLBACK_URL, COGNITO_SSO_PARAM, cognitoSignInErrorMessage } from "@/lib/sso-sign-in-errors";
 import { trpc } from "@/trpc/client";
 import { ForgotPasswordModal } from "./forgot-password-modal";
 
@@ -34,6 +35,13 @@ export function LoginForm() {
   const methodsQuery = trpc.settings.enabledAuthMethods.useQuery();
   const emailPasswordEnabled = methodsQuery.data?.emailPassword ?? true;
   const entraEnabled = methodsQuery.data?.entra ?? false;
+  // Null until the query resolves and whenever the install offers no Cognito.
+  const cognito = methodsQuery.data?.cognito ?? null;
+  // A failed Cognito sign-in comes back here with Better Auth's code, which is
+  // translated, never shown.
+  const cognitoError = cognito
+    ? cognitoSignInErrorMessage(searchParams.get(COGNITO_SSO_PARAM), searchParams.get("error"), cognito.displayName)
+    : null;
   // Defaults to off until the query resolves, so an install that does not offer
   // certificates never flashes a control the user cannot use.
   const pkiEnabled = methodsQuery.data?.pki ?? false;
@@ -58,6 +66,21 @@ export function LoginForm() {
     setError(null);
     try {
       await authClient.signIn.social({ provider: "microsoft", callbackURL: "/chats" });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+      setSubmitting(false);
+    }
+  };
+
+  const onCognitoSignIn = async (): Promise<void> => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await authClient.signIn.social({
+        provider: "cognito",
+        callbackURL: "/chats",
+        errorCallbackURL: COGNITO_ERROR_CALLBACK_URL,
+      });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
       setSubmitting(false);
@@ -126,6 +149,14 @@ export function LoginForm() {
               className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-900"
             >
               {certError}
+            </p>
+          )}
+          {cognitoError && (
+            <p
+              data-testid="login-cognito-error"
+              className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-900"
+            >
+              {cognitoError}
             </p>
           )}
           {emailPasswordEnabled && (
@@ -210,9 +241,33 @@ export function LoginForm() {
               </Button>
             </div>
           )}
-          {pkiEnabled && (
+          {cognito && (
             <div className="space-y-4">
               {(emailPasswordEnabled || entraEnabled) && (
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="h-px flex-1 bg-border" />
+                  or
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+              )}
+              {!emailPasswordEnabled && !entraEnabled && error && (
+                <p className="text-sm text-destructive">{error}</p>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={onCognitoSignIn}
+                disabled={submitting}
+                data-testid="login-cognito"
+              >
+                Sign in with {cognito.displayName}
+              </Button>
+            </div>
+          )}
+          {pkiEnabled && (
+            <div className="space-y-4">
+              {(emailPasswordEnabled || entraEnabled || cognito) && (
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
                   <span className="h-px flex-1 bg-border" />
                   or

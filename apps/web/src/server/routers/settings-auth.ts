@@ -167,6 +167,8 @@ export const authSettingsProcedures = {
     return {
       emailPassword: config.emailPasswordEnabled,
       entra: config.entraEnabled && isEntraConfigured(config.entra),
+      // Env-only, so it never changes at runtime; null when not offered.
+      cognito: ctx.container.cognitoSignIn,
       pki: isPkiUsable(config, ctx.container.runtimeConfig.isPkiEnvConfigured()),
       passwordReset: isSelfServicePasswordResetAvailable(config, emailConfigured),
     };

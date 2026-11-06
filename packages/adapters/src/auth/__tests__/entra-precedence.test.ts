@@ -45,6 +45,25 @@ describe("applyEntraPrecedence", () => {
     expect(rendered.params).toEqual(["3f1b6f7e-0000-4000-8000-000000000001", "credential"]);
   });
 
+  // Cognito links by email exactly as Entra does, so it needs the same guard:
+  // a password someone set before the link must not survive it.
+  it("deletes the password and revokes sessions when a Cognito account is attached", async () => {
+    const { database, deletes } = makeRecordingDatabase();
+
+    await applyEntraPrecedence(database, {
+      userId: "3f1b6f7e-0000-4000-8000-000000000006",
+      providerId: "cognito",
+    });
+
+    const credentialDelete = deletes.find((entry) => entry.table === core_accounts);
+    expect(credentialDelete).toBeDefined();
+    expect(renderCondition(credentialDelete!.condition).params).toEqual([
+      "3f1b6f7e-0000-4000-8000-000000000006",
+      "credential",
+    ]);
+    expect(deletes.some((entry) => entry.table === core_sessions)).toBe(true);
+  });
+
   it("revokes the linked user's existing sessions", async () => {
     const { database, deletes } = makeRecordingDatabase();
 

@@ -4,6 +4,8 @@ import {
   createAuth,
   type Auth,
   type AuthMethod,
+  cognitoProviderFor,
+  type CognitoProviderOptions,
   type Database,
   type PkiEnvDefaults,
   type RuntimeConfigStore,
@@ -105,6 +107,23 @@ export const warnOnLegacyAuthMethodContradiction = (
     });
 };
 
+interface CognitoEnv {
+  COGNITO_ISSUER?: string | undefined;
+  COGNITO_CLIENT_ID?: string | undefined;
+  COGNITO_CLIENT_SECRET?: string | undefined;
+  COGNITO_DISPLAY_NAME?: string | undefined;
+}
+
+// Env-only (see env.ts), so it is resolved once at boot rather than from the
+// runtime auth config the admin card edits.
+export const resolveCognitoEnv = (env: CognitoEnv): CognitoProviderOptions | null =>
+  cognitoProviderFor({
+    issuer: env.COGNITO_ISSUER,
+    clientId: env.COGNITO_CLIENT_ID,
+    clientSecret: env.COGNITO_CLIENT_SECRET,
+    displayName: env.COGNITO_DISPLAY_NAME,
+  });
+
 // PKI is absent by design: certificate sign-in is decided by runtime config, not
 // by the process's boot-time mechanism (ADR-042 §3).
 export const resolveAuthMethod = (authMethod: string): AuthMethod => {
@@ -127,6 +146,7 @@ export interface AuthRuntimeDependencies {
   readonly baseURL: string;
   readonly adminSeedEmail: string | undefined;
   readonly entraAuthority: string | undefined;
+  readonly cognito: CognitoProviderOptions | null;
   readonly sessionRevocations: SessionRevocationRegistry;
 }
 
@@ -163,6 +183,7 @@ export const buildAuthRuntime = (dependencies: AuthRuntimeDependencies): AuthRun
       authMethod: dependencies.authMethod,
       authConfig,
       entraAuthority: dependencies.entraAuthority,
+      cognito: dependencies.cognito,
       sessionRevocations: dependencies.sessionRevocations,
       // Errors are swallowed on purpose: Better Auth answers a reset request
       // with the same "if this address exists" message either way, so letting a

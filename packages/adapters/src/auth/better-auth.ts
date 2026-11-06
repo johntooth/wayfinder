@@ -1,9 +1,11 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { genericOAuth } from "better-auth/plugins/generic-oauth";
 import type { MicrosoftEntraIDProfile } from "better-auth/social-providers";
 import { isEntraConfigured, type AuthConfig as AuthMethodsConfig } from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { core_accounts, core_sessions, core_users, core_verification_tokens } from "../db/schema/core";
+import { cognitoOAuthConfig, type CognitoProviderOptions } from "./cognito-provider";
 import { applyEntraPrecedence } from "./entra-precedence";
 import { userInfoFromIdToken } from "./entra-user-info";
 import { enforceSessionConcurrency } from "./session-concurrency";
@@ -31,6 +33,9 @@ export interface CreateAuthOptions {
   readonly authMethod: AuthMethod;
   readonly authConfig: AuthMethodsConfig;
   readonly entraAuthority?: string;
+  // Env-only, resolved by cognitoProviderFor; null or absent offers no Cognito
+  // sign-in. Deliberately not a trusted provider: see accountLinking below.
+  readonly cognito?: CognitoProviderOptions | null;
   // Shared with the cached session resolver so an eviction takes effect on the
   // evicted device's next request rather than at the end of the cache TTL.
   readonly sessionRevocations: SessionRevocationRegistry;
@@ -171,7 +176,10 @@ export const createAuth = (db: Database, config: CreateAuthOptions): Auth => {
         updatedAt: "updated_at",
       },
       // A first Entra sign-in whose email matches an existing user links to that
-      // user instead of creating a duplicate (ADR-025).
+      // user instead of creating a duplicate (ADR-025). Cognito links the same
+      // way, but is not trusted: Better Auth skips its verified-address check
+      // for a trusted provider, and a user pool can hold unverified addresses.
+      // Untrusted, a Cognito identity links only when its address is verified.
       accountLinking: {
         enabled: true,
         trustedProviders: ["microsoft"],
@@ -282,5 +290,6 @@ export const createAuth = (db: Database, config: CreateAuthOptions): Auth => {
           },
         }
       : {}),
+    ...(config.cognito ? { plugins: [genericOAuth({ config: [cognitoOAuthConfig(config.cognito)] })] } : {}),
   }) as unknown as Auth;
 };

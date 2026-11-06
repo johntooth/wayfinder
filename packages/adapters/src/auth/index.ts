@@ -3,6 +3,7 @@ export * from "./admin-lookup";
 export * from "./admin-recovery";
 export * from "./password-resetter";
 export * from "./better-auth";
+export * from "./cognito-provider";
 export * from "./credential-accounts";
 export * from "./pki-cert-adapter";
 export * from "./seed-admin";

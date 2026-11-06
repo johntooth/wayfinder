@@ -159,3 +159,57 @@ describe("createAuth account linking", () => {
     expect(linkingOptions()?.databaseHooks?.account?.create?.after).toBeUndefined();
   });
 });
+
+describe("createAuth Cognito sign-in", () => {
+  const database = createDatabase("postgres://user:pass@localhost:5432/wayfinder_test");
+
+  const baseConfig = {
+    secret: "test-secret-value-at-least-32-chars-long",
+    baseURL: "http://localhost:3000",
+    adminSeedEmail: undefined,
+    authMethod: { type: "email-password" } as AuthMethod,
+    authConfig: {
+      emailPasswordEnabled: true,
+      entraEnabled: false,
+      entra: { tenantId: "", clientId: "", clientSecret: "" },
+    } satisfies AuthConfig,
+  };
+
+  const cognito = {
+    issuer: "https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_AbCdEfGhI",
+    clientId: "client",
+    clientSecret: "secret",
+    displayName: "Amazon Cognito",
+  };
+
+  interface InspectableOptions {
+    account?: { accountLinking?: { trustedProviders?: string[] } };
+    plugins?: { id: string; options?: { config?: { providerId: string; disableSignUp?: boolean }[] } }[];
+  }
+
+  const optionsOf = (auth: unknown): InspectableOptions | undefined =>
+    (auth as { options?: InspectableOptions }).options;
+
+  it("registers the Cognito provider, with sign-up off, when it is configured", () => {
+    const options = optionsOf(createAuth(database, { ...baseConfig, cognito }));
+    const genericOAuth = options?.plugins?.find((plugin) => plugin.id === "generic-oauth");
+
+    expect(genericOAuth?.options?.config?.map((provider) => provider.providerId)).toEqual(["cognito"]);
+    expect(genericOAuth?.options?.config?.[0]?.disableSignUp).toBe(true);
+  });
+
+  // Better Auth skips its verified-email check for a trusted provider. A user
+  // pool can hold unverified addresses, so Cognito stays untrusted: a first
+  // sign-in links by email only when Cognito says the address is verified.
+  it("does not trust Cognito, so linking requires a verified address", () => {
+    const options = optionsOf(createAuth(database, { ...baseConfig, cognito }));
+
+    expect(options?.account?.accountLinking?.trustedProviders).toEqual(["microsoft"]);
+  });
+
+  it("offers no Cognito sign-in when it is not configured", () => {
+    const options = optionsOf(createAuth(database, { ...baseConfig, cognito: null }));
+
+    expect(options?.plugins?.some((plugin) => plugin.id === "generic-oauth") ?? false).toBe(false);
+  });
+});

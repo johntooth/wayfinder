@@ -1,10 +1,15 @@
 import { and, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { core_accounts, core_sessions } from "../db/schema/core";
+import { COGNITO_PROVIDER_ID } from "./cognito-provider";
 import type { SessionRevocationRegistry } from "./session-revocation";
 
 export const ENTRA_PROVIDER_ID = "microsoft";
 export const CREDENTIAL_PROVIDER_ID = "credential";
+
+// Every provider that links to an existing account by email. Each one makes the
+// account SSO-only, for the reason given below.
+const LINKING_PROVIDER_IDS: ReadonlySet<string> = new Set([ENTRA_PROVIDER_ID, COGNITO_PROVIDER_ID]);
 
 export interface LinkedAccount {
   readonly userId: string;
@@ -13,7 +18,8 @@ export interface LinkedAccount {
 
 /**
  * Entra takes precedence over a password: once a Microsoft identity is attached
- * to an account, that account is Entra-only.
+ * to an account, that account is Entra-only. Cognito, the other provider that
+ * links by email, gets the same treatment.
  *
  * This is also what makes `accountLinking.requireLocalEmailVerified: false`
  * safe. That gate exists so an attacker who pre-registers a password account at
@@ -39,7 +45,7 @@ export const applyEntraPrecedence = async (
   account: LinkedAccount,
   sessionRevocations?: SessionRevocationRegistry,
 ): Promise<void> => {
-  if (account.providerId !== ENTRA_PROVIDER_ID) return;
+  if (!LINKING_PROVIDER_IDS.has(account.providerId)) return;
 
   await database
     .delete(core_accounts)

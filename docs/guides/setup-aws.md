@@ -270,6 +270,42 @@ the `SMTP_*` and `M365_*` variables in [`.env.example`](../../.env.example).
 - Check the S3 bucket — the file should appear under `templates/`
 - Check the `api` task's log for `scheduler heartbeat started`
 
+## 11. Optional — sign in with Amazon Cognito
+
+If your users already have accounts in a Cognito user pool, Wayfinder can offer
+a **Sign in with …** button for it, beside email and password.
+
+1. In the user pool, add an app client:
+   - confidential, with a client secret;
+   - authorization code grant, scopes `openid`, `email` and `profile`;
+   - callback URL `<BETTER_AUTH_URL>/api/auth/callback/cognito`.
+2. Set these on `web`:
+
+   | Wayfinder variable | Value |
+   |---|---|
+   | `COGNITO_ISSUER` | `https://cognito-idp.<region>.amazonaws.com/<user pool id>` |
+   | `COGNITO_CLIENT_ID` | The app client's id |
+   | `COGNITO_CLIENT_SECRET` | The app client's secret, from Secrets Manager |
+   | `COGNITO_DISPLAY_NAME` | Optional — the button reads "Sign in with *this*". Default `Amazon Cognito` |
+
+   All three of issuer, id and secret must be set, and the issuer must be
+   `https`, or the button doesn't appear. They're env-only, not an admin
+   setting: sign-in links accounts by email, so whoever can repoint the issuer
+   could sign in as anyone.
+
+How it behaves:
+
+- **It never creates accounts.** An admin creates the user in **Admin → Users**
+  first. Someone with no Wayfinder account is sent back to the sign-in page with
+  a message to ask an administrator.
+- **The first sign-in links by email**, the same way Microsoft Entra sign-in does
+  ([ADR-025](../development/adr/025-configurable-auth-methods-and-entra.adr.md)),
+  but only if the pool has verified that address. An unverified address is
+  refused with a message to verify it in the pool.
+- **A linked account becomes Cognito-only**, again as with Entra: its password is
+  removed and its existing sessions end. Accounts that never use Cognito keep
+  their passwords.
+
 ---
 
 ## Alternatives

@@ -213,6 +213,7 @@ import {
   resolveAuthMethod,
   buildAuthRuntime,
   resolvePkiEnv,
+  resolveCognitoEnv,
   warnOnLegacyAuthMethodContradiction,
   warnOnRejectedProxyEntries,
 } from "./container-auth";
@@ -539,6 +540,7 @@ const build = () => {
   });
 
   const authMethod: AuthMethod = resolveAuthMethod(env.AUTH_METHOD);
+  const cognito = resolveCognitoEnv(env);
 
   // Built unconditionally: configuration decides whether certificate sign-in
   // answers, not wiring, so an admin can turn it on with no redeploy.
@@ -559,6 +561,7 @@ const build = () => {
     baseURL: env.BETTER_AUTH_URL,
     adminSeedEmail: env.ADMIN_SEED_EMAIL,
     entraAuthority: env.ENTRA_AUTHORITY,
+    cognito,
     sessionRevocations,
   });
 
@@ -631,6 +634,7 @@ const build = () => {
     db,
     getAuth,
     pkiCertAdapter,
+    cognitoSignIn: cognito ? { displayName: cognito.displayName } : null,
     logger,
     objectStorage,
     runtimeConfig,
